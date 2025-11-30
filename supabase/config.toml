@@ -1,1 +1,10 @@
 project_id = "zmsfntqgxsstnbpzdled"
+
+[functions.sync-clientes]
+verify_jwt = false
+
+[functions.sync-produtos]
+verify_jwt = false
+
+[functions.sync-vendas]
+verify_jwt = false
