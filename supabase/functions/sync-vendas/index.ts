@@ -20,13 +20,31 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // MVP: sincronizar últimos 7 dias
-    // Futuramente: ler da tabela etl_controle para fazer incremental
+    // Sistema de sincronização incremental via stg.etl_controle
     const hoje = new Date();
-    const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const dataFim = hoje.toISOString().slice(0, 10); // YYYY-MM-DD
+    
+    // Buscar última data sincronizada
+    const { data: controle, error: controleError } = await supabase
+      .from('etl_controle')
+      .select('ultima_data')
+      .eq('entidade', 'vendas')
+      .single();
 
-    const dataFim = hoje.toISOString().slice(0, 10);        // YYYY-MM-DD
-    const dataInicio = seteDiasAtras.toISOString().slice(0, 10);
+    let dataInicio: string;
+    
+    if (controleError || !controle) {
+      // Primeira execução: buscar últimos 365 dias
+      const umAnoAtras = new Date(hoje.getTime() - 365 * 24 * 60 * 60 * 1000);
+      dataInicio = umAnoAtras.toISOString().slice(0, 10);
+      console.log('Primeira sincronização de vendas. Buscando últimos 365 dias.');
+    } else {
+      // Sincronização incremental: buscar desde última data (com 1 dia de segurança)
+      const ultimaData = new Date(controle.ultima_data);
+      const dataSeguranca = new Date(ultimaData.getTime() - 1 * 24 * 60 * 60 * 1000);
+      dataInicio = dataSeguranca.toISOString().slice(0, 10);
+      console.log(`Sincronização incremental desde ${controle.ultima_data}`);
+    }
 
     console.log(`Sincronizando vendas de ${dataInicio} até ${dataFim}`);
 
@@ -106,6 +124,20 @@ Deno.serve(async (req) => {
         console.error('Erro ao fazer upsert em stg.venda_item:', error);
         throw error;
       }
+    }
+
+    // Atualizar controle de ETL
+    const { error: controleUpdateError } = await supabase
+      .from('etl_controle')
+      .upsert({
+        entidade: 'vendas',
+        ultima_data: dataFim,
+        atualizado_em: new Date().toISOString(),
+      }, { onConflict: 'entidade' });
+
+    if (controleUpdateError) {
+      console.error('Erro ao atualizar stg.etl_controle:', controleUpdateError);
+      // Não falha a operação toda, apenas loga o erro
     }
 
     console.log('Sync de vendas concluído com sucesso.');
