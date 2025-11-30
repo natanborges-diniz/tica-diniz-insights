@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.sync-vendas]
 verify_jwt = false
+
+[functions.transform-dw]
+verify_jwt = false
