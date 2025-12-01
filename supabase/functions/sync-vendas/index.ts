@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
       .from('etl_controle')
       .select('ultima_data')
       .eq('entidade', 'vendas')
-      .single();
+      .maybeSingle();
 
     let dataInicio: string;
     

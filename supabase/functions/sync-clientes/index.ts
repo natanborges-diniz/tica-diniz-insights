@@ -7,7 +7,6 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -15,19 +14,12 @@ Deno.serve(async (req) => {
   try {
     console.log('Iniciando sync de clientes...');
 
-    // Cria cliente Supabase com service role
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Busca clientes da API Firebird
-    const json = await firebirdGet('/api/clientes', {
-      // Adicione parâmetros conforme necessário, ex:
-      // ativo: true,
-      // limit: 1000,
-    });
-
-    // Adapta o caminho conforme formato real da resposta
+    const json = await firebirdGet('/api/clientes');
     const clientes = json.data ?? json.clientes ?? json;
 
     if (!Array.isArray(clientes)) {
@@ -49,11 +41,10 @@ Deno.serve(async (req) => {
       email: c.email ?? null,
       ativo: c.ativo ?? true,
       vendedor: c.vendedor ?? false,
-    })).filter(r => r.cod_pessoa != null);
+    })).filter((r: any) => r.cod_pessoa != null);
 
     console.log(`Gravando ${rows.length} clientes em stg.pessoa...`);
 
-    // Faz upsert na tabela staging
     const { error } = await supabase
       .from('pessoa')
       .upsert(rows, { onConflict: 'cod_pessoa' });

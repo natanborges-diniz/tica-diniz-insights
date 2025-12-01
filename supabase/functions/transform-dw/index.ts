@@ -20,9 +20,9 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Chamar a stored procedure que faz toda a transformação
-    console.log('Executando stored procedure dw.processar_transformacao_dw()...');
+    console.log('Executando stored procedure dw_processar_transformacao()...');
     
-    const { data, error } = await supabase.rpc('processar_transformacao_dw');
+    const { data, error } = await supabase.rpc('dw_processar_transformacao');
 
     if (error) {
       console.error('Erro ao executar transformação DW:', error);
