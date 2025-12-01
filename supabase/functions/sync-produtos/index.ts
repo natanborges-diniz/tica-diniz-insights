@@ -7,7 +7,6 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -15,18 +14,12 @@ Deno.serve(async (req) => {
   try {
     console.log('Iniciando sync de produtos...');
 
-    // Cria cliente Supabase com service role
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Busca produtos da API Firebird
-    const json = await firebirdGet('/api/produtos', {
-      // Adicione parâmetros conforme necessário, ex:
-      // limit: 1000,
-    });
-
-    // Adapta o caminho conforme formato real da resposta
+    const json = await firebirdGet('/api/produtos');
     const produtos = json.data ?? json.produtos ?? json;
 
     if (!Array.isArray(produtos)) {
@@ -43,11 +36,10 @@ Deno.serve(async (req) => {
       referencia: p.referencia ?? null,
       categoria: p.categoria ?? p.grupo ?? null,
       ativo: p.ativo ?? true,
-    })).filter(r => r.cod_produto != null);
+    })).filter((r: any) => r.cod_produto != null);
 
     console.log(`Gravando ${rows.length} produtos em stg.produto...`);
 
-    // Faz upsert na tabela staging
     const { error } = await supabase
       .from('produto')
       .upsert(rows, { onConflict: 'cod_produto' });
