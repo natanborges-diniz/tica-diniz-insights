@@ -11,56 +11,104 @@ const FIREBIRD_API_PASSWORD = Deno.env.get('FIREBIRD_API_PASSWORD')!;
  * Em produção, considere cachear o token em memória/KV
  */
 export async function getFirebirdApiToken(): Promise<string> {
-  console.log('=== DIAGNÓSTICO AUTH FIREBIRD ===');
+  console.log('=== DIAGNÓSTICO AUTH FIREBIRD (NextAuth) ===');
   console.log('Base URL:', FIREBIRD_API_BASE_URL);
   console.log('Email:', FIREBIRD_API_EMAIL ? `${FIREBIRD_API_EMAIL.substring(0, 5)}...` : 'NÃO DEFINIDO');
-  console.log('Password:', FIREBIRD_API_PASSWORD ? '***DEFINIDO***' : 'NÃO DEFINIDO');
   
-  const authUrl = `${FIREBIRD_API_BASE_URL}/api/auth/signin`;
-  console.log('URL completa:', authUrl);
-
-  const res = await fetch(authUrl, {
+  // PASSO 1: Obter CSRF Token
+  const csrfUrl = `${FIREBIRD_API_BASE_URL}/api/auth/csrf`;
+  console.log('1️⃣ Buscando CSRF token em:', csrfUrl);
+  
+  const csrfRes = await fetch(csrfUrl, {
+    method: "GET",
+    headers: { "Accept": "application/json" },
+  });
+  
+  if (!csrfRes.ok) {
+    const text = await csrfRes.text();
+    console.error("Erro ao obter CSRF:", csrfRes.status, text.slice(0, 300));
+    throw new Error(`Erro ao obter CSRF token: ${csrfRes.status}`);
+  }
+  
+  const csrfData = await csrfRes.json();
+  const csrfToken = csrfData.csrfToken;
+  console.log('✅ CSRF Token obtido:', csrfToken ? csrfToken.substring(0, 10) + '...' : 'NÃO ENCONTRADO');
+  
+  if (!csrfToken) {
+    throw new Error("CSRF token não retornado pela API");
+  }
+  
+  // Capturar cookies da resposta CSRF
+  const csrfCookies = csrfRes.headers.get('set-cookie') || '';
+  console.log('🍪 Cookies CSRF recebidos:', csrfCookies ? 'SIM' : 'NÃO');
+  
+  // PASSO 2: Fazer login com credentials
+  const callbackUrl = `${FIREBIRD_API_BASE_URL}/api/auth/callback/credentials`;
+  console.log('2️⃣ Fazendo login em:', callbackUrl);
+  
+  const loginRes = await fetch(callbackUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    headers: { 
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Cookie": csrfCookies,
+    },
+    body: new URLSearchParams({
+      csrfToken: csrfToken,
       email: FIREBIRD_API_EMAIL,
       password: FIREBIRD_API_PASSWORD,
-    }),
+      json: "true",
+    }).toString(),
+    redirect: 'manual',
   });
-
-  const text = await res.text();
-  const contentType = res.headers.get("content-type") || "";
-
-  console.log('Status HTTP:', res.status);
-  console.log('Content-Type:', contentType);
-  console.log('Resposta (início):', text.slice(0, 500));
-
-  if (!res.ok) {
-    console.error("Erro auth Firebird API:", res.status, text.slice(0, 500));
-    throw new Error(`Erro ao autenticar na API Firebird: ${res.status}`);
-  }
-
-  if (!contentType.includes("application/json")) {
-    console.error("Resposta NÃO JSON na auth Firebird:", {
-      status: res.status,
-      contentType,
-      bodyInicio: text.slice(0, 500),
-    });
-    throw new Error("Firebird API retornou HTML/erro em vez de JSON na autenticação");
-  }
-
-  const json = JSON.parse(text);
-
-  // Flexível com o nome do campo de token
-  const token = json.token ?? json.accessToken ?? json.jwt ?? json.data?.token;
   
-  if (!token) {
-    console.error("Resposta JSON sem token:", json);
-    throw new Error("Resposta da API Firebird não contém token");
+  console.log('📊 Login Status:', loginRes.status);
+  
+  const loginText = await loginRes.text();
+  const loginContentType = loginRes.headers.get("content-type") || "";
+  console.log('📄 Login Content-Type:', loginContentType);
+  console.log('📝 Login Response (início):', loginText.slice(0, 500));
+  
+  // Capturar session cookies
+  const sessionCookies = loginRes.headers.get('set-cookie') || '';
+  console.log('🍪 Session Cookies:', sessionCookies ? sessionCookies.slice(0, 200) + '...' : 'NENHUM');
+  
+  // NextAuth pode retornar JSON com o token ou usar session cookies
+  if (loginContentType.includes("application/json")) {
+    try {
+      const loginJson = JSON.parse(loginText);
+      console.log('📦 JSON de resposta:', loginJson);
+      
+      const token = loginJson.token ?? loginJson.accessToken ?? loginJson.jwt ?? loginJson.data?.token;
+      if (token) {
+        console.log('✅ Token obtido do JSON!');
+        return token;
+      }
+    } catch (e) {
+      console.error("Erro ao parsear JSON de login:", e);
+    }
   }
-
-  console.log('Token obtido com sucesso!');
-  return token;
+  
+  // Tentar extrair session token dos cookies
+  const sessionMatch = sessionCookies.match(/next-auth\.session-token=([^;]+)/);
+  if (sessionMatch) {
+    console.log('✅ Session token extraído dos cookies!');
+    return sessionMatch[1];
+  }
+  
+  // Também tentar __Secure-next-auth.session-token
+  const secureSessionMatch = sessionCookies.match(/__Secure-next-auth\.session-token=([^;]+)/);
+  if (secureSessionMatch) {
+    console.log('✅ Secure session token extraído dos cookies!');
+    return secureSessionMatch[1];
+  }
+  
+  console.error('❌ Não foi possível obter token. Resposta completa:', {
+    status: loginRes.status,
+    headers: Object.fromEntries(loginRes.headers.entries()),
+    body: loginText,
+  });
+  
+  throw new Error("Não foi possível obter token de sessão do NextAuth");
 }
 
 /**
