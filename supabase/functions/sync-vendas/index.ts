@@ -67,13 +67,13 @@ Deno.serve(async (req) => {
     // Buscar progresso de página
     const { data: paginaControle } = await supabase
       .from('etl_controle')
-      .select('ultima_data')
-      .eq('entidade', 'vendas_pagina')
+      .select('pagina_atual')
+      .eq('entidade', 'vendas')
       .maybeSingle();
 
     let paginaInicial = 1;
-    if (!resetProgresso && paginaControle?.ultima_data) {
-      paginaInicial = parseInt(paginaControle.ultima_data) || 1;
+    if (!resetProgresso && paginaControle?.pagina_atual && paginaControle.pagina_atual > 1) {
+      paginaInicial = paginaControle.pagina_atual;
       console.log(`Retomando da página ${paginaInicial}`);
     }
 
@@ -191,21 +191,11 @@ Deno.serve(async (req) => {
     await supabase
       .from('etl_controle')
       .upsert({
-        entidade: 'vendas_pagina',
-        ultima_data: String(proximaPagina),
+        entidade: 'vendas',
+        ultima_data: !hasMore ? dataFim : null,
+        pagina_atual: proximaPagina,
         atualizado_em: new Date().toISOString(),
       }, { onConflict: 'entidade' });
-
-    // Se completou todas as páginas, atualiza controle de data
-    if (!hasMore) {
-      await supabase
-        .from('etl_controle')
-        .upsert({
-          entidade: 'vendas',
-          ultima_data: dataFim,
-          atualizado_em: new Date().toISOString(),
-        }, { onConflict: 'entidade' });
-    }
 
     const concluido = !hasMore;
     console.log(`Sync de vendas ${concluido ? 'COMPLETO' : 'parcial'}.`);

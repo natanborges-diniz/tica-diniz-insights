@@ -19,18 +19,21 @@ export type Database = {
           atualizado_em: string | null
           entidade: string
           id: string
+          pagina_atual: number | null
           ultima_data: string | null
         }
         Insert: {
           atualizado_em?: string | null
           entidade: string
           id?: string
+          pagina_atual?: number | null
           ultima_data?: string | null
         }
         Update: {
           atualizado_em?: string | null
           entidade?: string
           id?: string
+          pagina_atual?: number | null
           ultima_data?: string | null
         }
         Relationships: []
