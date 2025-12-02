@@ -18,35 +18,70 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Busca produtos da API Firebird
-    const json = await firebirdGet('/api/produtos');
-    const produtos = json.data ?? json.produtos ?? json;
+    // Busca produtos da API Firebird v1 com paginação
+    let allProdutos: any[] = [];
+    let pagina = 1;
+    const limite = 1000;
+    let hasMore = true;
 
-    if (!Array.isArray(produtos)) {
-      console.error('Formato inesperado de resposta de produtos:', json);
-      throw new Error('Resposta de produtos não é um array');
+    while (hasMore) {
+      console.log(`Buscando página ${pagina} de produtos...`);
+      
+      const json = await firebirdGet('/api/v1/produtos', {
+        limite,
+        pagina,
+      });
+
+      const produtos = json.data ?? json.produtos ?? json;
+
+      if (!Array.isArray(produtos)) {
+        console.error('Formato inesperado de resposta de produtos:', json);
+        throw new Error('Resposta de produtos não é um array');
+      }
+
+      console.log(`Página ${pagina}: ${produtos.length} produtos`);
+      allProdutos = allProdutos.concat(produtos);
+
+      // Se retornou menos que o limite, não há mais páginas
+      hasMore = produtos.length === limite;
+      pagina++;
+
+      // Limite de segurança para evitar loop infinito
+      if (pagina > 100) {
+        console.log('Limite de páginas atingido (100)');
+        break;
+      }
     }
 
-    console.log(`Recebidos ${produtos.length} produtos da API`);
+    console.log(`Total recebido: ${allProdutos.length} produtos da API`);
 
-    // Mapeia para o formato da tabela stg.produto
-    const rows = produtos.map((p: any) => ({
-      cod_produto: p.codProduto ?? p.id ?? p.codigo,
+    // Mapeia para o formato da tabela stg.produto (conforme novo guia API v1)
+    const rows = allProdutos.map((p: any) => ({
+      cod_produto: p.cod_produto ?? p.codProduto ?? p.id,
       descricao: p.descricao ?? p.nome,
-      referencia: p.referencia ?? null,
-      categoria: p.categoria ?? p.grupo ?? null,
+      referencia: p.codigo_barra ?? p.codigoBarra ?? p.referencia ?? null,
+      categoria: p.tipo_item ?? p.tipoItem ?? p.categoria ?? p.grupo ?? null,
       ativo: p.ativo ?? true,
+      preco_venda: p.preco_venda ?? p.precoVenda ?? null,
+      preco_custo: p.preco_custo ?? p.precoCusto ?? null,
     })).filter((r: any) => r.cod_produto != null);
 
     console.log(`Gravando ${rows.length} produtos em stg.produto...`);
 
-    const { error } = await supabase
-      .from('produto')
-      .upsert(rows, { onConflict: 'cod_produto' });
+    // Grava em lotes de 500 para evitar timeout
+    const batchSize = 500;
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const batch = rows.slice(i, i + batchSize);
+      console.log(`Gravando lote ${Math.floor(i / batchSize) + 1}/${Math.ceil(rows.length / batchSize)}...`);
+      
+      const { error } = await supabase
+        .from('produto')
+        .upsert(batch, { onConflict: 'cod_produto' });
 
-    if (error) {
-      console.error('Erro ao fazer upsert em stg.produto:', error);
-      throw error;
+      if (error) {
+        console.error('Erro ao fazer upsert em stg.produto:', error);
+        throw error;
+      }
     }
 
     console.log('Sync de produtos concluído com sucesso.');
@@ -55,8 +90,9 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         message: `${rows.length} produtos sincronizados com sucesso`,
-        totalRecebidos: produtos.length,
+        totalRecebidos: allProdutos.length,
         totalGravados: rows.length,
+        paginas: pagina - 1,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
