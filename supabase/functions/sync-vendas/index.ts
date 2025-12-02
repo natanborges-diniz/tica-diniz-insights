@@ -215,6 +215,10 @@ Deno.serve(async (req) => {
         status: v.naturezaOperacao ?? v.natureza_operacao ?? v.status ?? null,
         total: v.total ?? v.valorTotal ?? null,
         cod_vendedor: codVendedor,
+        // Armazena nomes originais para referência
+        cliente_nome: v.cliente ?? null,
+        loja_nome: v.loja ?? null,
+        vendedor_nome: v.vendedor ?? null,
       });
     }
 
