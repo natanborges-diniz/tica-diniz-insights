@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.transform-dw]
 verify_jwt = false
+
+[functions.orchestrate-sync]
+verify_jwt = false
