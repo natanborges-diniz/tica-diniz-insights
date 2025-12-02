@@ -7,7 +7,6 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -15,7 +14,6 @@ Deno.serve(async (req) => {
   try {
     console.log('Iniciando sync de vendas...');
 
-    // Cria cliente Supabase com service role
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -23,7 +21,7 @@ Deno.serve(async (req) => {
     // Sistema de sincronização incremental via stg.etl_controle
     const hoje = new Date();
     const dataFim = hoje.toISOString().slice(0, 10); // YYYY-MM-DD
-    
+
     // Buscar última data sincronizada
     const { data: controle, error: controleError } = await supabase
       .from('etl_controle')
@@ -32,14 +30,14 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     let dataInicio: string;
-    
+
     if (controleError || !controle) {
       // Primeira execução: buscar últimos 365 dias
       const umAnoAtras = new Date(hoje.getTime() - 365 * 24 * 60 * 60 * 1000);
       dataInicio = umAnoAtras.toISOString().slice(0, 10);
       console.log('Primeira sincronização de vendas. Buscando últimos 365 dias.');
     } else {
-      // Sincronização incremental: buscar desde última data (com 1 dia de segurança)
+      // Sincronização incremental: desde última data (1 dia de segurança)
       const ultimaData = new Date(controle.ultima_data);
       const dataSeguranca = new Date(ultimaData.getTime() - 1 * 24 * 60 * 60 * 1000);
       dataInicio = dataSeguranca.toISOString().slice(0, 10);
@@ -48,53 +46,75 @@ Deno.serve(async (req) => {
 
     console.log(`Sincronizando vendas de ${dataInicio} até ${dataFim}`);
 
-    // Busca vendas da API Firebird
-    const json = await firebirdGet('/api/vendas', {
-      dataInicio,
-      dataFim,
-      // loja: opcional
-      // limit/pagina: se existirem
-    });
+    // Busca vendas da API Firebird v1 com paginação
+    let allVendas: any[] = [];
+    let pagina = 1;
+    const limite = 500;
+    let hasMore = true;
 
-    // Adapta o caminho conforme formato real da resposta
-    const vendas = json.data ?? json.vendas ?? json;
+    while (hasMore) {
+      console.log(`Buscando página ${pagina} de vendas...`);
+      
+      const json = await firebirdGet('/api/v1/vendas', {
+        dataInicio,
+        dataFim,
+        limite,
+        pagina,
+      });
 
-    if (!Array.isArray(vendas)) {
-      console.error('Formato inesperado de resposta de vendas:', json);
-      throw new Error('Resposta de vendas não é um array');
+      const vendas = json.data ?? json.vendas ?? json;
+
+      if (!Array.isArray(vendas)) {
+        console.error('Formato inesperado de resposta de vendas:', json);
+        throw new Error('Resposta de vendas não é um array');
+      }
+
+      console.log(`Página ${pagina}: ${vendas.length} vendas`);
+      allVendas = allVendas.concat(vendas);
+
+      hasMore = vendas.length === limite;
+      pagina++;
+
+      // Limite de segurança
+      if (pagina > 200) {
+        console.log('Limite de páginas atingido (200)');
+        break;
+      }
     }
 
-    console.log(`Recebidas ${vendas.length} vendas da API`);
+    console.log(`Total recebido: ${allVendas.length} vendas da API`);
 
     const vendasRows: any[] = [];
     const itensRows: any[] = [];
 
-    // Processa cada venda e seus itens
-    for (const v of vendas) {
-      const idVenda = v.idVenda ?? v.id ?? v.numero;
+    // Processa cada venda e seus itens (conforme novo guia API v1)
+    for (const v of allVendas) {
+      const codTransacao = v.cod_transacao ?? v.codTransacao ?? v.id ?? v.numero;
 
       vendasRows.push({
-        id_venda: idVenda,
-        numero: v.numero ?? String(idVenda),
-        data_emissao: v.dataEmissao ?? v.data ?? null,
-        data_lancamento: v.dataLancamento ?? null,
-        cod_pessoa: v.cliente?.codPessoa ?? v.codCliente ?? null,
-        cod_empresa: v.empresa?.codEmpresa ?? v.codEmpresa ?? null,
-        status: v.status ?? null,
+        id_venda: codTransacao,
+        numero: v.numero_transacao ?? v.numeroTransacao ?? String(codTransacao),
+        data_emissao: v.data_emissao ?? v.dataEmissao ?? null,
+        data_lancamento: v.data_encerramento ?? v.dataEncerramento ?? null,
+        cod_pessoa: v.cliente?.cod_pessoa ?? v.cliente?.codPessoa ?? v.codCliente ?? null,
+        cod_empresa: v.loja?.cod_empresa ?? v.loja?.codEmpresa ?? v.codEmpresa ?? null,
+        status: v.natureza_operacao ?? v.naturezaOperacao ?? v.status ?? null,
         total: v.total ?? v.valorTotal ?? null,
+        cod_vendedor: v.vendedor?.cod_pessoa ?? v.vendedor?.codPessoa ?? null,
       });
 
       // Processa itens da venda
-      if (Array.isArray(v.itens)) {
-        for (const it of v.itens) {
+      const itens = v.itens ?? v.items ?? [];
+      if (Array.isArray(itens)) {
+        for (const it of itens) {
           itensRows.push({
-            id_venda: idVenda,
-            seq_item: it.seqItem ?? it.sequencia ?? 1,
-            cod_produto: it.produto?.codProduto ?? it.codProduto ?? null,
+            id_venda: codTransacao,
+            seq_item: it.seq_item ?? it.seqItem ?? it.sequencia ?? 1,
+            cod_produto: it.produto?.cod_produto ?? it.produto?.codProduto ?? it.codProduto ?? null,
             quantidade: it.quantidade ?? 1,
-            valor_unitario: it.valorUnitario ?? null,
-            valor_desconto: it.valorDesconto ?? 0,
-            valor_total: it.valorTotal ?? null,
+            valor_unitario: it.valor_unitario ?? it.valorUnitario ?? null,
+            valor_desconto: it.valor_desconto ?? it.valorDesconto ?? 0,
+            valor_total: it.valor_total ?? it.valorTotal ?? null,
           });
         }
       }
@@ -102,27 +122,39 @@ Deno.serve(async (req) => {
 
     console.log(`Gravando ${vendasRows.length} vendas e ${itensRows.length} itens...`);
 
-    // Grava vendas
+    // Grava vendas em lotes
     if (vendasRows.length > 0) {
-      const { error } = await supabase
-        .from('venda')
-        .upsert(vendasRows, { onConflict: 'id_venda' });
+      const batchSize = 500;
+      for (let i = 0; i < vendasRows.length; i += batchSize) {
+        const batch = vendasRows.slice(i, i + batchSize);
+        console.log(`Gravando lote de vendas ${Math.floor(i / batchSize) + 1}/${Math.ceil(vendasRows.length / batchSize)}...`);
+        
+        const { error } = await supabase
+          .from('venda')
+          .upsert(batch, { onConflict: 'id_venda' });
 
-      if (error) {
-        console.error('Erro ao fazer upsert em stg.venda:', error);
-        throw error;
+        if (error) {
+          console.error('Erro ao fazer upsert em stg.venda:', error);
+          throw error;
+        }
       }
     }
 
-    // Grava itens das vendas
+    // Grava itens em lotes
     if (itensRows.length > 0) {
-      const { error } = await supabase
-        .from('venda_item')
-        .upsert(itensRows, { onConflict: 'id_venda,seq_item' });
+      const batchSize = 500;
+      for (let i = 0; i < itensRows.length; i += batchSize) {
+        const batch = itensRows.slice(i, i + batchSize);
+        console.log(`Gravando lote de itens ${Math.floor(i / batchSize) + 1}/${Math.ceil(itensRows.length / batchSize)}...`);
+        
+        const { error } = await supabase
+          .from('venda_item')
+          .upsert(batch, { onConflict: 'id_venda,seq_item' });
 
-      if (error) {
-        console.error('Erro ao fazer upsert em stg.venda_item:', error);
-        throw error;
+        if (error) {
+          console.error('Erro ao fazer upsert em stg.venda_item:', error);
+          throw error;
+        }
       }
     }
 
@@ -137,7 +169,6 @@ Deno.serve(async (req) => {
 
     if (controleUpdateError) {
       console.error('Erro ao atualizar stg.etl_controle:', controleUpdateError);
-      // Não falha a operação toda, apenas loga o erro
     }
 
     console.log('Sync de vendas concluído com sucesso.');
@@ -149,6 +180,7 @@ Deno.serve(async (req) => {
         periodo: { dataInicio, dataFim },
         totalVendas: vendasRows.length,
         totalItens: itensRows.length,
+        paginas: pagina - 1,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
