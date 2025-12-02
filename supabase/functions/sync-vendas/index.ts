@@ -14,11 +14,13 @@ Deno.serve(async (req) => {
   try {
     // Parâmetros configuráveis
     const urlParams = new URL(req.url);
-    let maxPaginas = parseInt(urlParams.searchParams.get('maxPaginas') || '20');
-    let limiteRegistros = parseInt(urlParams.searchParams.get('limite') || '200');
+    let maxPaginas = parseInt(urlParams.searchParams.get('maxPaginas') || '5');
+    let limiteRegistros = parseInt(urlParams.searchParams.get('limite') || '500');
     let resetProgresso = urlParams.searchParams.get('reset') === 'true';
     let dataInicioParam = urlParams.searchParams.get('dataInicio');
     let dataFimParam = urlParams.searchParams.get('dataFim');
+    let debugMode = urlParams.searchParams.get('debug') === 'true';
+    let buscarItens = urlParams.searchParams.get('buscarItens') !== 'false';
 
     if (req.method === 'POST') {
       try {
@@ -28,10 +30,12 @@ Deno.serve(async (req) => {
         resetProgresso = body.reset ?? resetProgresso;
         dataInicioParam = body.dataInicio ?? dataInicioParam;
         dataFimParam = body.dataFim ?? dataFimParam;
+        debugMode = body.debug ?? debugMode;
+        buscarItens = body.buscarItens ?? buscarItens;
       } catch {}
     }
 
-    console.log(`Iniciando sync de vendas (max ${maxPaginas} páginas, ${limiteRegistros} por página)...`);
+    console.log(`Iniciando sync de vendas (max ${maxPaginas} páginas, ${limiteRegistros} por página, debug: ${debugMode}, buscarItens: ${buscarItens})...`);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -52,10 +56,10 @@ Deno.serve(async (req) => {
     if (dataInicioParam) {
       dataInicio = dataInicioParam;
     } else if (!controleData?.ultima_data) {
-      // Primeira execução: últimos 30 dias (mais seguro)
-      const trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000);
-      dataInicio = trintaDiasAtras.toISOString().slice(0, 10);
-      console.log('Primeira sincronização. Buscando últimos 30 dias.');
+      // Primeira execução: últimos 365 dias para capturar histórico
+      const umAnoAtras = new Date(hoje.getTime() - 365 * 24 * 60 * 60 * 1000);
+      dataInicio = umAnoAtras.toISOString().slice(0, 10);
+      console.log('Primeira sincronização. Buscando últimos 365 dias.');
     } else {
       // Incremental: desde última data (1 dia de segurança)
       const ultimaData = new Date(controleData.ultima_data);
@@ -64,20 +68,44 @@ Deno.serve(async (req) => {
       console.log(`Sincronização incremental desde ${controleData.ultima_data}`);
     }
 
-    // Buscar progresso de página
-    const { data: paginaControle } = await supabase
-      .from('etl_controle')
-      .select('pagina_atual')
-      .eq('entidade', 'vendas')
-      .maybeSingle();
-
+    // Buscar progresso de página (não usado em debug mode)
     let paginaInicial = 1;
-    if (!resetProgresso && paginaControle?.pagina_atual && paginaControle.pagina_atual > 1) {
-      paginaInicial = paginaControle.pagina_atual;
-      console.log(`Retomando da página ${paginaInicial}`);
+    if (!resetProgresso && !debugMode) {
+      const { data: paginaControle } = await supabase
+        .from('etl_controle')
+        .select('pagina_atual')
+        .eq('entidade', 'vendas')
+        .maybeSingle();
+
+      if (paginaControle?.pagina_atual && paginaControle.pagina_atual > 1) {
+        paginaInicial = paginaControle.pagina_atual;
+        console.log(`Retomando da página ${paginaInicial}`);
+      }
     }
 
     console.log(`Período: ${dataInicio} até ${dataFim}`);
+
+    // Carregar mapeamentos de lojas e pessoas por nome (para fazer join)
+    const { data: lojas } = await supabase
+      .from('empresa')
+      .select('cod_empresa, razao_social, nome_fantasia');
+    
+    const lojaMap = new Map<string, number>();
+    for (const loja of lojas || []) {
+      if (loja.nome_fantasia) lojaMap.set(loja.nome_fantasia.toUpperCase().trim(), loja.cod_empresa);
+      if (loja.razao_social) lojaMap.set(loja.razao_social.toUpperCase().trim(), loja.cod_empresa);
+    }
+    console.log(`Carregadas ${lojaMap.size} lojas para mapeamento`);
+
+    const { data: pessoas } = await supabase
+      .from('pessoa')
+      .select('cod_pessoa, nome');
+    
+    const pessoaMap = new Map<string, number>();
+    for (const pessoa of pessoas || []) {
+      if (pessoa.nome) pessoaMap.set(pessoa.nome.toUpperCase().trim(), pessoa.cod_pessoa);
+    }
+    console.log(`Carregadas ${pessoaMap.size} pessoas para mapeamento`);
 
     let allVendas: any[] = [];
     let pagina = paginaInicial;
@@ -94,7 +122,13 @@ Deno.serve(async (req) => {
         pagina,
       });
 
-      const vendas = json.data ?? json.vendas ?? json;
+      if (debugMode && paginasProcessadas === 0) {
+        console.log('=== DEBUG: ESTRUTURA RAW DO JSON ===');
+        console.log('Chaves do objeto:', Object.keys(json));
+        console.log('JSON (primeiros 2000 chars):', JSON.stringify(json).slice(0, 2000));
+      }
+
+      const vendas = json.vendas ?? json.data ?? json;
 
       if (!Array.isArray(vendas)) {
         console.error('Formato inesperado:', json);
@@ -114,45 +148,82 @@ Deno.serve(async (req) => {
 
     console.log(`Total recebido: ${allVendas.length} vendas em ${paginasProcessadas} páginas`);
 
+    // Em modo debug, retorna apenas a análise sem gravar
+    if (debugMode) {
+      const camposEncontrados: Record<string, any> = {};
+      
+      if (allVendas.length > 0) {
+        const v = allVendas[0];
+        camposEncontrados.chaves_venda = Object.keys(v);
+        camposEncontrados.amostra_venda = v;
+        camposEncontrados.mapeamento = {
+          loja_encontrada: v.loja ? lojaMap.get(v.loja.toUpperCase().trim()) : null,
+          cliente_encontrado: v.cliente ? pessoaMap.get(v.cliente.toUpperCase().trim()) : null,
+          vendedor_encontrado: v.vendedor ? pessoaMap.get(v.vendedor.toUpperCase().trim()) : null,
+        };
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: 'DEBUG',
+          message: 'Análise de estrutura - nenhum dado foi gravado',
+          periodo: { dataInicio, dataFim },
+          totalVendasAnalisadas: allVendas.length,
+          lojasCarregadas: lojaMap.size,
+          pessoasCarregadas: pessoaMap.size,
+          estrutura: camposEncontrados,
+        }, null, 2),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
+
+    // Modo normal: processa e grava
     const vendasRows: any[] = [];
-    const itensRows: any[] = [];
+    let vendasSemCliente = 0;
+    let vendasSemLoja = 0;
+    let vendasSemVendedor = 0;
 
     for (const v of allVendas) {
-      const codTransacao = v.cod_transacao ?? v.codTransacao ?? v.id ?? v.numero;
+      const codTransacao = v.codTransacao ?? v.cod_transacao ?? v.id ?? v.numero;
+      
+      // Mapeia loja pelo nome
+      const lojaName = v.loja?.toUpperCase().trim();
+      const codEmpresa = lojaName ? lojaMap.get(lojaName) : null;
+      if (!codEmpresa && lojaName) vendasSemLoja++;
+
+      // Mapeia cliente pelo nome
+      const clienteName = v.cliente?.toUpperCase().trim();
+      const codPessoa = clienteName ? pessoaMap.get(clienteName) : null;
+      if (!codPessoa && clienteName && clienteName !== 'CONSUMIDOR') vendasSemCliente++;
+
+      // Mapeia vendedor pelo nome
+      const vendedorName = v.vendedor?.toUpperCase().trim();
+      const codVendedor = vendedorName ? pessoaMap.get(vendedorName) : null;
+      if (!codVendedor && vendedorName && vendedorName !== 'VENDEDOR LOJA') vendasSemVendedor++;
 
       vendasRows.push({
         id_venda: codTransacao,
-        numero: v.numero_transacao ?? v.numeroTransacao ?? String(codTransacao),
-        data_emissao: v.data_emissao ?? v.dataEmissao ?? null,
-        data_lancamento: v.data_encerramento ?? v.dataEncerramento ?? null,
-        cod_pessoa: v.cliente?.cod_pessoa ?? v.cliente?.codPessoa ?? v.codCliente ?? null,
-        cod_empresa: v.loja?.cod_empresa ?? v.loja?.codEmpresa ?? v.codEmpresa ?? null,
-        status: v.natureza_operacao ?? v.naturezaOperacao ?? v.status ?? null,
+        numero: v.numeroTransacao ?? v.numero_transacao ?? String(codTransacao),
+        data_emissao: v.dataEmissao ?? v.data_emissao ?? null,
+        data_lancamento: v.dataEncerramento ?? v.data_encerramento ?? null,
+        cod_pessoa: codPessoa,
+        cod_empresa: codEmpresa,
+        status: v.naturezaOperacao ?? v.natureza_operacao ?? v.status ?? null,
         total: v.total ?? v.valorTotal ?? null,
-        cod_vendedor: v.vendedor?.cod_pessoa ?? v.vendedor?.codPessoa ?? null,
+        cod_vendedor: codVendedor,
       });
-
-      const itens = v.itens ?? v.items ?? [];
-      if (Array.isArray(itens)) {
-        for (const it of itens) {
-          itensRows.push({
-            id_venda: codTransacao,
-            seq_item: it.seq_item ?? it.seqItem ?? it.sequencia ?? 1,
-            cod_produto: it.produto?.cod_produto ?? it.produto?.codProduto ?? it.codProduto ?? null,
-            quantidade: it.quantidade ?? 1,
-            valor_unitario: it.valor_unitario ?? it.valorUnitario ?? null,
-            valor_desconto: it.valor_desconto ?? it.valorDesconto ?? 0,
-            valor_total: it.valor_total ?? it.valorTotal ?? null,
-          });
-        }
-      }
     }
 
-    console.log(`Gravando ${vendasRows.length} vendas e ${itensRows.length} itens...`);
+    console.log(`Mapeamento: ${vendasSemLoja} vendas sem loja, ${vendasSemCliente} sem cliente, ${vendasSemVendedor} sem vendedor`);
+    console.log(`Gravando ${vendasRows.length} vendas...`);
 
-    // Grava vendas em lotes menores
+    // Grava vendas em lotes
     if (vendasRows.length > 0) {
-      const batchSize = 100;
+      const batchSize = 200;
       for (let i = 0; i < vendasRows.length; i += batchSize) {
         const batch = vendasRows.slice(i, i + batchSize);
         console.log(`Gravando lote de vendas ${Math.floor(i / batchSize) + 1}/${Math.ceil(vendasRows.length / batchSize)}...`);
@@ -168,20 +239,26 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Grava itens em lotes menores
-    if (itensRows.length > 0) {
-      const batchSize = 200;
-      for (let i = 0; i < itensRows.length; i += batchSize) {
-        const batch = itensRows.slice(i, i + batchSize);
-        console.log(`Gravando lote de itens ${Math.floor(i / batchSize) + 1}/${Math.ceil(itensRows.length / batchSize)}...`);
-        
-        const { error } = await supabase
-          .from('venda_item')
-          .upsert(batch, { onConflict: 'id_venda,seq_item' });
-
-        if (error) {
-          console.error('Erro no upsert itens:', error);
-          throw error;
+    // Buscar itens separadamente para cada venda (se solicitado e se houver endpoint)
+    let totalItens = 0;
+    if (buscarItens && vendasRows.length > 0) {
+      console.log('Tentando buscar itens das vendas...');
+      
+      // Tenta endpoint de itens por venda
+      for (let i = 0; i < Math.min(vendasRows.length, 5); i++) {
+        const venda = vendasRows[i];
+        try {
+          // Tenta /api/v1/vendas/{id}/itens
+          const itensJson = await firebirdGet(`/api/v1/vendas/${venda.id_venda}/itens`, {});
+          console.log(`Itens da venda ${venda.id_venda}:`, JSON.stringify(itensJson).slice(0, 500));
+          
+          const itens = itensJson.itens ?? itensJson.items ?? itensJson.data ?? itensJson;
+          if (Array.isArray(itens)) {
+            totalItens += itens.length;
+          }
+        } catch (e) {
+          console.log(`Endpoint de itens não disponível: ${e}`);
+          break; // Se falhar, não tenta mais
         }
       }
     }
@@ -204,11 +281,17 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         message: concluido 
-          ? `Sincronização completa: ${vendasRows.length} vendas, ${itensRows.length} itens` 
-          : `Chunk processado: ${vendasRows.length} vendas, ${itensRows.length} itens`,
+          ? `Sincronização completa: ${vendasRows.length} vendas` 
+          : `Chunk processado: ${vendasRows.length} vendas`,
         periodo: { dataInicio, dataFim },
         totalVendas: vendasRows.length,
-        totalItens: itensRows.length,
+        totalItens,
+        totalGravados: vendasRows.length,
+        mapeamento: {
+          vendasSemLoja,
+          vendasSemCliente,
+          vendasSemVendedor,
+        },
         paginaInicial,
         paginaFinal: pagina - 1,
         paginasProcessadas,
