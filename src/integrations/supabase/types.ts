@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      empresa: {
+        Row: {
+          cidade: string | null
+          cnpj: string | null
+          cod_empresa: number
+          id: string
+          nome_fantasia: string | null
+          razao_social: string | null
+          stg_loaded_at: string | null
+          stg_source: string | null
+          uf: string | null
+        }
+        Insert: {
+          cidade?: string | null
+          cnpj?: string | null
+          cod_empresa: number
+          id?: string
+          nome_fantasia?: string | null
+          razao_social?: string | null
+          stg_loaded_at?: string | null
+          stg_source?: string | null
+          uf?: string | null
+        }
+        Update: {
+          cidade?: string | null
+          cnpj?: string | null
+          cod_empresa?: number
+          id?: string
+          nome_fantasia?: string | null
+          razao_social?: string | null
+          stg_loaded_at?: string | null
+          stg_source?: string | null
+          uf?: string | null
+        }
+        Relationships: []
+      }
       etl_controle: {
         Row: {
           atualizado_em: string | null
@@ -127,6 +163,7 @@ export type Database = {
       }
       venda: {
         Row: {
+          cliente_nome: string | null
           cod_empresa: number | null
           cod_pessoa: number | null
           cod_vendedor: number | null
@@ -134,13 +171,16 @@ export type Database = {
           data_lancamento: string | null
           id: string
           id_venda: number
+          loja_nome: string | null
           numero: string | null
           status: string | null
           stg_loaded_at: string | null
           stg_source: string | null
           total: number | null
+          vendedor_nome: string | null
         }
         Insert: {
+          cliente_nome?: string | null
           cod_empresa?: number | null
           cod_pessoa?: number | null
           cod_vendedor?: number | null
@@ -148,13 +188,16 @@ export type Database = {
           data_lancamento?: string | null
           id?: string
           id_venda: number
+          loja_nome?: string | null
           numero?: string | null
           status?: string | null
           stg_loaded_at?: string | null
           stg_source?: string | null
           total?: number | null
+          vendedor_nome?: string | null
         }
         Update: {
+          cliente_nome?: string | null
           cod_empresa?: number | null
           cod_pessoa?: number | null
           cod_vendedor?: number | null
@@ -162,11 +205,13 @@ export type Database = {
           data_lancamento?: string | null
           id?: string
           id_venda?: number
+          loja_nome?: string | null
           numero?: string | null
           status?: string | null
           stg_loaded_at?: string | null
           stg_source?: string | null
           total?: number | null
+          vendedor_nome?: string | null
         }
         Relationships: []
       }
