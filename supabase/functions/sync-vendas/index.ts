@@ -85,15 +85,14 @@ Deno.serve(async (req) => {
 
     console.log(`Período: ${dataInicio} até ${dataFim}`);
 
-    // Carregar mapeamentos de lojas e pessoas por nome (para fazer join)
+    // Carregar mapeamentos de lojas por nome (para fazer join)
     const { data: lojas } = await supabase
       .from('empresa')
-      .select('cod_empresa, razao_social, nome_fantasia');
+      .select('cod_empresa, nome_fantasia');
     
     const lojaMap = new Map<string, number>();
     for (const loja of lojas || []) {
       if (loja.nome_fantasia) lojaMap.set(loja.nome_fantasia.toUpperCase().trim(), loja.cod_empresa);
-      if (loja.razao_social) lojaMap.set(loja.razao_social.toUpperCase().trim(), loja.cod_empresa);
     }
     console.log(`Carregadas ${lojaMap.size} lojas para mapeamento`);
 
