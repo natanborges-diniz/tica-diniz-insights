@@ -12,50 +12,73 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log('Iniciando sync de produtos...');
+    // Parâmetros configuráveis
+    const url = new URL(req.url);
+    let maxPaginas = parseInt(url.searchParams.get('maxPaginas') || '10');
+    let limiteRegistros = parseInt(url.searchParams.get('limite') || '500');
+    let resetProgresso = url.searchParams.get('reset') === 'true';
+
+    if (req.method === 'POST') {
+      try {
+        const body = await req.json();
+        maxPaginas = body.maxPaginas ?? maxPaginas;
+        limiteRegistros = body.limite ?? limiteRegistros;
+        resetProgresso = body.reset ?? resetProgresso;
+      } catch {}
+    }
+
+    console.log(`Iniciando sync de produtos (max ${maxPaginas} páginas, ${limiteRegistros} por página)...`);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Busca produtos da API Firebird v1 com paginação
+    // Buscar progresso anterior
+    const { data: controle } = await supabase
+      .from('etl_controle')
+      .select('ultima_data')
+      .eq('entidade', 'produtos_pagina')
+      .maybeSingle();
+
+    let paginaInicial = 1;
+    if (!resetProgresso && controle?.ultima_data) {
+      paginaInicial = parseInt(controle.ultima_data) || 1;
+      console.log(`Retomando da página ${paginaInicial}`);
+    }
+
     let allProdutos: any[] = [];
-    let pagina = 1;
-    const limite = 1000;
+    let pagina = paginaInicial;
+    let paginasProcessadas = 0;
     let hasMore = true;
 
-    while (hasMore) {
+    while (hasMore && paginasProcessadas < maxPaginas) {
       console.log(`Buscando página ${pagina} de produtos...`);
       
       const json = await firebirdGet('/api/v1/produtos', {
-        limite,
+        limite: limiteRegistros,
         pagina,
       });
 
       const produtos = json.data ?? json.produtos ?? json;
 
       if (!Array.isArray(produtos)) {
-        console.error('Formato inesperado de resposta de produtos:', json);
-        throw new Error('Resposta de produtos não é um array');
+        console.error('Formato inesperado:', json);
+        throw new Error('Resposta não é um array');
       }
 
       console.log(`Página ${pagina}: ${produtos.length} produtos`);
-      allProdutos = allProdutos.concat(produtos);
-
-      // Se retornou menos que o limite, não há mais páginas
-      hasMore = produtos.length === limite;
-      pagina++;
-
-      // Limite de segurança para evitar loop infinito
-      if (pagina > 100) {
-        console.log('Limite de páginas atingido (100)');
-        break;
+      
+      if (produtos.length > 0) {
+        allProdutos = allProdutos.concat(produtos);
       }
+
+      hasMore = produtos.length === limiteRegistros;
+      pagina++;
+      paginasProcessadas++;
     }
 
-    console.log(`Total recebido: ${allProdutos.length} produtos da API`);
+    console.log(`Total recebido: ${allProdutos.length} produtos em ${paginasProcessadas} páginas`);
 
-    // Mapeia para o formato da tabela stg.produto (conforme novo guia API v1)
     const rows = allProdutos.map((p: any) => ({
       cod_produto: p.cod_produto ?? p.codProduto ?? p.id,
       descricao: p.descricao ?? p.nome,
@@ -66,10 +89,9 @@ Deno.serve(async (req) => {
       preco_custo: p.preco_custo ?? p.precoCusto ?? null,
     })).filter((r: any) => r.cod_produto != null);
 
-    console.log(`Gravando ${rows.length} produtos em stg.produto...`);
+    console.log(`Gravando ${rows.length} produtos...`);
 
-    // Grava em lotes de 500 para evitar timeout
-    const batchSize = 500;
+    const batchSize = 250;
     for (let i = 0; i < rows.length; i += batchSize) {
       const batch = rows.slice(i, i + batchSize);
       console.log(`Gravando lote ${Math.floor(i / batchSize) + 1}/${Math.ceil(rows.length / batchSize)}...`);
@@ -79,20 +101,44 @@ Deno.serve(async (req) => {
         .upsert(batch, { onConflict: 'cod_produto' });
 
       if (error) {
-        console.error('Erro ao fazer upsert em stg.produto:', error);
+        console.error('Erro no upsert:', error);
         throw error;
       }
     }
 
-    console.log('Sync de produtos concluído com sucesso.');
+    // Salva progresso
+    const proximaPagina = hasMore ? pagina : 1;
+    await supabase
+      .from('etl_controle')
+      .upsert({
+        entidade: 'produtos_pagina',
+        ultima_data: String(proximaPagina),
+        atualizado_em: new Date().toISOString(),
+      }, { onConflict: 'entidade' });
+
+    await supabase
+      .from('etl_controle')
+      .upsert({
+        entidade: 'produtos',
+        ultima_data: new Date().toISOString().slice(0, 10),
+        atualizado_em: new Date().toISOString(),
+      }, { onConflict: 'entidade' });
+
+    const concluido = !hasMore;
+    console.log(`Sync de produtos ${concluido ? 'COMPLETO' : 'parcial'}.`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: `${rows.length} produtos sincronizados com sucesso`,
-        totalRecebidos: allProdutos.length,
+        message: concluido 
+          ? `Sincronização completa: ${rows.length} produtos` 
+          : `Chunk processado: ${rows.length} produtos`,
         totalGravados: rows.length,
-        paginas: pagina - 1,
+        paginaInicial,
+        paginaFinal: pagina - 1,
+        paginasProcessadas,
+        proximaPagina: hasMore ? pagina : null,
+        concluido,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
