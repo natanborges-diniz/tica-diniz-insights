@@ -256,7 +256,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      executar_transformacao_dw: { Args: never; Returns: Json }
     }
     Enums: {
       [_ in never]: never
