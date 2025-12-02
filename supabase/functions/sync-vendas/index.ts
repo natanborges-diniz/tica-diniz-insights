@@ -12,82 +12,111 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log('Iniciando sync de vendas...');
+    // Parâmetros configuráveis
+    const urlParams = new URL(req.url);
+    let maxPaginas = parseInt(urlParams.searchParams.get('maxPaginas') || '20');
+    let limiteRegistros = parseInt(urlParams.searchParams.get('limite') || '200');
+    let resetProgresso = urlParams.searchParams.get('reset') === 'true';
+    let dataInicioParam = urlParams.searchParams.get('dataInicio');
+    let dataFimParam = urlParams.searchParams.get('dataFim');
+
+    if (req.method === 'POST') {
+      try {
+        const body = await req.json();
+        maxPaginas = body.maxPaginas ?? maxPaginas;
+        limiteRegistros = body.limite ?? limiteRegistros;
+        resetProgresso = body.reset ?? resetProgresso;
+        dataInicioParam = body.dataInicio ?? dataInicioParam;
+        dataFimParam = body.dataFim ?? dataFimParam;
+      } catch {}
+    }
+
+    console.log(`Iniciando sync de vendas (max ${maxPaginas} páginas, ${limiteRegistros} por página)...`);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Sistema de sincronização incremental via stg.etl_controle
+    // Determina período de sincronização
     const hoje = new Date();
-    const dataFim = hoje.toISOString().slice(0, 10); // YYYY-MM-DD
+    const dataFim = dataFimParam || hoje.toISOString().slice(0, 10);
 
     // Buscar última data sincronizada
-    const { data: controle, error: controleError } = await supabase
+    const { data: controleData } = await supabase
       .from('etl_controle')
       .select('ultima_data')
       .eq('entidade', 'vendas')
       .maybeSingle();
 
     let dataInicio: string;
-
-    if (controleError || !controle) {
-      // Primeira execução: buscar últimos 365 dias
-      const umAnoAtras = new Date(hoje.getTime() - 365 * 24 * 60 * 60 * 1000);
-      dataInicio = umAnoAtras.toISOString().slice(0, 10);
-      console.log('Primeira sincronização de vendas. Buscando últimos 365 dias.');
+    if (dataInicioParam) {
+      dataInicio = dataInicioParam;
+    } else if (!controleData?.ultima_data) {
+      // Primeira execução: últimos 30 dias (mais seguro)
+      const trintaDiasAtras = new Date(hoje.getTime() - 30 * 24 * 60 * 60 * 1000);
+      dataInicio = trintaDiasAtras.toISOString().slice(0, 10);
+      console.log('Primeira sincronização. Buscando últimos 30 dias.');
     } else {
-      // Sincronização incremental: desde última data (1 dia de segurança)
-      const ultimaData = new Date(controle.ultima_data);
+      // Incremental: desde última data (1 dia de segurança)
+      const ultimaData = new Date(controleData.ultima_data);
       const dataSeguranca = new Date(ultimaData.getTime() - 1 * 24 * 60 * 60 * 1000);
       dataInicio = dataSeguranca.toISOString().slice(0, 10);
-      console.log(`Sincronização incremental desde ${controle.ultima_data}`);
+      console.log(`Sincronização incremental desde ${controleData.ultima_data}`);
     }
 
-    console.log(`Sincronizando vendas de ${dataInicio} até ${dataFim}`);
+    // Buscar progresso de página
+    const { data: paginaControle } = await supabase
+      .from('etl_controle')
+      .select('ultima_data')
+      .eq('entidade', 'vendas_pagina')
+      .maybeSingle();
 
-    // Busca vendas da API Firebird v1 com paginação
+    let paginaInicial = 1;
+    if (!resetProgresso && paginaControle?.ultima_data) {
+      paginaInicial = parseInt(paginaControle.ultima_data) || 1;
+      console.log(`Retomando da página ${paginaInicial}`);
+    }
+
+    console.log(`Período: ${dataInicio} até ${dataFim}`);
+
     let allVendas: any[] = [];
-    let pagina = 1;
-    const limite = 500;
+    let pagina = paginaInicial;
+    let paginasProcessadas = 0;
     let hasMore = true;
 
-    while (hasMore) {
+    while (hasMore && paginasProcessadas < maxPaginas) {
       console.log(`Buscando página ${pagina} de vendas...`);
       
       const json = await firebirdGet('/api/v1/vendas', {
         dataInicio,
         dataFim,
-        limite,
+        limite: limiteRegistros,
         pagina,
       });
 
       const vendas = json.data ?? json.vendas ?? json;
 
       if (!Array.isArray(vendas)) {
-        console.error('Formato inesperado de resposta de vendas:', json);
-        throw new Error('Resposta de vendas não é um array');
+        console.error('Formato inesperado:', json);
+        throw new Error('Resposta não é um array');
       }
 
       console.log(`Página ${pagina}: ${vendas.length} vendas`);
-      allVendas = allVendas.concat(vendas);
-
-      hasMore = vendas.length === limite;
-      pagina++;
-
-      // Limite de segurança
-      if (pagina > 200) {
-        console.log('Limite de páginas atingido (200)');
-        break;
+      
+      if (vendas.length > 0) {
+        allVendas = allVendas.concat(vendas);
       }
+
+      hasMore = vendas.length === limiteRegistros;
+      pagina++;
+      paginasProcessadas++;
     }
 
-    console.log(`Total recebido: ${allVendas.length} vendas da API`);
+    console.log(`Total recebido: ${allVendas.length} vendas em ${paginasProcessadas} páginas`);
 
     const vendasRows: any[] = [];
     const itensRows: any[] = [];
 
-    // Processa cada venda e seus itens (conforme novo guia API v1)
     for (const v of allVendas) {
       const codTransacao = v.cod_transacao ?? v.codTransacao ?? v.id ?? v.numero;
 
@@ -103,7 +132,6 @@ Deno.serve(async (req) => {
         cod_vendedor: v.vendedor?.cod_pessoa ?? v.vendedor?.codPessoa ?? null,
       });
 
-      // Processa itens da venda
       const itens = v.itens ?? v.items ?? [];
       if (Array.isArray(itens)) {
         for (const it of itens) {
@@ -122,9 +150,9 @@ Deno.serve(async (req) => {
 
     console.log(`Gravando ${vendasRows.length} vendas e ${itensRows.length} itens...`);
 
-    // Grava vendas em lotes
+    // Grava vendas em lotes menores
     if (vendasRows.length > 0) {
-      const batchSize = 500;
+      const batchSize = 100;
       for (let i = 0; i < vendasRows.length; i += batchSize) {
         const batch = vendasRows.slice(i, i + batchSize);
         console.log(`Gravando lote de vendas ${Math.floor(i / batchSize) + 1}/${Math.ceil(vendasRows.length / batchSize)}...`);
@@ -134,15 +162,15 @@ Deno.serve(async (req) => {
           .upsert(batch, { onConflict: 'id_venda' });
 
         if (error) {
-          console.error('Erro ao fazer upsert em stg.venda:', error);
+          console.error('Erro no upsert vendas:', error);
           throw error;
         }
       }
     }
 
-    // Grava itens em lotes
+    // Grava itens em lotes menores
     if (itensRows.length > 0) {
-      const batchSize = 500;
+      const batchSize = 200;
       for (let i = 0; i < itensRows.length; i += batchSize) {
         const batch = itensRows.slice(i, i + batchSize);
         console.log(`Gravando lote de itens ${Math.floor(i / batchSize) + 1}/${Math.ceil(itensRows.length / batchSize)}...`);
@@ -152,35 +180,50 @@ Deno.serve(async (req) => {
           .upsert(batch, { onConflict: 'id_venda,seq_item' });
 
         if (error) {
-          console.error('Erro ao fazer upsert em stg.venda_item:', error);
+          console.error('Erro no upsert itens:', error);
           throw error;
         }
       }
     }
 
-    // Atualizar controle de ETL
-    const { error: controleUpdateError } = await supabase
+    // Salva progresso de página
+    const proximaPagina = hasMore ? pagina : 1;
+    await supabase
       .from('etl_controle')
       .upsert({
-        entidade: 'vendas',
-        ultima_data: dataFim,
+        entidade: 'vendas_pagina',
+        ultima_data: String(proximaPagina),
         atualizado_em: new Date().toISOString(),
       }, { onConflict: 'entidade' });
 
-    if (controleUpdateError) {
-      console.error('Erro ao atualizar stg.etl_controle:', controleUpdateError);
+    // Se completou todas as páginas, atualiza controle de data
+    if (!hasMore) {
+      await supabase
+        .from('etl_controle')
+        .upsert({
+          entidade: 'vendas',
+          ultima_data: dataFim,
+          atualizado_em: new Date().toISOString(),
+        }, { onConflict: 'entidade' });
     }
 
-    console.log('Sync de vendas concluído com sucesso.');
+    const concluido = !hasMore;
+    console.log(`Sync de vendas ${concluido ? 'COMPLETO' : 'parcial'}.`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Sincronização concluída com sucesso`,
+        message: concluido 
+          ? `Sincronização completa: ${vendasRows.length} vendas, ${itensRows.length} itens` 
+          : `Chunk processado: ${vendasRows.length} vendas, ${itensRows.length} itens`,
         periodo: { dataInicio, dataFim },
         totalVendas: vendasRows.length,
         totalItens: itensRows.length,
-        paginas: pagina - 1,
+        paginaInicial,
+        paginaFinal: pagina - 1,
+        paginasProcessadas,
+        proximaPagina: hasMore ? pagina : null,
+        concluido,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
