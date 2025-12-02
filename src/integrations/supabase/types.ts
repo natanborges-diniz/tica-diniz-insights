@@ -14,7 +14,195 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      etl_controle: {
+        Row: {
+          atualizado_em: string | null
+          entidade: string
+          id: string
+          ultima_data: string | null
+        }
+        Insert: {
+          atualizado_em?: string | null
+          entidade: string
+          id?: string
+          ultima_data?: string | null
+        }
+        Update: {
+          atualizado_em?: string | null
+          entidade?: string
+          id?: string
+          ultima_data?: string | null
+        }
+        Relationships: []
+      }
+      pessoa: {
+        Row: {
+          ativo: boolean | null
+          cidade: string | null
+          cod_pessoa: number
+          email: string | null
+          id: string
+          identificador: string | null
+          nome: string | null
+          stg_loaded_at: string | null
+          stg_source: string | null
+          telefone: string | null
+          tipo: string | null
+          uf: string | null
+          vendedor: boolean | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          cidade?: string | null
+          cod_pessoa: number
+          email?: string | null
+          id?: string
+          identificador?: string | null
+          nome?: string | null
+          stg_loaded_at?: string | null
+          stg_source?: string | null
+          telefone?: string | null
+          tipo?: string | null
+          uf?: string | null
+          vendedor?: boolean | null
+        }
+        Update: {
+          ativo?: boolean | null
+          cidade?: string | null
+          cod_pessoa?: number
+          email?: string | null
+          id?: string
+          identificador?: string | null
+          nome?: string | null
+          stg_loaded_at?: string | null
+          stg_source?: string | null
+          telefone?: string | null
+          tipo?: string | null
+          uf?: string | null
+          vendedor?: boolean | null
+        }
+        Relationships: []
+      }
+      produto: {
+        Row: {
+          ativo: boolean | null
+          categoria: string | null
+          cod_produto: number
+          descricao: string | null
+          id: string
+          preco_custo: number | null
+          preco_venda: number | null
+          referencia: string | null
+          stg_loaded_at: string | null
+          stg_source: string | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          categoria?: string | null
+          cod_produto: number
+          descricao?: string | null
+          id?: string
+          preco_custo?: number | null
+          preco_venda?: number | null
+          referencia?: string | null
+          stg_loaded_at?: string | null
+          stg_source?: string | null
+        }
+        Update: {
+          ativo?: boolean | null
+          categoria?: string | null
+          cod_produto?: number
+          descricao?: string | null
+          id?: string
+          preco_custo?: number | null
+          preco_venda?: number | null
+          referencia?: string | null
+          stg_loaded_at?: string | null
+          stg_source?: string | null
+        }
+        Relationships: []
+      }
+      venda: {
+        Row: {
+          cod_empresa: number | null
+          cod_pessoa: number | null
+          cod_vendedor: number | null
+          data_emissao: string | null
+          data_lancamento: string | null
+          id: string
+          id_venda: number
+          numero: string | null
+          status: string | null
+          stg_loaded_at: string | null
+          stg_source: string | null
+          total: number | null
+        }
+        Insert: {
+          cod_empresa?: number | null
+          cod_pessoa?: number | null
+          cod_vendedor?: number | null
+          data_emissao?: string | null
+          data_lancamento?: string | null
+          id?: string
+          id_venda: number
+          numero?: string | null
+          status?: string | null
+          stg_loaded_at?: string | null
+          stg_source?: string | null
+          total?: number | null
+        }
+        Update: {
+          cod_empresa?: number | null
+          cod_pessoa?: number | null
+          cod_vendedor?: number | null
+          data_emissao?: string | null
+          data_lancamento?: string | null
+          id?: string
+          id_venda?: number
+          numero?: string | null
+          status?: string | null
+          stg_loaded_at?: string | null
+          stg_source?: string | null
+          total?: number | null
+        }
+        Relationships: []
+      }
+      venda_item: {
+        Row: {
+          cod_produto: number | null
+          id: string
+          id_venda: number
+          quantidade: number | null
+          seq_item: number
+          stg_loaded_at: string | null
+          valor_desconto: number | null
+          valor_total: number | null
+          valor_unitario: number | null
+        }
+        Insert: {
+          cod_produto?: number | null
+          id?: string
+          id_venda: number
+          quantidade?: number | null
+          seq_item: number
+          stg_loaded_at?: string | null
+          valor_desconto?: number | null
+          valor_total?: number | null
+          valor_unitario?: number | null
+        }
+        Update: {
+          cod_produto?: number | null
+          id?: string
+          id_venda?: number
+          quantidade?: number | null
+          seq_item?: number
+          stg_loaded_at?: string | null
+          valor_desconto?: number | null
+          valor_total?: number | null
+          valor_unitario?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
