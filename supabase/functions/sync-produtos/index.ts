@@ -36,13 +36,13 @@ Deno.serve(async (req) => {
     // Buscar progresso anterior
     const { data: controle } = await supabase
       .from('etl_controle')
-      .select('ultima_data')
-      .eq('entidade', 'produtos_pagina')
+      .select('pagina_atual')
+      .eq('entidade', 'produtos')
       .maybeSingle();
 
     let paginaInicial = 1;
-    if (!resetProgresso && controle?.ultima_data) {
-      paginaInicial = parseInt(controle.ultima_data) || 1;
+    if (!resetProgresso && controle?.pagina_atual && controle.pagina_atual > 1) {
+      paginaInicial = controle.pagina_atual;
       console.log(`Retomando da página ${paginaInicial}`);
     }
 
@@ -111,16 +111,9 @@ Deno.serve(async (req) => {
     await supabase
       .from('etl_controle')
       .upsert({
-        entidade: 'produtos_pagina',
-        ultima_data: String(proximaPagina),
-        atualizado_em: new Date().toISOString(),
-      }, { onConflict: 'entidade' });
-
-    await supabase
-      .from('etl_controle')
-      .upsert({
         entidade: 'produtos',
         ultima_data: new Date().toISOString().slice(0, 10),
+        pagina_atual: proximaPagina,
         atualizado_em: new Date().toISOString(),
       }, { onConflict: 'entidade' });
 

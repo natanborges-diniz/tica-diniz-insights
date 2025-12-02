@@ -37,13 +37,13 @@ Deno.serve(async (req) => {
     // Buscar progresso anterior
     const { data: controle } = await supabase
       .from('etl_controle')
-      .select('ultima_data')
-      .eq('entidade', 'clientes_pagina')
+      .select('pagina_atual')
+      .eq('entidade', 'clientes')
       .maybeSingle();
 
     let paginaInicial = 1;
-    if (!resetProgresso && controle?.ultima_data) {
-      paginaInicial = parseInt(controle.ultima_data) || 1;
+    if (!resetProgresso && controle?.pagina_atual && controle.pagina_atual > 1) {
+      paginaInicial = controle.pagina_atual;
       console.log(`Retomando da página ${paginaInicial}`);
     }
 
@@ -119,23 +119,15 @@ Deno.serve(async (req) => {
     const { error: controleError } = await supabase
       .from('etl_controle')
       .upsert({
-        entidade: 'clientes_pagina',
-        ultima_data: String(proximaPagina),
+        entidade: 'clientes',
+        ultima_data: new Date().toISOString().slice(0, 10),
+        pagina_atual: proximaPagina,
         atualizado_em: new Date().toISOString(),
       }, { onConflict: 'entidade' });
 
     if (controleError) {
       console.error('Erro ao salvar progresso:', controleError);
     }
-
-    // Também atualiza controle geral
-    await supabase
-      .from('etl_controle')
-      .upsert({
-        entidade: 'clientes',
-        ultima_data: new Date().toISOString().slice(0, 10),
-        atualizado_em: new Date().toISOString(),
-      }, { onConflict: 'entidade' });
 
     const concluido = !hasMore;
     console.log(`Sync de clientes ${concluido ? 'COMPLETO' : 'parcial'}.`);
