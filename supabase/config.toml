@@ -1,5 +1,8 @@
 project_id = "zmsfntqgxsstnbpzdled"
 
+[functions.firebird-query]
+verify_jwt = false
+
 [functions.sync-clientes]
 verify_jwt = false
 

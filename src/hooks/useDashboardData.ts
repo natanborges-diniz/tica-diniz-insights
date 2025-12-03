@@ -24,6 +24,7 @@ interface VendaPorLoja {
   faturamento: number;
   quantidade: number;
   ticketMedio: number;
+  percentual?: number;
 }
 
 interface Loja {
@@ -31,14 +32,52 @@ interface Loja {
   nome: string;
 }
 
+// Flag para usar bridge Firebird (ativar quando bridge estiver deployado)
+const USE_FIREBIRD_BRIDGE = false;
+
+async function fetchFromBridge(endpoint: string, filters: DashboardFilters) {
+  const params = new URLSearchParams({
+    endpoint,
+    dataInicio: filters.dataInicio,
+    dataFim: filters.dataFim,
+  });
+  
+  if (filters.lojaId) {
+    params.append('codEmpresa', filters.lojaId.toString());
+  }
+
+  const { data, error } = await supabase.functions.invoke('firebird-query', {
+    body: null,
+    headers: {},
+  });
+
+  // Fallback: chamada direta se edge function não funcionar
+  const response = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/firebird-query?${params.toString()}`,
+    {
+      headers: {
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error('Erro ao buscar dados do Firebird');
+  }
+
+  return response.json();
+}
+
 export function useDashboardKPIs(filters: DashboardFilters) {
   return useQuery({
     queryKey: ['dashboard-kpis', filters],
     queryFn: async (): Promise<KPIs> => {
-      // Converter datas para formato id_tempo (YYYYMMDD)
-      const idTempoInicio = parseInt(filters.dataInicio.replace(/-/g, ''));
-      const idTempoFim = parseInt(filters.dataFim.replace(/-/g, ''));
+      if (USE_FIREBIRD_BRIDGE) {
+        return fetchFromBridge('kpis', filters);
+      }
 
+      // Fallback: usar dados do Supabase (tabela venda)
       let query = supabase
         .from('venda')
         .select('total, cod_empresa')
@@ -73,6 +112,11 @@ export function useVendasPorDia(filters: DashboardFilters) {
   return useQuery({
     queryKey: ['vendas-por-dia', filters],
     queryFn: async (): Promise<VendaPorDia[]> => {
+      if (USE_FIREBIRD_BRIDGE) {
+        return fetchFromBridge('vendas-por-dia', filters);
+      }
+
+      // Fallback: usar dados do Supabase
       let query = supabase
         .from('venda')
         .select('data_emissao, total')
@@ -107,7 +151,11 @@ export function useVendasPorLoja(filters: DashboardFilters) {
   return useQuery({
     queryKey: ['vendas-por-loja', filters],
     queryFn: async (): Promise<VendaPorLoja[]> => {
-      // Buscar vendas
+      if (USE_FIREBIRD_BRIDGE) {
+        return fetchFromBridge('vendas-por-loja', filters);
+      }
+
+      // Fallback: usar dados do Supabase
       let query = supabase
         .from('venda')
         .select('total, cod_empresa, loja_nome')
@@ -133,7 +181,7 @@ export function useVendasPorLoja(filters: DashboardFilters) {
         return acc;
       }, {} as Record<string, { faturamento: number; quantidade: number }>);
 
-      return Object.entries(porLoja)
+      const resultado = Object.entries(porLoja)
         .map(([loja, dados]) => ({
           loja,
           faturamento: dados.faturamento,
@@ -141,6 +189,13 @@ export function useVendasPorLoja(filters: DashboardFilters) {
           ticketMedio: dados.quantidade > 0 ? dados.faturamento / dados.quantidade : 0,
         }))
         .sort((a, b) => b.faturamento - a.faturamento);
+
+      // Calcular percentual
+      const totalGeral = resultado.reduce((sum, r) => sum + r.faturamento, 0);
+      return resultado.map(r => ({
+        ...r,
+        percentual: totalGeral > 0 ? (r.faturamento / totalGeral) * 100 : 0,
+      }));
     },
   });
 }
