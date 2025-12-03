@@ -1,5 +1,7 @@
-// Configuração da URL base - altere aqui se trocar o domínio do Railway
-const FIREBIRD_BRIDGE_BASE_URL = 'https://firebird-bridge-production.up.railway.app';
+// Configuração da URL base - usa variável de ambiente ou fallback para Railway
+const FIREBIRD_BRIDGE_BASE_URL = 
+  import.meta.env.VITE_FIREBIRD_BRIDGE_BASE_URL || 
+  'https://firebird-bridge-production.up.railway.app';
 
 export interface ResumoEmpresaVendedor {
   EMPRESA: string;
