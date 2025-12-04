@@ -63,11 +63,25 @@ export function isAtrasada(os: OsRecord, status: OsStatus): boolean {
 }
 
 export function calcularDiasCiclo(os: OsRecord): number | null {
-  if (!os.dataEmissao || !os.dataHoraSaidaUltima) return null;
-  const emissao = new Date(os.dataEmissao);
-  const fim = new Date(os.dataHoraSaidaUltima);
-  const diffMs = fim.getTime() - emissao.getTime();
-  return diffMs / (1000 * 60 * 60 * 24);
+  if (!os.dataEmissao) return null;
+
+  const inicio = new Date(os.dataEmissao);
+  let fim: Date;
+
+  if (os.dataHoraSaidaUltima) {
+    fim = new Date(os.dataHoraSaidaUltima);
+  } else if (os.dataPrevisao) {
+    fim = new Date(os.dataPrevisao);
+  } else {
+    fim = new Date(os.dataEmissao);
+  }
+
+  const diffMs = fim.getTime() - inicio.getTime();
+  const diffDias = diffMs / (1000 * 60 * 60 * 24);
+
+  if (!isFinite(diffDias) || diffDias < 0) return 0;
+
+  return diffDias;
 }
 
 export function calculateOsMetrics(data: OsRecord[]): OsMetrics {
@@ -103,6 +117,8 @@ export function calculateOsMetrics(data: OsRecord[]): OsMetrics {
     const soma = ciclos.reduce((acc, c) => acc + c, 0);
     tempoMedioCicloDias = Math.round((soma / ciclos.length) * 10) / 10;
   }
+
+  console.log("[OS Metrics] entregues:", entreguesNoPeriodo, "com diasCiclo calculado:", ciclos.length, "tempoMedio:", tempoMedioCicloDias);
 
   return {
     totalOs,
