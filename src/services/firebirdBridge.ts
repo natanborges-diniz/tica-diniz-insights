@@ -39,5 +39,34 @@ export async function fetchResumoEmpresaVendedor(
   return result.data;
 }
 
+export interface ResumoFormaPagamento {
+  EMPRESA: string;
+  VENDEDOR: string;
+  FORMAPAGAMENTO: string;
+  TOTALGERAL: number;
+  QTD_VENDAS: number;
+}
+
+export async function fetchResumoFormasPagamento(
+  dataInicio: string,
+  dataFim: string
+): Promise<ResumoFormaPagamento[]> {
+  const url = `${FIREBIRD_BRIDGE_BASE_URL}/api/v1/vendas/resumo-formas-pagamento?dataInicio=${dataInicio}&dataFim=${dataFim}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Erro ao buscar formas de pagamento: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  return result.data;
+}
+
 // Exporta a URL base para referência
 export { FIREBIRD_BRIDGE_BASE_URL };

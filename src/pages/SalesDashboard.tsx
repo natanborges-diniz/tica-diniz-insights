@@ -5,7 +5,10 @@ import { SalesFilters } from '@/components/sales-dashboard/SalesFilters';
 import { SalesKPICards } from '@/components/sales-dashboard/SalesKPICards';
 import { SellerChart } from '@/components/sales-dashboard/SellerChart';
 import { SalesTable } from '@/components/sales-dashboard/SalesTable';
+import { PaymentMethodsTable } from '@/components/sales-dashboard/PaymentMethodsTable';
+import { PaymentMethodsChart } from '@/components/sales-dashboard/PaymentMethodsChart';
 import { useResumoVendas } from '@/hooks/useResumoVendas';
+import { useResumoFormasPagamento } from '@/hooks/useResumoFormasPagamento';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 
@@ -18,14 +21,22 @@ export default function SalesDashboard() {
   const [dataFim, setDataFim] = useState(format(hoje, 'yyyy-MM-dd'));
   
   const { dados, isLoading, error, fetchData } = useResumoVendas();
+  const { 
+    dados: dadosFormasPagamento, 
+    isLoading: isLoadingFormas, 
+    error: errorFormas, 
+    fetchData: fetchFormasPagamento 
+  } = useResumoFormasPagamento();
 
   // Carregar dados ao montar o componente
   useEffect(() => {
     fetchData(dataInicio, dataFim);
+    fetchFormasPagamento(dataInicio, dataFim);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRefresh = () => {
     fetchData(dataInicio, dataFim);
+    fetchFormasPagamento(dataInicio, dataFim);
   };
 
   return (
@@ -38,10 +49,10 @@ export default function SalesDashboard() {
           onDataInicioChange={setDataInicio}
           onDataFimChange={setDataFim}
           onRefresh={handleRefresh}
-          isLoading={isLoading}
+          isLoading={isLoading || isLoadingFormas}
         />
 
-        {/* Erro */}
+        {/* Erros */}
         {error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -52,11 +63,24 @@ export default function SalesDashboard() {
         {/* KPIs */}
         <SalesKPICards dados={dados} isLoading={isLoading} />
 
-        {/* Gráfico */}
+        {/* Gráfico de Vendedores */}
         <SellerChart dados={dados} isLoading={isLoading} />
 
-        {/* Tabela */}
+        {/* Tabela de Vendas */}
         <SalesTable dados={dados} isLoading={isLoading} />
+
+        {/* Seção Formas de Pagamento */}
+        {errorFormas && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{errorFormas}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <PaymentMethodsChart dados={dadosFormasPagamento} isLoading={isLoadingFormas} />
+          <PaymentMethodsTable dados={dadosFormasPagamento} isLoading={isLoadingFormas} />
+        </div>
       </div>
     </SalesDashboardLayout>
   );
