@@ -1,11 +1,14 @@
 // src/components/os-dashboard/OsDashboardLayout.tsx
 
 import React from "react";
+import { Link } from "react-router-dom";
+import { ArrowLeft, ClipboardList } from "lucide-react";
 import { OsRecord } from "../../services/osMonitor";
 import { OsMetrics, mapStatus, getStatusLegivel, isAtrasada } from "../../utils/osMetrics";
 import { OsFilterState, OsStatusFilter } from "../../hooks/useOsMonitor";
 import { OsKpiCards } from "./OsKpiCards";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -65,9 +68,25 @@ export const OsDashboardLayout: React.FC<Props> = ({
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex flex-wrap gap-2 items-center justify-between">
-        <h1 className="text-2xl font-semibold">Monitor de Produção (OS)</h1>
+    <div className="min-h-screen bg-background">
+      <header className="border-b bg-card">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center gap-4">
+            <Link to="/">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
+            <div className="flex items-center gap-2">
+              <ClipboardList className="h-6 w-6 text-primary" />
+              <h1 className="text-xl font-bold">Monitor de Produção (OS)</h1>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-6 space-y-4">
+        <div className="flex flex-wrap gap-2 items-center justify-end">
 
         <div className="flex gap-2">
           <button
@@ -279,6 +298,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
           Carregando OS...
         </div>
       )}
+      </main>
     </div>
   );
 };
