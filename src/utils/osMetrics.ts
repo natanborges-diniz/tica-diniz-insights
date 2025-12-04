@@ -66,9 +66,18 @@ export function calcularDiasCiclo(os: OsRecord): number | null {
   if (!os.dataEmissao) return null;
 
   const inicio = new Date(os.dataEmissao);
+  const status = mapStatus(os);
+
   let fim: Date;
 
-  if (os.dataHoraSaidaUltima) {
+  // Prioridades para data final:
+  // 1) se ENTREGUE e tiver dataHoraEntradaUltima, usa ela
+  // 2) senão, se tiver dataHoraSaidaUltima, usa ela
+  // 3) senão, se tiver dataPrevisao, usa ela
+  // 4) senão, usa dataEmissao
+  if (status === "ENTREGUE" && os.dataHoraEntradaUltima) {
+    fim = new Date(os.dataHoraEntradaUltima);
+  } else if (os.dataHoraSaidaUltima) {
     fim = new Date(os.dataHoraSaidaUltima);
   } else if (os.dataPrevisao) {
     fim = new Date(os.dataPrevisao);
@@ -118,7 +127,7 @@ export function calculateOsMetrics(data: OsRecord[]): OsMetrics {
     tempoMedioCicloDias = Math.round((soma / ciclos.length) * 10) / 10;
   }
 
-  console.log("[OS Metrics] entregues:", entreguesNoPeriodo, "com diasCiclo calculado:", ciclos.length, "tempoMedio:", tempoMedioCicloDias);
+  console.log("[OS Metrics] entregues:", entreguesNoPeriodo, "diasCiclo exemplos:", ciclos.slice(0, 10), "tempoMedio:", tempoMedioCicloDias);
 
   return {
     totalOs,
