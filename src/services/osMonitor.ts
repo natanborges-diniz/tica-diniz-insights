@@ -16,6 +16,8 @@ export interface OsRecord {
   codEtapaAtual: number | null;
   dataHoraEntradaUltima: string | null;
   dataHoraSaidaUltima: string | null;
+  isReparo: boolean;
+  isEcommerce: boolean;
 }
 
 export type OsMonitorFilters = {
@@ -62,5 +64,7 @@ export async function getOsMonitor(
     codEtapaAtual: row.CODETAPA_ATUAL ?? null,
     dataHoraEntradaUltima: row.DATAHORAENTRADA_ULTIMA ?? null,
     dataHoraSaidaUltima: row.DATAHORASAIDA_ULTIMA ?? null,
+    isReparo: row.IS_REPARO === 1,
+    isEcommerce: row.IS_ECOMMERCE === 1,
   }));
 }

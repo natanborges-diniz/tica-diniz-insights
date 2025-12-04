@@ -11,6 +11,8 @@ export interface OsMetrics {
   entreguesNoPeriodo: number;
   tempoMedioCicloDias: number | null;
   semPrevisao: number;
+  reparo: number;
+  ecommerce: number;
 }
 
 export function mapStatus(os: OsRecord): OsStatus {
@@ -101,6 +103,8 @@ export function calculateOsMetrics(data: OsRecord[]): OsMetrics {
   let atrasadas = 0;
   let entreguesNoPeriodo = 0;
   let semPrevisao = 0;
+  let reparo = 0;
+  let ecommerce = 0;
   const ciclos: number[] = [];
 
   for (const os of data) {
@@ -125,6 +129,14 @@ export function calculateOsMetrics(data: OsRecord[]): OsMetrics {
     if (!os.dataPrevisao) {
       semPrevisao++;
     }
+
+    if (os.isReparo) {
+      reparo++;
+    }
+
+    if (os.isEcommerce) {
+      ecommerce++;
+    }
   }
 
   let tempoMedioCicloDias: number | null = null;
@@ -142,5 +154,7 @@ export function calculateOsMetrics(data: OsRecord[]): OsMetrics {
     entreguesNoPeriodo,
     tempoMedioCicloDias,
     semPrevisao,
+    reparo,
+    ecommerce,
   };
 }
