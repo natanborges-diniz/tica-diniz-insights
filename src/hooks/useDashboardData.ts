@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchResumoEmpresaVendedor, ResumoEmpresaVendedor } from '@/services/firebirdBridge';
 
 interface DashboardFilters {
   dataInicio: string;
@@ -12,6 +12,7 @@ interface KPIs {
   quantidadeVendas: number;
   ticketMedio: number;
   lojasAtivas: number;
+  totalDevolucoes: number;
 }
 
 interface VendaPorDia {
@@ -32,77 +33,56 @@ interface Loja {
   nome: string;
 }
 
-// Flag para usar bridge Firebird (ativar quando bridge estiver deployado)
-const USE_FIREBIRD_BRIDGE = false;
+// Lista de lojas hardcoded (mesma do firebird-bridge)
+const LOJAS_LISTA: Loja[] = [
+  { id_loja: 595, nome: 'Diniz Primitiva I' },
+  { id_loja: 597, nome: 'Diniz Primitiva II' },
+  { id_loja: 599, nome: 'Diniz Antônio Agú' },
+  { id_loja: 601, nome: 'Diniz União' },
+  { id_loja: 603, nome: 'Diniz Super' },
+  { id_loja: 605, nome: 'Diniz Carapicuíba' },
+  { id_loja: 607, nome: 'Diniz Itapevi' },
+  { id_loja: 609, nome: 'Diniz Jandira' },
+  { id_loja: 769, nome: 'Diniz Barueri' },
+];
 
-async function fetchFromBridge(endpoint: string, filters: DashboardFilters) {
-  const params = new URLSearchParams({
-    endpoint,
-    dataInicio: filters.dataInicio,
-    dataFim: filters.dataFim,
-  });
-  
-  if (filters.lojaId) {
-    params.append('codEmpresa', filters.lojaId.toString());
-  }
-
-  const { data, error } = await supabase.functions.invoke('firebird-query', {
-    body: null,
-    headers: {},
-  });
-
-  // Fallback: chamada direta se edge function não funcionar
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/firebird-query?${params.toString()}`,
-    {
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        'Content-Type': 'application/json',
-      },
+function processarDadosBridge(dados: ResumoEmpresaVendedor[], lojaId?: number) {
+  // Filtrar por loja se necessário
+  let dadosFiltrados = dados;
+  if (lojaId) {
+    const lojaInfo = LOJAS_LISTA.find(l => l.id_loja === lojaId);
+    if (lojaInfo) {
+      dadosFiltrados = dados.filter(d => 
+        d.EMPRESA.toUpperCase().includes(lojaInfo.nome.toUpperCase().split(' ').slice(1).join(' '))
+      );
     }
-  );
-
-  if (!response.ok) {
-    throw new Error('Erro ao buscar dados do Firebird');
   }
 
-  return response.json();
+  // Filtrar apenas vendas (excluir linhas de devolução pura)
+  const vendas = dadosFiltrados.filter(d => d.QTDTRANSACAO > 0);
+  
+  return { dadosFiltrados, vendas };
 }
 
 export function useDashboardKPIs(filters: DashboardFilters) {
   return useQuery({
-    queryKey: ['dashboard-kpis', filters],
+    queryKey: ['dashboard-kpis-bridge', filters],
     queryFn: async (): Promise<KPIs> => {
-      if (USE_FIREBIRD_BRIDGE) {
-        return fetchFromBridge('kpis', filters);
-      }
+      const dados = await fetchResumoEmpresaVendedor(filters.dataInicio, filters.dataFim);
+      const { dadosFiltrados } = processarDadosBridge(dados, filters.lojaId);
 
-      // Fallback: usar dados do Supabase (tabela venda)
-      let query = supabase
-        .from('venda')
-        .select('total, cod_empresa')
-        .gte('data_emissao', filters.dataInicio)
-        .lte('data_emissao', filters.dataFim);
-
-      if (filters.lojaId) {
-        query = query.eq('cod_empresa', filters.lojaId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      const vendas = data || [];
-      const faturamentoTotal = vendas.reduce((sum, v) => sum + (v.total || 0), 0);
-      const quantidadeVendas = vendas.length;
+      const faturamentoTotal = dadosFiltrados.reduce((sum, d) => sum + (d.TOTALVENDIDO || 0), 0);
+      const quantidadeVendas = dadosFiltrados.reduce((sum, d) => sum + (d.QTDTRANSACAO || 0), 0);
+      const totalDevolucoes = dadosFiltrados.reduce((sum, d) => sum + (d.TOTALDEVOLUCAO || 0), 0);
       const ticketMedio = quantidadeVendas > 0 ? faturamentoTotal / quantidadeVendas : 0;
-      const lojasAtivas = new Set(vendas.map(v => v.cod_empresa)).size;
+      const lojasAtivas = new Set(dadosFiltrados.map(d => d.EMPRESA)).size;
 
       return {
         faturamentoTotal,
         quantidadeVendas,
         ticketMedio,
         lojasAtivas,
+        totalDevolucoes,
       };
     },
   });
@@ -110,74 +90,30 @@ export function useDashboardKPIs(filters: DashboardFilters) {
 
 export function useVendasPorDia(filters: DashboardFilters) {
   return useQuery({
-    queryKey: ['vendas-por-dia', filters],
+    queryKey: ['vendas-por-dia-bridge', filters],
     queryFn: async (): Promise<VendaPorDia[]> => {
-      if (USE_FIREBIRD_BRIDGE) {
-        return fetchFromBridge('vendas-por-dia', filters);
-      }
-
-      // Fallback: usar dados do Supabase
-      let query = supabase
-        .from('venda')
-        .select('data_emissao, total')
-        .gte('data_emissao', filters.dataInicio)
-        .lte('data_emissao', filters.dataFim)
-        .order('data_emissao', { ascending: true });
-
-      if (filters.lojaId) {
-        query = query.eq('cod_empresa', filters.lojaId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      // Agrupar por data
-      const porDia = (data || []).reduce((acc, v) => {
-        const dia = v.data_emissao?.split('T')[0] || '';
-        if (!acc[dia]) acc[dia] = 0;
-        acc[dia] += v.total || 0;
-        return acc;
-      }, {} as Record<string, number>);
-
-      return Object.entries(porDia)
-        .map(([data, faturamento]) => ({ data, faturamento }))
-        .sort((a, b) => a.data.localeCompare(b.data));
+      // O endpoint atual não retorna dados por dia, então retornamos vazio
+      // Futuramente pode ser criado um endpoint específico no bridge
+      return [];
     },
   });
 }
 
 export function useVendasPorLoja(filters: DashboardFilters) {
   return useQuery({
-    queryKey: ['vendas-por-loja', filters],
+    queryKey: ['vendas-por-loja-bridge', filters],
     queryFn: async (): Promise<VendaPorLoja[]> => {
-      if (USE_FIREBIRD_BRIDGE) {
-        return fetchFromBridge('vendas-por-loja', filters);
-      }
+      const dados = await fetchResumoEmpresaVendedor(filters.dataInicio, filters.dataFim);
+      const { dadosFiltrados } = processarDadosBridge(dados, filters.lojaId);
 
-      // Fallback: usar dados do Supabase
-      let query = supabase
-        .from('venda')
-        .select('total, cod_empresa, loja_nome')
-        .gte('data_emissao', filters.dataInicio)
-        .lte('data_emissao', filters.dataFim);
-
-      if (filters.lojaId) {
-        query = query.eq('cod_empresa', filters.lojaId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      // Agrupar por loja
-      const porLoja = (data || []).reduce((acc, v) => {
-        const lojaKey = v.loja_nome || `Loja ${v.cod_empresa}`;
-        if (!acc[lojaKey]) {
-          acc[lojaKey] = { faturamento: 0, quantidade: 0 };
+      // Agrupar por empresa
+      const porLoja = dadosFiltrados.reduce((acc, d) => {
+        const loja = d.EMPRESA;
+        if (!acc[loja]) {
+          acc[loja] = { faturamento: 0, quantidade: 0 };
         }
-        acc[lojaKey].faturamento += v.total || 0;
-        acc[lojaKey].quantidade += 1;
+        acc[loja].faturamento += d.TOTALVENDIDO || 0;
+        acc[loja].quantidade += d.QTDTRANSACAO || 0;
         return acc;
       }, {} as Record<string, { faturamento: number; quantidade: number }>);
 
@@ -202,19 +138,9 @@ export function useVendasPorLoja(filters: DashboardFilters) {
 
 export function useLojas() {
   return useQuery({
-    queryKey: ['lojas'],
+    queryKey: ['lojas-lista'],
     queryFn: async (): Promise<Loja[]> => {
-      const { data, error } = await supabase
-        .from('empresa')
-        .select('cod_empresa, nome_fantasia')
-        .order('nome_fantasia', { ascending: true });
-
-      if (error) throw error;
-
-      return (data || []).map(e => ({
-        id_loja: e.cod_empresa,
-        nome: e.nome_fantasia || `Empresa ${e.cod_empresa}`,
-      }));
+      return LOJAS_LISTA;
     },
   });
 }
