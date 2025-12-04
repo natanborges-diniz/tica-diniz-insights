@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,11 +8,18 @@ import { useEmpresas } from '@/hooks/useEmpresas';
 import { StockKPICards } from '@/components/stock-dashboard/StockKPICards';
 import { StockTable } from '@/components/stock-dashboard/StockTable';
 import { StockActionChart } from '@/components/stock-dashboard/StockActionChart';
+import { StockFilters } from '@/components/stock-dashboard/StockFilters';
 
 export default function StockDashboard() {
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<number | null>(null);
   const { empresas, isLoading: loadingEmpresas, error: errorEmpresas } = useEmpresas();
   const { dados, isLoading, error, fetchData } = useAnaliseEstoque();
+
+  // Estados de filtros
+  const [fornecedorSelecionado, setFornecedorSelecionado] = useState('TODOS');
+  const [grifeSelecionada, setGrifeSelecionada] = useState('TODAS');
+  const [acaoSelecionada, setAcaoSelecionada] = useState('TODAS');
+  const [buscaTexto, setBuscaTexto] = useState('');
 
   // Selecionar primeira empresa quando carregar a lista
   useEffect(() => {
@@ -25,8 +32,40 @@ export default function StockDashboard() {
   useEffect(() => {
     if (selectedEmpresaId !== null) {
       fetchData(selectedEmpresaId);
+      // Limpar filtros ao trocar de empresa
+      setFornecedorSelecionado('TODOS');
+      setGrifeSelecionada('TODAS');
+      setAcaoSelecionada('TODAS');
+      setBuscaTexto('');
     }
   }, [selectedEmpresaId, fetchData]);
+
+  // Dados filtrados
+  const filteredData = useMemo(() => {
+    let result = dados;
+
+    if (fornecedorSelecionado !== 'TODOS') {
+      result = result.filter(item => item.NOME_FORNECEDOR === fornecedorSelecionado);
+    }
+
+    if (grifeSelecionada !== 'TODAS') {
+      result = result.filter(item => item.GRIFE === grifeSelecionada);
+    }
+
+    if (acaoSelecionada !== 'TODAS') {
+      result = result.filter(item => item.ACAO_SUGERIDA === acaoSelecionada);
+    }
+
+    if (buscaTexto.trim()) {
+      const termo = buscaTexto.toLowerCase();
+      result = result.filter(item =>
+        (item.DESCRICAO_PRODUTO?.toLowerCase().includes(termo)) ||
+        (item.CODIGO_BARRA?.toLowerCase().includes(termo))
+      );
+    }
+
+    return result;
+  }, [dados, fornecedorSelecionado, grifeSelecionada, acaoSelecionada, buscaTexto]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,14 +152,34 @@ export default function StockDashboard() {
             {/* Dados de Estoque */}
             {!isLoading && !error && selectedEmpresaId !== null && (
               <>
-                <StockKPICards dados={dados} />
-                <StockActionChart dados={dados} />
+                {/* Filtros */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Filtros</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <StockFilters
+                      dados={dados}
+                      fornecedorSelecionado={fornecedorSelecionado}
+                      setFornecedorSelecionado={setFornecedorSelecionado}
+                      grifeSelecionada={grifeSelecionada}
+                      setGrifeSelecionada={setGrifeSelecionada}
+                      acaoSelecionada={acaoSelecionada}
+                      setAcaoSelecionada={setAcaoSelecionada}
+                      buscaTexto={buscaTexto}
+                      setBuscaTexto={setBuscaTexto}
+                    />
+                  </CardContent>
+                </Card>
+
+                <StockKPICards dados={filteredData} />
+                <StockActionChart dados={filteredData} />
                 <Card>
                   <CardHeader>
                     <CardTitle>Detalhamento do Estoque</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <StockTable dados={dados} />
+                    <StockTable dados={filteredData} />
                   </CardContent>
                 </Card>
               </>
