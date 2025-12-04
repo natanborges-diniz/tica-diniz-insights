@@ -1,6 +1,8 @@
 // src/utils/osMetrics.ts
 
-import { OsMonitorItem } from "../services/osMonitor";
+import { OsRecord } from "../services/osMonitor";
+
+export type OsStatus = "EM_ANDAMENTO" | "ENTREGUE" | "CONCLUIDA_LOJA" | "CANCELADA";
 
 export interface OsMetrics {
   totalOs: number;
@@ -10,43 +12,96 @@ export interface OsMetrics {
   tempoMedioCicloDias: number | null;
 }
 
-export function calculateOsMetrics(data: OsMonitorItem[]): OsMetrics {
-  const hoje = new Date();
+export function mapStatus(os: OsRecord): OsStatus {
+  switch (os.codEtapaAtual) {
+    case 8:
+      return "ENTREGUE";
+    case 9:
+      return "CANCELADA";
+    case 6:
+      return "CONCLUIDA_LOJA";
+    default:
+      return "EM_ANDAMENTO";
+  }
+}
 
+export function getStatusLegivel(status: OsStatus): string {
+  switch (status) {
+    case "ENTREGUE":
+      return "Entregue";
+    case "CANCELADA":
+      return "Cancelada";
+    case "CONCLUIDA_LOJA":
+      return "Concluída na loja";
+    case "EM_ANDAMENTO":
+    default:
+      return "Em produção";
+  }
+}
+
+export function isAtrasada(os: OsRecord, status: OsStatus): boolean {
+  // Se não está em andamento, não é atrasada
+  if (status !== "EM_ANDAMENTO") return false;
+  if (!os.dataEmissao) return false;
+
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  const emissao = new Date(os.dataEmissao);
+  emissao.setHours(0, 0, 0, 0);
+
+  if (os.dataPrevisao) {
+    const previsao = new Date(os.dataPrevisao);
+    previsao.setHours(0, 0, 0, 0);
+    return previsao < hoje;
+  }
+
+  // Sem previsão: considera atrasada se passou mais de 7 dias desde emissão
+  const diffMs = hoje.getTime() - emissao.getTime();
+  const diffDias = diffMs / (1000 * 60 * 60 * 24);
+  return diffDias > 7;
+}
+
+export function calcularDiasCiclo(os: OsRecord): number | null {
+  if (!os.dataEmissao || !os.dataHoraSaidaUltima) return null;
+  const emissao = new Date(os.dataEmissao);
+  const fim = new Date(os.dataHoraSaidaUltima);
+  const diffMs = fim.getTime() - emissao.getTime();
+  return diffMs / (1000 * 60 * 60 * 24);
+}
+
+export function calculateOsMetrics(data: OsRecord[]): OsMetrics {
   const totalOs = data.length;
 
-  const emProducao = data.filter(
-    (o) =>
-      !o.DataHoraSaida &&
-      !/cancelada/i.test(o.Etapa) &&
-      !/entregue/i.test(o.Etapa)
-  ).length;
+  let emProducao = 0;
+  let atrasadas = 0;
+  let entreguesNoPeriodo = 0;
+  const ciclos: number[] = [];
 
-  const atrasadas = data.filter((o) => {
-    if (!o.DataPrevisao || o.DataHoraSaida) return false;
-    const prev = new Date(o.DataPrevisao);
-    return prev < hoje;
-  }).length;
+  for (const os of data) {
+    const status = mapStatus(os);
 
-  const entreguesNoPeriodo = data.filter((o) =>
-    /entregue/i.test(o.Etapa)
-  ).length;
+    if (status === "EM_ANDAMENTO" || status === "CONCLUIDA_LOJA") {
+      emProducao++;
+    }
 
-  // Tempo médio de ciclo: diferença entre DataHoraSaida e DataHoraEntrada para OS entregues
-  const osComCiclo = data.filter(
-    (o) => o.DataHoraEntrada && o.DataHoraSaida
-  );
+    if (status === "ENTREGUE") {
+      entreguesNoPeriodo++;
+      const ciclo = calcularDiasCiclo(os);
+      if (ciclo !== null) {
+        ciclos.push(ciclo);
+      }
+    }
+
+    if (isAtrasada(os, status)) {
+      atrasadas++;
+    }
+  }
 
   let tempoMedioCicloDias: number | null = null;
-  if (osComCiclo.length > 0) {
-    const totalDias = osComCiclo.reduce((acc, o) => {
-      const entrada = new Date(o.DataHoraEntrada);
-      const saida = new Date(o.DataHoraSaida!);
-      const diffMs = saida.getTime() - entrada.getTime();
-      const diffDias = diffMs / (1000 * 60 * 60 * 24);
-      return acc + diffDias;
-    }, 0);
-    tempoMedioCicloDias = Math.round((totalDias / osComCiclo.length) * 10) / 10;
+  if (ciclos.length > 0) {
+    const soma = ciclos.reduce((acc, c) => acc + c, 0);
+    tempoMedioCicloDias = Math.round((soma / ciclos.length) * 10) / 10;
   }
 
   return {

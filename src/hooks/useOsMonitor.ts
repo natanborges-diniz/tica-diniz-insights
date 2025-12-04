@@ -4,13 +4,13 @@ import { useEffect, useState, useMemo } from "react";
 import {
   getOsMonitor,
   OsMonitorFilters,
-  OsMonitorItem,
+  OsRecord,
 } from "../services/osMonitor";
 import { calculateOsMetrics, OsMetrics } from "../utils/osMetrics";
 
 export function useOsMonitor(initialFilters: OsMonitorFilters) {
   const [filters, setFilters] = useState<OsMonitorFilters>(initialFilters);
-  const [data, setData] = useState<OsMonitorItem[]>([]);
+  const [data, setData] = useState<OsRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 

@@ -1,13 +1,13 @@
 // src/components/os-dashboard/OsDashboardLayout.tsx
 
 import React from "react";
-import { OsMonitorItem } from "../../services/osMonitor";
-import { OsMetrics } from "../../utils/osMetrics";
+import { OsRecord } from "../../services/osMonitor";
+import { OsMetrics, mapStatus, getStatusLegivel, isAtrasada } from "../../utils/osMetrics";
 import { OsKpiCards } from "./OsKpiCards";
 import { Badge } from "@/components/ui/badge";
 
 type Props = {
-  data: OsMonitorItem[];
+  data: OsRecord[];
   loading: boolean;
   error: string | null;
   metrics: OsMetrics;
@@ -42,19 +42,6 @@ export const OsDashboardLayout: React.FC<Props> = ({
     inicio.setDate(inicio.getDate() - 30);
     const ini = inicio.toISOString().slice(0, 10);
     onChangePeriod({ dataInicio: ini, dataFim: fim });
-  }
-
-  function isAtrasada(os: OsMonitorItem): boolean {
-    if (!os.DataPrevisao || os.DataHoraSaida) return false;
-    const prev = new Date(os.DataPrevisao);
-    return prev < hoje;
-  }
-
-  function getStatusLegivel(os: OsMonitorItem): string {
-    if (/entregue/i.test(os.Etapa)) return "Entregue";
-    if (/cancelada/i.test(os.Etapa)) return "Cancelada";
-    if (os.DataHoraSaida) return "Finalizada";
-    return os.Etapa || "Em produção";
   }
 
   return (
@@ -109,31 +96,33 @@ export const OsDashboardLayout: React.FC<Props> = ({
           </thead>
           <tbody>
             {data.map((os) => {
-              const atrasada = isAtrasada(os);
-              const status = getStatusLegivel(os);
+              const status = mapStatus(os);
+              const statusLegivel = getStatusLegivel(status);
+              const atrasada = isAtrasada(os, status);
+
               return (
                 <tr
-                  key={os.OS + os.Empresa + os.DataHoraEntrada}
+                  key={`${os.numeroOs}-${os.codEmpresa}-${os.dataHoraEntradaUltima}`}
                   className={`border-t border-border hover:bg-muted/50 ${
                     atrasada ? "bg-destructive/5" : ""
                   }`}
                 >
-                  <Td>{os.Empresa}</Td>
-                  <Td>{os.OS}</Td>
-                  <Td>{os.Cliente}</Td>
-                  <Td>{formatDate(os.DataEmissao)}</Td>
-                  <Td>{os.DataPrevisao ? formatDate(os.DataPrevisao) : "-"}</Td>
+                  <Td>{os.empresa}</Td>
+                  <Td>{os.numeroOs}</Td>
+                  <Td>{os.cliente}</Td>
+                  <Td>{formatDate(os.dataEmissao)}</Td>
+                  <Td>{os.dataPrevisao ? formatDate(os.dataPrevisao) : "-"}</Td>
                   <Td>
                     <Badge
                       variant={
-                        status === "Entregue"
+                        status === "ENTREGUE"
                           ? "default"
-                          : status === "Cancelada"
+                          : status === "CANCELADA"
                           ? "destructive"
                           : "secondary"
                       }
                     >
-                      {status}
+                      {statusLegivel}
                     </Badge>
                   </Td>
                   <Td>
@@ -179,7 +168,7 @@ const Td: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <td className="px-3 py-2 whitespace-nowrap align-top">{children}</td>
 );
 
-function formatDate(value: string) {
+function formatDate(value: string | null) {
   if (!value) return "";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
