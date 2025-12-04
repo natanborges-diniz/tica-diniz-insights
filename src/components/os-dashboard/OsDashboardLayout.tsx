@@ -111,7 +111,13 @@ export const OsDashboardLayout: React.FC<Props> = ({
                   <Td>{os.numeroOs}</Td>
                   <Td>{os.cliente}</Td>
                   <Td>{formatDate(os.dataEmissao)}</Td>
-                  <Td>{os.dataPrevisao ? formatDate(os.dataPrevisao) : "-"}</Td>
+                  <Td>
+                    {os.dataPrevisao ? (
+                      formatDate(os.dataPrevisao)
+                    ) : (
+                      <span className="text-muted-foreground text-xs">Sem previsão</span>
+                    )}
+                  </Td>
                   <Td>
                     <Badge
                       variant={
@@ -127,7 +133,13 @@ export const OsDashboardLayout: React.FC<Props> = ({
                   </Td>
                   <Td>
                     {atrasada ? (
-                      <Badge variant="destructive">Sim</Badge>
+                      !os.dataPrevisao ? (
+                        <Badge variant="destructive" className="bg-amber-500 hover:bg-amber-600">
+                          Sim (sem previsão)
+                        </Badge>
+                      ) : (
+                        <Badge variant="destructive">Sim</Badge>
+                      )
                     ) : (
                       <span className="text-muted-foreground">Não</span>
                     )}
