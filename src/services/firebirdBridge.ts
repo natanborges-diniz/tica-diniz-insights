@@ -68,5 +68,32 @@ export async function fetchResumoFormasPagamento(
   return result.data;
 }
 
+export interface AnaliseEstoqueAcao {
+  EMPRESA: string;
+  NOME_FORNECEDOR: string;
+  GRIFE: string;
+  CODIGO_BARRA: string;
+  DESCRICAO_PRODUTO: string;
+  QUANTIDADE_ESTOQUE: number;
+  DIAS_ESTOQUE: number;
+  ACAO_SUGERIDA: string;
+}
+
+export async function fetchAnaliseEstoqueAcao(
+  codEmpresa: number | string
+): Promise<AnaliseEstoqueAcao[]> {
+  const cod = String(codEmpresa);
+  const url = `${FIREBIRD_BRIDGE_BASE_URL}/api/v1/estoque/analise-acao?codEmpresa=${encodeURIComponent(cod)}`;
+
+  const res = await fetch(url);
+
+  if (!res.ok) {
+    throw new Error(`Erro ao buscar análise de estoque: ${res.status}`);
+  }
+
+  const json = await res.json();
+  return json.data;
+}
+
 // Exporta a URL base para referência
 export { FIREBIRD_BRIDGE_BASE_URL };
