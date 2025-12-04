@@ -2,11 +2,15 @@
 
 import React from "react";
 import { OsMonitorItem } from "../../services/osMonitor";
+import { OsMetrics } from "../../utils/osMetrics";
+import { OsKpiCards } from "./OsKpiCards";
+import { Badge } from "@/components/ui/badge";
 
 type Props = {
   data: OsMonitorItem[];
   loading: boolean;
   error: string | null;
+  metrics: OsMetrics;
   onChangePeriod: (range: { dataInicio: string; dataFim: string }) => void;
 };
 
@@ -14,27 +18,10 @@ export const OsDashboardLayout: React.FC<Props> = ({
   data,
   loading,
   error,
+  metrics,
   onChangePeriod,
 }) => {
   const hoje = new Date();
-
-  const totalOs = data.length;
-  const abertas = data.filter(
-    (o) =>
-      !o.DataHoraSaida &&
-      !/cancelada/i.test(o.Etapa) &&
-      !/entregue/i.test(o.Etapa)
-  ).length;
-
-  const atrasadas = data.filter((o) => {
-    if (!o.DataPrevisao || o.DataHoraSaida) return false;
-    const prev = new Date(o.DataPrevisao);
-    return prev < hoje;
-  }).length;
-
-  const entregues = data.filter((o) =>
-    /entregue/i.test(o.Etapa)
-  ).length;
 
   function handleChangeToday() {
     const iso = hoje.toISOString().slice(0, 10);
@@ -49,12 +36,31 @@ export const OsDashboardLayout: React.FC<Props> = ({
     onChangePeriod({ dataInicio: ini, dataFim: fim });
   }
 
+  function handleChangeLast30Days() {
+    const fim = hoje.toISOString().slice(0, 10);
+    const inicio = new Date(hoje);
+    inicio.setDate(inicio.getDate() - 30);
+    const ini = inicio.toISOString().slice(0, 10);
+    onChangePeriod({ dataInicio: ini, dataFim: fim });
+  }
+
+  function isAtrasada(os: OsMonitorItem): boolean {
+    if (!os.DataPrevisao || os.DataHoraSaida) return false;
+    const prev = new Date(os.DataPrevisao);
+    return prev < hoje;
+  }
+
+  function getStatusLegivel(os: OsMonitorItem): string {
+    if (/entregue/i.test(os.Etapa)) return "Entregue";
+    if (/cancelada/i.test(os.Etapa)) return "Cancelada";
+    if (os.DataHoraSaida) return "Finalizada";
+    return os.Etapa || "Em produção";
+  }
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex flex-wrap gap-2 items-center justify-between">
-        <h1 className="text-2xl font-semibold">
-          Monitor de Produção (OS)
-        </h1>
+        <h1 className="text-2xl font-semibold">Monitor de Produção (OS)</h1>
 
         <div className="flex gap-2">
           <button
@@ -69,23 +75,20 @@ export const OsDashboardLayout: React.FC<Props> = ({
           >
             Últimos 7 dias
           </button>
+          <button
+            onClick={handleChangeLast30Days}
+            className="px-3 py-1 text-sm border border-border rounded-md hover:bg-muted"
+          >
+            Últimos 30 dias
+          </button>
         </div>
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard title="Total de OS" value={totalOs} />
-        <KpiCard title="Em produção" value={abertas} />
-        <KpiCard title="Atrasadas" value={atrasadas} />
-        <KpiCard title="Entregues" value={entregues} />
-      </div>
-
-      {loading && (
-        <div className="text-sm text-muted-foreground">Carregando OS...</div>
-      )}
+      <OsKpiCards metrics={metrics} loading={loading} />
 
       {error && (
-        <div className="text-sm text-destructive">
+        <div className="text-sm text-destructive border border-destructive/30 bg-destructive/10 p-3 rounded-md">
           Erro: {error}
         </div>
       )}
@@ -96,61 +99,75 @@ export const OsDashboardLayout: React.FC<Props> = ({
           <thead className="bg-muted">
             <tr>
               <Th>Empresa</Th>
-              <Th>OS</Th>
+              <Th>Nº OS</Th>
               <Th>Cliente</Th>
-              <Th>Telefone</Th>
-              <Th>Etapa</Th>
-              <Th>Emissão</Th>
+              <Th>Data Emissão</Th>
               <Th>Previsão</Th>
-              <Th>Responsável</Th>
-              <Th>Total</Th>
+              <Th>Status</Th>
+              <Th>Atrasada</Th>
             </tr>
           </thead>
           <tbody>
-            {data.map((os) => (
-              <tr
-                key={os.OS + os.Empresa + os.DataHoraEntrada}
-                className="border-t border-border hover:bg-muted/50"
-              >
-                <Td>{os.Empresa}</Td>
-                <Td>{os.OS}</Td>
-                <Td>{os.Cliente}</Td>
-                <Td>{os.Telefone}</Td>
-                <Td>{os.Etapa}</Td>
-                <Td>{formatDate(os.DataEmissao)}</Td>
-                <Td>{os.DataPrevisao ? formatDate(os.DataPrevisao) : "-"}</Td>
-                <Td>{os.Usuario}</Td>
-                <Td>R$ {Number(os.Total || 0).toFixed(2)}</Td>
-              </tr>
-            ))}
+            {data.map((os) => {
+              const atrasada = isAtrasada(os);
+              const status = getStatusLegivel(os);
+              return (
+                <tr
+                  key={os.OS + os.Empresa + os.DataHoraEntrada}
+                  className={`border-t border-border hover:bg-muted/50 ${
+                    atrasada ? "bg-destructive/5" : ""
+                  }`}
+                >
+                  <Td>{os.Empresa}</Td>
+                  <Td>{os.OS}</Td>
+                  <Td>{os.Cliente}</Td>
+                  <Td>{formatDate(os.DataEmissao)}</Td>
+                  <Td>{os.DataPrevisao ? formatDate(os.DataPrevisao) : "-"}</Td>
+                  <Td>
+                    <Badge
+                      variant={
+                        status === "Entregue"
+                          ? "default"
+                          : status === "Cancelada"
+                          ? "destructive"
+                          : "secondary"
+                      }
+                    >
+                      {status}
+                    </Badge>
+                  </Td>
+                  <Td>
+                    {atrasada ? (
+                      <Badge variant="destructive">Sim</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">Não</span>
+                    )}
+                  </Td>
+                </tr>
+              );
+            })}
             {data.length === 0 && !loading && (
               <tr>
                 <td
-                  colSpan={9}
-                  className="py-4 text-center text-muted-foreground"
+                  colSpan={7}
+                  className="py-8 text-center text-muted-foreground"
                 >
-                  Nenhuma OS encontrada no período.
+                  Nenhuma OS encontrada neste período.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {loading && (
+        <div className="text-sm text-muted-foreground text-center py-4">
+          Carregando OS...
+        </div>
+      )}
     </div>
   );
 };
-
-const KpiCard: React.FC<{ title: string; value: number }> = ({
-  title,
-  value,
-}) => (
-  <div className="border border-border rounded-lg p-3 bg-card shadow-sm">
-    <div className="text-xs text-muted-foreground">{title}</div>
-    <div className="text-xl font-semibold mt-1">
-      {value.toLocaleString("pt-BR")}
-    </div>
-  </div>
-);
 
 const Th: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -159,9 +176,7 @@ const Th: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 
 const Td: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <td className="px-3 py-2 whitespace-nowrap align-top">
-    {children}
-  </td>
+  <td className="px-3 py-2 whitespace-nowrap align-top">{children}</td>
 );
 
 function formatDate(value: string) {

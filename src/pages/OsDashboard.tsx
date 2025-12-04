@@ -12,7 +12,7 @@ const OsDashboardPage: React.FC = () => {
   inicioDate.setDate(inicioDate.getDate() - 7);
   const inicio = inicioDate.toISOString().slice(0, 10);
 
-  const { data, loading, error, reload } = useOsMonitor({
+const { data, loading, error, metrics, reload } = useOsMonitor({
     dataInicio: inicio,
     dataFim: fim,
   });
@@ -22,6 +22,7 @@ const OsDashboardPage: React.FC = () => {
       data={data}
       loading={loading}
       error={error}
+      metrics={metrics}
       onChangePeriod={reload}
     />
   );
