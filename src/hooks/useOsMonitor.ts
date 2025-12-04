@@ -1,17 +1,20 @@
 // src/hooks/useOsMonitor.ts
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   getOsMonitor,
   OsMonitorFilters,
   OsMonitorItem,
 } from "../services/osMonitor";
+import { calculateOsMetrics, OsMetrics } from "../utils/osMetrics";
 
 export function useOsMonitor(initialFilters: OsMonitorFilters) {
   const [filters, setFilters] = useState<OsMonitorFilters>(initialFilters);
   const [data, setData] = useState<OsMonitorItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  const metrics: OsMetrics = useMemo(() => calculateOsMetrics(data), [data]);
 
   async function fetchData(f: OsMonitorFilters) {
     try {
@@ -43,6 +46,7 @@ export function useOsMonitor(initialFilters: OsMonitorFilters) {
     loading,
     error,
     filters,
+    metrics,
     reload,
   };
 }
