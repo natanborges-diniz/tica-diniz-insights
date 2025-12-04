@@ -118,5 +118,47 @@ export async function fetchAnaliseEstoqueAcao(
   return json.data;
 }
 
+export interface AnaliseFamiliaVendedor {
+  COD_EMPRESA: number;
+  EMPRESA: string;
+  COD_VENDEDOR: number;
+  VENDEDOR: string;
+  FAMILIA: string;
+  QTD_TRANSACAO: number;
+  QTD_PRODUTOS: number;
+  TOTAL_VENDIDO: number;
+}
+
+export async function fetchAnaliseFamiliaVendedor(params: {
+  dataInicio: string;
+  dataFim: string;
+  codEmpresa?: number;
+}): Promise<AnaliseFamiliaVendedor[]> {
+  const queryParams = new URLSearchParams({
+    dataInicio: params.dataInicio,
+    dataFim: params.dataFim,
+  });
+  
+  if (params.codEmpresa !== undefined) {
+    queryParams.append('codEmpresa', String(params.codEmpresa));
+  }
+
+  const url = `${FIREBIRD_BRIDGE_BASE_URL}/api/v1/vendas/analise-familia-vendedor?${queryParams.toString()}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Erro ao buscar análise família/vendedor: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  return result.data;
+}
+
 // Exporta a URL base para referência
 export { FIREBIRD_BRIDGE_BASE_URL };
