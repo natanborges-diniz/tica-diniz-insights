@@ -6,15 +6,54 @@ import {
   OsMonitorFilters,
   OsRecord,
 } from "../services/osMonitor";
-import { calculateOsMetrics, OsMetrics } from "../utils/osMetrics";
+import { calculateOsMetrics, OsMetrics, mapStatus, isAtrasada } from "../utils/osMetrics";
+
+export type OsStatusFilter = "TODOS" | "EM_ANDAMENTO" | "ATRASADAS" | "ENTREGUES" | "CANCELADAS";
+
+export interface OsFilterState {
+  status: OsStatusFilter;
+  empresa: string | "TODAS";
+  somenteReparo: boolean;
+  somenteEcommerce: boolean;
+  somenteSemPrevisao: boolean;
+}
 
 export function useOsMonitor(initialFilters: OsMonitorFilters) {
-  const [filters, setFilters] = useState<OsMonitorFilters>(initialFilters);
+  const [apiFilters, setApiFilters] = useState<OsMonitorFilters>(initialFilters);
   const [data, setData] = useState<OsRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [filters, setFilters] = useState<OsFilterState>({
+    status: "TODOS",
+    empresa: "TODAS",
+    somenteReparo: false,
+    somenteEcommerce: false,
+    somenteSemPrevisao: false,
+  });
+
+  const filteredData = useMemo(() => {
+    return data.filter((os) => {
+      const status = mapStatus(os);
+      const atrasada = isAtrasada(os, status);
+
+      if (filters.status === "EM_ANDAMENTO" && status !== "EM_ANDAMENTO") return false;
+      if (filters.status === "ATRASADAS" && !atrasada) return false;
+      if (filters.status === "ENTREGUES" && status !== "ENTREGUE") return false;
+      if (filters.status === "CANCELADAS" && status !== "CANCELADA") return false;
+
+      if (filters.empresa !== "TODAS" && os.empresa !== filters.empresa) return false;
+
+      if (filters.somenteReparo && !os.isReparo) return false;
+      if (filters.somenteEcommerce && !os.isEcommerce) return false;
+      if (filters.somenteSemPrevisao && os.dataPrevisao) return false;
+
+      return true;
+    });
+  }, [data, filters]);
+
   const metrics: OsMetrics = useMemo(() => calculateOsMetrics(data), [data]);
+  const filteredMetrics: OsMetrics = useMemo(() => calculateOsMetrics(filteredData), [filteredData]);
 
   async function fetchData(f: OsMonitorFilters) {
     try {
@@ -31,22 +70,26 @@ export function useOsMonitor(initialFilters: OsMonitorFilters) {
   }
 
   useEffect(() => {
-    fetchData(filters);
+    fetchData(apiFilters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function reload(newFilters?: Partial<OsMonitorFilters>) {
-    const merged = { ...filters, ...newFilters };
-    setFilters(merged);
+  function reload(newApiFilters?: Partial<OsMonitorFilters>) {
+    const merged = { ...apiFilters, ...newApiFilters };
+    setApiFilters(merged);
     fetchData(merged);
   }
 
   return {
     data,
+    filteredData,
     loading,
     error,
+    apiFilters,
     filters,
+    setFilters,
     metrics,
+    filteredMetrics,
     reload,
   };
 }
