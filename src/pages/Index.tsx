@@ -17,10 +17,10 @@ const Index = () => {
         </p>
         
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-2xl mx-auto">
-          <Link to="/dashboard">
+          <Link to="/vendas">
             <Button className="w-full h-auto py-4 flex flex-col gap-2" size="lg">
               <BarChart3 className="h-6 w-6" />
-              <span>Dashboard de Gestão</span>
+              <span>Dashboard de Vendas</span>
             </Button>
           </Link>
 
