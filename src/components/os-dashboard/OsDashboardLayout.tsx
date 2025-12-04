@@ -3,25 +3,45 @@
 import React from "react";
 import { OsRecord } from "../../services/osMonitor";
 import { OsMetrics, mapStatus, getStatusLegivel, isAtrasada } from "../../utils/osMetrics";
+import { OsFilterState, OsStatusFilter } from "../../hooks/useOsMonitor";
 import { OsKpiCards } from "./OsKpiCards";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type Props = {
   data: OsRecord[];
+  rawData: OsRecord[];
   loading: boolean;
   error: string | null;
   metrics: OsMetrics;
+  filters: OsFilterState;
+  onChangeFilters: (next: Partial<OsFilterState>) => void;
   onChangePeriod: (range: { dataInicio: string; dataFim: string }) => void;
 };
 
 export const OsDashboardLayout: React.FC<Props> = ({
   data,
+  rawData,
   loading,
   error,
   metrics,
+  filters,
+  onChangeFilters,
   onChangePeriod,
 }) => {
   const hoje = new Date();
+
+  // Lista de empresas única a partir dos dados brutos
+  const empresas = Array.from(
+    new Set(rawData.map((os) => os.empresa).filter((e): e is string => !!e))
+  ).sort();
 
   function handleChangeToday() {
     const iso = hoje.toISOString().slice(0, 10);
@@ -71,14 +91,88 @@ export const OsDashboardLayout: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* KPIs */}
-      <OsKpiCards metrics={metrics} loading={loading} />
+      {/* KPIs clicáveis */}
+      <OsKpiCards
+        metrics={metrics}
+        filters={filters}
+        onChangeFilters={onChangeFilters}
+        loading={loading}
+      />
 
       {error && (
         <div className="text-sm text-destructive border border-destructive/30 bg-destructive/10 p-3 rounded-md">
           Erro: {error}
         </div>
       )}
+
+      {/* Toolbar de filtros */}
+      <div className="flex flex-wrap gap-4 items-center p-3 bg-muted/50 rounded-lg border border-border">
+        <Select
+          value={filters.empresa}
+          onValueChange={(value) => onChangeFilters({ empresa: value })}
+        >
+          <SelectTrigger className="w-[220px]">
+            <SelectValue placeholder="Todas as empresas" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="TODAS">Todas as empresas</SelectItem>
+            {empresas.map((nome) => (
+              <SelectItem key={nome} value={nome}>
+                {nome}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={filters.status}
+          onValueChange={(value) => onChangeFilters({ status: value as OsStatusFilter })}
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="TODOS">Todos os status</SelectItem>
+            <SelectItem value="EM_ANDAMENTO">Em andamento</SelectItem>
+            <SelectItem value="ATRASADAS">Atrasadas</SelectItem>
+            <SelectItem value="ENTREGUES">Entregues</SelectItem>
+            <SelectItem value="CANCELADAS">Canceladas</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <div className="flex gap-4 items-center">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="check-reparo"
+              checked={filters.somenteReparo}
+              onCheckedChange={(checked) => onChangeFilters({ somenteReparo: !!checked })}
+            />
+            <label htmlFor="check-reparo" className="text-sm cursor-pointer">
+              Reparo
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="check-ecommerce"
+              checked={filters.somenteEcommerce}
+              onCheckedChange={(checked) => onChangeFilters({ somenteEcommerce: !!checked })}
+            />
+            <label htmlFor="check-ecommerce" className="text-sm cursor-pointer">
+              E-commerce
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="check-sem-previsao"
+              checked={filters.somenteSemPrevisao}
+              onCheckedChange={(checked) => onChangeFilters({ somenteSemPrevisao: !!checked })}
+            />
+            <label htmlFor="check-sem-previsao" className="text-sm cursor-pointer">
+              Sem previsão
+            </label>
+          </div>
+        </div>
+      </div>
 
       {/* Tabela */}
       <div className="overflow-auto border border-border rounded-lg">
@@ -90,6 +184,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
               <Th>Cliente</Th>
               <Th>Data Emissão</Th>
               <Th>Previsão</Th>
+              <Th>Tags</Th>
               <Th>Status</Th>
               <Th>Atrasada</Th>
             </tr>
@@ -116,6 +211,24 @@ export const OsDashboardLayout: React.FC<Props> = ({
                       formatDate(os.dataPrevisao)
                     ) : (
                       <span className="text-muted-foreground text-xs">Sem previsão</span>
+                    )}
+                  </Td>
+                  <Td>
+                    {!os.isReparo && !os.isEcommerce ? (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : (
+                      <div className="flex gap-1 flex-wrap">
+                        {os.isReparo && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                            Reparo
+                          </span>
+                        )}
+                        {os.isEcommerce && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                            E-commerce
+                          </span>
+                        )}
+                      </div>
                     )}
                   </Td>
                   <Td>
@@ -150,10 +263,10 @@ export const OsDashboardLayout: React.FC<Props> = ({
             {data.length === 0 && !loading && (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="py-8 text-center text-muted-foreground"
                 >
-                  Nenhuma OS encontrada neste período.
+                  Nenhuma OS encontrada com os filtros atuais.
                 </td>
               </tr>
             )}
