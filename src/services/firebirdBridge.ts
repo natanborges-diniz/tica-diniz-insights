@@ -68,6 +68,29 @@ export async function fetchResumoFormasPagamento(
   return result.data;
 }
 
+export interface Empresa {
+  COD_EMPRESA: number;
+  EMPRESA: string;
+}
+
+export async function fetchEmpresas(): Promise<Empresa[]> {
+  const url = `${FIREBIRD_BRIDGE_BASE_URL}/api/v1/empresas`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Erro ao buscar empresas: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  return result.data;
+}
+
 export interface AnaliseEstoqueAcao {
   EMPRESA: string;
   NOME_FORNECEDOR: string;
