@@ -9,6 +9,8 @@ import StockDashboard from "./pages/StockDashboard";
 import SalesFamilyDashboard from "./pages/SalesFamilyDashboard";
 import OsDashboard from "./pages/OsDashboard";
 import FinanceiroDashboard from "./pages/FinanceiroDashboard";
+import FinanceiroDreDashboard from "./pages/FinanceiroDreDashboard";
+import FluxoCaixaDashboard from "./pages/FluxoCaixaDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +28,8 @@ const App = () => (
           <Route path="/vendas-familia" element={<SalesFamilyDashboard />} />
           <Route path="/os" element={<OsDashboard />} />
           <Route path="/financeiro" element={<FinanceiroDashboard />} />
+          <Route path="/financeiro/dre" element={<FinanceiroDreDashboard />} />
+          <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaDashboard />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
