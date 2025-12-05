@@ -1,7 +1,7 @@
 // src/components/financeiro-dashboard/FinanceiroFilters.tsx
 
 import React, { useEffect, useState } from "react";
-import { FinanceiroFilters as FiltersType, TipoFilter, SituacaoFilter } from "../../hooks/useFinanceiroParcelas";
+import { FinanceiroFilters as FiltersType, TipoFilter, SituacaoFilter, CampoDataFilter } from "../../hooks/useFinanceiroParcelas";
 import { fetchEmpresas, Empresa } from "../../services/firebirdBridge";
 import {
   Select,
@@ -39,15 +39,33 @@ export function FinanceiroFilters({ filters, onChange }: FinanceiroFiltersProps)
           }
         >
           <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Todas as empresas" />
+            <SelectValue placeholder="Selecione a empresa" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="TODAS">Todas as empresas</SelectItem>
+            <SelectItem value="TODAS">Selecione a empresa</SelectItem>
             {empresas.map((e) => (
               <SelectItem key={e.COD_EMPRESA} value={String(e.COD_EMPRESA)}>
                 {e.EMPRESA}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Campo de Data */}
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">Campo de Data</Label>
+        <Select
+          value={filters.campoData}
+          onValueChange={(value) => onChange({ campoData: value as CampoDataFilter })}
+        >
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Campo de Data" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="VENCIMENTO">Data Vencimento</SelectItem>
+            <SelectItem value="EMISSAO">Data Emissão</SelectItem>
+            <SelectItem value="PAGAMENTO">Data Pagamento</SelectItem>
           </SelectContent>
         </Select>
       </div>
