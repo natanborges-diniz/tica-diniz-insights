@@ -13,7 +13,7 @@ export default function FinanceiroDashboard() {
   const {
     filters,
     setFilters,
-    filteredData,
+    data,
     metrics,
     loading,
     error,
@@ -59,9 +59,9 @@ export default function FinanceiroDashboard() {
 
         <FinanceiroKPICards metrics={metrics} />
 
-        <FinanceiroVencimentoChart data={filteredData} />
+        <FinanceiroVencimentoChart data={data} />
 
-        <FinanceiroParcelasTable data={filteredData} />
+        <FinanceiroParcelasTable data={data} />
       </main>
     </div>
   );

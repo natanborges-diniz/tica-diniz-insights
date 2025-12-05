@@ -5,6 +5,7 @@ import { getFinanceiroParcelas, FinanceiroParcela } from "../services/financeiro
 
 export type TipoFilter = "TODOS" | "PAGAR" | "RECEBER";
 export type SituacaoFilter = "TODOS" | "EM ABERTO" | "EM ATRASO" | "PAGA";
+export type CampoDataFilter = "EMISSAO" | "VENCIMENTO" | "PAGAMENTO";
 
 export interface FinanceiroFilters {
   empresa: string | number | null;
@@ -12,6 +13,7 @@ export interface FinanceiroFilters {
   dataFim: string;
   tipo: TipoFilter;
   situacao: SituacaoFilter;
+  campoData: CampoDataFilter;
 }
 
 export interface FinanceiroMetrics {
@@ -36,6 +38,7 @@ function getDefaultFilters(): FinanceiroFilters {
     dataFim: ultimoDiaMes.toISOString().split("T")[0],
     tipo: "TODOS",
     situacao: "TODOS",
+    campoData: "VENCIMENTO",
   };
 }
 
@@ -106,6 +109,9 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
         dataIni: filters.dataIni,
         dataFim: filters.dataFim,
         empresa: filters.empresa,
+        tipo: filters.tipo,
+        situacao: filters.situacao,
+        campoData: filters.campoData,
       });
       setData(parcelas);
     } catch (err) {
@@ -114,26 +120,14 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
     } finally {
       setLoading(false);
     }
-  }, [filters.dataIni, filters.dataFim, filters.empresa]);
+  }, [filters.dataIni, filters.dataFim, filters.empresa, filters.tipo, filters.situacao, filters.campoData]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const filteredData = useMemo(() => {
-    return data.filter((p) => {
-      if (filters.tipo !== "TODOS" && p.tipoLancamento !== filters.tipo) {
-        return false;
-      }
-      if (filters.situacao !== "TODOS" && p.situacao !== filters.situacao) {
-        return false;
-      }
-      return true;
-    });
-  }, [data, filters.tipo, filters.situacao]);
-
+  // Métricas calculadas a partir dos dados retornados (já filtrados pelo backend)
   const metrics = useMemo(() => calculateMetrics(data), [data]);
-  const filteredMetrics = useMemo(() => calculateMetrics(filteredData), [filteredData]);
 
   const reload = useCallback(() => {
     fetchData();
@@ -143,9 +137,7 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
     filters,
     setFilters,
     data,
-    filteredData,
     metrics,
-    filteredMetrics,
     loading,
     error,
     reload,

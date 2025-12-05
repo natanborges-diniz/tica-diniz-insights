@@ -96,10 +96,17 @@ function mapRowToParcela(row: ApiParcelaRow): FinanceiroParcela {
   };
 }
 
+export type TipoFilterParam = "TODOS" | "PAGAR" | "RECEBER";
+export type SituacaoFilterParam = "TODOS" | "EM ABERTO" | "EM ATRASO" | "PAGA";
+export type CampoDataParam = "EMISSAO" | "VENCIMENTO" | "PAGAMENTO";
+
 export interface GetFinanceiroParcelasParams {
   dataIni: string;
   dataFim: string;
   empresa?: number | string;
+  tipo?: TipoFilterParam;
+  situacao?: SituacaoFilterParam;
+  campoData?: CampoDataParam;
 }
 
 export async function getFinanceiroParcelas(
@@ -112,6 +119,15 @@ export async function getFinanceiroParcelas(
 
   if (params.empresa !== undefined && params.empresa !== null && params.empresa !== "") {
     queryParams.append("empresa", String(params.empresa));
+  }
+  if (params.tipo && params.tipo !== "TODOS") {
+    queryParams.append("tipo", params.tipo);
+  }
+  if (params.situacao && params.situacao !== "TODOS") {
+    queryParams.append("situacao", params.situacao);
+  }
+  if (params.campoData) {
+    queryParams.append("campoData", params.campoData);
   }
 
   const url = `${FIREBIRD_BRIDGE_BASE_URL}/api/v1/financeiro/parcelas?${queryParams.toString()}`;
