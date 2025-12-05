@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { BarChart3, Database, Users, RefreshCw, Package, Layers, ClipboardList } from 'lucide-react';
+import { BarChart3, Database, Users, RefreshCw, Package, Layers, ClipboardList, Wallet } from 'lucide-react';
 
 const Index = () => {
   return (
@@ -16,7 +16,7 @@ const Index = () => {
           Integração Firebird → Data Warehouse com dashboards analíticos
         </p>
         
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 max-w-4xl mx-auto">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6 max-w-5xl mx-auto">
           <Link to="/vendas">
             <Button className="w-full h-auto py-4 flex flex-col gap-2" size="lg">
               <BarChart3 className="h-6 w-6" />
@@ -42,6 +42,13 @@ const Index = () => {
             <Button variant="secondary" className="w-full h-auto py-4 flex flex-col gap-2" size="lg">
               <ClipboardList className="h-6 w-6" />
               <span>Monitor de OS</span>
+            </Button>
+          </Link>
+
+          <Link to="/financeiro">
+            <Button variant="secondary" className="w-full h-auto py-4 flex flex-col gap-2" size="lg">
+              <Wallet className="h-6 w-6" />
+              <span>Financeiro</span>
             </Button>
           </Link>
           
