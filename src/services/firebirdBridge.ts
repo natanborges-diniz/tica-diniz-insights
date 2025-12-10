@@ -68,6 +68,13 @@ export async function fetchResumoFormasPagamento(
   return result.data;
 }
 
+// Interface raw da API (snake_case)
+interface EmpresaRaw {
+  cod_empresa: number;
+  empresa_nome: string;
+}
+
+// Interface pública (SCREAMING_SNAKE_CASE)
 export interface Empresa {
   COD_EMPRESA: number;
   EMPRESA: string;
@@ -78,9 +85,7 @@ export async function fetchEmpresas(): Promise<Empresa[]> {
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
   });
 
   if (!response.ok) {
@@ -88,7 +93,19 @@ export async function fetchEmpresas(): Promise<Empresa[]> {
   }
 
   const result = await response.json();
-  return result.data;
+  
+  // Tratar envelope { ok, data, error }
+  const data: EmpresaRaw[] = result.data ?? result;
+  
+  if (!result.ok && result.error) {
+    throw new Error(result.error.message || 'Erro ao buscar empresas');
+  }
+
+  // Normalizar campos para interface pública
+  return data.map((raw) => ({
+    COD_EMPRESA: raw.cod_empresa,
+    EMPRESA: raw.empresa_nome,
+  }));
 }
 
 export interface AnaliseEstoqueAcao {
