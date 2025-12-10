@@ -4,20 +4,59 @@ const FIREBIRD_BRIDGE_BASE_URL =
   import.meta.env.VITE_FIREBIRD_BRIDGE_BASE_URL ||
   'https://firebird-bridge-production.up.railway.app';
 
+// Interface para linha retornada pelo novo backend
 export interface DreLinha {
   grupo: string;
   subgrupo: string | null;
   competencia: string;
   valor: number;
+  // Campos adicionais do novo backend (se existirem)
+  contaclaCodigo?: number | null;
+  contaclaNumero?: string | null;
+  contaclaDescricao?: string | null;
+  valorTotal?: number;
 }
 
-export interface DreResponse {
+// Interface para resposta legada
+interface DreResponseLegacy {
   ok: boolean;
-  empresa: number;
-  dataIni: string;
-  dataFim: string;
-  modo: string;
-  linhas: DreLinha[];
+  empresa?: number;
+  dataIni?: string;
+  dataFim?: string;
+  modo?: string;
+  linhas?: DreLinha[];
+}
+
+// Interface para novo envelope de resposta
+interface ApiEnvelopeResponse<T> {
+  ok: boolean;
+  data: T[] | null;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: string;
+  } | null;
+}
+
+// Interface para linha bruta do novo backend
+interface ApiDreRow {
+  COMPETENCIA?: string;
+  GRUPO?: string;
+  SUBGRUPO?: string | null;
+  VALOR?: number;
+  VALOR_TOTAL?: number;
+  CONTACLA_CODIGO?: number | null;
+  CONTACLA_NUMERO?: string | null;
+  CONTACLA_DESCRICAO?: string | null;
+  // campos em lowercase (caso backend normalize)
+  competencia?: string;
+  grupo?: string;
+  subgrupo?: string | null;
+  valor?: number;
+  valor_total?: number;
+  contacla_codigo?: number | null;
+  contacla_numero?: string | null;
+  contacla_descricao?: string | null;
 }
 
 export interface GetDreParams {
@@ -26,12 +65,26 @@ export interface GetDreParams {
   empresa: number | string;
 }
 
+function mapApiRowToDreLinha(row: ApiDreRow): DreLinha {
+  return {
+    grupo: row.GRUPO || row.grupo || "",
+    subgrupo: row.SUBGRUPO ?? row.subgrupo ?? null,
+    competencia: row.COMPETENCIA || row.competencia || "",
+    valor: row.VALOR ?? row.valor ?? row.VALOR_TOTAL ?? row.valor_total ?? 0,
+    contaclaCodigo: row.CONTACLA_CODIGO ?? row.contacla_codigo ?? null,
+    contaclaNumero: row.CONTACLA_NUMERO ?? row.contacla_numero ?? null,
+    contaclaDescricao: row.CONTACLA_DESCRICAO ?? row.contacla_descricao ?? null,
+    valorTotal: row.VALOR_TOTAL ?? row.valor_total ?? row.VALOR ?? row.valor ?? 0,
+  };
+}
+
 export async function getFinanceiroDre(params: GetDreParams): Promise<DreLinha[]> {
-  const queryParams = new URLSearchParams({
-    dataIni: params.dataIni,
-    dataFim: params.dataFim,
-    empresa: String(params.empresa),
-  });
+  const queryParams = new URLSearchParams();
+  
+  // Novo backend usa dataInicio/dataFim
+  queryParams.append("dataInicio", params.dataIni);
+  queryParams.append("dataFim", params.dataFim);
+  queryParams.append("empresa", String(params.empresa));
 
   const url = `${FIREBIRD_BRIDGE_BASE_URL}/api/v1/financeiro/dre?${queryParams.toString()}`;
 
@@ -46,13 +99,24 @@ export async function getFinanceiroDre(params: GetDreParams): Promise<DreLinha[]
     throw new Error(`Erro ao buscar DRE: ${response.status} ${response.statusText}`);
   }
 
-  const result: DreResponse = await response.json();
+  const result = await response.json();
 
-  if (!result.ok) {
-    throw new Error("Resposta inválida da API de DRE");
+  // Novo formato: { ok, data, error }
+  if ('data' in result) {
+    const envelope = result as ApiEnvelopeResponse<ApiDreRow>;
+    if (!envelope.ok || envelope.error) {
+      const errorMsg = envelope.error?.message || "Resposta inválida da API de DRE";
+      throw new Error(errorMsg);
+    }
+    return (envelope.data || []).map(mapApiRowToDreLinha);
   }
 
-  return result.linhas || [];
+  // Formato legado: { ok, linhas }
+  const legacyResult = result as DreResponseLegacy;
+  if (!legacyResult.ok) {
+    throw new Error("Resposta inválida da API de DRE");
+  }
+  return legacyResult.linhas || [];
 }
 
 // Grupos padrão do DRE para cálculos
