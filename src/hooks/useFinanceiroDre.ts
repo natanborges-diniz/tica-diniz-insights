@@ -49,6 +49,7 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
     setError(null);
 
     try {
+      // Chama o service com os parâmetros corretos
       const linhas = await getFinanceiroDre({
         dataIni: filters.dataIni,
         dataFim: filters.dataFim,
@@ -67,7 +68,7 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
     fetchData();
   }, [fetchData]);
 
-  // Resumo calculado
+  // Resumo calculado usando o valor (ou valorTotal) de cada linha
   const resumo = useMemo<DreResumo>(() => calcularResumoDre(data), [data]);
 
   // Dados agrupados por competência para o gráfico
@@ -75,9 +76,10 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
     const competenciaMap = new Map<string, DreLinha[]>();
 
     for (const linha of data) {
-      const existing = competenciaMap.get(linha.competencia) || [];
+      const comp = linha.competencia || "SEM_COMPETENCIA";
+      const existing = competenciaMap.get(comp) || [];
       existing.push(linha);
-      competenciaMap.set(linha.competencia, existing);
+      competenciaMap.set(comp, existing);
     }
 
     const result: DreCompetenciaData[] = [];

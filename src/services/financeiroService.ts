@@ -100,6 +100,17 @@ export type TipoFilterParam = "TODOS" | "PAGAR" | "RECEBER";
 export type SituacaoFilterParam = "TODOS" | "EM ABERTO" | "EM ATRASO" | "PAGA";
 export type CampoDataParam = "EMISSAO" | "VENCIMENTO" | "PAGAMENTO";
 
+// Interface genérica para resposta do novo backend
+interface ApiEnvelopeResponse<T> {
+  ok: boolean;
+  data: T[] | null;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: string;
+  } | null;
+}
+
 export interface GetFinanceiroParcelasParams {
   dataIni: string;
   dataFim: string;
@@ -112,10 +123,11 @@ export interface GetFinanceiroParcelasParams {
 export async function getFinanceiroParcelas(
   params: GetFinanceiroParcelasParams
 ): Promise<FinanceiroParcela[]> {
-  const queryParams = new URLSearchParams({
-    dataIni: params.dataIni,
-    dataFim: params.dataFim,
-  });
+  const queryParams = new URLSearchParams();
+  
+  // Novo backend usa dataInicio/dataFim
+  queryParams.append("dataInicio", params.dataIni);
+  queryParams.append("dataFim", params.dataFim);
 
   if (params.empresa !== undefined && params.empresa !== null && params.empresa !== "") {
     queryParams.append("empresa", String(params.empresa));
@@ -143,13 +155,25 @@ export async function getFinanceiroParcelas(
     throw new Error(`Erro ao buscar parcelas financeiras: ${response.status} ${response.statusText}`);
   }
 
-  const result: ApiResponse = await response.json();
+  // Tenta parsear com novo envelope, fallback para formato antigo
+  const result = await response.json();
 
-  if (!result.ok) {
+  // Novo formato: { ok, data, error }
+  if ('data' in result) {
+    const envelope = result as ApiEnvelopeResponse<ApiParcelaRow>;
+    if (!envelope.ok || envelope.error) {
+      const errorMsg = envelope.error?.message || "Resposta inválida da API de parcelas financeiras";
+      throw new Error(errorMsg);
+    }
+    return (envelope.data || []).map(mapRowToParcela);
+  }
+  
+  // Formato antigo: { ok, rows }
+  const legacyResult = result as ApiResponse;
+  if (!legacyResult.ok) {
     throw new Error("Resposta inválida da API de parcelas financeiras");
   }
-
-  return (result.rows || []).map(mapRowToParcela);
+  return (legacyResult.rows || []).map(mapRowToParcela);
 }
 
 export { FIREBIRD_BRIDGE_BASE_URL };
