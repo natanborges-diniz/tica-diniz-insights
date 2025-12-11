@@ -39,7 +39,7 @@ export default function SalesFamilyDashboard() {
   // Selecionar primeira empresa quando carregar a lista
   useEffect(() => {
     if (!loadingEmpresas && !errorEmpresas && empresas.length > 0 && selectedEmpresaId === null) {
-      setSelectedEmpresaId(empresas[0].COD_EMPRESA);
+      setSelectedEmpresaId(empresas[0].codEmpresa);
     }
   }, [empresas, loadingEmpresas, errorEmpresas, selectedEmpresaId]);
 
@@ -62,20 +62,20 @@ export default function SalesFamilyDashboard() {
     let result = data;
 
     if (filtroVendedor !== 'TODOS') {
-      result = result.filter(item => item.VENDEDOR === filtroVendedor);
+      result = result.filter(item => item.vendedor === filtroVendedor);
     }
 
     if (filtroFamilia !== 'TODAS') {
-      result = result.filter(item => item.FAMILIA === filtroFamilia);
+      result = result.filter(item => item.familia === filtroFamilia);
     }
 
     if (filtroBuscaTexto.trim()) {
       const termo = filtroBuscaTexto.toLowerCase();
       result = result.filter(
         item =>
-          item.EMPRESA?.toLowerCase().includes(termo) ||
-          item.VENDEDOR?.toLowerCase().includes(termo) ||
-          item.FAMILIA?.toLowerCase().includes(termo)
+          item.empresa?.toLowerCase().includes(termo) ||
+          item.vendedor?.toLowerCase().includes(termo) ||
+          item.familia?.toLowerCase().includes(termo)
       );
     }
 

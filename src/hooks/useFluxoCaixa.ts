@@ -40,11 +40,16 @@ function getDefaultFilters(): FluxoCaixaFilters {
   };
 }
 
-function formatarPeriodo(date: Date, granularidade: Granularidade): string {
+function formatarPeriodo(dateStr: string | null, granularidade: Granularidade): string {
+  if (!dateStr) return "SEM DATA";
+  
+  // Parse date string (YYYY-MM-DD format)
+  const date = new Date(dateStr + "T00:00:00");
+  
   if (granularidade === "MENSAL") {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
   }
-  return date.toISOString().split("T")[0];
+  return dateStr;
 }
 
 export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
