@@ -9,6 +9,13 @@ export interface DreFilters {
   dataFim: string;
 }
 
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function getDefaultFilters(): DreFilters {
   const hoje = new Date();
   const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
@@ -16,8 +23,8 @@ function getDefaultFilters(): DreFilters {
 
   return {
     empresa: null,
-    dataIni: primeiroDiaMes.toISOString().split("T")[0],
-    dataFim: ultimoDiaMes.toISOString().split("T")[0],
+    dataIni: formatLocalDate(primeiroDiaMes),
+    dataFim: formatLocalDate(ultimoDiaMes),
   };
 }
 
