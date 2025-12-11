@@ -48,7 +48,7 @@ export type CampoDataParam = 'EMISSAO' | 'VENCIMENTO' | 'PAGAMENTO';
 export interface GetFinanceiroParcelasParams {
   dataIni: string;
   dataFim: string;
-  empresa: number | string;
+  empresa: number | string | null;
   tipo?: TipoFilterParam;
   situacao?: SituacaoFilterParam;
   campoData?: CampoDataParam;
@@ -84,14 +84,27 @@ function mapParcelaRaw(r: FinanceiroParcelaRaw): FinanceiroParcela {
 export async function getFinanceiroParcelas(
   params: GetFinanceiroParcelasParams
 ): Promise<FinanceiroParcela[]> {
-  const raw = await apiGet<FinanceiroParcelaRaw>('/financeiro/parcelas', {
+  // Montar parâmetros da query
+  const queryParams: Record<string, string | number | undefined> = {
     dataInicio: params.dataIni,
     dataFim: params.dataFim,
-    empresa: params.empresa,
-    tipo: params.tipo !== 'TODOS' ? params.tipo : undefined,
-    situacao: params.situacao !== 'TODOS' ? params.situacao : undefined,
     campoData: params.campoData,
-  });
+  };
+  
+  // Passar empresa apenas se não for null (backend aceita null = todas)
+  if (params.empresa !== null && params.empresa !== undefined) {
+    queryParams.empresa = params.empresa;
+  }
+  
+  // Filtros opcionais
+  if (params.tipo && params.tipo !== 'TODOS') {
+    queryParams.tipo = params.tipo;
+  }
+  if (params.situacao && params.situacao !== 'TODOS') {
+    queryParams.situacao = params.situacao;
+  }
+  
+  const raw = await apiGet<FinanceiroParcelaRaw>('/financeiro/parcelas', queryParams);
   
   return raw.map(mapParcelaRaw);
 }
