@@ -1,23 +1,50 @@
 // src/services/osMonitor.ts
 
-const FIREBIRD_BRIDGE_BASE_URL =
-  import.meta.env.VITE_FIREBIRD_BRIDGE_BASE_URL ||
-  "https://firebird-bridge-production.up.railway.app";
+import { apiGet } from './firebirdBridge';
+
+// ============================================
+// INTERFACES - OS MONITOR
+// ============================================
+
+interface OsRecordRaw {
+  OS: number;
+  EMPRESA?: string;
+  CODEMPRESA?: number;
+  COD_EMPRESA?: number;
+  CLIENTE?: string;
+  CODCLIENTE?: number;
+  CPF?: string;
+  TOTAL?: number;
+  DATAEMISSAO?: string;
+  DATAPREVISAO?: string;
+  CODETAPA_ATUAL?: number;
+  DATAHORAENTRADA_ULTIMA?: string;
+  DATAHORASAIDA_ULTIMA?: string;
+  IS_REPARO?: number;
+  IS_ECOMMERCE?: number;
+  ETAPA?: string;
+  NUMEROORDEMSERVICO?: string;
+  TELEFONE?: string;
+}
 
 export interface OsRecord {
-  empresa: string | null;
   numeroOs: number;
+  empresa: string | null;
+  codEmpresa: number | null;
   cliente: string | null;
+  codCliente: number | null;
   cpf: string | null;
   total: number | null;
   dataEmissao: string | null;
   dataPrevisao: string | null;
-  codEmpresa: number | null;
   codEtapaAtual: number | null;
   dataHoraEntradaUltima: string | null;
   dataHoraSaidaUltima: string | null;
   isReparo: boolean;
   isEcommerce: boolean;
+  etapa: string | null;
+  numeroOrdemServico: string | null;
+  telefone: string | null;
 }
 
 export type OsMonitorFilters = {
@@ -26,45 +53,36 @@ export type OsMonitorFilters = {
   codEmpresa?: number | null;
 };
 
+function mapOsRecordRaw(r: OsRecordRaw): OsRecord {
+  return {
+    numeroOs: r.OS ?? 0,
+    empresa: r.EMPRESA ?? null,
+    codEmpresa: r.CODEMPRESA ?? r.COD_EMPRESA ?? null,
+    cliente: r.CLIENTE ?? null,
+    codCliente: r.CODCLIENTE ?? null,
+    cpf: r.CPF ?? null,
+    total: r.TOTAL ?? null,
+    dataEmissao: r.DATAEMISSAO ?? null,
+    dataPrevisao: r.DATAPREVISAO ?? null,
+    codEtapaAtual: r.CODETAPA_ATUAL ?? null,
+    dataHoraEntradaUltima: r.DATAHORAENTRADA_ULTIMA ?? null,
+    dataHoraSaidaUltima: r.DATAHORASAIDA_ULTIMA ?? null,
+    isReparo: r.IS_REPARO === 1,
+    isEcommerce: r.IS_ECOMMERCE === 1,
+    etapa: r.ETAPA ?? null,
+    numeroOrdemServico: r.NUMEROORDEMSERVICO ?? null,
+    telefone: r.TELEFONE ?? null,
+  };
+}
+
 export async function getOsMonitor(
   filters: OsMonitorFilters
 ): Promise<OsRecord[]> {
-  const url = new URL("/api/v1/os/monitor", FIREBIRD_BRIDGE_BASE_URL);
+  const raw = await apiGet<OsRecordRaw>('/os/monitor', {
+    dataInicio: filters.dataInicio,
+    dataFim: filters.dataFim,
+    empresa: filters.codEmpresa,
+  });
 
-  url.searchParams.set("dataInicio", filters.dataInicio);
-  url.searchParams.set("dataFim", filters.dataFim);
-
-  if (filters.codEmpresa) {
-    url.searchParams.set("codEmpresa", String(filters.codEmpresa));
-  }
-
-  const res = await fetch(url.toString());
-
-  if (!res.ok) {
-    const text = await res.text();
-    console.error("Erro ao buscar OS monitor:", text);
-    throw new Error("Erro ao buscar monitor de OS");
-  }
-
-  const json = await res.json();
-
-  // API pode retornar { data: [...] } ou direto [...]
-  const rawData = Array.isArray(json) ? json : Array.isArray(json.data) ? json.data : [];
-
-  // Mapeia campos UPPERCASE do Firebird para camelCase
-  return rawData.map((row: any) => ({
-    empresa: row.EMPRESA ?? null,
-    numeroOs: row.OS ?? 0,
-    cliente: row.CLIENTE ?? null,
-    cpf: row.CPF ?? null,
-    total: row.TOTAL ?? null,
-    dataEmissao: row.DATAEMISSAO ?? null,
-    dataPrevisao: row.DATAPREVISAO ?? null,
-    codEmpresa: row.CODEMPRESA ?? null,
-    codEtapaAtual: row.CODETAPA_ATUAL ?? null,
-    dataHoraEntradaUltima: row.DATAHORAENTRADA_ULTIMA ?? null,
-    dataHoraSaidaUltima: row.DATAHORASAIDA_ULTIMA ?? null,
-    isReparo: row.IS_REPARO === 1,
-    isEcommerce: row.IS_ECOMMERCE === 1,
-  }));
+  return raw.map(mapOsRecordRaw);
 }

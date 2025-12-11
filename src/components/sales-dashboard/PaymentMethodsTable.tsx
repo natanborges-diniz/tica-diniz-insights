@@ -47,12 +47,12 @@ export function PaymentMethodsTable({ dados, isLoading }: PaymentMethodsTablePro
             </TableHeader>
             <TableBody>
               {dados.map((item, index) => (
-                <TableRow key={`${item.EMPRESA}-${item.VENDEDOR}-${item.FORMAPAGAMENTO}-${index}`}>
-                  <TableCell className="font-medium">{item.EMPRESA}</TableCell>
-                  <TableCell>{item.VENDEDOR}</TableCell>
-                  <TableCell>{item.FORMAPAGAMENTO}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(item.TOTALGERAL)}</TableCell>
-                  <TableCell className="text-right">{item.QTD_VENDAS}</TableCell>
+                <TableRow key={`${item.empresa}-${item.vendedor}-${item.formaPagamento}-${index}`}>
+                  <TableCell className="font-medium">{item.empresa}</TableCell>
+                  <TableCell>{item.vendedor}</TableCell>
+                  <TableCell>{item.formaPagamento}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(item.totalGeral)}</TableCell>
+                  <TableCell className="text-right">{item.qtdVendas}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

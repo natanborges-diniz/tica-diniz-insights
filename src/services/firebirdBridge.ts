@@ -1,11 +1,94 @@
-// Configuração da URL base - usa variável de ambiente ou fallback para Railway
+// src/services/firebirdBridge.ts
+// Cliente HTTP centralizado para Firebird Bridge API
+
 const FIREBIRD_BRIDGE_BASE_URL = 
   import.meta.env.VITE_FIREBIRD_BRIDGE_BASE_URL || 
   'https://firebird-bridge-production.up.railway.app';
 
-export interface ResumoEmpresaVendedor {
+// ============================================
+// ENVELOPE PADRÃO DA API
+// ============================================
+
+interface ApiEnvelope<T> {
+  ok: boolean;
+  data: T[] | null;
+  error: {
+    code: string;
+    message: string;
+    details: object | null;
+  } | null;
+}
+
+// ============================================
+// FUNÇÃO GENÉRICA DE REQUISIÇÃO
+// ============================================
+
+export async function apiGet<T>(
+  path: string, 
+  params?: Record<string, string | number | undefined | null>
+): Promise<T[]> {
+  const url = new URL(`${FIREBIRD_BRIDGE_BASE_URL}/api/v1${path}`);
+  
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        url.searchParams.append(key, String(value));
+      }
+    });
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
+  }
+
+  const result = await response.json() as ApiEnvelope<T>;
+  
+  // Aplicar regra do envelope { ok, data, error }
+  if (!result.ok || result.error) {
+    throw new Error(result.error?.message || result.error?.code || 'Erro na API');
+  }
+
+  return result.data || [];
+}
+
+// ============================================
+// INTERFACES - EMPRESA
+// ============================================
+
+// Interface raw da API (snake_case)
+interface EmpresaRaw {
+  cod_empresa: number;
+  empresa_nome: string;
+}
+
+// Interface pública (camelCase)
+export interface Empresa {
+  codEmpresa: number;
+  empresaNome: string;
+}
+
+export async function fetchEmpresas(): Promise<Empresa[]> {
+  const raw = await apiGet<EmpresaRaw>('/empresas');
+  return raw.map((r) => ({
+    codEmpresa: r.cod_empresa,
+    empresaNome: r.empresa_nome,
+  }));
+}
+
+// ============================================
+// INTERFACES - VENDAS RESUMO EMPRESA/VENDEDOR
+// ============================================
+
+interface ResumoEmpresaVendedorRaw {
   EMPRESA: string;
+  COD_EMPRESA: number;
   VENDEDOR: string;
+  COD_VENDEDOR: number;
   TOTALORIGINAL: number;
   TOTALVENDIDO: number;
   TICKETMEDIO: number;
@@ -14,128 +97,146 @@ export interface ResumoEmpresaVendedor {
   QTDDEVOLUCAO: number;
 }
 
-interface ApiResponse {
-  data: ResumoEmpresaVendedor[];
+export interface ResumoEmpresaVendedor {
+  codEmpresa: number;
+  empresa: string;
+  codVendedor: number;
+  vendedor: string;
+  totalOriginal: number;
+  totalVendido: number;
+  ticketMedio: number;
+  totalDevolucao: number;
+  qtdTransacao: number;
+  qtdDevolucao: number;
 }
 
 export async function fetchResumoEmpresaVendedor(
   dataInicio: string,
   dataFim: string
 ): Promise<ResumoEmpresaVendedor[]> {
-  const url = `${FIREBIRD_BRIDGE_BASE_URL}/api/v1/vendas/resumo-empresa-vendedor?dataInicio=${dataInicio}&dataFim=${dataFim}`;
-  
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+  const raw = await apiGet<ResumoEmpresaVendedorRaw>('/vendas/resumo-empresa-vendedor', {
+    dataInicio,
+    dataFim,
   });
+  
+  return raw.map((r) => ({
+    codEmpresa: r.COD_EMPRESA ?? 0,
+    empresa: r.EMPRESA ?? '',
+    codVendedor: r.COD_VENDEDOR ?? 0,
+    vendedor: r.VENDEDOR ?? '',
+    totalOriginal: r.TOTALORIGINAL ?? 0,
+    totalVendido: r.TOTALVENDIDO ?? 0,
+    ticketMedio: r.TICKETMEDIO ?? 0,
+    totalDevolucao: r.TOTALDEVOLUCAO ?? 0,
+    qtdTransacao: r.QTDTRANSACAO ?? 0,
+    qtdDevolucao: r.QTDDEVOLUCAO ?? 0,
+  }));
+}
 
-  if (!response.ok) {
-    throw new Error(`Erro ao buscar dados: ${response.status} ${response.statusText}`);
-  }
+// ============================================
+// INTERFACES - FORMAS DE PAGAMENTO
+// ============================================
 
-  const result: ApiResponse = await response.json();
-  return result.data;
+interface ResumoFormaPagamentoRaw {
+  COD_EMPRESA: number;
+  EMPRESA: string;
+  VENDEDOR?: string;
+  FORMA_PAGAMENTO?: string;
+  FORMAPAGAMENTO?: string;
+  TOTAL?: number;
+  TOTALGERAL?: number;
+  QTD_TRANSACOES?: number;
+  QTD_VENDAS?: number;
 }
 
 export interface ResumoFormaPagamento {
-  EMPRESA: string;
-  VENDEDOR: string;
-  FORMAPAGAMENTO: string;
-  TOTALGERAL: number;
-  QTD_VENDAS: number;
+  codEmpresa: number;
+  empresa: string;
+  vendedor: string;
+  formaPagamento: string;
+  totalGeral: number;
+  qtdVendas: number;
 }
 
 export async function fetchResumoFormasPagamento(
   dataInicio: string,
   dataFim: string
 ): Promise<ResumoFormaPagamento[]> {
-  const url = `${FIREBIRD_BRIDGE_BASE_URL}/api/v1/vendas/resumo-formas-pagamento?dataInicio=${dataInicio}&dataFim=${dataFim}`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+  const raw = await apiGet<ResumoFormaPagamentoRaw>('/vendas/resumo-formas-pagamento', {
+    dataInicio,
+    dataFim,
   });
-
-  if (!response.ok) {
-    throw new Error(`Erro ao buscar formas de pagamento: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
-  return result.data;
-}
-
-// Interface raw da API (snake_case)
-interface EmpresaRaw {
-  cod_empresa: number;
-  empresa_nome: string;
-}
-
-// Interface pública (SCREAMING_SNAKE_CASE)
-export interface Empresa {
-  COD_EMPRESA: number;
-  EMPRESA: string;
-}
-
-export async function fetchEmpresas(): Promise<Empresa[]> {
-  const url = `${FIREBIRD_BRIDGE_BASE_URL}/api/v1/empresas`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Erro ao buscar empresas: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
   
-  // Tratar envelope { ok, data, error }
-  const data: EmpresaRaw[] = result.data ?? result;
-  
-  if (!result.ok && result.error) {
-    throw new Error(result.error.message || 'Erro ao buscar empresas');
-  }
-
-  // Normalizar campos para interface pública
-  return data.map((raw) => ({
-    COD_EMPRESA: raw.cod_empresa,
-    EMPRESA: raw.empresa_nome,
+  return raw.map((r) => ({
+    codEmpresa: r.COD_EMPRESA ?? 0,
+    empresa: r.EMPRESA ?? '',
+    vendedor: r.VENDEDOR ?? '',
+    formaPagamento: r.FORMA_PAGAMENTO ?? r.FORMAPAGAMENTO ?? '',
+    totalGeral: r.TOTAL ?? r.TOTALGERAL ?? 0,
+    qtdVendas: r.QTD_TRANSACOES ?? r.QTD_VENDAS ?? 0,
   }));
 }
 
-export interface AnaliseEstoqueAcao {
+// ============================================
+// INTERFACES - ANÁLISE ESTOQUE
+// ============================================
+
+interface AnaliseEstoqueAcaoRaw {
+  COD_EMPRESA?: number;
   EMPRESA: string;
-  NOME_FORNECEDOR: string;
-  GRIFE: string;
-  CODIGO_BARRA: string;
-  DESCRICAO_PRODUTO: string;
-  QUANTIDADE_ESTOQUE: number;
+  COD_PRODUTO?: number;
+  NOME_FORNECEDOR?: string;
+  FORNECEDOR?: string;
+  GRIFE?: string;
+  MARCA?: string;
+  CODIGO_BARRA?: string;
+  DESCRICAO_PRODUTO?: string;
+  DESCRICAO?: string;
+  QUANTIDADE_ESTOQUE?: number;
+  ESTOQUE_ATUAL?: number;
   DIAS_ESTOQUE: number;
   ACAO_SUGERIDA: string;
+}
+
+export interface AnaliseEstoqueAcao {
+  codEmpresa: number;
+  empresa: string;
+  codProduto: number;
+  fornecedor: string;
+  marca: string;
+  codigoBarra: string;
+  descricao: string;
+  quantidadeEstoque: number;
+  diasEstoque: number;
+  acaoSugerida: string;
 }
 
 export async function fetchAnaliseEstoqueAcao(
   codEmpresa: number | string
 ): Promise<AnaliseEstoqueAcao[]> {
-  const cod = String(codEmpresa);
-  const url = `${FIREBIRD_BRIDGE_BASE_URL}/api/v1/estoque/analise-acao?codEmpresa=${encodeURIComponent(cod)}`;
-
-  const res = await fetch(url);
-
-  if (!res.ok) {
-    throw new Error(`Erro ao buscar análise de estoque: ${res.status}`);
-  }
-
-  const json = await res.json();
-  return json.data;
+  const raw = await apiGet<AnaliseEstoqueAcaoRaw>('/estoque/analise-acao', {
+    empresa: codEmpresa,
+  });
+  
+  return raw.map((r) => ({
+    codEmpresa: r.COD_EMPRESA ?? 0,
+    empresa: r.EMPRESA ?? '',
+    codProduto: r.COD_PRODUTO ?? 0,
+    fornecedor: r.NOME_FORNECEDOR ?? r.FORNECEDOR ?? '',
+    marca: r.GRIFE ?? r.MARCA ?? '',
+    codigoBarra: r.CODIGO_BARRA ?? '',
+    descricao: r.DESCRICAO_PRODUTO ?? r.DESCRICAO ?? '',
+    quantidadeEstoque: r.QUANTIDADE_ESTOQUE ?? r.ESTOQUE_ATUAL ?? 0,
+    diasEstoque: r.DIAS_ESTOQUE ?? 0,
+    acaoSugerida: r.ACAO_SUGERIDA ?? '',
+  }));
 }
 
-export interface AnaliseFamiliaVendedor {
+// ============================================
+// INTERFACES - ANÁLISE FAMÍLIA/VENDEDOR
+// ============================================
+
+interface AnaliseFamiliaVendedorRaw {
   COD_EMPRESA: number;
   EMPRESA: string;
   COD_VENDEDOR: number;
@@ -146,35 +247,38 @@ export interface AnaliseFamiliaVendedor {
   TOTAL_VENDIDO: number;
 }
 
+export interface AnaliseFamiliaVendedor {
+  codEmpresa: number;
+  empresa: string;
+  codVendedor: number;
+  vendedor: string;
+  familia: string;
+  qtdTransacao: number;
+  qtdProdutos: number;
+  totalVendido: number;
+}
+
 export async function fetchAnaliseFamiliaVendedor(params: {
   dataInicio: string;
   dataFim: string;
   codEmpresa?: number;
 }): Promise<AnaliseFamiliaVendedor[]> {
-  const queryParams = new URLSearchParams({
+  const raw = await apiGet<AnaliseFamiliaVendedorRaw>('/vendas/analise-familia-vendedor', {
     dataInicio: params.dataInicio,
     dataFim: params.dataFim,
+    empresa: params.codEmpresa,
   });
   
-  if (params.codEmpresa !== undefined) {
-    queryParams.append('codEmpresa', String(params.codEmpresa));
-  }
-
-  const url = `${FIREBIRD_BRIDGE_BASE_URL}/api/v1/vendas/analise-familia-vendedor?${queryParams.toString()}`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Erro ao buscar análise família/vendedor: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
-  return result.data;
+  return raw.map((r) => ({
+    codEmpresa: r.COD_EMPRESA ?? 0,
+    empresa: r.EMPRESA ?? '',
+    codVendedor: r.COD_VENDEDOR ?? 0,
+    vendedor: r.VENDEDOR ?? '',
+    familia: r.FAMILIA ?? '',
+    qtdTransacao: r.QTD_TRANSACAO ?? 0,
+    qtdProdutos: r.QTD_PRODUTOS ?? 0,
+    totalVendido: r.TOTAL_VENDIDO ?? 0,
+  }));
 }
 
 // Exporta a URL base para referência

@@ -35,11 +35,11 @@ function formatCurrency(value: number): string {
 export function PaymentMethodsChart({ dados, isLoading }: PaymentMethodsChartProps) {
   // Agrupa por forma de pagamento (soma de todas empresas)
   const chartData = dados.reduce((acc, item) => {
-    const existing = acc.find(d => d.name === item.FORMAPAGAMENTO);
+    const existing = acc.find(d => d.name === item.formaPagamento);
     if (existing) {
-      existing.value += item.TOTALGERAL;
+      existing.value += item.totalGeral;
     } else {
-      acc.push({ name: item.FORMAPAGAMENTO, value: item.TOTALGERAL });
+      acc.push({ name: item.formaPagamento, value: item.totalGeral });
     }
     return acc;
   }, [] as { name: string; value: number }[]);

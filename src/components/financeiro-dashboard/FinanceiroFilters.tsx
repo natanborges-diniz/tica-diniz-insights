@@ -44,8 +44,8 @@ export function FinanceiroFilters({ filters, onChange }: FinanceiroFiltersProps)
           <SelectContent>
             <SelectItem value="TODAS">Selecione a empresa</SelectItem>
             {empresas.map((e) => (
-              <SelectItem key={e.COD_EMPRESA} value={String(e.COD_EMPRESA)}>
-                {e.EMPRESA}
+              <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
+                {e.empresaNome}
               </SelectItem>
             ))}
           </SelectContent>

@@ -40,7 +40,8 @@ export function FinanceiroVencimentoChart({ data }: FinanceiroVencimentoChartPro
     for (const p of data) {
       if (!p.dataVencimento) continue;
 
-      const dateKey = p.dataVencimento.toISOString().split("T")[0];
+      // dataVencimento já é string no formato YYYY-MM-DD
+      const dateKey = p.dataVencimento.split("T")[0];
 
       if (!groupedByDate[dateKey]) {
         groupedByDate[dateKey] = { receber: 0, pagar: 0 };
