@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { fetchEmpresas, Empresa } from '@/services/firebirdBridge';
 
+// Empresas que não devem aparecer nos filtros (sem operação ativa)
+const EMPRESAS_INATIVAS = [10]; // Loja 10 não tem mais operação
+
 interface UseEmpresasReturn {
   empresas: Empresa[];
   isLoading: boolean;
@@ -18,7 +21,11 @@ export function useEmpresas(): UseEmpresasReturn {
         setIsLoading(true);
         setError(null);
         const data = await fetchEmpresas();
-        setEmpresas(data);
+        // Filtrar empresas inativas
+        const empresasAtivas = data.filter(
+          (emp) => !EMPRESAS_INATIVAS.includes(emp.codEmpresa)
+        );
+        setEmpresas(empresasAtivas);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Erro ao carregar empresas';
         setError(message);
