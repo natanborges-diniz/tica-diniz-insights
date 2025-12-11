@@ -80,7 +80,9 @@ export function FinanceiroParcelasTable({ data }: FinanceiroParcelasTableProps) 
                 <TableHead>Situação</TableHead>
                 <TableHead>Cliente/Fornecedor</TableHead>
                 <TableHead>Documento</TableHead>
+                <TableHead>Emissão</TableHead>
                 <TableHead>Vencimento</TableHead>
+                <TableHead>Pagamento</TableHead>
                 <TableHead className="text-right">Valor</TableHead>
                 <TableHead>Conta</TableHead>
                 <TableHead>Forma Pgto</TableHead>
@@ -89,7 +91,7 @@ export function FinanceiroParcelasTable({ data }: FinanceiroParcelasTableProps) 
             <TableBody>
               {sortedData.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                     Nenhuma parcela encontrada
                   </TableCell>
                 </TableRow>
@@ -107,8 +109,14 @@ export function FinanceiroParcelasTable({ data }: FinanceiroParcelasTableProps) 
                     <TableCell className="text-sm text-muted-foreground">
                       {p.documento || "—"}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {formatDate(p.dataEmissao)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">
                       {formatDate(p.dataVencimento)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {formatDate(p.dataPagamento)}
                     </TableCell>
                     <TableCell className="text-right font-medium whitespace-nowrap">
                       {formatCurrency(p.valor)}
