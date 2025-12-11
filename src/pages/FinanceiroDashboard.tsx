@@ -6,6 +6,7 @@ export default function FinanceiroDashboard() {
     filters,
     setFilters,
     data,
+    filteredData,
     metrics,
     loading,
     error,
@@ -19,6 +20,7 @@ export default function FinanceiroDashboard() {
       loading={loading}
       error={error}
       parcelas={data}
+      filteredParcelas={filteredData}
       metrics={metrics}
       reload={reload}
     />
