@@ -46,14 +46,15 @@ export async function apiGet<T>(
     throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
   }
 
-  const result = await response.json() as ApiEnvelope<T>;
+  const result = await response.json();
   
   // Aplicar regra do envelope { ok, data, error }
-  if (!result.ok || result.error) {
+  if (result.ok === false || result.error) {
     throw new Error(result.error?.message || result.error?.code || 'Erro na API');
   }
 
-  return result.data || [];
+  // Aceitar tanto 'data' quanto 'rows' como campo de dados
+  return result.data || result.rows || [];
 }
 
 // ============================================
