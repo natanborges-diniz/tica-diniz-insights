@@ -18,13 +18,13 @@ export interface VendasFiltersState {
 }
 
 export interface ResumoLoja {
-  EMPRESA: string;
-  TOTALORIGINAL: number;
-  TOTALVENDIDO: number;
-  TICKETMEDIO: number;
-  TOTALDEVOLUCAO: number;
-  QTDTRANSACAO: number;
-  QTDDEVOLUCAO: number;
+  empresa: string;
+  totalOriginal: number;
+  totalVendido: number;
+  ticketMedio: number;
+  totalDevolucao: number;
+  qtdTransacao: number;
+  qtdDevolucao: number;
 }
 
 export interface VendasMetrics {
@@ -38,29 +38,29 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
   const mapa = new Map<string, ResumoLoja>();
 
   dados.forEach((d) => {
-    const existing = mapa.get(d.EMPRESA);
+    const existing = mapa.get(d.empresa);
     if (existing) {
-      existing.TOTALORIGINAL += d.TOTALORIGINAL || 0;
-      existing.TOTALVENDIDO += d.TOTALVENDIDO || 0;
-      existing.TOTALDEVOLUCAO += d.TOTALDEVOLUCAO || 0;
-      existing.QTDTRANSACAO += d.QTDTRANSACAO || 0;
-      existing.QTDDEVOLUCAO += d.QTDDEVOLUCAO || 0;
+      existing.totalOriginal += d.totalOriginal || 0;
+      existing.totalVendido += d.totalVendido || 0;
+      existing.totalDevolucao += d.totalDevolucao || 0;
+      existing.qtdTransacao += d.qtdTransacao || 0;
+      existing.qtdDevolucao += d.qtdDevolucao || 0;
     } else {
-      mapa.set(d.EMPRESA, {
-        EMPRESA: d.EMPRESA,
-        TOTALORIGINAL: d.TOTALORIGINAL || 0,
-        TOTALVENDIDO: d.TOTALVENDIDO || 0,
-        TICKETMEDIO: 0,
-        TOTALDEVOLUCAO: d.TOTALDEVOLUCAO || 0,
-        QTDTRANSACAO: d.QTDTRANSACAO || 0,
-        QTDDEVOLUCAO: d.QTDDEVOLUCAO || 0,
+      mapa.set(d.empresa, {
+        empresa: d.empresa,
+        totalOriginal: d.totalOriginal || 0,
+        totalVendido: d.totalVendido || 0,
+        ticketMedio: 0,
+        totalDevolucao: d.totalDevolucao || 0,
+        qtdTransacao: d.qtdTransacao || 0,
+        qtdDevolucao: d.qtdDevolucao || 0,
       });
     }
   });
 
   return Array.from(mapa.values()).map((loja) => ({
     ...loja,
-    TICKETMEDIO: loja.QTDTRANSACAO > 0 ? loja.TOTALVENDIDO / loja.QTDTRANSACAO : 0,
+    ticketMedio: loja.qtdTransacao > 0 ? loja.totalVendido / loja.qtdTransacao : 0,
   }));
 }
 
@@ -119,9 +119,9 @@ export function useVendasDashboard() {
   const dadosPorLoja = useMemo(() => agruparPorLoja(dados), [dados]);
 
   const metrics = useMemo<VendasMetrics>(() => {
-    const totalVendido = dados.reduce((acc, d) => acc + (d.TOTALVENDIDO || 0), 0);
-    const qtdTransacoes = dados.reduce((acc, d) => acc + (d.QTDTRANSACAO || 0), 0);
-    const totalDevolucao = dados.reduce((acc, d) => acc + (d.TOTALDEVOLUCAO || 0), 0);
+    const totalVendido = dados.reduce((acc, d) => acc + (d.totalVendido || 0), 0);
+    const qtdTransacoes = dados.reduce((acc, d) => acc + (d.qtdTransacao || 0), 0);
+    const totalDevolucao = dados.reduce((acc, d) => acc + (d.totalDevolucao || 0), 0);
     const ticketMedio = qtdTransacoes > 0 ? totalVendido / qtdTransacoes : 0;
 
     return { totalVendido, ticketMedio, qtdTransacoes, totalDevolucao };

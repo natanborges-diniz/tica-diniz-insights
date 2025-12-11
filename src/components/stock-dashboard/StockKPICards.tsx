@@ -7,15 +7,15 @@ interface StockKPICardsProps {
 }
 
 export function StockKPICards({ dados }: StockKPICardsProps) {
-  const totalPecas = dados.reduce((acc, item) => acc + (item.QUANTIDADE_ESTOQUE || 0), 0);
+  const totalPecas = dados.reduce((acc, item) => acc + (item.quantidadeEstoque || 0), 0);
   
-  const fornecedoresDistintos = new Set(dados.map(item => item.NOME_FORNECEDOR)).size;
+  const fornecedoresDistintos = new Set(dados.map(item => item.fornecedor)).size;
   
-  const grifesDistintas = new Set(dados.map(item => item.GRIFE)).size;
+  const grifesDistintas = new Set(dados.map(item => item.marca)).size;
   
   const pecasLiquida = dados
-    .filter(item => item.ACAO_SUGERIDA?.toUpperCase().includes('LIQUIDA'))
-    .reduce((acc, item) => acc + (item.QUANTIDADE_ESTOQUE || 0), 0);
+    .filter(item => item.acaoSugerida?.toUpperCase().includes('LIQUIDA'))
+    .reduce((acc, item) => acc + (item.quantidadeEstoque || 0), 0);
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -43,7 +43,7 @@ export function StockKPICards({ dados }: StockKPICardsProps) {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Grifes</CardTitle>
+          <CardTitle className="text-sm font-medium">Marcas</CardTitle>
           <Tag className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>

@@ -15,18 +15,11 @@ import {
 } from "@/components/ui/select";
 
 import { AnaliseEstoqueAcao, Empresa } from "@/services/firebirdBridge";
+import { StockFiltersState } from "@/hooks/useEstoqueDashboard";
 import { StockFilters } from "./StockFilters";
 import { StockKPICards } from "./StockKPICards";
 import { StockActionChart } from "./StockActionChart";
 import { StockTable } from "./StockTable";
-
-interface StockFiltersState {
-  empresaId: number | null;
-  fornecedor: string;
-  grife: string;
-  acao: string;
-  busca: string;
-}
 
 interface StockDashboardLayoutProps {
   // Empresas
@@ -105,7 +98,7 @@ export function StockDashboardLayout({
       ...prev,
       empresaId: Number(value),
       fornecedor: "TODOS",
-      grife: "TODAS",
+      marca: "TODAS",
       acao: "TODAS",
       busca: "",
     }));
@@ -204,8 +197,8 @@ export function StockDashboardLayout({
                       dados={dados}
                       fornecedorSelecionado={filters.fornecedor}
                       setFornecedorSelecionado={(v) => setFilters((p) => ({ ...p, fornecedor: v }))}
-                      grifeSelecionada={filters.grife}
-                      setGrifeSelecionada={(v) => setFilters((p) => ({ ...p, grife: v }))}
+                      marcaSelecionada={filters.marca}
+                      setMarcaSelecionada={(v) => setFilters((p) => ({ ...p, marca: v }))}
                       acaoSelecionada={filters.acao}
                       setAcaoSelecionada={(v) => setFilters((p) => ({ ...p, acao: v }))}
                       buscaTexto={filters.busca}

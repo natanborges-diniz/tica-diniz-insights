@@ -20,7 +20,7 @@ export function StockTable({ dados }: StockTableProps) {
           <TableRow>
             <TableHead>Empresa</TableHead>
             <TableHead>Fornecedor</TableHead>
-            <TableHead>Grife</TableHead>
+            <TableHead>Marca</TableHead>
             <TableHead>Cód. Barras</TableHead>
             <TableHead>Descrição</TableHead>
             <TableHead className="text-right">Qtde Estoque</TableHead>
@@ -37,15 +37,15 @@ export function StockTable({ dados }: StockTableProps) {
             </TableRow>
           ) : (
             dados.map((item, index) => (
-              <TableRow key={`${item.CODIGO_BARRA}-${index}`}>
-                <TableCell className="font-medium">{item.EMPRESA}</TableCell>
-                <TableCell>{item.NOME_FORNECEDOR}</TableCell>
-                <TableCell>{item.GRIFE}</TableCell>
-                <TableCell>{item.CODIGO_BARRA}</TableCell>
-                <TableCell className="max-w-[200px] truncate">{item.DESCRICAO_PRODUTO}</TableCell>
-                <TableCell className="text-right">{item.QUANTIDADE_ESTOQUE?.toLocaleString('pt-BR')}</TableCell>
-                <TableCell className="text-right">{item.DIAS_ESTOQUE}</TableCell>
-                <TableCell>{item.ACAO_SUGERIDA}</TableCell>
+              <TableRow key={`${item.codigoBarra}-${index}`}>
+                <TableCell className="font-medium">{item.empresa}</TableCell>
+                <TableCell>{item.fornecedor}</TableCell>
+                <TableCell>{item.marca}</TableCell>
+                <TableCell>{item.codigoBarra}</TableCell>
+                <TableCell className="max-w-[200px] truncate">{item.descricao}</TableCell>
+                <TableCell className="text-right">{item.quantidadeEstoque?.toLocaleString('pt-BR')}</TableCell>
+                <TableCell className="text-right">{item.diasEstoque}</TableCell>
+                <TableCell>{item.acaoSugerida}</TableCell>
               </TableRow>
             ))
           )}

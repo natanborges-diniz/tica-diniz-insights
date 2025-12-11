@@ -8,16 +8,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-
-interface ResumoLoja {
-  EMPRESA: string;
-  TOTALORIGINAL: number;
-  TOTALVENDIDO: number;
-  TICKETMEDIO: number;
-  TOTALDEVOLUCAO: number;
-  QTDTRANSACAO: number;
-  QTDDEVOLUCAO: number;
-}
+import { ResumoLoja } from '@/hooks/useVendasDashboard';
 
 interface StoreTableProps {
   dados: ResumoLoja[];
@@ -28,16 +19,16 @@ const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
 export function StoreTable({ dados, isLoading }: StoreTableProps) {
-  const dadosOrdenados = [...dados].sort((a, b) => b.TOTALVENDIDO - a.TOTALVENDIDO);
+  const dadosOrdenados = [...dados].sort((a, b) => b.totalVendido - a.totalVendido);
 
   // Calcular totais
   const totais = dados.reduce(
     (acc, d) => ({
-      totalOriginal: acc.totalOriginal + (d.TOTALORIGINAL || 0),
-      totalVendido: acc.totalVendido + (d.TOTALVENDIDO || 0),
-      totalDevolucao: acc.totalDevolucao + (d.TOTALDEVOLUCAO || 0),
-      qtdTransacao: acc.qtdTransacao + (d.QTDTRANSACAO || 0),
-      qtdDevolucao: acc.qtdDevolucao + (d.QTDDEVOLUCAO || 0),
+      totalOriginal: acc.totalOriginal + (d.totalOriginal || 0),
+      totalVendido: acc.totalVendido + (d.totalVendido || 0),
+      totalDevolucao: acc.totalDevolucao + (d.totalDevolucao || 0),
+      qtdTransacao: acc.qtdTransacao + (d.qtdTransacao || 0),
+      qtdDevolucao: acc.qtdDevolucao + (d.qtdDevolucao || 0),
     }),
     { totalOriginal: 0, totalVendido: 0, totalDevolucao: 0, qtdTransacao: 0, qtdDevolucao: 0 }
   );
@@ -84,19 +75,19 @@ export function StoreTable({ dados, isLoading }: StoreTableProps) {
               ) : (
                 <>
                   {dadosOrdenados.map((item, index) => (
-                    <TableRow key={item.EMPRESA}>
+                    <TableRow key={item.empresa}>
                       <TableCell className="font-medium">
                         <span className="text-muted-foreground mr-2">#{index + 1}</span>
-                        {item.EMPRESA}
+                        {item.empresa}
                       </TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.TOTALORIGINAL)}</TableCell>
-                      <TableCell className="text-right font-semibold">{formatCurrency(item.TOTALVENDIDO)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.TICKETMEDIO)}</TableCell>
-                      <TableCell className="text-right">{item.QTDTRANSACAO}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(item.totalOriginal)}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatCurrency(item.totalVendido)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(item.ticketMedio)}</TableCell>
+                      <TableCell className="text-right">{item.qtdTransacao}</TableCell>
                       <TableCell className="text-right text-destructive">
-                        {item.TOTALDEVOLUCAO > 0 ? formatCurrency(item.TOTALDEVOLUCAO) : '-'}
+                        {item.totalDevolucao > 0 ? formatCurrency(item.totalDevolucao) : '-'}
                       </TableCell>
-                      <TableCell className="text-right">{item.QTDDEVOLUCAO || '-'}</TableCell>
+                      <TableCell className="text-right">{item.qtdDevolucao || '-'}</TableCell>
                     </TableRow>
                   ))}
                   {/* Linha de Totais */}

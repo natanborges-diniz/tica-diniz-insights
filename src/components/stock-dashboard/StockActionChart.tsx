@@ -11,9 +11,9 @@ export function StockActionChart({ dados }: StockActionChartProps) {
   const acaoMap = new Map<string, number>();
   
   dados.forEach(item => {
-    const acao = item.ACAO_SUGERIDA || 'SEM AÇÃO';
+    const acao = item.acaoSugerida || 'SEM AÇÃO';
     const atual = acaoMap.get(acao) || 0;
-    acaoMap.set(acao, atual + (item.QUANTIDADE_ESTOQUE || 0));
+    acaoMap.set(acao, atual + (item.quantidadeEstoque || 0));
   });
 
   const chartData = Array.from(acaoMap.entries())

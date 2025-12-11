@@ -1,12 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
-
-interface ResumoLoja {
-  EMPRESA: string;
-  TOTALVENDIDO: number;
-  QTDTRANSACAO: number;
-}
+import { ResumoLoja } from '@/hooks/useVendasDashboard';
 
 interface StoreChartProps {
   dados: ResumoLoja[];
@@ -15,13 +10,13 @@ interface StoreChartProps {
 
 export function StoreChart({ dados, isLoading }: StoreChartProps) {
   const chartData = dados
-    .filter(d => d.TOTALVENDIDO > 0)
-    .sort((a, b) => b.TOTALVENDIDO - a.TOTALVENDIDO)
+    .filter(d => d.totalVendido > 0)
+    .sort((a, b) => b.totalVendido - a.totalVendido)
     .slice(0, 15)
     .map(d => ({
-      loja: d.EMPRESA.replace('DINIZ ', ''),
-      total: d.TOTALVENDIDO,
-      quantidade: d.QTDTRANSACAO,
+      loja: d.empresa.replace('DINIZ ', ''),
+      total: d.totalVendido,
+      quantidade: d.qtdTransacao,
     }));
 
   if (isLoading) {

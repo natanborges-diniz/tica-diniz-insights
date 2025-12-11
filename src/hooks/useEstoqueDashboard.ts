@@ -7,7 +7,7 @@ import { fetchAnaliseEstoqueAcao, AnaliseEstoqueAcao } from "@/services/firebird
 export interface StockFiltersState {
   empresaId: number | null;
   fornecedor: string;
-  grife: string;
+  marca: string;
   acao: string;
   busca: string;
 }
@@ -18,7 +18,7 @@ export function useEstoqueDashboard() {
   const [filters, setFilters] = useState<StockFiltersState>({
     empresaId: null,
     fornecedor: "TODOS",
-    grife: "TODAS",
+    marca: "TODAS",
     acao: "TODAS",
     busca: "",
   });
@@ -30,7 +30,7 @@ export function useEstoqueDashboard() {
   // Selecionar primeira empresa quando carregar a lista
   useEffect(() => {
     if (!loadingEmpresas && !errorEmpresas && empresas.length > 0 && filters.empresaId === null) {
-      setFilters((prev) => ({ ...prev, empresaId: empresas[0].COD_EMPRESA }));
+      setFilters((prev) => ({ ...prev, empresaId: empresas[0].codEmpresa }));
     }
   }, [empresas, loadingEmpresas, errorEmpresas, filters.empresaId]);
 
@@ -61,23 +61,23 @@ export function useEstoqueDashboard() {
     let result = dados;
 
     if (filters.fornecedor !== "TODOS") {
-      result = result.filter((item) => item.NOME_FORNECEDOR === filters.fornecedor);
+      result = result.filter((item) => item.fornecedor === filters.fornecedor);
     }
 
-    if (filters.grife !== "TODAS") {
-      result = result.filter((item) => item.GRIFE === filters.grife);
+    if (filters.marca !== "TODAS") {
+      result = result.filter((item) => item.marca === filters.marca);
     }
 
     if (filters.acao !== "TODAS") {
-      result = result.filter((item) => item.ACAO_SUGERIDA === filters.acao);
+      result = result.filter((item) => item.acaoSugerida === filters.acao);
     }
 
     if (filters.busca.trim()) {
       const termo = filters.busca.toLowerCase();
       result = result.filter(
         (item) =>
-          item.DESCRICAO_PRODUTO?.toLowerCase().includes(termo) ||
-          item.CODIGO_BARRA?.toLowerCase().includes(termo)
+          item.descricao?.toLowerCase().includes(termo) ||
+          item.codigoBarra?.toLowerCase().includes(termo)
       );
     }
 
