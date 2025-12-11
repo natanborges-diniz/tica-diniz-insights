@@ -6,20 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
-import { FinanceiroFilters as FiltersType, FinanceiroMetrics } from "@/hooks/useFinanceiroParcelas";
+import { FinanceiroFilters as FiltersType, FinanceiroMetrics, KPIFilterType } from "@/hooks/useFinanceiroParcelas";
 import { FinanceiroParcela } from "@/services/financeiroService";
 import { FinanceiroFilters } from "./FinanceiroFilters";
 import { FinanceiroKPICards } from "./FinanceiroKPICards";
 import { FinanceiroVencimentoChart } from "./FinanceiroVencimentoChart";
 import { FinanceiroParcelasTable } from "./FinanceiroParcelasTable";
-
-interface DailyFlowItem {
-  data: string;
-  receber: number;
-  pagar: number;
-  saldo: number;
-}
 
 interface FinanceiroDashboardLayoutProps {
   filters: FiltersType;
@@ -27,8 +21,8 @@ interface FinanceiroDashboardLayoutProps {
   loading: boolean;
   error: string | null;
   parcelas: FinanceiroParcela[];
+  filteredParcelas: FinanceiroParcela[];
   metrics: FinanceiroMetrics;
-  dailyFlow?: DailyFlowItem[];
   reload: () => void;
 }
 
@@ -75,12 +69,21 @@ function LoadingSkeleton() {
   );
 }
 
+const KPI_FILTER_LABELS: Record<KPIFilterType, string> = {
+  TODOS: "Todas as parcelas",
+  RECEBER_ABERTO: "A Receber (Aberto)",
+  RECEBER_ATRASO: "A Receber (Atraso)",
+  PAGAR_ABERTO: "A Pagar (Aberto)",
+  PAGAR_ATRASO: "A Pagar (Atraso)",
+};
+
 export function FinanceiroDashboardLayout({
   filters,
   setFilters,
   loading,
   error,
   parcelas,
+  filteredParcelas,
   metrics,
   reload,
 }: FinanceiroDashboardLayoutProps) {
@@ -102,6 +105,7 @@ export function FinanceiroDashboardLayout({
       campoData: "VENCIMENTO",
       dataIni: hoje,
       dataFim: hoje,
+      kpiFilter: "TODOS",
     }));
   };
 
@@ -112,6 +116,7 @@ export function FinanceiroDashboardLayout({
       situacao: "PAGA",
       dataIni: hoje,
       dataFim: hoje,
+      kpiFilter: "TODOS",
     }));
   };
 
@@ -121,7 +126,16 @@ export function FinanceiroDashboardLayout({
       campoData: "EMISSAO",
       dataIni: primeiroDiaMes,
       dataFim: ultimoDiaMes,
+      kpiFilter: "TODOS",
     }));
+  };
+
+  const handleKPIFilterChange = (kpiFilter: KPIFilterType) => {
+    setFilters((prev) => ({ ...prev, kpiFilter }));
+  };
+
+  const clearKPIFilter = () => {
+    setFilters((prev) => ({ ...prev, kpiFilter: "TODOS" }));
   };
 
   return (
@@ -153,7 +167,7 @@ export function FinanceiroDashboardLayout({
                   Fluxo de Caixa
                 </Button>
               </Link>
-              <Button variant="outline" size="sm" onClick={reload} disabled={loading}>
+              <Button variant="default" size="sm" onClick={reload} disabled={loading}>
                 <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                 Atualizar
               </Button>
@@ -195,9 +209,29 @@ export function FinanceiroDashboardLayout({
           <LoadingSkeleton />
         ) : (
           <>
-            <FinanceiroKPICards metrics={metrics} />
-            <FinanceiroVencimentoChart data={parcelas} />
-            <FinanceiroParcelasTable data={parcelas} />
+            <FinanceiroKPICards 
+              metrics={metrics} 
+              activeFilter={filters.kpiFilter}
+              onFilterChange={handleKPIFilterChange}
+            />
+            
+            {/* Indicador de filtro ativo */}
+            {filters.kpiFilter !== "TODOS" && (
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-sm">
+                  Filtro ativo: {KPI_FILTER_LABELS[filters.kpiFilter]}
+                </Badge>
+                <Button variant="ghost" size="sm" onClick={clearKPIFilter}>
+                  Limpar filtro
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  ({filteredParcelas.length} de {parcelas.length} parcelas)
+                </span>
+              </div>
+            )}
+            
+            <FinanceiroVencimentoChart data={filteredParcelas} />
+            <FinanceiroParcelasTable data={filteredParcelas} />
           </>
         )}
       </main>

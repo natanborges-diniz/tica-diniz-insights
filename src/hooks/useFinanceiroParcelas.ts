@@ -6,6 +6,7 @@ import { getFinanceiroParcelas, FinanceiroParcela } from "../services/financeiro
 export type TipoFilter = "TODOS" | "PAGAR" | "RECEBER";
 export type SituacaoFilter = "TODOS" | "EM ABERTO" | "EM ATRASO" | "PAGA";
 export type CampoDataFilter = "EMISSAO" | "VENCIMENTO" | "PAGAMENTO";
+export type KPIFilterType = "TODOS" | "RECEBER_ABERTO" | "RECEBER_ATRASO" | "PAGAR_ABERTO" | "PAGAR_ATRASO";
 
 export interface FinanceiroFilters {
   empresa: string | number | null;
@@ -14,6 +15,7 @@ export interface FinanceiroFilters {
   tipo: TipoFilter;
   situacao: SituacaoFilter;
   campoData: CampoDataFilter;
+  kpiFilter: KPIFilterType;
 }
 
 export interface FinanceiroMetrics {
@@ -25,6 +27,8 @@ export interface FinanceiroMetrics {
   qtdParcelasAtraso: number;
   qtdParcelasPagar: number;
   qtdParcelasReceber: number;
+  qtdReceberAtraso: number;
+  qtdPagarAtraso: number;
 }
 
 function formatLocalDate(date: Date): string {
@@ -46,6 +50,7 @@ function getDefaultFilters(): FinanceiroFilters {
     tipo: "TODOS",
     situacao: "TODOS",
     campoData: "VENCIMENTO",
+    kpiFilter: "TODOS",
   };
 }
 
@@ -57,6 +62,8 @@ function calculateMetrics(parcelas: FinanceiroParcela[]): FinanceiroMetrics {
   let qtdParcelasAtraso = 0;
   let qtdParcelasPagar = 0;
   let qtdParcelasReceber = 0;
+  let qtdReceberAtraso = 0;
+  let qtdPagarAtraso = 0;
 
   for (const p of parcelas) {
     if (p.tipoLancamento === "RECEBER") {
@@ -66,6 +73,7 @@ function calculateMetrics(parcelas: FinanceiroParcela[]): FinanceiroMetrics {
       } else if (p.situacao === "EM ATRASO") {
         totalReceberAtraso += p.valor;
         qtdParcelasAtraso++;
+        qtdReceberAtraso++;
       }
     } else {
       qtdParcelasPagar++;
@@ -74,6 +82,7 @@ function calculateMetrics(parcelas: FinanceiroParcela[]): FinanceiroMetrics {
       } else if (p.situacao === "EM ATRASO") {
         totalPagarAtraso += p.valor;
         qtdParcelasAtraso++;
+        qtdPagarAtraso++;
       }
     }
   }
@@ -87,7 +96,29 @@ function calculateMetrics(parcelas: FinanceiroParcela[]): FinanceiroMetrics {
     qtdParcelasAtraso,
     qtdParcelasPagar,
     qtdParcelasReceber,
+    qtdReceberAtraso,
+    qtdPagarAtraso,
   };
+}
+
+// Filtra parcelas baseado no KPI filter selecionado
+function filterByKPI(parcelas: FinanceiroParcela[], kpiFilter: KPIFilterType): FinanceiroParcela[] {
+  if (kpiFilter === "TODOS") return parcelas;
+  
+  return parcelas.filter(p => {
+    switch (kpiFilter) {
+      case "RECEBER_ABERTO":
+        return p.tipoLancamento === "RECEBER" && p.situacao === "EM ABERTO";
+      case "RECEBER_ATRASO":
+        return p.tipoLancamento === "RECEBER" && p.situacao === "EM ATRASO";
+      case "PAGAR_ABERTO":
+        return p.tipoLancamento === "PAGAR" && p.situacao === "EM ABERTO";
+      case "PAGAR_ATRASO":
+        return p.tipoLancamento === "PAGAR" && p.situacao === "EM ATRASO";
+      default:
+        return true;
+    }
+  });
 }
 
 export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters>) {
@@ -135,6 +166,9 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
 
   // Métricas calculadas a partir dos dados retornados (já filtrados pelo backend)
   const metrics = useMemo(() => calculateMetrics(data), [data]);
+  
+  // Dados filtrados pelo KPI card selecionado
+  const filteredData = useMemo(() => filterByKPI(data, filters.kpiFilter), [data, filters.kpiFilter]);
 
   const reload = useCallback(() => {
     fetchData();
@@ -144,6 +178,7 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
     filters,
     setFilters,
     data,
+    filteredData,
     metrics,
     loading,
     error,
