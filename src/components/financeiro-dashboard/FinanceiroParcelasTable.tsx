@@ -26,9 +26,11 @@ function formatCurrency(value: number): string {
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("pt-BR");
+  // Extrair apenas a parte da data (YYYY-MM-DD) para evitar conversão de timezone
+  const datePart = dateStr.split('T')[0];
+  const [year, month, day] = datePart.split('-');
+  if (!year || !month || !day) return "—";
+  return `${day}/${month}/${year}`;
 }
 
 function getSituacaoBadge(situacao: string) {
