@@ -34,7 +34,7 @@ export interface DreLinha {
 export interface GetDreParams {
   dataIni: string;
   dataFim: string;
-  empresa: number | string;
+  empresa: number | string | null;
 }
 
 function mapDreLinhaRaw(r: DreLinhaRaw): DreLinha {
@@ -52,11 +52,18 @@ function mapDreLinhaRaw(r: DreLinhaRaw): DreLinha {
 }
 
 export async function getFinanceiroDre(params: GetDreParams): Promise<DreLinha[]> {
-  const raw = await apiGet<DreLinhaRaw>('/financeiro/dre', {
+  // Montar parâmetros da query
+  const queryParams: Record<string, string | number | undefined> = {
     dataInicio: params.dataIni,
     dataFim: params.dataFim,
-    empresa: params.empresa,
-  });
+  };
+  
+  // Passar empresa apenas se não for null (backend aceita null = todas)
+  if (params.empresa !== null && params.empresa !== undefined) {
+    queryParams.empresa = params.empresa;
+  }
+  
+  const raw = await apiGet<DreLinhaRaw>('/financeiro/dre', queryParams);
   
   return raw.map(mapDreLinhaRaw);
 }

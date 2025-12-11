@@ -46,17 +46,11 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!filters.empresa) {
-      setData([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
-      // Chama o service com os parâmetros corretos
+      // Chama o service com os parâmetros corretos (empresa pode ser null)
       const linhas = await getFinanceiroDre({
         dataIni: filters.dataIni,
         dataFim: filters.dataFim,

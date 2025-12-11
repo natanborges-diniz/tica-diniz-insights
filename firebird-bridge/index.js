@@ -18,6 +18,21 @@ const firebaseConfig = {
   pageSize: 4096
 };
 
+// ============================================
+// CONSTANTES DE NEGÓCIO
+// ============================================
+
+// Empresas que não devem aparecer nos filtros (lixo ou sem operação)
+const EMPRESAS_EXCLUIDAS = [3, 5, 7, 8, 10, 11, 12];
+
+// Empresas que devem ser unificadas (18 -> 13 = DINIZ SUPER)
+const EMPRESAS_UNIFICADAS = { 18: 13 };
+
+// Helper para obter cláusula WHERE de empresas ativas
+function getWhereEmpresasAtivas(alias = 'e') {
+  return `${alias}.codempresa NOT IN (${EMPRESAS_EXCLUIDAS.join(',')})`;
+}
+
 // Helper para executar queries
 function executeQuery(sql, params = []) {
   return new Promise((resolve, reject) => {
@@ -39,10 +54,240 @@ function executeQuery(sql, params = []) {
   });
 }
 
+// Função para criar resposta padronizada
+function apiResponse(res, data, error = null) {
+  if (error) {
+    console.error('API Error:', error);
+    return res.status(500).json({
+      ok: false,
+      data: null,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message || 'Erro inesperado no servidor',
+        details: null
+      }
+    });
+  }
+  return res.json({
+    ok: true,
+    data: data,
+    error: null
+  });
+}
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// ============================================
+// API v1 - Empresas (com filtro de ativas)
+// ============================================
+app.get('/api/v1/empresas', async (req, res) => {
+  try {
+    const sql = `
+      SELECT 
+        CODEMPRESA AS cod_empresa, 
+        NOMEFANTASIA AS empresa_nome,
+        CODEMPRESA AS empresa_cod_logico,
+        NOMEFANTASIA AS empresa_nome_logico
+      FROM EMPRESA
+      WHERE ATIVO = 1
+        AND ${getWhereEmpresasAtivas('EMPRESA')}
+      ORDER BY NOMEFANTASIA
+    `;
+    
+    console.log('[API] GET /api/v1/empresas');
+    const rows = await executeQuery(sql);
+    
+    // Aplicar unificação de empresas (18 -> 13)
+    const empresasMap = new Map();
+    for (const row of rows) {
+      const codLogico = EMPRESAS_UNIFICADAS[row.COD_EMPRESA] || row.COD_EMPRESA;
+      if (!empresasMap.has(codLogico)) {
+        empresasMap.set(codLogico, {
+          cod_empresa: codLogico,
+          empresa_nome: row.EMPRESA_NOME,
+          empresa_cod_logico: codLogico,
+          empresa_nome_logico: row.EMPRESA_NOME_LOGICO
+        });
+      }
+    }
+    
+    const empresas = Array.from(empresasMap.values()).sort((a, b) => 
+      a.empresa_nome.localeCompare(b.empresa_nome)
+    );
+    
+    return apiResponse(res, empresas);
+  } catch (error) {
+    return apiResponse(res, null, error);
+  }
+});
+
+// ============================================
+// API v1 - Parcelas Financeiras (suporta empresa=null para TODAS)
+// ============================================
+app.get('/api/v1/financeiro/parcelas', async (req, res) => {
+  try {
+    const { dataInicio, dataFim, empresa, tipo, situacao, campoData } = req.query;
+
+    if (!dataInicio || !dataFim) {
+      return res.status(400).json({ 
+        ok: false, 
+        data: null,
+        error: { code: 'INVALID_PARAMS', message: 'Parâmetros obrigatórios: dataInicio, dataFim' }
+      });
+    }
+
+    // Determinar campo de data para filtro
+    const campoDataMap = {
+      'EMISSAO': 'fl.dataemissao',
+      'VENCIMENTO': 'fp.datavencimento',
+      'PAGAMENTO': 'fp.datapagamento'
+    };
+    const campoDataField = campoDataMap[campoData] || campoDataMap['VENCIMENTO'];
+
+    // Montar WHERE base
+    let whereClauses = [
+      `${campoDataField} >= '${dataInicio}'`,
+      `${campoDataField} <= '${dataFim}'`,
+      getWhereEmpresasAtivas('e')
+    ];
+
+    // Filtro de empresa (se informado e não for "null", "TODAS" ou vazio)
+    if (empresa && empresa !== 'null' && empresa !== 'TODAS' && empresa !== '') {
+      whereClauses.push(`e.codempresa = ${parseInt(empresa)}`);
+    }
+
+    // Filtro de tipo (PAGAR / RECEBER)
+    if (tipo === 'PAGAR') {
+      whereClauses.push("fl.pagar = 'T'");
+    } else if (tipo === 'RECEBER') {
+      whereClauses.push("fl.pagar = 'F'");
+    }
+
+    // Filtro de situação (calculada)
+    if (situacao === 'PAGA') {
+      whereClauses.push('fp.datapagamento IS NOT NULL');
+    } else if (situacao === 'EM ATRASO') {
+      whereClauses.push('fp.datapagamento IS NULL');
+      whereClauses.push('fp.datavencimento < CURRENT_DATE');
+    } else if (situacao === 'EM ABERTO') {
+      whereClauses.push('fp.datapagamento IS NULL');
+      whereClauses.push('fp.datavencimento >= CURRENT_DATE');
+    }
+
+    const whereSQL = whereClauses.join(' AND ');
+
+    const sql = `
+      SELECT
+        e.codempresa AS cod_empresa,
+        e.nomefantasia AS empresa_nome,
+        fl.idfinlancamento AS cod_lancamento,
+        fl.pagar AS lancamento_pagar,
+        fl.previsao AS lancamento_previsao,
+        fl.documento AS lancamento_documento,
+        p.codpessoa AS pessoa_cod_pessoa,
+        p.nome AS pessoa_nome,
+        fp.idfinlancamentoparcela AS parcela_id,
+        fl.dataemissao AS parcela_data_emissao,
+        fp.datavencimento AS parcela_data_vencimento,
+        fp.datapagamento AS parcela_data_pagamento,
+        fp.datarecebimento AS parcela_data_recebimento,
+        fp.valor AS parcela_valor,
+        fp.valororiginal AS parcela_valor_original,
+        COALESCE(fp.valorpago, 0) AS parcela_valor_pago,
+        CASE
+          WHEN fp.datapagamento IS NOT NULL THEN 'PAGA'
+          WHEN fp.datavencimento < CURRENT_DATE THEN 'EM ATRASO'
+          ELSE 'EM ABERTO'
+        END AS parcela_situacao,
+        cc.idfincontaclassificacao AS contacla_codigo,
+        cc.numero AS contacla_numero,
+        cc.descricao AS contacla_descricao,
+        fpg.idformapagamento AS formapagto_codigo,
+        fpt.idformapagamentotipo AS formapagto_tipo_codigo,
+        fpt.descricao AS formapagto_tipo_nome
+      FROM finlancamento fl
+      INNER JOIN finlancamentoparcela fp ON fp.idfinlancamento = fl.idfinlancamento
+      INNER JOIN empresa e ON e.codempresa = fl.codempresa
+      LEFT JOIN pessoa p ON p.codpessoa = fl.codpessoa
+      LEFT JOIN fincontaclassificacao cc ON cc.idfincontaclassificacao = fl.idfincontaclassificacao
+      LEFT JOIN formapagamento fpg ON fpg.idformapagamento = fp.idformapagamento
+      LEFT JOIN formapagamentotipo fpt ON fpt.idformapagamentotipo = fpg.idformapagamentotipo
+      WHERE ${whereSQL}
+      ORDER BY fp.datavencimento, fl.idfinlancamento
+    `;
+
+    console.log('[API] GET /api/v1/financeiro/parcelas', { empresa: empresa || 'TODAS', dataInicio, dataFim });
+    const rows = await executeQuery(sql);
+    return apiResponse(res, rows);
+  } catch (error) {
+    return apiResponse(res, null, error);
+  }
+});
+
+// ============================================
+// API v1 - DRE Gerencial (suporta empresa=null para TODAS)
+// ============================================
+app.get('/api/v1/financeiro/dre', async (req, res) => {
+  try {
+    const { dataInicio, dataFim, empresa } = req.query;
+
+    if (!dataInicio || !dataFim) {
+      return res.status(400).json({ 
+        ok: false, 
+        data: null,
+        error: { code: 'INVALID_PARAMS', message: 'Parâmetros obrigatórios: dataInicio, dataFim' }
+      });
+    }
+
+    // Montar WHERE
+    let whereClauses = [
+      `fp.datavencimento >= '${dataInicio}'`,
+      `fp.datavencimento <= '${dataFim}'`,
+      getWhereEmpresasAtivas('e')
+    ];
+
+    // Filtro de empresa (se informado e não for "null", "TODAS" ou vazio)
+    if (empresa && empresa !== 'null' && empresa !== 'TODAS' && empresa !== '') {
+      whereClauses.push(`e.codempresa = ${parseInt(empresa)}`);
+    }
+
+    const whereSQL = whereClauses.join(' AND ');
+
+    const sql = `
+      SELECT
+        EXTRACT(YEAR FROM fp.datavencimento) || '-' || LPAD(EXTRACT(MONTH FROM fp.datavencimento), 2, '0') AS COMPETENCIA,
+        e.codempresa AS COD_EMPRESA,
+        e.nomefantasia AS EMPRESA_NOME,
+        cc.idfincontaclassificacao AS CONTACLA_CODIGO,
+        cc.numero AS CONTACLA_NUMERO,
+        cc.descricao AS CONTACLA_DESCRICAO,
+        SUM(CASE WHEN fl.pagar = 'T' THEN -fp.valor ELSE fp.valor END) AS VALOR_TOTAL
+      FROM finlancamento fl
+      INNER JOIN finlancamentoparcela fp ON fp.idfinlancamento = fl.idfinlancamento
+      INNER JOIN empresa e ON e.codempresa = fl.codempresa
+      LEFT JOIN fincontaclassificacao cc ON cc.idfincontaclassificacao = fl.idfincontaclassificacao
+      WHERE ${whereSQL}
+      GROUP BY
+        EXTRACT(YEAR FROM fp.datavencimento) || '-' || LPAD(EXTRACT(MONTH FROM fp.datavencimento), 2, '0'),
+        e.codempresa, e.nomefantasia,
+        cc.idfincontaclassificacao, cc.numero, cc.descricao
+      ORDER BY COMPETENCIA, cc.numero
+    `;
+
+    console.log('[API] GET /api/v1/financeiro/dre', { empresa: empresa || 'TODAS', dataInicio, dataFim });
+    const rows = await executeQuery(sql);
+    return apiResponse(res, rows);
+  } catch (error) {
+    return apiResponse(res, null, error);
+  }
+});
+
+// ============================================
+// ENDPOINTS LEGADOS (mantidos para compatibilidade)
+// ============================================
 
 // KPIs do Dashboard - replica a query original
 app.get('/api/kpis', async (req, res) => {
@@ -178,7 +423,7 @@ app.get('/api/vendas-por-loja', async (req, res) => {
   }
 });
 
-// Lista de empresas/lojas
+// Lista de empresas/lojas (legado)
 app.get('/api/empresas', async (req, res) => {
   try {
     const sql = `
@@ -201,165 +446,8 @@ app.get('/api/empresas', async (req, res) => {
   }
 });
 
-// API v1 - Empresas
-app.get('/api/v1/empresas', async (req, res) => {
-  try {
-    const sql = `
-      SELECT CODEMPRESA AS COD_EMPRESA, NOMEFANTASIA AS EMPRESA
-      FROM EMPRESA
-      WHERE ATIVO = 1
-      ORDER BY NOMEFANTASIA
-    `;
-    const rows = await executeQuery(sql);
-    res.json({ ok: true, count: rows.length, rows });
-  } catch (error) {
-    console.error('Erro /api/v1/empresas:', error);
-    res.status(500).json({ ok: false, error: error.message });
-  }
-});
-
-// API v1 - Parcelas Financeiras
-app.get('/api/v1/financeiro/parcelas', async (req, res) => {
-  try {
-    const { dataIni, dataFim, empresa, tipo, situacao, campoData } = req.query;
-
-    if (!dataIni || !dataFim || !empresa) {
-      return res.status(400).json({ ok: false, error: 'Parâmetros obrigatórios: dataIni, dataFim, empresa' });
-    }
-
-    // Determinar campo de data para filtro
-    const campoDataMap = {
-      'EMISSAO': 'fl.dataemissao',
-      'VENCIMENTO': 'fp.datavencimento',
-      'PAGAMENTO': 'fp.datapagamento'
-    };
-    const campoDataField = campoDataMap[campoData] || campoDataMap['VENCIMENTO'];
-
-    // Montar WHERE base
-    let whereClauses = [
-      `${campoDataField} >= '${dataIni}'`,
-      `${campoDataField} <= '${dataFim}'`,
-      `e.codempresa = ${parseInt(empresa)}`
-    ];
-
-    // Filtro de tipo (PAGAR / RECEBER)
-    if (tipo === 'PAGAR') {
-      whereClauses.push("fl.pagar = 'T'");
-    } else if (tipo === 'RECEBER') {
-      whereClauses.push("fl.pagar = 'F'");
-    }
-
-    // Filtro de situação (calculada)
-    if (situacao === 'PAGA') {
-      whereClauses.push('fp.datapagamento IS NOT NULL');
-    } else if (situacao === 'EM ATRASO') {
-      whereClauses.push('fp.datapagamento IS NULL');
-      whereClauses.push('fp.datavencimento < CURRENT_DATE');
-    } else if (situacao === 'EM ABERTO') {
-      whereClauses.push('fp.datapagamento IS NULL');
-      whereClauses.push('fp.datavencimento >= CURRENT_DATE');
-    }
-
-    const whereSQL = whereClauses.join(' AND ');
-
-    const sql = `
-      SELECT
-        e.codempresa AS COD_EMPRESA,
-        e.nomefantasia AS EMPRESA_NOME,
-        fl.idfinlancamento AS COD_LANCAMENTO,
-        fl.pagar AS LANCAMENTO_PAGAR,
-        fl.previsao AS LANCAMENTO_PREVISAO,
-        fl.documento AS LANCAMENTO_DOCUMENTO,
-        p.codpessoa AS PESSOA_COD_PESSOA,
-        p.nome AS PESSOA_NOME,
-        fp.idfinlancamentoparcela AS PARCELA_ID,
-        fl.dataemissao AS PARCELA_DATA_EMISSAO,
-        fp.datavencimento AS PARCELA_DATA_VENCIMENTO,
-        fp.datapagamento AS PARCELA_DATA_PAGAMENTO,
-        fp.datarecebimento AS PARCELA_DATA_RECEBIMENTO,
-        fp.valor AS PARCELA_VALOR,
-        fp.valororiginal AS PARCELA_VALOR_ORIGINAL,
-        COALESCE(fp.valorpago, 0) AS PARCELA_VALOR_PAGO,
-        CASE
-          WHEN fp.datapagamento IS NOT NULL THEN 'PAGA'
-          WHEN fp.datavencimento < CURRENT_DATE THEN 'EM ATRASO'
-          ELSE 'EM ABERTO'
-        END AS PARCELA_SITUACAO,
-        cc.idfincontaclassificacao AS CONTACLA_CODIGO,
-        cc.numero AS CONTACLA_NUMERO,
-        cc.descricao AS CONTACLA_DESCRICAO,
-        fpg.idformapagamento AS FORMAPAGTO_CODIGO,
-        fpt.idformapagamentotipo AS FORMAPAGTO_TIPO_CODIGO,
-        fpt.descricao AS FORMAPAGTO_TIPO_NOME
-      FROM finlancamento fl
-      INNER JOIN finlancamentoparcela fp ON fp.idfinlancamento = fl.idfinlancamento
-      INNER JOIN empresa e ON e.codempresa = fl.codempresa
-      LEFT JOIN pessoa p ON p.codpessoa = fl.codpessoa
-      LEFT JOIN fincontaclassificacao cc ON cc.idfincontaclassificacao = fl.idfincontaclassificacao
-      LEFT JOIN formapagamento fpg ON fpg.idformapagamento = fp.idformapagamento
-      LEFT JOIN formapagamentotipo fpt ON fpt.idformapagamentotipo = fpg.idformapagamentotipo
-      WHERE ${whereSQL}
-      ORDER BY fp.datavencimento, fl.idfinlancamento
-    `;
-
-    console.log('SQL Parcelas:', sql);
-    const rows = await executeQuery(sql);
-    res.json({ ok: true, count: rows.length, rows });
-  } catch (error) {
-    console.error('Erro /api/v1/financeiro/parcelas:', error);
-    res.status(500).json({ ok: false, error: error.message });
-  }
-});
-
-// API v1 - DRE Gerencial
-app.get('/api/v1/financeiro/dre', async (req, res) => {
-  try {
-    const { competenciaIni, competenciaFim, empresa } = req.query;
-
-    if (!competenciaIni || !competenciaFim || !empresa) {
-      return res.status(400).json({ ok: false, error: 'Parâmetros obrigatórios: competenciaIni, competenciaFim, empresa' });
-    }
-
-    // competenciaIni e competenciaFim no formato YYYY-MM
-    const dataIni = `${competenciaIni}-01`;
-    // Último dia do mês final
-    const [anoFim, mesFim] = competenciaFim.split('-').map(Number);
-    const ultimoDia = new Date(anoFim, mesFim, 0).getDate();
-    const dataFim = `${competenciaFim}-${String(ultimoDia).padStart(2, '0')}`;
-
-    const sql = `
-      SELECT
-        EXTRACT(YEAR FROM fp.datavencimento) || '-' || LPAD(EXTRACT(MONTH FROM fp.datavencimento), 2, '0') AS COMPETENCIA,
-        e.codempresa AS COD_EMPRESA,
-        e.nomefantasia AS EMPRESA_NOME,
-        cc.idfincontaclassificacao AS CONTACLA_CODIGO,
-        cc.numero AS CONTACLA_NUMERO,
-        cc.descricao AS CONTACLA_DESCRICAO,
-        SUM(CASE WHEN fl.pagar = 'T' THEN -fp.valor ELSE fp.valor END) AS VALOR_TOTAL
-      FROM finlancamento fl
-      INNER JOIN finlancamentoparcela fp ON fp.idfinlancamento = fl.idfinlancamento
-      INNER JOIN empresa e ON e.codempresa = fl.codempresa
-      LEFT JOIN fincontaclassificacao cc ON cc.idfincontaclassificacao = fl.idfincontaclassificacao
-      WHERE fp.datavencimento >= '${dataIni}'
-        AND fp.datavencimento <= '${dataFim}'
-        AND e.codempresa = ${parseInt(empresa)}
-      GROUP BY
-        EXTRACT(YEAR FROM fp.datavencimento) || '-' || LPAD(EXTRACT(MONTH FROM fp.datavencimento), 2, '0'),
-        e.codempresa, e.nomefantasia,
-        cc.idfincontaclassificacao, cc.numero, cc.descricao
-      ORDER BY COMPETENCIA, cc.numero
-    `;
-
-    console.log('SQL DRE:', sql);
-    const rows = await executeQuery(sql);
-    res.json({ ok: true, count: rows.length, rows });
-  } catch (error) {
-    console.error('Erro /api/v1/financeiro/dre:', error);
-    res.status(500).json({ ok: false, error: error.message });
-  }
-});
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Firebird Bridge rodando na porta ${PORT}`);
+  console.log(`Empresas excluídas: ${EMPRESAS_EXCLUIDAS.join(', ')}`);
 });

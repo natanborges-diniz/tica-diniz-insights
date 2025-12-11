@@ -70,12 +70,6 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!filters.empresa) {
-      setData([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
@@ -83,7 +77,7 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
       const parcelas = await getFinanceiroParcelas({
         dataIni: filters.dataIni,
         dataFim: filters.dataFim,
-        empresa: filters.empresa,
+        empresa: filters.empresa, // Passa null se "Todas" for selecionada
         campoData: "VENCIMENTO",
         tipo: "TODOS",
         situacao: "TODOS",

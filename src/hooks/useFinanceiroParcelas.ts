@@ -132,13 +132,6 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    // API requer empresa obrigatória
-    if (!filters.empresa) {
-      setData([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
@@ -146,7 +139,7 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
       const parcelas = await getFinanceiroParcelas({
         dataIni: filters.dataIni,
         dataFim: filters.dataFim,
-        empresa: filters.empresa,
+        empresa: filters.empresa, // Passa null se "Todas" for selecionada
         tipo: filters.tipo,
         situacao: filters.situacao,
         campoData: filters.campoData,
