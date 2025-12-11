@@ -33,8 +33,8 @@ export function FluxoCaixaFilters({ filters, onChange }: Props) {
           </SelectTrigger>
           <SelectContent>
             {empresas.map((emp) => (
-              <SelectItem key={emp.COD_EMPRESA} value={String(emp.COD_EMPRESA)}>
-                {emp.EMPRESA}
+              <SelectItem key={emp.codEmpresa} value={String(emp.codEmpresa)}>
+                {emp.empresaNome}
               </SelectItem>
             ))}
           </SelectContent>

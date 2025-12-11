@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { BarChart3 } from 'lucide-react';
 import { ResumoEmpresaVendedor } from '@/services/firebirdBridge';
 
@@ -27,23 +27,23 @@ function formatCurrency(value: number): string {
 
 export function SellerChart({ dados, isLoading }: SellerChartProps) {
   // Preparar dados agrupados por vendedor com empresa para cor
-  const empresas = [...new Set(dados.map(d => d.EMPRESA))];
+  const empresas = [...new Set(dados.map(d => d.empresa))];
   const empresaColorMap = Object.fromEntries(
     empresas.map((empresa, index) => [empresa, COLORS[index % COLORS.length]])
   );
 
   // Ordenar por total vendido decrescente
   const chartData = [...dados]
-    .sort((a, b) => (b.TOTALVENDIDO || 0) - (a.TOTALVENDIDO || 0))
+    .sort((a, b) => (b.totalVendido || 0) - (a.totalVendido || 0))
     .slice(0, 15) // Limitar a 15 para visualização
     .map(item => ({
-      vendedor: item.VENDEDOR?.length > 12 
-        ? item.VENDEDOR.substring(0, 12) + '...' 
-        : item.VENDEDOR,
-      vendedorFull: item.VENDEDOR,
-      empresa: item.EMPRESA,
-      totalVendido: item.TOTALVENDIDO || 0,
-      cor: empresaColorMap[item.EMPRESA],
+      vendedor: item.vendedor?.length > 12 
+        ? item.vendedor.substring(0, 12) + '...' 
+        : item.vendedor,
+      vendedorFull: item.vendedor,
+      empresa: item.empresa,
+      totalVendido: item.totalVendido || 0,
+      cor: empresaColorMap[item.empresa],
     }));
 
   return (

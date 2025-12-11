@@ -21,10 +21,10 @@ function formatNumber(value: number): string {
 
 export function SalesKPICards({ dados, isLoading }: SalesKPICardsProps) {
   // Calcular KPIs agregados
-  const faturamentoTotal = dados.reduce((acc, item) => acc + (item.TOTALVENDIDO || 0), 0);
-  const quantidadeVendas = dados.reduce((acc, item) => acc + (item.QTDTRANSACAO || 0), 0);
-  const totalDevolucoes = dados.reduce((acc, item) => acc + (item.TOTALDEVOLUCAO || 0), 0);
-  const qtdDevolucoes = dados.reduce((acc, item) => acc + (item.QTDDEVOLUCAO || 0), 0);
+  const faturamentoTotal = dados.reduce((acc, item) => acc + (item.totalVendido || 0), 0);
+  const quantidadeVendas = dados.reduce((acc, item) => acc + (item.qtdTransacao || 0), 0);
+  const totalDevolucoes = dados.reduce((acc, item) => acc + (item.totalDevolucao || 0), 0);
+  const qtdDevolucoes = dados.reduce((acc, item) => acc + (item.qtdDevolucao || 0), 0);
   
   // Ticket médio ponderado: total vendido / quantidade de transações
   const ticketMedio = quantidadeVendas > 0 ? faturamentoTotal / quantidadeVendas : 0;

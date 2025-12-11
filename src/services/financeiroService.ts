@@ -1,179 +1,104 @@
 // src/services/financeiroService.ts
 
-const FIREBIRD_BRIDGE_BASE_URL =
-  import.meta.env.VITE_FIREBIRD_BRIDGE_BASE_URL ||
-  'https://firebird-bridge-production.up.railway.app';
+import { apiGet } from './firebirdBridge';
+
+// ============================================
+// INTERFACES - PARCELAS FINANCEIRAS
+// ============================================
+
+interface FinanceiroParcelaRaw {
+  COD_EMPRESA: number;
+  EMPRESA_NOME: string;
+  TIPO_LANCAMENTO?: string;
+  LANCAMENTO_PAGAR?: 'T' | 'F';
+  DOCUMENTO?: string;
+  LANCAMENTO_DOCUMENTO?: string;
+  PESSOA_NOME?: string;
+  DATA_VENCIMENTO?: string;
+  PARCELA_DATA_VENCIMENTO?: string;
+  DATA_EMISSAO?: string;
+  PARCELA_DATA_EMISSAO?: string;
+  DATA_PAGAMENTO?: string;
+  PARCELA_DATA_PAGAMENTO?: string;
+  VALOR?: number;
+  PARCELA_VALOR?: number;
+  VALOR_PAGO?: number;
+  PARCELA_VALOR_PAGO?: number;
+  SITUACAO?: string;
+  PARCELA_SITUACAO?: string;
+  CONTA_NUMERO?: string;
+  CONTACLA_NUMERO?: string;
+  CONTA_DESCRICAO?: string;
+  CONTACLA_DESCRICAO?: string;
+  FORMAPAGTO_TIPO_NOME?: string;
+}
 
 export interface FinanceiroParcela {
   codEmpresa: number;
   empresaNome: string;
-  codLancamento: number;
-  tipoLancamento: "PAGAR" | "RECEBER";
-  isPrevisao: boolean;
+  tipoLancamento: string;
   documento: string;
-  codPessoa: number;
   pessoaNome: string;
-  parcelaId: number;
-  dataEmissao: Date | null;
-  dataVencimento: Date;
-  dataPagamento: Date | null;
-  dataRecebimento: Date | null;
+  dataVencimento: string | null;
+  dataEmissao: string | null;
+  dataPagamento: string | null;
   valor: number;
-  valorOriginal: number;
   valorPago: number;
-  situacao: "PAGA" | "EM ABERTO" | "EM ATRASO";
-  contaCodigo: number | null;
+  situacao: string;
   contaNumero: string | null;
   contaDescricao: string | null;
-  formaPagamentoCodigo: number | null;
-  formaPagamentoTipoCodigo: number | null;
   formaPagamentoTipo: string | null;
 }
 
-interface ApiParcelaRow {
-  COD_EMPRESA: number;
-  EMPRESA_NOME: string;
-  COD_LANCAMENTO: number;
-  LANCAMENTO_PAGAR: "T" | "F";
-  LANCAMENTO_PREVISAO: "T" | "F";
-  LANCAMENTO_DOCUMENTO: string;
-  PESSOA_COD_PESSOA: number;
-  PESSOA_NOME: string;
-  PARCELA_ID: number;
-  PARCELA_DATA_EMISSAO: string | null;
-  PARCELA_DATA_VENCIMENTO: string;
-  PARCELA_DATA_PAGAMENTO: string | null;
-  PARCELA_DATA_RECEBIMENTO: string | null;
-  PARCELA_VALOR: number;
-  PARCELA_VALOR_ORIGINAL: number;
-  PARCELA_VALOR_PAGO: number;
-  PARCELA_SITUACAO: "PAGA" | "EM ABERTO" | "EM ATRASO";
-  CONTACLA_CODIGO: number | null;
-  CONTACLA_NUMERO: string | null;
-  CONTACLA_DESCRICAO: string | null;
-  FORMAPAGTO_CODIGO: number | null;
-  FORMAPAGTO_TIPO_CODIGO: number | null;
-  FORMAPAGTO_TIPO_NOME: string | null;
-}
-
-interface ApiResponse {
-  ok: boolean;
-  count: number;
-  rows: ApiParcelaRow[];
-}
-
-function parseDate(dateStr: string | null): Date | null {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-function mapRowToParcela(row: ApiParcelaRow): FinanceiroParcela {
-  return {
-    codEmpresa: row.COD_EMPRESA,
-    empresaNome: row.EMPRESA_NOME,
-    codLancamento: row.COD_LANCAMENTO,
-    tipoLancamento: row.LANCAMENTO_PAGAR === "T" ? "PAGAR" : "RECEBER",
-    isPrevisao: row.LANCAMENTO_PREVISAO === "T",
-    documento: row.LANCAMENTO_DOCUMENTO || "",
-    codPessoa: row.PESSOA_COD_PESSOA,
-    pessoaNome: row.PESSOA_NOME || "",
-    parcelaId: row.PARCELA_ID,
-    dataEmissao: parseDate(row.PARCELA_DATA_EMISSAO),
-    dataVencimento: parseDate(row.PARCELA_DATA_VENCIMENTO) || new Date(),
-    dataPagamento: parseDate(row.PARCELA_DATA_PAGAMENTO),
-    dataRecebimento: parseDate(row.PARCELA_DATA_RECEBIMENTO),
-    valor: row.PARCELA_VALOR || 0,
-    valorOriginal: row.PARCELA_VALOR_ORIGINAL || 0,
-    valorPago: row.PARCELA_VALOR_PAGO || 0,
-    situacao: row.PARCELA_SITUACAO || "EM ABERTO",
-    contaCodigo: row.CONTACLA_CODIGO,
-    contaNumero: row.CONTACLA_NUMERO,
-    contaDescricao: row.CONTACLA_DESCRICAO,
-    formaPagamentoCodigo: row.FORMAPAGTO_CODIGO,
-    formaPagamentoTipoCodigo: row.FORMAPAGTO_TIPO_CODIGO,
-    formaPagamentoTipo: row.FORMAPAGTO_TIPO_NOME,
-  };
-}
-
-export type TipoFilterParam = "TODOS" | "PAGAR" | "RECEBER";
-export type SituacaoFilterParam = "TODOS" | "EM ABERTO" | "EM ATRASO" | "PAGA";
-export type CampoDataParam = "EMISSAO" | "VENCIMENTO" | "PAGAMENTO";
-
-// Interface genérica para resposta do novo backend
-interface ApiEnvelopeResponse<T> {
-  ok: boolean;
-  data: T[] | null;
-  error?: {
-    code?: string;
-    message?: string;
-    details?: string;
-  } | null;
-}
+export type TipoFilterParam = 'TODOS' | 'PAGAR' | 'RECEBER';
+export type SituacaoFilterParam = 'TODOS' | 'EM ABERTO' | 'EM ATRASO' | 'PAGA';
+export type CampoDataParam = 'EMISSAO' | 'VENCIMENTO' | 'PAGAMENTO';
 
 export interface GetFinanceiroParcelasParams {
   dataIni: string;
   dataFim: string;
-  empresa?: number | string;
+  empresa: number | string;
   tipo?: TipoFilterParam;
   situacao?: SituacaoFilterParam;
   campoData?: CampoDataParam;
 }
 
+function mapParcelaRaw(r: FinanceiroParcelaRaw): FinanceiroParcela {
+  // Determinar tipo de lançamento
+  let tipoLancamento = r.TIPO_LANCAMENTO ?? '';
+  if (!tipoLancamento && r.LANCAMENTO_PAGAR !== undefined) {
+    tipoLancamento = r.LANCAMENTO_PAGAR === 'T' ? 'PAGAR' : 'RECEBER';
+  }
+  
+  return {
+    codEmpresa: r.COD_EMPRESA ?? 0,
+    empresaNome: r.EMPRESA_NOME ?? '',
+    tipoLancamento,
+    documento: r.DOCUMENTO ?? r.LANCAMENTO_DOCUMENTO ?? '',
+    pessoaNome: r.PESSOA_NOME ?? '',
+    dataVencimento: r.DATA_VENCIMENTO ?? r.PARCELA_DATA_VENCIMENTO ?? null,
+    dataEmissao: r.DATA_EMISSAO ?? r.PARCELA_DATA_EMISSAO ?? null,
+    dataPagamento: r.DATA_PAGAMENTO ?? r.PARCELA_DATA_PAGAMENTO ?? null,
+    valor: r.VALOR ?? r.PARCELA_VALOR ?? 0,
+    valorPago: r.VALOR_PAGO ?? r.PARCELA_VALOR_PAGO ?? 0,
+    situacao: r.SITUACAO ?? r.PARCELA_SITUACAO ?? 'EM ABERTO',
+    contaNumero: r.CONTA_NUMERO ?? r.CONTACLA_NUMERO ?? null,
+    contaDescricao: r.CONTA_DESCRICAO ?? r.CONTACLA_DESCRICAO ?? null,
+    formaPagamentoTipo: r.FORMAPAGTO_TIPO_NOME ?? null,
+  };
+}
+
 export async function getFinanceiroParcelas(
   params: GetFinanceiroParcelasParams
 ): Promise<FinanceiroParcela[]> {
-  const queryParams = new URLSearchParams();
-  
-  // Novo backend usa dataInicio/dataFim
-  queryParams.append("dataInicio", params.dataIni);
-  queryParams.append("dataFim", params.dataFim);
-
-  if (params.empresa !== undefined && params.empresa !== null && params.empresa !== "") {
-    queryParams.append("empresa", String(params.empresa));
-  }
-  if (params.tipo && params.tipo !== "TODOS") {
-    queryParams.append("tipo", params.tipo);
-  }
-  if (params.situacao && params.situacao !== "TODOS") {
-    queryParams.append("situacao", params.situacao);
-  }
-  if (params.campoData) {
-    queryParams.append("campoData", params.campoData);
-  }
-
-  const url = `${FIREBIRD_BRIDGE_BASE_URL}/api/v1/financeiro/parcelas?${queryParams.toString()}`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
+  const raw = await apiGet<FinanceiroParcelaRaw>('/financeiro/parcelas', {
+    dataInicio: params.dataIni,
+    dataFim: params.dataFim,
+    empresa: params.empresa,
+    tipo: params.tipo !== 'TODOS' ? params.tipo : undefined,
+    situacao: params.situacao !== 'TODOS' ? params.situacao : undefined,
+    campoData: params.campoData,
   });
-
-  if (!response.ok) {
-    throw new Error(`Erro ao buscar parcelas financeiras: ${response.status} ${response.statusText}`);
-  }
-
-  // Tenta parsear com novo envelope, fallback para formato antigo
-  const result = await response.json();
-
-  // Novo formato: { ok, data, error }
-  if ('data' in result) {
-    const envelope = result as ApiEnvelopeResponse<ApiParcelaRow>;
-    if (!envelope.ok || envelope.error) {
-      const errorMsg = envelope.error?.message || "Resposta inválida da API de parcelas financeiras";
-      throw new Error(errorMsg);
-    }
-    return (envelope.data || []).map(mapRowToParcela);
-  }
   
-  // Formato antigo: { ok, rows }
-  const legacyResult = result as ApiResponse;
-  if (!legacyResult.ok) {
-    throw new Error("Resposta inválida da API de parcelas financeiras");
-  }
-  return (legacyResult.rows || []).map(mapRowToParcela);
+  return raw.map(mapParcelaRaw);
 }
-
-export { FIREBIRD_BRIDGE_BASE_URL };

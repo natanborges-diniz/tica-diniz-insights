@@ -24,8 +24,10 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
-function formatDate(date: Date | null): string {
-  if (!date) return "—";
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "—";
   return date.toLocaleDateString("pt-BR");
 }
 
@@ -41,7 +43,7 @@ function getSituacaoBadge(situacao: string) {
   }
 }
 
-function getTipoBadge(tipo: "PAGAR" | "RECEBER") {
+function getTipoBadge(tipo: string) {
   if (tipo === "RECEBER") {
     return <Badge className="bg-emerald-500 hover:bg-emerald-600">Receber</Badge>;
   }
@@ -52,8 +54,8 @@ export function FinanceiroParcelasTable({ data }: FinanceiroParcelasTableProps) 
   // Ordenar por vencimento DESC
   const sortedData = useMemo(() => {
     return [...data].sort((a, b) => {
-      const dateA = a.dataVencimento?.getTime() || 0;
-      const dateB = b.dataVencimento?.getTime() || 0;
+      const dateA = a.dataVencimento ? new Date(a.dataVencimento).getTime() : 0;
+      const dateB = b.dataVencimento ? new Date(b.dataVencimento).getTime() : 0;
       return dateB - dateA;
     });
   }, [data]);
@@ -92,8 +94,8 @@ export function FinanceiroParcelasTable({ data }: FinanceiroParcelasTableProps) 
                   </TableCell>
                 </TableRow>
               ) : (
-                sortedData.map((p) => (
-                  <TableRow key={`${p.codLancamento}-${p.parcelaId}`}>
+                sortedData.map((p, index) => (
+                  <TableRow key={`${p.codEmpresa}-${p.documento}-${index}`}>
                     <TableCell className="font-medium text-sm">
                       {p.empresaNome || `Empresa ${p.codEmpresa}`}
                     </TableCell>

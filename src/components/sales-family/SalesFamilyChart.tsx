@@ -11,11 +11,11 @@ export function SalesFamilyChart({ dados }: SalesFamilyChartProps) {
   const familiaMap = new Map<string, { total: number; qtd: number }>();
 
   dados.forEach(item => {
-    const familia = item.FAMILIA || 'SEM FAMÍLIA';
+    const familia = item.familia || 'SEM FAMÍLIA';
     const atual = familiaMap.get(familia) || { total: 0, qtd: 0 };
     familiaMap.set(familia, {
-      total: atual.total + (item.TOTAL_VENDIDO || 0),
-      qtd: atual.qtd + (item.QTD_PRODUTOS || 0),
+      total: atual.total + (item.totalVendido || 0),
+      qtd: atual.qtd + (item.qtdProdutos || 0),
     });
   });
 

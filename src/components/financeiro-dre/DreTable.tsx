@@ -78,8 +78,8 @@ export function DreTable({ data }: Props) {
                 <TableCell>{linha.competencia}</TableCell>
                 <TableCell className="font-medium">{formatGrupo(linha.grupo)}</TableCell>
                 <TableCell className="text-muted-foreground">{linha.subgrupo || "—"}</TableCell>
-                <TableCell className={`text-right font-mono ${linha.valor < 0 ? "text-red-500" : ""}`}>
-                  {formatCurrency(linha.valor)}
+                <TableCell className={`text-right font-mono ${linha.valorTotal < 0 ? "text-red-500" : ""}`}>
+                  {formatCurrency(linha.valorTotal)}
                 </TableCell>
               </TableRow>
             ))}

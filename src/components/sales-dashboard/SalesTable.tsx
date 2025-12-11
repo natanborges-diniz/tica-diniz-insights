@@ -57,19 +57,19 @@ export function SalesTable({ dados, isLoading }: SalesTableProps) {
               </TableHeader>
               <TableBody>
                 {dados.map((row, index) => (
-                  <TableRow key={`${row.EMPRESA}-${row.VENDEDOR}-${index}`}>
-                    <TableCell className="font-medium">{row.EMPRESA}</TableCell>
-                    <TableCell>{row.VENDEDOR}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(row.TOTALORIGINAL || 0)}</TableCell>
+                  <TableRow key={`${row.empresa}-${row.vendedor}-${index}`}>
+                    <TableCell className="font-medium">{row.empresa}</TableCell>
+                    <TableCell>{row.vendedor}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(row.totalOriginal || 0)}</TableCell>
                     <TableCell className="text-right font-semibold text-emerald-600">
-                      {formatCurrency(row.TOTALVENDIDO || 0)}
+                      {formatCurrency(row.totalVendido || 0)}
                     </TableCell>
-                    <TableCell className="text-right">{formatCurrency(row.TICKETMEDIO || 0)}</TableCell>
-                    <TableCell className="text-right">{formatNumber(row.QTDTRANSACAO || 0)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(row.ticketMedio || 0)}</TableCell>
+                    <TableCell className="text-right">{formatNumber(row.qtdTransacao || 0)}</TableCell>
                     <TableCell className="text-right text-orange-600">
-                      {formatCurrency(row.TOTALDEVOLUCAO || 0)}
+                      {formatCurrency(row.totalDevolucao || 0)}
                     </TableCell>
-                    <TableCell className="text-right">{formatNumber(row.QTDDEVOLUCAO || 0)}</TableCell>
+                    <TableCell className="text-right">{formatNumber(row.qtdDevolucao || 0)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
