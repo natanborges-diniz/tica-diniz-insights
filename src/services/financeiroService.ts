@@ -6,31 +6,22 @@ import { apiGet } from './firebirdBridge';
 // INTERFACES - PARCELAS FINANCEIRAS
 // ============================================
 
+// Interface raw da API (snake_case minúsculo)
 interface FinanceiroParcelaRaw {
-  COD_EMPRESA: number;
-  EMPRESA_NOME: string;
-  TIPO_LANCAMENTO?: string;
-  LANCAMENTO_PAGAR?: 'T' | 'F';
-  DOCUMENTO?: string;
-  LANCAMENTO_DOCUMENTO?: string;
-  PESSOA_NOME?: string;
-  DATA_VENCIMENTO?: string;
-  PARCELA_DATA_VENCIMENTO?: string;
-  DATA_EMISSAO?: string;
-  PARCELA_DATA_EMISSAO?: string;
-  DATA_PAGAMENTO?: string;
-  PARCELA_DATA_PAGAMENTO?: string;
-  VALOR?: number;
-  PARCELA_VALOR?: number;
-  VALOR_PAGO?: number;
-  PARCELA_VALOR_PAGO?: number;
-  SITUACAO?: string;
-  PARCELA_SITUACAO?: string;
-  CONTA_NUMERO?: string;
-  CONTACLA_NUMERO?: string;
-  CONTA_DESCRICAO?: string;
-  CONTACLA_DESCRICAO?: string;
-  FORMAPAGTO_TIPO_NOME?: string;
+  cod_empresa: number;
+  empresa_nome: string;
+  lancamento_pagar?: string;
+  lancamento_documento?: string;
+  pessoa_nome?: string;
+  parcela_data_vencimento?: string;
+  parcela_data_emissao?: string;
+  parcela_data_pagamento?: string;
+  parcela_valor?: number;
+  parcela_valor_pago?: number;
+  parcela_situacao?: string;
+  contacla_numero?: string;
+  contacla_descricao?: string;
+  formapagto_tipo_nome?: string;
 }
 
 export interface FinanceiroParcela {
@@ -64,27 +55,29 @@ export interface GetFinanceiroParcelasParams {
 }
 
 function mapParcelaRaw(r: FinanceiroParcelaRaw): FinanceiroParcela {
-  // Determinar tipo de lançamento
-  let tipoLancamento = r.TIPO_LANCAMENTO ?? '';
-  if (!tipoLancamento && r.LANCAMENTO_PAGAR !== undefined) {
-    tipoLancamento = r.LANCAMENTO_PAGAR === 'T' ? 'PAGAR' : 'RECEBER';
-  }
+  // Determinar tipo de lançamento a partir de lancamento_pagar
+  // 'T' = PAGAR (true), 'F' = RECEBER (false)
+  const lancamentoPagar = r.lancamento_pagar?.trim();
+  const tipoLancamento = lancamentoPagar === 'T' ? 'PAGAR' : 'RECEBER';
+  
+  // Normalizar situação (remover espaços extras)
+  const situacaoRaw = r.parcela_situacao?.trim() || 'EM ABERTO';
   
   return {
-    codEmpresa: r.COD_EMPRESA ?? 0,
-    empresaNome: r.EMPRESA_NOME ?? '',
+    codEmpresa: r.cod_empresa ?? 0,
+    empresaNome: r.empresa_nome ?? '',
     tipoLancamento,
-    documento: r.DOCUMENTO ?? r.LANCAMENTO_DOCUMENTO ?? '',
-    pessoaNome: r.PESSOA_NOME ?? '',
-    dataVencimento: r.DATA_VENCIMENTO ?? r.PARCELA_DATA_VENCIMENTO ?? null,
-    dataEmissao: r.DATA_EMISSAO ?? r.PARCELA_DATA_EMISSAO ?? null,
-    dataPagamento: r.DATA_PAGAMENTO ?? r.PARCELA_DATA_PAGAMENTO ?? null,
-    valor: r.VALOR ?? r.PARCELA_VALOR ?? 0,
-    valorPago: r.VALOR_PAGO ?? r.PARCELA_VALOR_PAGO ?? 0,
-    situacao: r.SITUACAO ?? r.PARCELA_SITUACAO ?? 'EM ABERTO',
-    contaNumero: r.CONTA_NUMERO ?? r.CONTACLA_NUMERO ?? null,
-    contaDescricao: r.CONTA_DESCRICAO ?? r.CONTACLA_DESCRICAO ?? null,
-    formaPagamentoTipo: r.FORMAPAGTO_TIPO_NOME ?? null,
+    documento: r.lancamento_documento ?? '',
+    pessoaNome: r.pessoa_nome ?? '',
+    dataVencimento: r.parcela_data_vencimento ?? null,
+    dataEmissao: r.parcela_data_emissao ?? null,
+    dataPagamento: r.parcela_data_pagamento ?? null,
+    valor: r.parcela_valor ?? 0,
+    valorPago: r.parcela_valor_pago ?? 0,
+    situacao: situacaoRaw,
+    contaNumero: r.contacla_numero ?? null,
+    contaDescricao: r.contacla_descricao ?? null,
+    formaPagamentoTipo: r.formapagto_tipo_nome?.trim() ?? null,
   };
 }
 
