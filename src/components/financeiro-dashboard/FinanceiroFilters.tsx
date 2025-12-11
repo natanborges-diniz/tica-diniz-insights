@@ -1,8 +1,8 @@
 // src/components/financeiro-dashboard/FinanceiroFilters.tsx
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { FinanceiroFilters as FiltersType, TipoFilter, SituacaoFilter, CampoDataFilter } from "../../hooks/useFinanceiroParcelas";
-import { fetchEmpresas, Empresa } from "../../services/firebirdBridge";
+import { useEmpresas } from "../../hooks/useEmpresas";
 import {
   Select,
   SelectContent,
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Loader2, AlertCircle } from "lucide-react";
 
 interface FinanceiroFiltersProps {
   filters: FiltersType;
@@ -19,13 +20,7 @@ interface FinanceiroFiltersProps {
 }
 
 export function FinanceiroFilters({ filters, onChange }: FinanceiroFiltersProps) {
-  const [empresas, setEmpresas] = useState<Empresa[]>([]);
-
-  useEffect(() => {
-    fetchEmpresas()
-      .then(setEmpresas)
-      .catch(() => setEmpresas([]));
-  }, []);
+  const { empresas, isLoading, error } = useEmpresas();
 
   return (
     <div className="flex flex-wrap gap-4 items-end">
@@ -37,9 +32,22 @@ export function FinanceiroFilters({ filters, onChange }: FinanceiroFiltersProps)
           onValueChange={(value) =>
             onChange({ empresa: value === "TODAS" ? null : Number(value) })
           }
+          disabled={isLoading}
         >
           <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Selecione a empresa" />
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Carregando...</span>
+              </div>
+            ) : error ? (
+              <div className="flex items-center gap-2 text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <span>Erro</span>
+              </div>
+            ) : (
+              <SelectValue placeholder="Selecione a empresa" />
+            )}
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="TODAS">Selecione a empresa</SelectItem>
@@ -50,6 +58,9 @@ export function FinanceiroFilters({ filters, onChange }: FinanceiroFiltersProps)
             ))}
           </SelectContent>
         </Select>
+        {error && (
+          <p className="text-xs text-destructive">{error}</p>
+        )}
       </div>
 
       {/* Campo de Data */}

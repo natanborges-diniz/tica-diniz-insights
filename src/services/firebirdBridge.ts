@@ -37,24 +37,49 @@ export async function apiGet<T>(
     });
   }
 
-  const response = await fetch(url.toString(), {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-  });
+  // Timeout de 15 segundos
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-  if (!response.ok) {
-    throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
+  try {
+    console.log(`[FirebirdBridge] Fetching: ${url.toString()}`);
+    
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    
+    // Aplicar regra do envelope { ok, data, error }
+    if (result.ok === false || result.error) {
+      throw new Error(result.error?.message || result.error?.code || 'Erro na API');
+    }
+
+    console.log(`[FirebirdBridge] Success: ${path}`, result.data?.length || result.rows?.length || 0, 'records');
+
+    // Aceitar tanto 'data' quanto 'rows' como campo de dados
+    return result.data || result.rows || [];
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        console.error(`[FirebirdBridge] Timeout: ${path}`);
+        throw new Error('Timeout: O servidor não respondeu em tempo hábil');
+      }
+      console.error(`[FirebirdBridge] Error: ${path}`, error.message);
+      throw error;
+    }
+    throw new Error('Erro desconhecido na requisição');
   }
-
-  const result = await response.json();
-  
-  // Aplicar regra do envelope { ok, data, error }
-  if (result.ok === false || result.error) {
-    throw new Error(result.error?.message || result.error?.code || 'Erro na API');
-  }
-
-  // Aceitar tanto 'data' quanto 'rows' como campo de dados
-  return result.data || result.rows || [];
 }
 
 // ============================================
