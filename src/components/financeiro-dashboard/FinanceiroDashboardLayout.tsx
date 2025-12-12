@@ -205,9 +205,19 @@ export function FinanceiroDashboardLayout({
           </Alert>
         )}
 
+        {/* Mensagem quando nenhuma empresa está selecionada */}
+        {!loading && filters.empresa === null && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Selecione uma empresa para visualizar os dados financeiros.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {loading ? (
           <LoadingSkeleton />
-        ) : (
+        ) : filters.empresa !== null ? (
           <>
             <FinanceiroKPICards 
               metrics={metrics} 
@@ -233,7 +243,7 @@ export function FinanceiroDashboardLayout({
             <FinanceiroVencimentoChart data={filteredParcelas} />
             <FinanceiroParcelasTable data={filteredParcelas} />
           </>
-        )}
+        ) : null}
       </main>
     </div>
   );

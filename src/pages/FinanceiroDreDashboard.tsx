@@ -60,11 +60,23 @@ export default function FinanceiroDreDashboard() {
           </Alert>
         )}
 
-        <DreResumoCards resumo={resumo} />
+        {/* Mensagem quando nenhuma empresa está selecionada */}
+        {!loading && filters.empresa === null && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Selecione uma empresa para visualizar os dados do DRE.
+            </AlertDescription>
+          </Alert>
+        )}
 
-        <DreCompetenciaChart data={dadosPorCompetencia} />
-
-        <DreTable data={data} />
+        {filters.empresa !== null && (
+          <>
+            <DreResumoCards resumo={resumo} />
+            <DreCompetenciaChart data={dadosPorCompetencia} />
+            <DreTable data={data} />
+          </>
+        )}
       </main>
     </div>
   );

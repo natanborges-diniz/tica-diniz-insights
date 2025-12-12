@@ -154,8 +154,13 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
   }, [filters.dataIni, filters.dataFim, filters.empresa, filters.tipo, filters.situacao, filters.campoData]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    // Só busca dados se uma empresa específica estiver selecionada
+    if (filters.empresa !== null) {
+      fetchData();
+    } else {
+      setData([]);
+    }
+  }, [fetchData, filters.empresa]);
 
   // Métricas calculadas a partir dos dados retornados (já filtrados pelo backend)
   const metrics = useMemo(() => calculateMetrics(data), [data]);
