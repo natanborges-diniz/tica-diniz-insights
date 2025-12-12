@@ -66,8 +66,11 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
   }, [filters.dataIni, filters.dataFim, filters.empresa]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    // Só busca se empresa estiver selecionada
+    if (filters.empresa !== null) {
+      fetchData();
+    }
+  }, [fetchData, filters.empresa]);
 
   // Resumo calculado usando o valor (ou valorTotal) de cada linha
   const resumo = useMemo<DreResumo>(() => calcularResumoDre(data), [data]);

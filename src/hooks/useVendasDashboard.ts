@@ -1,13 +1,13 @@
 // src/hooks/useVendasDashboard.ts
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { format, startOfMonth } from "date-fns";
+import { useState, useMemo, useCallback } from "react";
 import {
   fetchResumoEmpresaVendedor,
   fetchResumoFormasPagamento,
   ResumoEmpresaVendedor,
   ResumoFormaPagamento,
 } from "@/services/firebirdBridge";
+import { getDefaultPeriodoMesAtual } from "@/utils/dateValidation";
 
 export type ViewMode = "loja" | "vendedor";
 
@@ -15,6 +15,7 @@ export interface VendasFiltersState {
   dataInicio: string;
   dataFim: string;
   viewMode: ViewMode;
+  empresaSelecionada: string | null; // null = não carrega dados
 }
 
 export interface ResumoLoja {
@@ -65,13 +66,13 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
 }
 
 export function useVendasDashboard() {
-  const hoje = new Date();
-  const primeiroDiaMes = startOfMonth(hoje);
+  const defaultPeriodo = getDefaultPeriodoMesAtual();
 
   const [filters, setFilters] = useState<VendasFiltersState>({
-    dataInicio: format(primeiroDiaMes, "yyyy-MM-dd"),
-    dataFim: format(hoje, "yyyy-MM-dd"),
+    dataInicio: defaultPeriodo.dataIni,
+    dataFim: defaultPeriodo.dataFim,
     viewMode: "loja",
+    empresaSelecionada: null, // Não carrega automaticamente
   });
 
   const [dados, setDados] = useState<ResumoEmpresaVendedor[]>([]);
@@ -80,6 +81,7 @@ export function useVendasDashboard() {
   const [loadingFormas, setLoadingFormas] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorFormas, setErrorFormas] = useState<string | null>(null);
+  const [dataLoaded, setDataLoaded] = useState(false); // Controle se dados já foram carregados
 
   const fetchData = useCallback(async (dataInicio: string, dataFim: string) => {
     setLoading(true);
@@ -87,6 +89,7 @@ export function useVendasDashboard() {
     try {
       const result = await fetchResumoEmpresaVendedor(dataInicio, dataFim);
       setDados(result);
+      setDataLoaded(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao buscar resumo de vendas";
       setError(message);
@@ -111,10 +114,7 @@ export function useVendasDashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchData(filters.dataInicio, filters.dataFim);
-    fetchFormas(filters.dataInicio, filters.dataFim);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // NÃO carrega automaticamente - aguarda ação do usuário
 
   const dadosPorLoja = useMemo(() => agruparPorLoja(dados), [dados]);
 
@@ -137,6 +137,7 @@ export function useVendasDashboard() {
     dados,
     dadosPorLoja,
     dadosFormasPagamento,
+    dataLoaded,
     // Loading/Error
     loading,
     loadingFormas,

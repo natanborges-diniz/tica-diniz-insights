@@ -1,6 +1,6 @@
 // src/pages/OsDashboard.tsx
 
-import React from "react";
+import React, { useState } from "react";
 import { useOsMonitor } from "../hooks/useOsMonitor";
 import { OsDashboardLayout } from "../components/os-dashboard/OsDashboardLayout";
 
@@ -11,6 +11,8 @@ const OsDashboardPage: React.FC = () => {
   const inicioDate = new Date(hoje);
   inicioDate.setDate(inicioDate.getDate() - 7);
   const inicio = inicioDate.toISOString().slice(0, 10);
+
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   const {
     data,
@@ -31,6 +33,16 @@ const OsDashboardPage: React.FC = () => {
     setFilters((prev) => ({ ...prev, ...next }));
   };
 
+  const handleLoadData = () => {
+    reload();
+    setDataLoaded(true);
+  };
+
+  const handleChangePeriod = (range: { dataInicio: string; dataFim: string }) => {
+    reload(range);
+    setDataLoaded(true);
+  };
+
   return (
     <OsDashboardLayout
       data={filteredData}
@@ -39,8 +51,10 @@ const OsDashboardPage: React.FC = () => {
       error={error}
       metrics={filteredMetrics}
       filters={filters}
+      dataLoaded={dataLoaded}
       onChangeFilters={handleChangeFilters}
-      onChangePeriod={reload}
+      onChangePeriod={handleChangePeriod}
+      onLoadData={handleLoadData}
     />
   );
 };

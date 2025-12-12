@@ -2,13 +2,14 @@
 
 import React from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ClipboardList } from "lucide-react";
+import { ArrowLeft, ClipboardList, Info, RefreshCw } from "lucide-react";
 import { OsRecord } from "../../services/osMonitor";
 import { OsMetrics, mapStatus, getStatusLegivel, isAtrasada } from "../../utils/osMetrics";
-import { OsFilterState, OsStatusFilter } from "../../hooks/useOsMonitor";
+import { OsFilterState, OsStatusFilter, OsEmpresaFilter } from "../../hooks/useOsMonitor";
 import { OsKpiCards } from "./OsKpiCards";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -25,8 +26,10 @@ type Props = {
   error: string | null;
   metrics: OsMetrics;
   filters: OsFilterState;
+  dataLoaded: boolean;
   onChangeFilters: (next: Partial<OsFilterState>) => void;
   onChangePeriod: (range: { dataInicio: string; dataFim: string }) => void;
+  onLoadData: () => void;
 };
 
 export const OsDashboardLayout: React.FC<Props> = ({
@@ -36,10 +39,13 @@ export const OsDashboardLayout: React.FC<Props> = ({
   error,
   metrics,
   filters,
+  dataLoaded,
   onChangeFilters,
   onChangePeriod,
+  onLoadData,
 }) => {
   const hoje = new Date();
+  const showEmptyState = !dataLoaded && !loading;
 
   // Lista de empresas única a partir dos dados brutos
   const empresas = Array.from(
@@ -110,13 +116,33 @@ export const OsDashboardLayout: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* KPIs clicáveis */}
-      <OsKpiCards
-        metrics={metrics}
-        filters={filters}
-        onChangeFilters={onChangeFilters}
-        loading={loading}
-      />
+      {/* Estado inicial - Aguardando ação do usuário */}
+      {showEmptyState && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Info className="h-12 w-12 text-muted-foreground mb-4" />
+            <CardTitle className="text-lg mb-2">Clique em Carregar para visualizar as OS</CardTitle>
+            <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
+              Selecione o período desejado e clique no botão para carregar os dados.
+              O período máximo permitido é de 1 ano.
+            </p>
+            <Button onClick={onLoadData} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+              Carregar Dados
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* KPIs clicáveis - só mostra se dados carregados */}
+      {dataLoaded && (
+        <OsKpiCards
+          metrics={metrics}
+          filters={filters}
+          onChangeFilters={onChangeFilters}
+          loading={loading}
+        />
+      )}
 
       {error && (
         <div className="text-sm text-destructive border border-destructive/30 bg-destructive/10 p-3 rounded-md">
@@ -124,12 +150,13 @@ export const OsDashboardLayout: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Toolbar de filtros */}
-      <div className="flex flex-wrap gap-4 items-center p-3 bg-muted/50 rounded-lg border border-border">
-        <Select
-          value={filters.empresa}
-          onValueChange={(value) => onChangeFilters({ empresa: value })}
-        >
+      {/* Toolbar de filtros - só mostra se dados carregados */}
+      {dataLoaded && (
+        <div className="flex flex-wrap gap-4 items-center p-3 bg-muted/50 rounded-lg border border-border">
+          <Select
+            value={filters.empresa ?? "TODAS"}
+            onValueChange={(value) => onChangeFilters({ empresa: value === "TODAS" ? null : value })}
+          >
           <SelectTrigger className="w-[220px]">
             <SelectValue placeholder="Todas as empresas" />
           </SelectTrigger>
@@ -192,9 +219,11 @@ export const OsDashboardLayout: React.FC<Props> = ({
           </div>
         </div>
       </div>
+      )}
 
-      {/* Tabela */}
-      <div className="overflow-auto border border-border rounded-lg">
+      {/* Tabela - só mostra se dados carregados */}
+      {dataLoaded && (
+        <div className="overflow-auto border border-border rounded-lg">
         <table className="min-w-full text-sm">
           <thead className="bg-muted">
             <tr>
@@ -291,7 +320,8 @@ export const OsDashboardLayout: React.FC<Props> = ({
             )}
           </tbody>
         </table>
-      </div>
+        </div>
+      )}
 
       {loading && (
         <div className="text-sm text-muted-foreground text-center py-4">

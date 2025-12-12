@@ -27,12 +27,7 @@ export function useEstoqueDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Selecionar primeira empresa quando carregar a lista
-  useEffect(() => {
-    if (!loadingEmpresas && !errorEmpresas && empresas.length > 0 && filters.empresaId === null) {
-      setFilters((prev) => ({ ...prev, empresaId: empresas[0].codEmpresa }));
-    }
-  }, [empresas, loadingEmpresas, errorEmpresas, filters.empresaId]);
+  // NÃO auto-seleciona empresa - usuário deve escolher manualmente
 
   const fetchData = useCallback(async (codEmpresa: number) => {
     setLoading(true);
