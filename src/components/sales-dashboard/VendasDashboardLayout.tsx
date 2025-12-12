@@ -1,11 +1,11 @@
 // src/components/sales-dashboard/VendasDashboardLayout.tsx
 
 import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3, RefreshCw, AlertCircle, Building2, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, RefreshCw, AlertCircle, Building2, Users, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { VendasFiltersState, ViewMode, ResumoLoja, VendasMetrics } from "@/hooks/useVendasDashboard";
 import { ResumoEmpresaVendedor, ResumoFormaPagamento } from "@/services/firebirdBridge";
@@ -23,6 +23,7 @@ interface VendasDashboardLayoutProps {
   dados: ResumoEmpresaVendedor[];
   dadosPorLoja: ResumoLoja[];
   dadosFormasPagamento: ResumoFormaPagamento[];
+  dataLoaded: boolean;
   // Loading/Error
   loading: boolean;
   loadingFormas: boolean;
@@ -84,6 +85,7 @@ export function VendasDashboardLayout({
   dados,
   dadosPorLoja,
   dadosFormasPagamento,
+  dataLoaded,
   loading,
   loadingFormas,
   error,
@@ -94,6 +96,7 @@ export function VendasDashboardLayout({
   reload,
 }: VendasDashboardLayoutProps) {
   const isLoading = loading || loadingFormas;
+  const showEmptyState = !dataLoaded && !loading;
 
   const handleViewModeChange = (mode: ViewMode) => {
     setFilters((prev) => ({ ...prev, viewMode: mode }));
@@ -162,9 +165,27 @@ export function VendasDashboardLayout({
           </Alert>
         )}
 
+        {/* Estado inicial - Aguardando ação do usuário */}
+        {showEmptyState && (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Info className="h-12 w-12 text-muted-foreground mb-4" />
+              <CardTitle className="text-lg mb-2">Clique em Atualizar para carregar os dados</CardTitle>
+              <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
+                Selecione o período desejado e clique no botão "Atualizar" para visualizar as vendas.
+                O período máximo permitido é de 1 ano.
+              </p>
+              <Button onClick={reload} disabled={isLoading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+                Carregar Dados
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {loading ? (
           <LoadingSkeleton />
-        ) : (
+        ) : dataLoaded && (
           <>
             {/* KPIs */}
             <SalesKPICards dados={dados} isLoading={loading} />

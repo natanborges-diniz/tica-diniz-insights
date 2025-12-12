@@ -9,10 +9,11 @@ import {
 import { calculateOsMetrics, OsMetrics, mapStatus, isAtrasada } from "../utils/osMetrics";
 
 export type OsStatusFilter = "TODOS" | "EM_ANDAMENTO" | "ATRASADAS" | "ENTREGUES" | "CANCELADAS";
+export type OsEmpresaFilter = string | null;
 
 export interface OsFilterState {
   status: OsStatusFilter;
-  empresa: string | "TODAS";
+  empresa: OsEmpresaFilter;
   somenteReparo: boolean;
   somenteEcommerce: boolean;
   somenteSemPrevisao: boolean;
@@ -26,7 +27,7 @@ export function useOsMonitor(initialFilters: OsMonitorFilters) {
 
   const [filters, setFilters] = useState<OsFilterState>({
     status: "TODOS",
-    empresa: "TODAS",
+    empresa: null, // Não carrega dados automaticamente - usuário deve selecionar
     somenteReparo: false,
     somenteEcommerce: false,
     somenteSemPrevisao: false,
@@ -42,7 +43,7 @@ export function useOsMonitor(initialFilters: OsMonitorFilters) {
       if (filters.status === "ENTREGUES" && status !== "ENTREGUE") return false;
       if (filters.status === "CANCELADAS" && status !== "CANCELADA") return false;
 
-      if (filters.empresa !== "TODAS" && os.empresa !== filters.empresa) return false;
+      if (filters.empresa !== null && filters.empresa !== "TODAS" && os.empresa !== filters.empresa) return false;
 
       if (filters.somenteReparo && !os.isReparo) return false;
       if (filters.somenteEcommerce && !os.isEcommerce) return false;
@@ -69,10 +70,8 @@ export function useOsMonitor(initialFilters: OsMonitorFilters) {
     }
   }
 
-  useEffect(() => {
-    fetchData(apiFilters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // NÃO carrega automaticamente - aguarda seleção de empresa pelo usuário
+  // useEffect removido para evitar carregamento automático
 
   function reload(newApiFilters?: Partial<OsMonitorFilters>) {
     const merged = { ...apiFilters, ...newApiFilters };

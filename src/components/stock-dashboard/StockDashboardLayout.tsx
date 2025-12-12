@@ -1,9 +1,9 @@
 // src/components/stock-dashboard/StockDashboardLayout.tsx
 
 import { Link } from "react-router-dom";
-import { ArrowLeft, Package, RefreshCw, AlertCircle } from "lucide-react";
+import { ArrowLeft, Package, RefreshCw, AlertCircle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -180,6 +180,19 @@ export function StockDashboardLayout({
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
+            )}
+
+            {/* Estado vazio - empresa não selecionada */}
+            {filters.empresaId === null && !loading && (
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <Info className="h-12 w-12 text-muted-foreground mb-4" />
+                  <CardTitle className="text-lg mb-2">Selecione uma empresa</CardTitle>
+                  <p className="text-sm text-muted-foreground text-center max-w-md">
+                    Escolha uma empresa no seletor acima para visualizar a análise de estoque.
+                  </p>
+                </CardContent>
+              </Card>
             )}
 
             {/* Loading ou Dados */}
