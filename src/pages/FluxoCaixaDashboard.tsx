@@ -58,9 +58,22 @@ export default function FluxoCaixaDashboard() {
           </Alert>
         )}
 
-        <FluxoCaixaResumoCards resumo={resumo} />
+        {/* Mensagem quando nenhuma empresa está selecionada */}
+        {!loading && filters.empresa === null && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Selecione uma empresa para visualizar o fluxo de caixa.
+            </AlertDescription>
+          </Alert>
+        )}
 
-        <FluxoCaixaChart data={fluxoAgrupado} />
+        {filters.empresa !== null && (
+          <>
+            <FluxoCaixaResumoCards resumo={resumo} />
+            <FluxoCaixaChart data={fluxoAgrupado} />
+          </>
+        )}
       </main>
     </div>
   );
