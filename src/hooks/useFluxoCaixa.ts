@@ -92,13 +92,8 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
   }, [filters.dataIni, filters.dataFim, filters.empresa]);
 
   useEffect(() => {
-    // Só busca dados se uma empresa específica estiver selecionada
-    if (filters.empresa !== null) {
-      fetchData();
-    } else {
-      setData([]);
-    }
-  }, [fetchData, filters.empresa]);
+    fetchData();
+  }, [fetchData]);
 
   // Agrupar por período (dia ou mês)
   const fluxoAgrupado = useMemo<FluxoCaixaItem[]>(() => {

@@ -37,9 +37,9 @@ export async function apiGet<T>(
     });
   }
 
-  // Timeout de 15 segundos
+  // Timeout de 60 segundos para permitir consultas consolidadas
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   try {
     console.log(`[FirebirdBridge] Fetching: ${url.toString()}`);
