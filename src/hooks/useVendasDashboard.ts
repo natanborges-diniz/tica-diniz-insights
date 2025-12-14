@@ -87,12 +87,16 @@ export function useVendasDashboard() {
   const fetchData = useCallback(async (empresa: EmpresaParam, dataInicio: string, dataFim: string) => {
     setLoading(true);
     setError(null);
+    console.log('[useVendasDashboard] Fetching data...', { empresa, dataInicio, dataFim });
     try {
       const result = await getResumoEmpresaVendedor({ empresa, dataInicio, dataFim });
+      console.log('[useVendasDashboard] Dados recebidos:', result.length, 'registros');
+      console.log('[useVendasDashboard] Primeiro registro:', result[0]);
       setDados(result);
       setDataLoaded(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao buscar resumo de vendas";
+      console.error('[useVendasDashboard] Erro:', message);
       setError(message);
       setDados([]);
     } finally {
