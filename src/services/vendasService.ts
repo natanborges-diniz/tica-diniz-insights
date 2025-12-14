@@ -17,6 +17,8 @@ interface ResumoEmpresaVendedorRaw {
   qtd_transacao: number;
   qtd_produtos: number;
   total_vendido: number;
+  total_devolucao: number;
+  qtd_devolucao: number;
 }
 
 export interface ResumoEmpresaVendedor {
@@ -59,9 +61,9 @@ export async function getResumoEmpresaVendedor(
     totalOriginal: r.total_vendido ?? 0,
     totalVendido: r.total_vendido ?? 0,
     ticketMedio: r.qtd_transacao > 0 ? r.total_vendido / r.qtd_transacao : 0,
-    totalDevolucao: 0,
+    totalDevolucao: r.total_devolucao ?? 0,
     qtdTransacao: r.qtd_transacao ?? 0,
-    qtdDevolucao: 0,
+    qtdDevolucao: r.qtd_devolucao ?? 0,
   }));
 
   console.log('[vendasService] Mapped data sample:', mapped[0]);
