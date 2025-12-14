@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useEmpresas } from "./useEmpresas";
-import { fetchAnaliseEstoqueAcao, AnaliseEstoqueAcao } from "@/services/firebirdBridge";
+import { getAnaliseEstoqueAcao, AnaliseEstoqueAcao } from "@/services/estoqueService";
+import { EmpresaParam } from "@/services/firebirdBridge";
 
 export interface StockFiltersState {
-  empresaId: number | null;
+  empresa: EmpresaParam; // 'ALL' | string | number | null
   fornecedor: string;
   marca: string;
   acao: string;
@@ -14,9 +15,9 @@ export interface StockFiltersState {
 
 export function useEstoqueDashboard() {
   const { empresas, isLoading: loadingEmpresas, error: errorEmpresas } = useEmpresas();
-  
+
   const [filters, setFilters] = useState<StockFiltersState>({
-    empresaId: null,
+    empresa: null, // Usuário deve escolher
     fornecedor: "TODOS",
     marca: "TODAS",
     acao: "TODAS",
@@ -27,13 +28,13 @@ export function useEstoqueDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // NÃO auto-seleciona empresa - usuário deve escolher manualmente
-
-  const fetchData = useCallback(async (codEmpresa: number) => {
+  const fetchData = useCallback(async (empresa: EmpresaParam) => {
+    if (empresa === null) return;
+    
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchAnaliseEstoqueAcao(codEmpresa);
+      const result = await getAnaliseEstoqueAcao({ empresa });
       setDados(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro desconhecido ao buscar dados";
@@ -46,10 +47,10 @@ export function useEstoqueDashboard() {
 
   // Buscar dados quando empresa mudar
   useEffect(() => {
-    if (filters.empresaId !== null) {
-      fetchData(filters.empresaId);
+    if (filters.empresa !== null) {
+      fetchData(filters.empresa);
     }
-  }, [filters.empresaId, fetchData]);
+  }, [filters.empresa, fetchData]);
 
   // Dados filtrados
   const filteredData = useMemo(() => {
@@ -80,25 +81,24 @@ export function useEstoqueDashboard() {
   }, [dados, filters]);
 
   const reload = useCallback(() => {
-    if (filters.empresaId !== null) {
-      fetchData(filters.empresaId);
+    if (filters.empresa !== null) {
+      fetchData(filters.empresa);
     }
-  }, [filters.empresaId, fetchData]);
+  }, [filters.empresa, fetchData]);
 
   return {
-    // Empresas
     empresas,
     loadingEmpresas,
     errorEmpresas,
-    // Dados
     dados,
     filteredData,
     loading,
     error,
-    // Filtros
     filters,
     setFilters,
-    // Ações
     reload,
   };
 }
+
+// Re-export types
+export type { AnaliseEstoqueAcao } from '@/services/estoqueService';

@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { VendasFiltersState, ViewMode, ResumoLoja, VendasMetrics } from "@/hooks/useVendasDashboard";
-import { ResumoEmpresaVendedor, ResumoFormaPagamento } from "@/services/firebirdBridge";
+import { ResumoEmpresaVendedor, ResumoFormaPagamento } from "@/services/vendasService";
 import { SalesFilters } from "./SalesFilters";
 import { SalesKPICards } from "./SalesKPICards";
 import { SellerChart } from "./SellerChart";

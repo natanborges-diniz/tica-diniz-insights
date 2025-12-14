@@ -2,11 +2,12 @@
 
 import { useState, useMemo, useCallback } from "react";
 import {
-  fetchResumoEmpresaVendedor,
-  fetchResumoFormasPagamento,
+  getResumoEmpresaVendedor,
+  getResumoFormasPagamento,
   ResumoEmpresaVendedor,
   ResumoFormaPagamento,
-} from "@/services/firebirdBridge";
+} from "@/services/vendasService";
+import { EmpresaParam } from "@/services/firebirdBridge";
 import { getDefaultPeriodoMesAtual } from "@/utils/dateValidation";
 
 export type ViewMode = "loja" | "vendedor";
@@ -15,7 +16,7 @@ export interface VendasFiltersState {
   dataInicio: string;
   dataFim: string;
   viewMode: ViewMode;
-  empresaSelecionada: string | null; // null = não carrega dados
+  empresa: EmpresaParam; // 'ALL' | string | number | null
 }
 
 export interface ResumoLoja {
@@ -72,7 +73,7 @@ export function useVendasDashboard() {
     dataInicio: defaultPeriodo.dataIni,
     dataFim: defaultPeriodo.dataFim,
     viewMode: "loja",
-    empresaSelecionada: null, // Não carrega automaticamente
+    empresa: 'ALL', // Default: todas as empresas
   });
 
   const [dados, setDados] = useState<ResumoEmpresaVendedor[]>([]);
@@ -81,13 +82,13 @@ export function useVendasDashboard() {
   const [loadingFormas, setLoadingFormas] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorFormas, setErrorFormas] = useState<string | null>(null);
-  const [dataLoaded, setDataLoaded] = useState(false); // Controle se dados já foram carregados
+  const [dataLoaded, setDataLoaded] = useState(false);
 
-  const fetchData = useCallback(async (dataInicio: string, dataFim: string) => {
+  const fetchData = useCallback(async (empresa: EmpresaParam, dataInicio: string, dataFim: string) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchResumoEmpresaVendedor(dataInicio, dataFim);
+      const result = await getResumoEmpresaVendedor({ empresa, dataInicio, dataFim });
       setDados(result);
       setDataLoaded(true);
     } catch (err) {
@@ -99,11 +100,11 @@ export function useVendasDashboard() {
     }
   }, []);
 
-  const fetchFormas = useCallback(async (dataInicio: string, dataFim: string) => {
+  const fetchFormas = useCallback(async (empresa: EmpresaParam, dataInicio: string, dataFim: string) => {
     setLoadingFormas(true);
     setErrorFormas(null);
     try {
-      const result = await fetchResumoFormasPagamento(dataInicio, dataFim);
+      const result = await getResumoFormasPagamento({ empresa, dataInicio, dataFim });
       setDadosFormasPagamento(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao buscar formas de pagamento";
@@ -113,8 +114,6 @@ export function useVendasDashboard() {
       setLoadingFormas(false);
     }
   }, []);
-
-  // NÃO carrega automaticamente - aguarda ação do usuário
 
   const dadosPorLoja = useMemo(() => agruparPorLoja(dados), [dados]);
 
@@ -128,27 +127,25 @@ export function useVendasDashboard() {
   }, [dados]);
 
   const reload = useCallback(() => {
-    fetchData(filters.dataInicio, filters.dataFim);
-    fetchFormas(filters.dataInicio, filters.dataFim);
-  }, [filters.dataInicio, filters.dataFim, fetchData, fetchFormas]);
+    fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
+    fetchFormas(filters.empresa, filters.dataInicio, filters.dataFim);
+  }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchData, fetchFormas]);
 
   return {
-    // Dados
     dados,
     dadosPorLoja,
     dadosFormasPagamento,
     dataLoaded,
-    // Loading/Error
     loading,
     loadingFormas,
     error,
     errorFormas,
-    // Filtros
     filters,
     setFilters,
-    // Métricas
     metrics,
-    // Ações
     reload,
   };
 }
+
+// Re-export types
+export type { ResumoEmpresaVendedor, ResumoFormaPagamento } from '@/services/vendasService';

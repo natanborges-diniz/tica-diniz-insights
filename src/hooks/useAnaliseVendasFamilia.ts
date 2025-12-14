@@ -1,39 +1,43 @@
+// src/hooks/useAnaliseVendasFamilia.ts
+
 import { useState, useEffect, useCallback } from 'react';
-import { fetchAnaliseFamiliaVendedor, AnaliseFamiliaVendedor } from '@/services/firebirdBridge';
+import { getAnaliseFamiliaVendedor, AnaliseFamiliaVendedor } from '@/services/vendasService';
+import { EmpresaParam } from '@/services/firebirdBridge';
 
 interface UseAnaliseVendasFamiliaParams {
   dataInicio: string;
   dataFim: string;
-  codEmpresa: number | null;
+  empresa: EmpresaParam;
 }
 
 interface UseAnaliseVendasFamiliaReturn {
   data: AnaliseFamiliaVendedor[];
   isLoading: boolean;
   error: string | null;
+  reload: () => void;
 }
 
 export function useAnaliseVendasFamilia({
   dataInicio,
   dataFim,
-  codEmpresa,
+  empresa,
 }: UseAnaliseVendasFamiliaParams): UseAnaliseVendasFamiliaReturn {
   const [data, setData] = useState<AnaliseFamiliaVendedor[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!dataInicio || !dataFim || codEmpresa === null) {
+    if (!dataInicio || !dataFim) {
       return;
     }
 
     try {
       setIsLoading(true);
       setError(null);
-      const result = await fetchAnaliseFamiliaVendedor({
+      const result = await getAnaliseFamiliaVendedor({
         dataInicio,
         dataFim,
-        codEmpresa,
+        empresa,
       });
       setData(result);
     } catch (err) {
@@ -43,11 +47,14 @@ export function useAnaliseVendasFamilia({
     } finally {
       setIsLoading(false);
     }
-  }, [dataInicio, dataFim, codEmpresa]);
+  }, [dataInicio, dataFim, empresa]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  return { data, isLoading, error };
+  return { data, isLoading, error, reload: fetchData };
 }
+
+// Re-export types
+export type { AnaliseFamiliaVendedor } from '@/services/vendasService';

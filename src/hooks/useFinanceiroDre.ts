@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { getFinanceiroDre, DreLinha, calcularResumoDre, DreResumo } from "../services/financeiroDreService";
+import { EmpresaParam } from "@/services/firebirdBridge";
 
 export interface DreFilters {
-  empresa: string | number | null;
+  empresa: EmpresaParam;
   dataIni: string;
   dataFim: string;
 }
@@ -22,7 +23,7 @@ function getDefaultFilters(): DreFilters {
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
   return {
-    empresa: null,
+    empresa: 'ALL', // Default: todas as empresas
     dataIni: formatLocalDate(primeiroDiaMes),
     dataFim: formatLocalDate(ultimoDiaMes),
   };
@@ -50,11 +51,10 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
     setError(null);
 
     try {
-      // Chama o service com os parâmetros corretos (empresa pode ser null)
       const linhas = await getFinanceiroDre({
-        dataIni: filters.dataIni,
-        dataFim: filters.dataFim,
         empresa: filters.empresa,
+        dataInicio: filters.dataIni,
+        dataFim: filters.dataFim,
       });
       setData(linhas);
     } catch (err) {
@@ -66,16 +66,14 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
   }, [filters.dataIni, filters.dataFim, filters.empresa]);
 
   useEffect(() => {
-    // Só busca se empresa estiver selecionada
+    // Busca automaticamente se empresa estiver definida (incluindo 'ALL')
     if (filters.empresa !== null) {
       fetchData();
     }
   }, [fetchData, filters.empresa]);
 
-  // Resumo calculado usando o valor (ou valorTotal) de cada linha
   const resumo = useMemo<DreResumo>(() => calcularResumoDre(data), [data]);
 
-  // Dados agrupados por competência para o gráfico
   const dadosPorCompetencia = useMemo<DreCompetenciaData[]>(() => {
     const competenciaMap = new Map<string, DreLinha[]>();
 
@@ -115,3 +113,6 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
     reload,
   };
 }
+
+// Re-export types
+export type { DreLinha, DreResumo } from '../services/financeiroDreService';

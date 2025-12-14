@@ -1,5 +1,7 @@
+// src/hooks/useEmpresas.ts
+
 import { useState, useEffect } from 'react';
-import { fetchEmpresas, Empresa } from '@/services/firebirdBridge';
+import { getEmpresas, Empresa } from '@/services/empresaService';
 
 // Empresas que não devem aparecer nos filtros (sem operação ativa)
 const EMPRESAS_INATIVAS = [10]; // Loja 10 não tem mais operação
@@ -20,7 +22,7 @@ export function useEmpresas(): UseEmpresasReturn {
       try {
         setIsLoading(true);
         setError(null);
-        const data = await fetchEmpresas();
+        const data = await getEmpresas();
         // Filtrar empresas inativas
         const empresasAtivas = data.filter(
           (emp) => !EMPRESAS_INATIVAS.includes(emp.codEmpresa)
@@ -39,3 +41,6 @@ export function useEmpresas(): UseEmpresasReturn {
 
   return { empresas, isLoading, error };
 }
+
+// Re-export types for convenience
+export type { Empresa } from '@/services/empresaService';

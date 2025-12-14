@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { getFinanceiroParcelas, FinanceiroParcela } from "../services/financeiroService";
+import { EmpresaParam } from "@/services/firebirdBridge";
 
 export type TipoFilter = "TODOS" | "PAGAR" | "RECEBER";
 export type SituacaoFilter = "TODOS" | "EM ABERTO" | "EM ATRASO" | "PAGA";
@@ -9,7 +10,7 @@ export type CampoDataFilter = "EMISSAO" | "VENCIMENTO" | "PAGAMENTO";
 export type KPIFilterType = "TODOS" | "RECEBER_ABERTO" | "RECEBER_ATRASO" | "PAGAR_ABERTO" | "PAGAR_ATRASO";
 
 export interface FinanceiroFilters {
-  empresa: string | number | null;
+  empresa: EmpresaParam;
   dataIni: string;
   dataFim: string;
   tipo: TipoFilter;
@@ -44,7 +45,7 @@ function getDefaultFilters(): FinanceiroFilters {
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
   return {
-    empresa: null,
+    empresa: 'ALL', // Default: todas as empresas
     dataIni: formatLocalDate(primeiroDiaMes),
     dataFim: formatLocalDate(ultimoDiaMes),
     tipo: "TODOS",
@@ -101,10 +102,9 @@ function calculateMetrics(parcelas: FinanceiroParcela[]): FinanceiroMetrics {
   };
 }
 
-// Filtra parcelas baseado no KPI filter selecionado
 function filterByKPI(parcelas: FinanceiroParcela[], kpiFilter: KPIFilterType): FinanceiroParcela[] {
   if (kpiFilter === "TODOS") return parcelas;
-  
+
   return parcelas.filter(p => {
     switch (kpiFilter) {
       case "RECEBER_ABERTO":
@@ -137,9 +137,9 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
 
     try {
       const parcelas = await getFinanceiroParcelas({
-        dataIni: filters.dataIni,
+        empresa: filters.empresa,
+        dataInicio: filters.dataIni,
         dataFim: filters.dataFim,
-        empresa: filters.empresa, // Passa null se "Todas" for selecionada
         tipo: filters.tipo,
         situacao: filters.situacao,
         campoData: filters.campoData,
@@ -154,16 +154,13 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
   }, [filters.dataIni, filters.dataFim, filters.empresa, filters.tipo, filters.situacao, filters.campoData]);
 
   useEffect(() => {
-    // Só busca se empresa estiver selecionada
+    // Busca automaticamente se empresa estiver definida (incluindo 'ALL')
     if (filters.empresa !== null) {
       fetchData();
     }
   }, [fetchData, filters.empresa]);
 
-  // Métricas calculadas a partir dos dados retornados (já filtrados pelo backend)
   const metrics = useMemo(() => calculateMetrics(data), [data]);
-  
-  // Dados filtrados pelo KPI card selecionado
   const filteredData = useMemo(() => filterByKPI(data, filters.kpiFilter), [data, filters.kpiFilter]);
 
   const reload = useCallback(() => {
@@ -181,3 +178,6 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
     reload,
   };
 }
+
+// Re-export types
+export type { FinanceiroParcela } from '../services/financeiroService';
