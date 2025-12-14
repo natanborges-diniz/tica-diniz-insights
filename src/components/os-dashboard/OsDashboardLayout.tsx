@@ -19,6 +19,11 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 
+interface Empresa {
+  codEmpresa: number;
+  nome: string;
+}
+
 type Props = {
   data: OsRecord[];
   rawData: OsRecord[];
@@ -30,6 +35,11 @@ type Props = {
   onChangeFilters: (next: Partial<OsFilterState>) => void;
   onChangePeriod: (range: { dataInicio: string; dataFim: string }) => void;
   onLoadData: () => void;
+  empresas: Empresa[];
+  loadingEmpresas: boolean;
+  errorEmpresas: string | null;
+  selectedEmpresa: number | null;
+  onSelectEmpresa: (codEmpresa: number | null) => void;
 };
 
 export const OsDashboardLayout: React.FC<Props> = ({
@@ -43,12 +53,17 @@ export const OsDashboardLayout: React.FC<Props> = ({
   onChangeFilters,
   onChangePeriod,
   onLoadData,
+  empresas,
+  loadingEmpresas,
+  errorEmpresas,
+  selectedEmpresa,
+  onSelectEmpresa,
 }) => {
   const hoje = new Date();
   const showEmptyState = !dataLoaded && !loading;
 
-  // Lista de empresas única a partir dos dados brutos
-  const empresas = Array.from(
+  // Lista de empresas única a partir dos dados brutos (para filtro visual)
+  const empresasVisuais = Array.from(
     new Set(rawData.map((os) => os.empresa).filter((e): e is string => !!e))
   ).sort();
 
@@ -116,20 +131,40 @@ export const OsDashboardLayout: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Estado inicial - Aguardando ação do usuário */}
+      {/* Estado inicial - Aguardando seleção de empresa */}
       {showEmptyState && (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Info className="h-12 w-12 text-muted-foreground mb-4" />
-            <CardTitle className="text-lg mb-2">Clique em Carregar para visualizar as OS</CardTitle>
+            <CardTitle className="text-lg mb-2">Selecione uma empresa para visualizar as OS</CardTitle>
             <p className="text-sm text-muted-foreground text-center max-w-md mb-4">
-              Selecione o período desejado e clique no botão para carregar os dados.
-              O período máximo permitido é de 1 ano.
+              Selecione a empresa e o período desejado, depois clique em Carregar Dados.
             </p>
-            <Button onClick={onLoadData} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-              Carregar Dados
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3 items-center">
+              <Select
+                value={selectedEmpresa?.toString() ?? ""}
+                onValueChange={(value) => onSelectEmpresa(value ? Number(value) : null)}
+                disabled={loadingEmpresas}
+              >
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder={loadingEmpresas ? "Carregando..." : "Selecione a empresa"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {empresas.map((e) => (
+                    <SelectItem key={e.codEmpresa} value={e.codEmpresa.toString()}>
+                      {e.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={onLoadData} disabled={loading || !selectedEmpresa}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+                Carregar Dados
+              </Button>
+            </div>
+            {errorEmpresas && (
+              <p className="text-sm text-destructive mt-2">{errorEmpresas}</p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -162,7 +197,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="TODAS">Todas as empresas</SelectItem>
-            {empresas.map((nome) => (
+            {empresasVisuais.map((nome) => (
               <SelectItem key={nome} value={nome}>
                 {nome}
               </SelectItem>
