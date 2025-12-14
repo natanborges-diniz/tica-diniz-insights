@@ -47,7 +47,11 @@ export async function getResumoEmpresaVendedor(
     dataFim: params.dataFim,
   });
 
-  return raw.map((r) => ({
+  console.log('[vendasService] Raw data count:', raw.length);
+  console.log('[vendasService] Raw data sample:', raw[0]);
+  console.log('[vendasService] Raw data keys:', raw[0] ? Object.keys(raw[0]) : 'N/A');
+
+  const mapped = raw.map((r) => ({
     codEmpresa: r.cod_empresa ?? 0,
     empresa: r.empresa ?? '',
     codVendedor: r.cod_vendedor ?? 0,
@@ -59,6 +63,10 @@ export async function getResumoEmpresaVendedor(
     qtdTransacao: r.qtd_transacao ?? 0,
     qtdDevolucao: 0,
   }));
+
+  console.log('[vendasService] Mapped data sample:', mapped[0]);
+
+  return mapped;
 }
 
 // ============================================
