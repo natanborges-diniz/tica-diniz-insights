@@ -8,16 +8,15 @@ import { apiGet, EmpresaParam, formatEmpresaParam } from './firebirdBridge';
 // ============================================
 
 interface ResumoEmpresaVendedorRaw {
-  EMPRESA: string;
-  COD_EMPRESA: number;
-  VENDEDOR: string;
-  COD_VENDEDOR: number;
-  TOTALORIGINAL: number;
-  TOTALVENDIDO: number;
-  TICKETMEDIO: number;
-  TOTALDEVOLUCAO: number;
-  QTDTRANSACAO: number;
-  QTDDEVOLUCAO: number;
+  cod_empresa: number;
+  empresa: string;
+  empresa_cod_logico: number;
+  empresa_nome_logico: string;
+  cod_vendedor: number;
+  vendedor: string;
+  qtd_transacao: number;
+  qtd_produtos: number;
+  total_vendido: number;
 }
 
 export interface ResumoEmpresaVendedor {
@@ -49,16 +48,16 @@ export async function getResumoEmpresaVendedor(
   });
 
   return raw.map((r) => ({
-    codEmpresa: r.COD_EMPRESA ?? 0,
-    empresa: r.EMPRESA ?? '',
-    codVendedor: r.COD_VENDEDOR ?? 0,
-    vendedor: r.VENDEDOR ?? '',
-    totalOriginal: r.TOTALORIGINAL ?? 0,
-    totalVendido: r.TOTALVENDIDO ?? 0,
-    ticketMedio: r.TICKETMEDIO ?? 0,
-    totalDevolucao: r.TOTALDEVOLUCAO ?? 0,
-    qtdTransacao: r.QTDTRANSACAO ?? 0,
-    qtdDevolucao: r.QTDDEVOLUCAO ?? 0,
+    codEmpresa: r.cod_empresa ?? 0,
+    empresa: r.empresa ?? '',
+    codVendedor: r.cod_vendedor ?? 0,
+    vendedor: (r.vendedor ?? '').trim(),
+    totalOriginal: r.total_vendido ?? 0,
+    totalVendido: r.total_vendido ?? 0,
+    ticketMedio: r.qtd_transacao > 0 ? r.total_vendido / r.qtd_transacao : 0,
+    totalDevolucao: 0,
+    qtdTransacao: r.qtd_transacao ?? 0,
+    qtdDevolucao: 0,
   }));
 }
 
@@ -67,15 +66,13 @@ export async function getResumoEmpresaVendedor(
 // ============================================
 
 interface ResumoFormaPagamentoRaw {
-  COD_EMPRESA: number;
-  EMPRESA: string;
-  VENDEDOR?: string;
-  FORMA_PAGAMENTO?: string;
-  FORMAPAGAMENTO?: string;
-  TOTAL?: number;
-  TOTALGERAL?: number;
-  QTD_TRANSACOES?: number;
-  QTD_VENDAS?: number;
+  empresa: string;
+  empresa_cod_logico: number;
+  empresa_nome_logico: string;
+  vendedor: string;
+  formapagamento: string;
+  totalgeral: number;
+  qtd_vendas: number;
 }
 
 export interface ResumoFormaPagamento {
@@ -103,12 +100,12 @@ export async function getResumoFormasPagamento(
   });
 
   return raw.map((r) => ({
-    codEmpresa: r.COD_EMPRESA ?? 0,
-    empresa: r.EMPRESA ?? '',
-    vendedor: r.VENDEDOR ?? '',
-    formaPagamento: r.FORMA_PAGAMENTO ?? r.FORMAPAGAMENTO ?? '',
-    totalGeral: r.TOTAL ?? r.TOTALGERAL ?? 0,
-    qtdVendas: r.QTD_TRANSACOES ?? r.QTD_VENDAS ?? 0,
+    codEmpresa: r.empresa_cod_logico ?? 0,
+    empresa: r.empresa ?? '',
+    vendedor: (r.vendedor ?? '').trim(),
+    formaPagamento: r.formapagamento ?? '',
+    totalGeral: r.totalgeral ?? 0,
+    qtdVendas: r.qtd_vendas ?? 0,
   }));
 }
 
@@ -117,14 +114,16 @@ export async function getResumoFormasPagamento(
 // ============================================
 
 interface AnaliseFamiliaVendedorRaw {
-  COD_EMPRESA: number;
-  EMPRESA: string;
-  COD_VENDEDOR: number;
-  VENDEDOR: string;
-  FAMILIA: string;
-  QTD_TRANSACAO: number;
-  QTD_PRODUTOS: number;
-  TOTAL_VENDIDO: number;
+  cod_empresa: number;
+  empresa: string;
+  empresa_cod_logico: number;
+  empresa_nome_logico: string;
+  cod_vendedor: number;
+  vendedor: string;
+  familia: string;
+  qtd_transacao: number;
+  qtd_produtos: number;
+  total_vendido: number;
 }
 
 export interface AnaliseFamiliaVendedor {
@@ -156,13 +155,13 @@ export async function getAnaliseFamiliaVendedor(
   });
 
   return raw.map((r) => ({
-    codEmpresa: r.COD_EMPRESA ?? 0,
-    empresa: r.EMPRESA ?? '',
-    codVendedor: r.COD_VENDEDOR ?? 0,
-    vendedor: r.VENDEDOR ?? '',
-    familia: r.FAMILIA ?? '',
-    qtdTransacao: r.QTD_TRANSACAO ?? 0,
-    qtdProdutos: r.QTD_PRODUTOS ?? 0,
-    totalVendido: r.TOTAL_VENDIDO ?? 0,
+    codEmpresa: r.empresa_cod_logico ?? r.cod_empresa ?? 0,
+    empresa: r.empresa ?? '',
+    codVendedor: r.cod_vendedor ?? 0,
+    vendedor: (r.vendedor ?? '').trim(),
+    familia: r.familia ?? '',
+    qtdTransacao: r.qtd_transacao ?? 0,
+    qtdProdutos: r.qtd_produtos ?? 0,
+    totalVendido: r.total_vendido ?? 0,
   }));
 }
