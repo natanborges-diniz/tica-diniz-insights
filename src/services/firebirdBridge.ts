@@ -82,22 +82,44 @@ export async function apiGet<T>(
       throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
     }
 
-    const result: ApiEnvelope<T[]> = await response.json();
+    const result = await response.json();
 
-    // Aplicar regra do envelope { ok, data, error }
-    if (result.ok === false || result.error) {
-      const errorObj = result.error;
-      const errorMessage = errorObj?.message || 'Erro desconhecido na API';
-      const error = new Error(errorMessage) as Error & { code?: string; details?: unknown };
-      if (errorObj?.code) error.code = errorObj.code;
-      if (errorObj?.details) error.details = errorObj.details;
-      throw error;
+    // Formato novo: { ok, data, error }
+    if (result.ok !== undefined) {
+      if (result.ok === false || result.error) {
+        const errorObj = result.error;
+        const errorMessage = errorObj?.message || 'Erro desconhecido na API';
+        const error = new Error(errorMessage) as Error & { code?: string; details?: unknown };
+        if (errorObj?.code) error.code = errorObj.code;
+        if (errorObj?.details) error.details = errorObj.details;
+        throw error;
+      }
+      const data = result.data ?? [];
+      console.log(`[FirebirdBridge] Success (envelope): ${path}`, data.length, 'records');
+      return data;
     }
 
-    const data = result.data ?? [];
-    console.log(`[FirebirdBridge] Success: ${path}`, data.length, 'records');
+    // Formato legacy: { data: [...] }
+    if (result.data !== undefined && Array.isArray(result.data)) {
+      console.log(`[FirebirdBridge] Success (legacy data): ${path}`, result.data.length, 'records');
+      return result.data;
+    }
 
-    return data;
+    // Formato legacy: { rows: [...] }
+    if (result.rows !== undefined && Array.isArray(result.rows)) {
+      console.log(`[FirebirdBridge] Success (legacy rows): ${path}`, result.rows.length, 'records');
+      return result.rows;
+    }
+
+    // Array direto
+    if (Array.isArray(result)) {
+      console.log(`[FirebirdBridge] Success (array): ${path}`, result.length, 'records');
+      return result;
+    }
+
+    // Fallback - retorna array vazio se formato não reconhecido
+    console.warn(`[FirebirdBridge] Formato não reconhecido: ${path}`, result);
+    return [];
   } catch (error) {
     clearTimeout(timeoutId);
 
