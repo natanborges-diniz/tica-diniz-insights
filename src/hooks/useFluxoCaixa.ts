@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { getFinanceiroParcelas, FinanceiroParcela } from "../services/financeiroService";
+import { EmpresaParam } from "@/services/firebirdBridge";
 
 export type Granularidade = "DIARIO" | "MENSAL";
 
 export interface FluxoCaixaFilters {
-  empresa: string | number | null;
+  empresa: EmpresaParam;
   dataIni: string;
   dataFim: string;
   granularidade: Granularidade;
@@ -40,7 +41,7 @@ function getDefaultFilters(): FluxoCaixaFilters {
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
   return {
-    empresa: null,
+    empresa: 'ALL', // Default: todas as empresas
     dataIni: formatLocalDate(primeiroDiaMes),
     dataFim: formatLocalDate(ultimoDiaMes),
     granularidade: "DIARIO",
@@ -49,10 +50,9 @@ function getDefaultFilters(): FluxoCaixaFilters {
 
 function formatarPeriodo(dateStr: string | null, granularidade: Granularidade): string {
   if (!dateStr) return "SEM DATA";
-  
-  // Parse date string (YYYY-MM-DD format)
+
   const date = new Date(dateStr + "T00:00:00");
-  
+
   if (granularidade === "MENSAL") {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
   }
@@ -75,9 +75,9 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
 
     try {
       const parcelas = await getFinanceiroParcelas({
-        dataIni: filters.dataIni,
+        empresa: filters.empresa,
+        dataInicio: filters.dataIni,
         dataFim: filters.dataFim,
-        empresa: filters.empresa, // Passa null se "Todas" for selecionada
         campoData: "VENCIMENTO",
         tipo: "TODOS",
         situacao: "TODOS",
@@ -92,13 +92,12 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
   }, [filters.dataIni, filters.dataFim, filters.empresa]);
 
   useEffect(() => {
-    // Só busca se empresa estiver selecionada
+    // Busca automaticamente se empresa estiver definida (incluindo 'ALL')
     if (filters.empresa !== null) {
       fetchData();
     }
   }, [fetchData, filters.empresa]);
 
-  // Agrupar por período (dia ou mês)
   const fluxoAgrupado = useMemo<FluxoCaixaItem[]>(() => {
     const periodoMap = new Map<string, { receber: number; pagar: number }>();
 
@@ -128,7 +127,6 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
     return result.sort((a, b) => a.periodo.localeCompare(b.periodo));
   }, [data, filters.granularidade]);
 
-  // Resumo do período
   const resumo = useMemo<FluxoCaixaResumo>(() => {
     let totalReceber = 0;
     let totalPagar = 0;

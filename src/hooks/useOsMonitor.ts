@@ -1,33 +1,36 @@
 // src/hooks/useOsMonitor.ts
 
-import { useEffect, useState, useMemo } from "react";
-import {
-  getOsMonitor,
-  OsMonitorFilters,
-  OsRecord,
-} from "../services/osMonitor";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { getOsMonitor, OsRecord, GetOsMonitorParams } from "../services/osService";
 import { calculateOsMetrics, OsMetrics, mapStatus, isAtrasada } from "../utils/osMetrics";
+import { EmpresaParam } from "@/services/firebirdBridge";
 
 export type OsStatusFilter = "TODOS" | "EM_ANDAMENTO" | "ATRASADAS" | "ENTREGUES" | "CANCELADAS";
 export type OsEmpresaFilter = string | null;
 
+export interface OsApiFilters {
+  empresa: EmpresaParam;
+  dataInicio: string;
+  dataFim: string;
+}
+
 export interface OsFilterState {
   status: OsStatusFilter;
-  empresa: OsEmpresaFilter;
+  empresaVisual: OsEmpresaFilter; // Para filtro visual na tabela
   somenteReparo: boolean;
   somenteEcommerce: boolean;
   somenteSemPrevisao: boolean;
 }
 
-export function useOsMonitor(initialFilters: OsMonitorFilters) {
-  const [apiFilters, setApiFilters] = useState<OsMonitorFilters>(initialFilters);
+export function useOsMonitor(initialFilters: OsApiFilters) {
+  const [apiFilters, setApiFilters] = useState<OsApiFilters>(initialFilters);
   const [data, setData] = useState<OsRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<OsFilterState>({
     status: "TODOS",
-    empresa: null, // Não carrega dados automaticamente - usuário deve selecionar
+    empresaVisual: null,
     somenteReparo: false,
     somenteEcommerce: false,
     somenteSemPrevisao: false,
@@ -43,7 +46,7 @@ export function useOsMonitor(initialFilters: OsMonitorFilters) {
       if (filters.status === "ENTREGUES" && status !== "ENTREGUE") return false;
       if (filters.status === "CANCELADAS" && status !== "CANCELADA") return false;
 
-      if (filters.empresa !== null && filters.empresa !== "TODAS" && os.empresa !== filters.empresa) return false;
+      if (filters.empresaVisual !== null && filters.empresaVisual !== "TODAS" && os.empresa !== filters.empresaVisual) return false;
 
       if (filters.somenteReparo && !os.isReparo) return false;
       if (filters.somenteEcommerce && !os.isEcommerce) return false;
@@ -56,28 +59,36 @@ export function useOsMonitor(initialFilters: OsMonitorFilters) {
   const metrics: OsMetrics = useMemo(() => calculateOsMetrics(data), [data]);
   const filteredMetrics: OsMetrics = useMemo(() => calculateOsMetrics(filteredData), [filteredData]);
 
-  async function fetchData(f: OsMonitorFilters) {
+  const fetchData = useCallback(async (f: OsApiFilters) => {
     try {
       setLoading(true);
       setError(null);
-      const result = await getOsMonitor(f);
+      const result = await getOsMonitor({
+        empresa: f.empresa,
+        dataInicio: f.dataInicio,
+        dataFim: f.dataFim,
+      });
       setData(result);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err?.message || "Erro ao carregar monitor de OS");
+      setError(err instanceof Error ? err.message : "Erro ao carregar monitor de OS");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  // NÃO carrega automaticamente - aguarda seleção de empresa pelo usuário
-  // useEffect removido para evitar carregamento automático
+  // Busca automaticamente se empresa estiver definida (incluindo 'ALL')
+  useEffect(() => {
+    if (apiFilters.empresa !== null) {
+      fetchData(apiFilters);
+    }
+  }, [apiFilters, fetchData]);
 
-  function reload(newApiFilters?: Partial<OsMonitorFilters>) {
+  const reload = useCallback((newApiFilters?: Partial<OsApiFilters>) => {
     const merged = { ...apiFilters, ...newApiFilters };
     setApiFilters(merged);
     fetchData(merged);
-  }
+  }, [apiFilters, fetchData]);
 
   return {
     data,
@@ -85,6 +96,7 @@ export function useOsMonitor(initialFilters: OsMonitorFilters) {
     loading,
     error,
     apiFilters,
+    setApiFilters,
     filters,
     setFilters,
     metrics,
@@ -92,3 +104,6 @@ export function useOsMonitor(initialFilters: OsMonitorFilters) {
     reload,
   };
 }
+
+// Re-export types
+export type { OsRecord } from '../services/osService';

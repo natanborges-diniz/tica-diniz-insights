@@ -14,7 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { AnaliseEstoqueAcao, Empresa } from "@/services/firebirdBridge";
+import { AnaliseEstoqueAcao } from "@/services/estoqueService";
+import { Empresa } from "@/services/empresaService";
 import { StockFiltersState } from "@/hooks/useEstoqueDashboard";
 import { StockFilters } from "./StockFilters";
 import { StockKPICards } from "./StockKPICards";
