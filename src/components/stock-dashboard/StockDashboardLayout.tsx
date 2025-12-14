@@ -97,7 +97,7 @@ export function StockDashboardLayout({
   const handleEmpresaChange = (value: string) => {
     setFilters((prev) => ({
       ...prev,
-      empresaId: Number(value),
+      empresa: Number(value),
       fornecedor: "TODOS",
       marca: "TODAS",
       acao: "TODAS",
@@ -158,7 +158,7 @@ export function StockDashboardLayout({
               </CardHeader>
               <CardContent>
                 <Select
-                  value={filters.empresaId?.toString() ?? ""}
+                  value={filters.empresa !== null ? String(filters.empresa) : ""}
                   onValueChange={handleEmpresaChange}
                 >
                   <SelectTrigger className="w-full max-w-xs">
@@ -167,7 +167,7 @@ export function StockDashboardLayout({
                   <SelectContent>
                     {empresas.map((emp) => (
                       <SelectItem key={emp.codEmpresa} value={emp.codEmpresa.toString()}>
-                        {emp.codEmpresa} - {emp.empresaNome}
+                        {emp.codEmpresa} - {emp.nome}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -184,7 +184,7 @@ export function StockDashboardLayout({
             )}
 
             {/* Estado vazio - empresa não selecionada */}
-            {filters.empresaId === null && !loading && (
+            {filters.empresa === null && !loading && (
               <Card className="border-dashed">
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Info className="h-12 w-12 text-muted-foreground mb-4" />
@@ -199,7 +199,7 @@ export function StockDashboardLayout({
             {/* Loading ou Dados */}
             {loading ? (
               <LoadingSkeleton />
-            ) : filters.empresaId !== null && (
+            ) : filters.empresa !== null && (
               <>
                 {/* Filtros */}
                 <Card>

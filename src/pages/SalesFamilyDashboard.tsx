@@ -54,7 +54,7 @@ export default function SalesFamilyDashboard() {
   const { data, isLoading, error } = useAnaliseVendasFamilia({
     dataInicio,
     dataFim,
-    codEmpresa: selectedEmpresaId,
+    empresa: selectedEmpresaId,
   });
 
   // Dados filtrados

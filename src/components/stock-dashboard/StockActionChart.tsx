@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { AnaliseEstoqueAcao } from '@/services/firebirdBridge';
+import { AnaliseEstoqueAcao } from '@/services/estoqueService';
 
 interface StockActionChartProps {
   dados: AnaliseEstoqueAcao[];

@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AnaliseFamiliaVendedor, Empresa } from '@/services/firebirdBridge';
+import { AnaliseFamiliaVendedor } from '@/services/vendasService';
+import { Empresa } from '@/services/empresaService';
 
 interface SalesFamilyFiltersProps {
   empresas: Empresa[];
@@ -41,7 +42,7 @@ export function SalesFamilyFilters({
       <div className="space-y-2">
         <Label htmlFor="empresa">Empresa</Label>
         <select id="empresa" value={selectedEmpresaId ?? ''} onChange={(e) => onEmpresaChange(Number(e.target.value))} className="w-full px-3 py-2 border rounded-md bg-background">
-          {empresas.map((emp) => (<option key={emp.codEmpresa} value={emp.codEmpresa}>{emp.empresaNome}</option>))}
+          {empresas.map((emp) => (<option key={emp.codEmpresa} value={emp.codEmpresa}>{emp.nome}</option>))}
         </select>
       </div>
       <div className="space-y-2"><Label>Data Início</Label><Input type="date" value={dataInicio} onChange={(e) => onDataInicioChange(e.target.value)} /></div>

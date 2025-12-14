@@ -6,7 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { AnaliseEstoqueAcao } from '@/services/firebirdBridge';
+import { AnaliseEstoqueAcao } from '@/services/estoqueService';
 
 interface StockTableProps {
   dados: AnaliseEstoqueAcao[];

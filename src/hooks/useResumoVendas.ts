@@ -1,33 +1,38 @@
+// src/hooks/useResumoVendas.ts
+
 import { useState, useCallback } from 'react';
-import { fetchResumoEmpresaVendedor, ResumoEmpresaVendedor } from '@/services/firebirdBridge';
+import { getResumoEmpresaVendedor, ResumoEmpresaVendedor } from '@/services/vendasService';
+import { EmpresaParam } from '@/services/firebirdBridge';
 
 interface UseResumoVendasReturn {
-  dados: ResumoEmpresaVendedor[];
+  data: ResumoEmpresaVendedor[];
   isLoading: boolean;
   error: string | null;
-  fetchData: (dataInicio: string, dataFim: string) => Promise<void>;
+  fetchData: (empresa: EmpresaParam, dataInicio: string, dataFim: string) => Promise<void>;
 }
 
 export function useResumoVendas(): UseResumoVendasReturn {
-  const [dados, setDados] = useState<ResumoEmpresaVendedor[]>([]);
+  const [data, setData] = useState<ResumoEmpresaVendedor[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async (dataInicio: string, dataFim: string) => {
-    setIsLoading(true);
-    setError(null);
-    
+  const fetchData = useCallback(async (empresa: EmpresaParam, dataInicio: string, dataFim: string) => {
     try {
-      const result = await fetchResumoEmpresaVendedor(dataInicio, dataFim);
-      setDados(result);
+      setIsLoading(true);
+      setError(null);
+      const result = await getResumoEmpresaVendedor({ empresa, dataInicio, dataFim });
+      setData(result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro desconhecido ao buscar dados';
+      const message = err instanceof Error ? err.message : 'Erro ao carregar dados';
       setError(message);
-      setDados([]);
+      setData([]);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  return { dados, isLoading, error, fetchData };
+  return { data, isLoading, error, fetchData };
 }
+
+// Re-export types
+export type { ResumoEmpresaVendedor } from '@/services/vendasService';

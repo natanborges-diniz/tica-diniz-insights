@@ -1,33 +1,39 @@
+// src/hooks/useAnaliseEstoque.ts
+
 import { useState, useCallback } from 'react';
-import { fetchAnaliseEstoqueAcao, AnaliseEstoqueAcao } from '@/services/firebirdBridge';
+import { getAnaliseEstoqueAcao, AnaliseEstoqueAcao } from '@/services/estoqueService';
+import { EmpresaParam } from '@/services/firebirdBridge';
 
 interface UseAnaliseEstoqueReturn {
-  dados: AnaliseEstoqueAcao[];
+  data: AnaliseEstoqueAcao[];
   isLoading: boolean;
   error: string | null;
-  fetchData: (codEmpresa: number | string) => Promise<void>;
+  fetchData: (empresa: EmpresaParam) => Promise<void>;
 }
 
 export function useAnaliseEstoque(): UseAnaliseEstoqueReturn {
-  const [dados, setDados] = useState<AnaliseEstoqueAcao[]>([]);
+  const [data, setData] = useState<AnaliseEstoqueAcao[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async (codEmpresa: number | string) => {
+  const fetchData = useCallback(async (empresa: EmpresaParam) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const result = await fetchAnaliseEstoqueAcao(codEmpresa);
-      setDados(result);
+      const result = await getAnaliseEstoqueAcao({ empresa });
+      setData(result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro desconhecido ao buscar dados';
+      const message = err instanceof Error ? err.message : 'Erro ao carregar dados';
       setError(message);
-      setDados([]);
+      setData([]);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  return { dados, isLoading, error, fetchData };
+  return { data, isLoading, error, fetchData };
 }
+
+// Re-export types
+export type { AnaliseEstoqueAcao } from '@/services/estoqueService';

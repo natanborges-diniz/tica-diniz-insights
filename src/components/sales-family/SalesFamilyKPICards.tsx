@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DollarSign, ShoppingCart, Package, TrendingUp } from 'lucide-react';
-import { AnaliseFamiliaVendedor } from '@/services/firebirdBridge';
+import { AnaliseFamiliaVendedor } from '@/services/vendasService';
 
 interface SalesFamilyKPICardsProps { dados: AnaliseFamiliaVendedor[]; }
 

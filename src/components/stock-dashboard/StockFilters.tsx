@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AnaliseEstoqueAcao } from '@/services/firebirdBridge';
+import { AnaliseEstoqueAcao } from '@/services/estoqueService';
 
 interface StockFiltersProps {
   dados: AnaliseEstoqueAcao[];

@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { AnaliseFamiliaVendedor } from '@/services/firebirdBridge';
+import { AnaliseFamiliaVendedor } from '@/services/vendasService';
 
 interface SalesFamilyChartProps {
   dados: AnaliseFamiliaVendedor[];
