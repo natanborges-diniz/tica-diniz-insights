@@ -25,6 +25,7 @@ const OsDashboardPage: React.FC = () => {
     setFilters,
     reload,
   } = useOsMonitor({
+    empresa: 'ALL',
     dataInicio: inicio,
     dataFim: fim,
   });

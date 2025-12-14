@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Package, Users, Tag, AlertTriangle } from 'lucide-react';
-import { AnaliseEstoqueAcao } from '@/services/firebirdBridge';
+import { AnaliseEstoqueAcao } from '@/services/estoqueService';
 
 interface StockKPICardsProps {
   dados: AnaliseEstoqueAcao[];

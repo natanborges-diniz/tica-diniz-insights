@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { BarChart3 } from 'lucide-react';
-import { ResumoEmpresaVendedor } from '@/services/firebirdBridge';
+import { ResumoEmpresaVendedor } from '@/services/vendasService';
 
 interface SellerChartProps {
   dados: ResumoEmpresaVendedor[];

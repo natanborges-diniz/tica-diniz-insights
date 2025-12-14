@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TableIcon } from 'lucide-react';
-import { ResumoEmpresaVendedor } from '@/services/firebirdBridge';
+import { ResumoEmpresaVendedor } from '@/services/vendasService';
 
 interface SalesTableProps {
   dados: ResumoEmpresaVendedor[];

@@ -154,8 +154,8 @@ export const OsDashboardLayout: React.FC<Props> = ({
       {dataLoaded && (
         <div className="flex flex-wrap gap-4 items-center p-3 bg-muted/50 rounded-lg border border-border">
           <Select
-            value={filters.empresa ?? "TODAS"}
-            onValueChange={(value) => onChangeFilters({ empresa: value === "TODAS" ? null : value })}
+            value={filters.empresaVisual ?? "TODAS"}
+            onValueChange={(value) => onChangeFilters({ empresaVisual: value === "TODAS" ? null : value })}
           >
           <SelectTrigger className="w-[220px]">
             <SelectValue placeholder="Todas as empresas" />

@@ -1,5 +1,5 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { AnaliseFamiliaVendedor } from '@/services/firebirdBridge';
+import { AnaliseFamiliaVendedor } from '@/services/vendasService';
 
 interface SalesFamilyTableProps { dados: AnaliseFamiliaVendedor[]; }
 

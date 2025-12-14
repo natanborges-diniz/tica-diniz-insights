@@ -50,7 +50,7 @@ export function DreFilters({ filters, onChange }: Props) {
             <SelectItem value="TODAS">Todas as empresas</SelectItem>
             {empresas.map((emp) => (
               <SelectItem key={emp.codEmpresa} value={String(emp.codEmpresa)}>
-                {emp.empresaNome}
+                {emp.nome}
               </SelectItem>
             ))}
           </SelectContent>

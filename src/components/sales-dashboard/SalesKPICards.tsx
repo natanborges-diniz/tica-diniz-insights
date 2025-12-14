@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DollarSign, ShoppingCart, Ticket, RotateCcw } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ResumoEmpresaVendedor } from '@/services/firebirdBridge';
+import { ResumoEmpresaVendedor } from '@/services/vendasService';
 
 interface SalesKPICardsProps {
   dados: ResumoEmpresaVendedor[];
