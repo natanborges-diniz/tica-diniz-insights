@@ -77,11 +77,20 @@ function mapOsRecordRaw(r: OsRecordRaw): OsRecord {
 }
 
 export async function getOsMonitor(params: GetOsMonitorParams): Promise<OsRecord[]> {
-  const raw = await apiGet<OsRecordRaw>('/os/monitor', {
+  const queryParams = {
     empresa: formatEmpresaParam(params.empresa),
     dataInicio: params.dataInicio,
     dataFim: params.dataFim,
-  });
+  };
+  
+  console.log('[osService] Sending params:', queryParams);
+  
+  const raw = await apiGet<OsRecordRaw>('/os/monitor', queryParams);
 
-  return raw.map(mapOsRecordRaw);
+  console.log('[osService] Raw data sample:', raw[0]);
+  
+  const mapped = raw.map(mapOsRecordRaw);
+  console.log('[osService] Mapped data sample:', mapped[0]);
+  
+  return mapped;
 }
