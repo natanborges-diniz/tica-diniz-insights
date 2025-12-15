@@ -60,7 +60,7 @@ function normalizeStatusAtraso(value: string | undefined): StatusAtraso {
 function mapOsRecordRaw(r: OsRecordRaw): OsRecord {
   return {
     codOs: r.cod_os ?? 0,
-    os: r.os?.trim() ?? '',
+    os: String(r.os ?? ''),
     empresa: r.empresa?.trim() ?? '',
     codEmpresa: r.codempresa ?? null,
     cliente: r.cliente?.trim() ?? '',
