@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DollarSign, Percent, ShoppingCart, RotateCcw, TrendingDown, Calculator } from 'lucide-react';
+import { DollarSign, Percent, ShoppingCart, RotateCcw, TrendingDown, Calculator, Receipt } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VendasMetrics } from '@/hooks/useVendasDashboard';
 
@@ -22,7 +22,7 @@ function formatPercent(value: number): string {
 export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
   const cards = [
     {
-      title: 'Total Bruto',
+      title: 'Faturamento Bruto',
       value: formatCurrency(metrics.totalBruto),
       icon: DollarSign,
       color: 'text-blue-600',
@@ -43,7 +43,7 @@ export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
       bgColor: 'bg-orange-50',
     },
     {
-      title: 'Total Vendido (Líquido)',
+      title: 'Faturamento Líquido',
       value: formatCurrency(metrics.totalVendido),
       icon: ShoppingCart,
       color: 'text-emerald-600',
@@ -57,18 +57,26 @@ export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
       bgColor: 'bg-red-50',
     },
     {
-      title: 'Líquido sem Devoluções',
-      value: formatCurrency(metrics.totalLiquidoSemDevolucoes),
-      icon: Calculator,
+      title: '% Devolução',
+      value: formatPercent(metrics.percentualDevolucao),
+      icon: Percent,
+      color: 'text-rose-600',
+      bgColor: 'bg-rose-50',
+    },
+    {
+      title: 'Faturamento Real',
+      value: formatCurrency(metrics.totalLiquidoComDevolucoes),
+      icon: Receipt,
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
+      highlight: true,
     },
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
       {cards.map((card) => (
-        <Card key={card.title} className="overflow-hidden">
+        <Card key={card.title} className={`overflow-hidden ${card.highlight ? 'ring-2 ring-purple-500' : ''}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
               {card.title}
@@ -81,7 +89,7 @@ export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
             {isLoading ? (
               <Skeleton className="h-7 w-24" />
             ) : (
-              <p className="text-xl font-bold">{card.value}</p>
+              <p className={`text-xl font-bold ${card.highlight ? 'text-purple-700' : ''}`}>{card.value}</p>
             )}
           </CardContent>
         </Card>

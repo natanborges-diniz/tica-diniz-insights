@@ -18,10 +18,13 @@ interface ResumoEmpresaVendedorRaw {
   qtd_produtos: number;
   total_bruto: number;
   total_desconto: number;
-  total_ipi: number;
   total_vendido: number;
   total_devolucao: number;
   qtd_devolucao: number;
+  // Campos pré-calculados pelo backend
+  perc_desconto: number;
+  total_liquido_sem_devolucao: number;
+  total_liquido_com_devolucao: number;
 }
 
 export interface ResumoEmpresaVendedor {
@@ -35,13 +38,14 @@ export interface ResumoEmpresaVendedor {
   qtdProdutos: number;
   totalBruto: number;
   totalDesconto: number;
-  totalIpi: number;
   totalVendido: number;
   totalDevolucao: number;
   qtdDevolucao: number;
-  // Campos calculados
+  // Campos do backend (pré-calculados)
   percentualDesconto: number;
   totalLiquidoSemDevolucoes: number;
+  totalLiquidoComDevolucoes: number;
+  // Calculado no frontend
   ticketMedioLiquido: number;
 }
 
@@ -64,10 +68,7 @@ export async function getResumoEmpresaVendedor(
   console.log('[vendasService] Raw data sample:', raw[0]);
 
   const mapped = raw.map((r) => {
-    const totalBruto = r.total_bruto ?? 0;
-    const totalDesconto = r.total_desconto ?? 0;
     const totalVendido = r.total_vendido ?? 0;
-    const totalDevolucao = r.total_devolucao ?? 0;
     const qtdTransacao = r.qtd_transacao ?? 0;
 
     return {
@@ -79,15 +80,16 @@ export async function getResumoEmpresaVendedor(
       vendedor: (r.vendedor ?? '').trim(),
       qtdTransacao,
       qtdProdutos: r.qtd_produtos ?? 0,
-      totalBruto,
-      totalDesconto,
-      totalIpi: r.total_ipi ?? 0,
+      totalBruto: r.total_bruto ?? 0,
+      totalDesconto: r.total_desconto ?? 0,
       totalVendido,
-      totalDevolucao,
+      totalDevolucao: r.total_devolucao ?? 0,
       qtdDevolucao: r.qtd_devolucao ?? 0,
-      // Campos calculados
-      percentualDesconto: totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0,
-      totalLiquidoSemDevolucoes: totalVendido - totalDevolucao,
+      // Usar valores pré-calculados do backend
+      percentualDesconto: r.perc_desconto ?? 0,
+      totalLiquidoSemDevolucoes: r.total_liquido_sem_devolucao ?? 0,
+      totalLiquidoComDevolucoes: r.total_liquido_com_devolucao ?? 0,
+      // Ticket médio calculado no frontend
       ticketMedioLiquido: qtdTransacao > 0 ? totalVendido / qtdTransacao : 0,
     };
   });

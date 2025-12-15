@@ -26,6 +26,7 @@ export interface ResumoLoja {
   totalVendido: number;
   totalDevolucao: number;
   totalLiquidoSemDevolucoes: number;
+  totalLiquidoComDevolucoes: number;
   qtdTransacao: number;
   qtdDevolucao: number;
   percentualDesconto: number;
@@ -39,8 +40,10 @@ export interface VendasMetrics {
   totalVendido: number;
   totalDevolucao: number;
   totalLiquidoSemDevolucoes: number;
+  totalLiquidoComDevolucoes: number;
   qtdTransacoes: number;
   ticketMedioLiquido: number;
+  percentualDevolucao: number;
 }
 
 function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
@@ -55,6 +58,7 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
       existing.totalVendido += d.totalVendido || 0;
       existing.totalDevolucao += d.totalDevolucao || 0;
       existing.totalLiquidoSemDevolucoes += d.totalLiquidoSemDevolucoes || 0;
+      existing.totalLiquidoComDevolucoes += d.totalLiquidoComDevolucoes || 0;
       existing.qtdTransacao += d.qtdTransacao || 0;
       existing.qtdDevolucao += d.qtdDevolucao || 0;
     } else {
@@ -65,6 +69,7 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
         totalVendido: d.totalVendido || 0,
         totalDevolucao: d.totalDevolucao || 0,
         totalLiquidoSemDevolucoes: d.totalLiquidoSemDevolucoes || 0,
+        totalLiquidoComDevolucoes: d.totalLiquidoComDevolucoes || 0,
         qtdTransacao: d.qtdTransacao || 0,
         qtdDevolucao: d.qtdDevolucao || 0,
         percentualDesconto: 0,
@@ -140,10 +145,12 @@ export function useVendasDashboard() {
     const totalDesconto = dados.reduce((acc, d) => acc + (d.totalDesconto || 0), 0);
     const totalVendido = dados.reduce((acc, d) => acc + (d.totalVendido || 0), 0);
     const totalDevolucao = dados.reduce((acc, d) => acc + (d.totalDevolucao || 0), 0);
-    const totalLiquidoSemDevolucoes = totalVendido - totalDevolucao;
+    const totalLiquidoSemDevolucoes = dados.reduce((acc, d) => acc + (d.totalLiquidoSemDevolucoes || 0), 0);
+    const totalLiquidoComDevolucoes = dados.reduce((acc, d) => acc + (d.totalLiquidoComDevolucoes || 0), 0);
     const qtdTransacoes = dados.reduce((acc, d) => acc + (d.qtdTransacao || 0), 0);
     const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
     const ticketMedioLiquido = qtdTransacoes > 0 ? totalVendido / qtdTransacoes : 0;
+    const percentualDevolucao = totalVendido > 0 ? (totalDevolucao / totalVendido) * 100 : 0;
 
     return { 
       totalBruto, 
@@ -152,8 +159,10 @@ export function useVendasDashboard() {
       totalVendido, 
       totalDevolucao, 
       totalLiquidoSemDevolucoes,
+      totalLiquidoComDevolucoes,
       qtdTransacoes,
       ticketMedioLiquido,
+      percentualDevolucao,
     };
   }, [dados]);
 

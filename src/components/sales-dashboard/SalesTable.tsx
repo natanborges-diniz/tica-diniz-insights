@@ -12,7 +12,8 @@ interface SalesTableProps {
 }
 
 type SortField = 'empresaNomeLogico' | 'vendedor' | 'qtdTransacao' | 'qtdProdutos' | 'totalBruto' | 
-                 'totalDesconto' | 'percentualDesconto' | 'totalVendido' | 'totalDevolucao' | 'totalLiquidoSemDevolucoes';
+                 'totalDesconto' | 'percentualDesconto' | 'totalVendido' | 'totalDevolucao' | 
+                 'totalLiquidoSemDevolucoes' | 'totalLiquidoComDevolucoes';
 type SortDirection = 'asc' | 'desc' | null;
 
 function formatCurrency(value: number): string {
@@ -32,7 +33,7 @@ function formatPercent(value: number): string {
 
 export function SalesTable({ dados, isLoading }: SalesTableProps) {
   const [search, setSearch] = useState('');
-  const [sortField, setSortField] = useState<SortField>('totalLiquidoSemDevolucoes');
+  const [sortField, setSortField] = useState<SortField>('totalLiquidoComDevolucoes');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const handleSort = (field: SortField) => {
@@ -209,6 +210,15 @@ export function SalesTable({ dados, isLoading }: SalesTableProps) {
                       <SortIcon field="totalLiquidoSemDevolucoes" />
                     </div>
                   </TableHead>
+                  <TableHead 
+                    className="text-right cursor-pointer hover:bg-muted/50"
+                    onClick={() => handleSort('totalLiquidoComDevolucoes')}
+                  >
+                    <div className="flex items-center justify-end">
+                      Fat. Real
+                      <SortIcon field="totalLiquidoComDevolucoes" />
+                    </div>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -227,8 +237,11 @@ export function SalesTable({ dados, isLoading }: SalesTableProps) {
                     <TableCell className="text-right text-red-600">
                       {formatCurrency(row.totalDevolucao)}
                     </TableCell>
-                    <TableCell className="text-right font-bold text-purple-600">
+                    <TableCell className="text-right text-muted-foreground">
                       {formatCurrency(row.totalLiquidoSemDevolucoes)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-purple-600">
+                      {formatCurrency(row.totalLiquidoComDevolucoes)}
                     </TableCell>
                   </TableRow>
                 ))}
