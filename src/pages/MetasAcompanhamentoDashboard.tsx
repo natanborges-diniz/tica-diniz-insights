@@ -97,16 +97,10 @@ export default function MetasAcompanhamentoDashboard() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Link to="/config/calendario">
-                <Button variant="outline" size="sm">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Calendário
-                </Button>
-              </Link>
               <Link to="/config/metas">
                 <Button variant="outline" size="sm">
-                  <Target className="h-4 w-4 mr-2" />
-                  Cadastrar Metas
+                  <Settings className="h-4 w-4 mr-2" />
+                  Configurações
                 </Button>
               </Link>
             </div>

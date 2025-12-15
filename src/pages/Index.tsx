@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { BarChart3, Database, Users, RefreshCw, Package, Layers, ClipboardList, Wallet, Store, Trophy, Brain, Target, TrendingUp, Settings, Calendar } from 'lucide-react';
+import { BarChart3, Database, Users, RefreshCw, Package, Layers, ClipboardList, Wallet, Store, Trophy, Brain, Target, TrendingUp, Settings } from 'lucide-react';
 
 const Index = () => {
   return (
@@ -100,18 +100,12 @@ const Index = () => {
             <Settings className="h-4 w-4" />
             Configurações
           </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-3xl mx-auto">
+          <div className="grid gap-4 sm:grid-cols-2 max-w-2xl mx-auto">
             <Link to="/config/metas">
               <Button variant="ghost" className="w-full h-auto py-4 flex flex-col gap-2 border border-border" size="lg">
                 <Target className="h-6 w-6" />
-                <span>Cadastro de Metas</span>
-              </Button>
-            </Link>
-
-            <Link to="/config/calendario">
-              <Button variant="ghost" className="w-full h-auto py-4 flex flex-col gap-2 border border-border" size="lg">
-                <Calendar className="h-6 w-6" />
-                <span>Calendário e Lojas</span>
+                <span>Metas e Calendário</span>
+                <span className="text-xs text-muted-foreground">Metas, períodos, feriados, lojas</span>
               </Button>
             </Link>
             
