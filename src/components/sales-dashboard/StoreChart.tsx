@@ -10,12 +10,12 @@ interface StoreChartProps {
 
 export function StoreChart({ dados, isLoading }: StoreChartProps) {
   const chartData = dados
-    .filter(d => d.totalVendido > 0)
-    .sort((a, b) => b.totalVendido - a.totalVendido)
+    .filter(d => d.totalLiquidoSemDevolucoes > 0)
+    .sort((a, b) => b.totalLiquidoSemDevolucoes - a.totalLiquidoSemDevolucoes)
     .slice(0, 15)
     .map(d => ({
       loja: d.empresa.replace('DINIZ ', ''),
-      total: d.totalVendido,
+      total: d.totalLiquidoSemDevolucoes,
       quantidade: d.qtdTransacao,
     }));
 
@@ -23,7 +23,7 @@ export function StoreChart({ dados, isLoading }: StoreChartProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Vendas por Loja</CardTitle>
+          <CardTitle>Total Líquido sem Devoluções por Loja</CardTitle>
         </CardHeader>
         <CardContent>
           <Skeleton className="h-[300px] w-full" />
@@ -35,7 +35,7 @@ export function StoreChart({ dados, isLoading }: StoreChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Vendas por Loja</CardTitle>
+        <CardTitle>Total Líquido sem Devoluções por Loja</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
@@ -55,7 +55,7 @@ export function StoreChart({ dados, isLoading }: StoreChartProps) {
             <Tooltip
               formatter={(value: number) => [
                 new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value),
-                'Total Vendido'
+                'Líquido s/ Devoluções'
               ]}
             />
             <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />

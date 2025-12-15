@@ -18,20 +18,26 @@ interface StoreTableProps {
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
+const formatPercent = (value: number) => `${value.toFixed(2)}%`;
+
 export function StoreTable({ dados, isLoading }: StoreTableProps) {
-  const dadosOrdenados = [...dados].sort((a, b) => b.totalVendido - a.totalVendido);
+  // Ordenar por total líquido sem devoluções
+  const dadosOrdenados = [...dados].sort((a, b) => b.totalLiquidoSemDevolucoes - a.totalLiquidoSemDevolucoes);
 
   // Calcular totais
   const totais = dados.reduce(
     (acc, d) => ({
-      totalOriginal: acc.totalOriginal + (d.totalOriginal || 0),
+      totalBruto: acc.totalBruto + (d.totalBruto || 0),
+      totalDesconto: acc.totalDesconto + (d.totalDesconto || 0),
       totalVendido: acc.totalVendido + (d.totalVendido || 0),
       totalDevolucao: acc.totalDevolucao + (d.totalDevolucao || 0),
+      totalLiquidoSemDevolucoes: acc.totalLiquidoSemDevolucoes + (d.totalLiquidoSemDevolucoes || 0),
       qtdTransacao: acc.qtdTransacao + (d.qtdTransacao || 0),
-      qtdDevolucao: acc.qtdDevolucao + (d.qtdDevolucao || 0),
     }),
-    { totalOriginal: 0, totalVendido: 0, totalDevolucao: 0, qtdTransacao: 0, qtdDevolucao: 0 }
+    { totalBruto: 0, totalDesconto: 0, totalVendido: 0, totalDevolucao: 0, totalLiquidoSemDevolucoes: 0, qtdTransacao: 0 }
   );
+
+  const percentualDescontoTotal = totais.totalBruto > 0 ? (totais.totalDesconto / totais.totalBruto) * 100 : 0;
 
   if (isLoading) {
     return (
@@ -52,24 +58,24 @@ export function StoreTable({ dados, isLoading }: StoreTableProps) {
         <CardTitle>Ranking por Loja</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md border">
+        <div className="rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Loja</TableHead>
-                <TableHead className="text-right">Total Original</TableHead>
+                <TableHead className="text-right">Total Bruto</TableHead>
+                <TableHead className="text-right">Desconto</TableHead>
+                <TableHead className="text-right">% Desc.</TableHead>
                 <TableHead className="text-right">Total Vendido</TableHead>
-                <TableHead className="text-right">Ticket Médio</TableHead>
-                <TableHead className="text-right">Qtde Vendas</TableHead>
-                <TableHead className="text-right">Devoluções</TableHead>
-                <TableHead className="text-right">Qtde Dev.</TableHead>
+                <TableHead className="text-right">Devolução</TableHead>
+                <TableHead className="text-right">Líquido s/ Dev.</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {dadosOrdenados.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    Nenhum dado encontrado
+                    Sem dados no período
                   </TableCell>
                 </TableRow>
               ) : (
@@ -80,27 +86,27 @@ export function StoreTable({ dados, isLoading }: StoreTableProps) {
                         <span className="text-muted-foreground mr-2">#{index + 1}</span>
                         {item.empresa}
                       </TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.totalOriginal)}</TableCell>
-                      <TableCell className="text-right font-semibold">{formatCurrency(item.totalVendido)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.ticketMedio)}</TableCell>
-                      <TableCell className="text-right">{item.qtdTransacao}</TableCell>
-                      <TableCell className="text-right text-destructive">
+                      <TableCell className="text-right">{formatCurrency(item.totalBruto)}</TableCell>
+                      <TableCell className="text-right text-amber-600">{formatCurrency(item.totalDesconto)}</TableCell>
+                      <TableCell className="text-right text-orange-600">{formatPercent(item.percentualDesconto)}</TableCell>
+                      <TableCell className="text-right font-semibold text-emerald-600">{formatCurrency(item.totalVendido)}</TableCell>
+                      <TableCell className="text-right text-red-600">
                         {item.totalDevolucao > 0 ? formatCurrency(item.totalDevolucao) : '-'}
                       </TableCell>
-                      <TableCell className="text-right">{item.qtdDevolucao || '-'}</TableCell>
+                      <TableCell className="text-right font-bold text-purple-600">
+                        {formatCurrency(item.totalLiquidoSemDevolucoes)}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {/* Linha de Totais */}
                   <TableRow className="bg-muted/50 font-bold">
                     <TableCell>TOTAL</TableCell>
-                    <TableCell className="text-right">{formatCurrency(totais.totalOriginal)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(totais.totalVendido)}</TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(totais.qtdTransacao > 0 ? totais.totalVendido / totais.qtdTransacao : 0)}
-                    </TableCell>
-                    <TableCell className="text-right">{totais.qtdTransacao}</TableCell>
-                    <TableCell className="text-right text-destructive">{formatCurrency(totais.totalDevolucao)}</TableCell>
-                    <TableCell className="text-right">{totais.qtdDevolucao}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(totais.totalBruto)}</TableCell>
+                    <TableCell className="text-right text-amber-600">{formatCurrency(totais.totalDesconto)}</TableCell>
+                    <TableCell className="text-right text-orange-600">{formatPercent(percentualDescontoTotal)}</TableCell>
+                    <TableCell className="text-right text-emerald-600">{formatCurrency(totais.totalVendido)}</TableCell>
+                    <TableCell className="text-right text-red-600">{formatCurrency(totais.totalDevolucao)}</TableCell>
+                    <TableCell className="text-right text-purple-600">{formatCurrency(totais.totalLiquidoSemDevolucoes)}</TableCell>
                   </TableRow>
                 </>
               )}

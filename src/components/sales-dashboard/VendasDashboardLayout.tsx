@@ -12,6 +12,7 @@ import { ResumoEmpresaVendedor, ResumoFormaPagamento } from "@/services/vendasSe
 import { SalesFilters } from "./SalesFilters";
 import { SalesKPICards } from "./SalesKPICards";
 import { SellerChart } from "./SellerChart";
+import { DescontoChart } from "./DescontoChart";
 import { SalesTable } from "./SalesTable";
 import { StoreChart } from "./StoreChart";
 import { StoreTable } from "./StoreTable";
@@ -188,7 +189,7 @@ export function VendasDashboardLayout({
         ) : dataLoaded && (
           <>
             {/* KPIs */}
-            <SalesKPICards dados={dados} isLoading={loading} />
+            <SalesKPICards metrics={metrics} isLoading={loading} />
 
             {/* Gráfico e Tabela - Condicional por modo */}
             {filters.viewMode === "loja" ? (
@@ -198,7 +199,10 @@ export function VendasDashboardLayout({
               </>
             ) : (
               <>
-                <SellerChart dados={dados} isLoading={loading} />
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <SellerChart dados={dados} isLoading={loading} />
+                  <DescontoChart dados={dados} isLoading={loading} />
+                </div>
                 <SalesTable dados={dados} isLoading={loading} />
               </>
             )}
