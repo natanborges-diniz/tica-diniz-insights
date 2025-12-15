@@ -21,8 +21,8 @@ const formatCurrency = (value: number) =>
 const formatPercent = (value: number) => `${value.toFixed(2)}%`;
 
 export function StoreTable({ dados, isLoading }: StoreTableProps) {
-  // Ordenar por total líquido sem devoluções
-  const dadosOrdenados = [...dados].sort((a, b) => b.totalLiquidoSemDevolucoes - a.totalLiquidoSemDevolucoes);
+  // Ordenar por faturamento real (com devoluções)
+  const dadosOrdenados = [...dados].sort((a, b) => b.totalLiquidoComDevolucoes - a.totalLiquidoComDevolucoes);
 
   // Calcular totais
   const totais = dados.reduce(
@@ -32,9 +32,10 @@ export function StoreTable({ dados, isLoading }: StoreTableProps) {
       totalVendido: acc.totalVendido + (d.totalVendido || 0),
       totalDevolucao: acc.totalDevolucao + (d.totalDevolucao || 0),
       totalLiquidoSemDevolucoes: acc.totalLiquidoSemDevolucoes + (d.totalLiquidoSemDevolucoes || 0),
+      totalLiquidoComDevolucoes: acc.totalLiquidoComDevolucoes + (d.totalLiquidoComDevolucoes || 0),
       qtdTransacao: acc.qtdTransacao + (d.qtdTransacao || 0),
     }),
-    { totalBruto: 0, totalDesconto: 0, totalVendido: 0, totalDevolucao: 0, totalLiquidoSemDevolucoes: 0, qtdTransacao: 0 }
+    { totalBruto: 0, totalDesconto: 0, totalVendido: 0, totalDevolucao: 0, totalLiquidoSemDevolucoes: 0, totalLiquidoComDevolucoes: 0, qtdTransacao: 0 }
   );
 
   const percentualDescontoTotal = totais.totalBruto > 0 ? (totais.totalDesconto / totais.totalBruto) * 100 : 0;
@@ -68,7 +69,7 @@ export function StoreTable({ dados, isLoading }: StoreTableProps) {
                 <TableHead className="text-right">% Desc.</TableHead>
                 <TableHead className="text-right">Total Vendido</TableHead>
                 <TableHead className="text-right">Devolução</TableHead>
-                <TableHead className="text-right">Líquido s/ Dev.</TableHead>
+                <TableHead className="text-right">Fat. Real</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -94,7 +95,7 @@ export function StoreTable({ dados, isLoading }: StoreTableProps) {
                         {item.totalDevolucao > 0 ? formatCurrency(item.totalDevolucao) : '-'}
                       </TableCell>
                       <TableCell className="text-right font-bold text-purple-600">
-                        {formatCurrency(item.totalLiquidoSemDevolucoes)}
+                        {formatCurrency(item.totalLiquidoComDevolucoes)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -106,7 +107,7 @@ export function StoreTable({ dados, isLoading }: StoreTableProps) {
                     <TableCell className="text-right text-orange-600">{formatPercent(percentualDescontoTotal)}</TableCell>
                     <TableCell className="text-right text-emerald-600">{formatCurrency(totais.totalVendido)}</TableCell>
                     <TableCell className="text-right text-red-600">{formatCurrency(totais.totalDevolucao)}</TableCell>
-                    <TableCell className="text-right text-purple-600">{formatCurrency(totais.totalLiquidoSemDevolucoes)}</TableCell>
+                    <TableCell className="text-right text-purple-600">{formatCurrency(totais.totalLiquidoComDevolucoes)}</TableCell>
                   </TableRow>
                 </>
               )}

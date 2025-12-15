@@ -32,9 +32,9 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
     empresas.map((empresa, index) => [empresa, COLORS[index % COLORS.length]])
   );
 
-  // Ordenar por total líquido sem devoluções decrescente
+  // Ordenar por faturamento real decrescente
   const chartData = [...dados]
-    .sort((a, b) => (b.totalLiquidoSemDevolucoes || 0) - (a.totalLiquidoSemDevolucoes || 0))
+    .sort((a, b) => (b.totalLiquidoComDevolucoes || 0) - (a.totalLiquidoComDevolucoes || 0))
     .slice(0, 15) // Limitar a 15 para visualização
     .map(item => ({
       vendedor: item.vendedor?.length > 12 
@@ -42,7 +42,7 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
         : item.vendedor,
       vendedorFull: item.vendedor,
       empresa: item.empresaNomeLogico || item.empresa,
-      totalLiquidoSemDevolucoes: item.totalLiquidoSemDevolucoes || 0,
+      totalLiquidoComDevolucoes: item.totalLiquidoComDevolucoes || 0,
       cor: empresaColorMap[item.empresaNomeLogico || item.empresa],
     }));
 
@@ -51,7 +51,7 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-primary" />
-          Total Líquido sem Devoluções por Vendedor
+          Faturamento Real por Vendedor
         </CardTitle>
         <div className="flex flex-wrap gap-2 mt-2">
           {empresas.map((empresa, index) => (
@@ -89,7 +89,7 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
               <Tooltip 
                 formatter={(value: number) => [
                   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value),
-                  'Líquido s/ Devoluções'
+                  'Faturamento Real'
                 ]}
                 labelFormatter={(label, payload) => {
                   if (payload && payload[0]) {
@@ -103,7 +103,7 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
                   borderRadius: '8px'
                 }}
               />
-              <Bar dataKey="totalLiquidoSemDevolucoes" radius={[0, 4, 4, 0]}>
+              <Bar dataKey="totalLiquidoComDevolucoes" radius={[0, 4, 4, 0]}>
                 {chartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.cor} />
                 ))}
