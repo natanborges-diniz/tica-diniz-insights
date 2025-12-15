@@ -13,7 +13,6 @@ import FinanceiroDreDashboard from "./pages/FinanceiroDreDashboard";
 import FluxoCaixaDashboard from "./pages/FluxoCaixaDashboard";
 import RankingLojasDashboard from "./pages/RankingLojasDashboard";
 import RankingVendedoresDashboard from "./pages/RankingVendedoresDashboard";
-import MetasVendasDashboard from "./pages/MetasVendasDashboard";
 import MetasAcompanhamentoDashboard from "./pages/MetasAcompanhamentoDashboard";
 import MetasConfigDashboard from "./pages/MetasConfigDashboard";
 import NotFound from "./pages/NotFound";
@@ -38,8 +37,7 @@ const App = () => (
           <Route path="/ranking-lojas" element={<RankingLojasDashboard />} />
           <Route path="/ranking-vendedores" element={<RankingVendedoresDashboard />} />
           <Route path="/vendas/metas" element={<MetasAcompanhamentoDashboard />} />
-          <Route path="/config/metas" element={<MetasVendasDashboard />} />
-          <Route path="/config/calendario" element={<MetasConfigDashboard />} />
+          <Route path="/config/metas" element={<MetasConfigDashboard />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
