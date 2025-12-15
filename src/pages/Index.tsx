@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { BarChart3, Database, Users, RefreshCw, Package, Layers, ClipboardList, Wallet, Store, Trophy, Brain, Target, TrendingUp } from 'lucide-react';
+import { BarChart3, Database, Users, RefreshCw, Package, Layers, ClipboardList, Wallet, Store, Trophy, Brain, Target, TrendingUp, Settings, Calendar } from 'lucide-react';
 
 const Index = () => {
   return (
@@ -23,7 +23,7 @@ const Index = () => {
             Inteligência de Vendas
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
-            <Link to="/metas/acompanhamento">
+            <Link to="/vendas/metas">
               <Button className="w-full h-auto py-4 flex flex-col gap-2 bg-gradient-to-br from-green-600 to-green-500" size="lg">
                 <TrendingUp className="h-6 w-6" />
                 <span>Acompanhamento de Metas</span>
@@ -55,13 +55,6 @@ const Index = () => {
               <Button variant="secondary" className="w-full h-auto py-4 flex flex-col gap-2" size="lg">
                 <Layers className="h-6 w-6" />
                 <span>Vendas por Família</span>
-              </Button>
-            </Link>
-
-            <Link to="/metas">
-              <Button variant="outline" className="w-full h-auto py-4 flex flex-col gap-2 border-primary/50" size="lg">
-                <Target className="h-6 w-6" />
-                <span>Cadastro de Metas</span>
               </Button>
             </Link>
           </div>
@@ -97,6 +90,34 @@ const Index = () => {
             <Button variant="outline" className="w-full h-auto py-4 flex flex-col gap-2" size="lg" disabled>
               <Users className="h-6 w-6" />
               <span>Cliente 360 (em breve)</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* Módulo de Configurações */}
+        <div className="mb-6">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center justify-center gap-2">
+            <Settings className="h-4 w-4" />
+            Configurações
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-3xl mx-auto">
+            <Link to="/config/metas">
+              <Button variant="ghost" className="w-full h-auto py-4 flex flex-col gap-2 border border-border" size="lg">
+                <Target className="h-6 w-6" />
+                <span>Cadastro de Metas</span>
+              </Button>
+            </Link>
+
+            <Link to="/config/calendario">
+              <Button variant="ghost" className="w-full h-auto py-4 flex flex-col gap-2 border border-border" size="lg">
+                <Calendar className="h-6 w-6" />
+                <span>Calendário e Lojas</span>
+              </Button>
+            </Link>
+            
+            <Button variant="ghost" className="w-full h-auto py-4 flex flex-col gap-2 border border-border" size="lg" disabled>
+              <Users className="h-6 w-6" />
+              <span>Usuários (em breve)</span>
             </Button>
           </div>
         </div>
