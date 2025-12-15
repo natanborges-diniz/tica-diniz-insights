@@ -74,6 +74,51 @@ export type Database = {
         }
         Relationships: []
       }
+      metas_vendas: {
+        Row: {
+          ano: number
+          cod_referencia: number
+          created_at: string
+          id: string
+          mes: number
+          meta_desconto_max: number | null
+          meta_faturamento: number | null
+          meta_qtd_vendas: number | null
+          meta_ticket_medio: number | null
+          nome_referencia: string | null
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          ano: number
+          cod_referencia: number
+          created_at?: string
+          id?: string
+          mes: number
+          meta_desconto_max?: number | null
+          meta_faturamento?: number | null
+          meta_qtd_vendas?: number | null
+          meta_ticket_medio?: number | null
+          nome_referencia?: string | null
+          tipo: string
+          updated_at?: string
+        }
+        Update: {
+          ano?: number
+          cod_referencia?: number
+          created_at?: string
+          id?: string
+          mes?: number
+          meta_desconto_max?: number | null
+          meta_faturamento?: number | null
+          meta_qtd_vendas?: number | null
+          meta_ticket_medio?: number | null
+          nome_referencia?: string | null
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pessoa: {
         Row: {
           ativo: boolean | null
