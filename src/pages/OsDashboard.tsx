@@ -14,7 +14,7 @@ const OsDashboardPage: React.FC = () => {
   const inicio = inicioDate.toISOString().slice(0, 10);
 
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [selectedEmpresa, setSelectedEmpresa] = useState<number | null>(null);
+  const [selectedEmpresa, setSelectedEmpresa] = useState<number | "ALL" | null>(null);
 
   const { empresas, isLoading: loadingEmpresas, error: errorEmpresas } = useEmpresas();
 
@@ -27,6 +27,8 @@ const OsDashboardPage: React.FC = () => {
     filteredMetrics,
     filters,
     setFilters,
+    empresasUnicas,
+    etapasUnicas,
     reload,
   } = useOsMonitor({
     empresa: null,
@@ -38,12 +40,12 @@ const OsDashboardPage: React.FC = () => {
     setFilters((prev) => ({ ...prev, ...next }));
   };
 
-  const handleSelectEmpresa = (codEmpresa: number | null) => {
+  const handleSelectEmpresa = (codEmpresa: number | "ALL" | null) => {
     setSelectedEmpresa(codEmpresa);
   };
 
   const handleLoadData = () => {
-    if (!selectedEmpresa) {
+    if (selectedEmpresa === null) {
       return;
     }
     reload({ empresa: selectedEmpresa });
@@ -51,7 +53,7 @@ const OsDashboardPage: React.FC = () => {
   };
 
   const handleChangePeriod = (range: { dataInicio: string; dataFim: string }) => {
-    if (!selectedEmpresa) {
+    if (selectedEmpresa === null) {
       return;
     }
     reload({ ...range, empresa: selectedEmpresa });
@@ -75,6 +77,8 @@ const OsDashboardPage: React.FC = () => {
       errorEmpresas={errorEmpresas}
       selectedEmpresa={selectedEmpresa}
       onSelectEmpresa={handleSelectEmpresa}
+      empresasUnicas={empresasUnicas}
+      etapasUnicas={etapasUnicas}
     />
   );
 };

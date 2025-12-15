@@ -1,160 +1,110 @@
 // src/utils/osMetrics.ts
+// Métricas calculadas client-side usando dados do backend
 
-import { OsRecord } from "../services/osMonitor";
-
-export type OsStatus = "EM_ANDAMENTO" | "ENTREGUE" | "CONCLUIDA_LOJA" | "CANCELADA";
+import { OsRecord, StatusAtraso } from "../services/osService";
 
 export interface OsMetrics {
   totalOs: number;
-  emProducao: number;
+  emAndamento: number;
+  entregues: number;
   atrasadas: number;
-  entreguesNoPeriodo: number;
-  tempoMedioCicloDias: number | null;
   semPrevisao: number;
-  reparo: number;
-  ecommerce: number;
+  tempoMedioCicloDias: number | null;
 }
 
-export function mapStatus(os: OsRecord): OsStatus {
-  switch (os.codEtapaAtual) {
-    case 8:
-      return "ENTREGUE";
-    case 9:
-      return "CANCELADA";
-    case 6:
-      return "CONCLUIDA_LOJA";
-    default:
-      return "EM_ANDAMENTO";
-  }
-}
-
-export function getStatusLegivel(status: OsStatus): string {
+export function getStatusColor(status: StatusAtraso): string {
   switch (status) {
-    case "ENTREGUE":
-      return "Entregue";
-    case "CANCELADA":
-      return "Cancelada";
-    case "CONCLUIDA_LOJA":
-      return "Concluída na loja";
-    case "EM_ANDAMENTO":
+    case 'ENTREGUE':
+      return 'bg-green-500/20 text-green-700 border-green-500/30';
+    case 'NO_PRAZO':
+      return 'bg-blue-500/20 text-blue-700 border-blue-500/30';
+    case 'ATRASO_LEVE':
+      return 'bg-yellow-500/20 text-yellow-700 border-yellow-500/30';
+    case 'ATRASO':
+      return 'bg-red-500/20 text-red-700 border-red-500/30';
+    case 'SEM_DATA':
     default:
-      return "Em produção";
+      return 'bg-muted text-muted-foreground border-muted-foreground/30';
   }
 }
 
-export function isAtrasada(os: OsRecord, status: OsStatus): boolean {
-  // Se não está em andamento, não é atrasada
-  if (status !== "EM_ANDAMENTO") return false;
-  if (!os.dataEmissao) return false;
-
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-
-  const emissao = new Date(os.dataEmissao);
-  emissao.setHours(0, 0, 0, 0);
-
-  if (os.dataPrevisao) {
-    const previsao = new Date(os.dataPrevisao);
-    previsao.setHours(0, 0, 0, 0);
-    return previsao < hoje;
+export function getStatusLabel(status: StatusAtraso): string {
+  switch (status) {
+    case 'ENTREGUE':
+      return 'Entregue';
+    case 'NO_PRAZO':
+      return 'No Prazo';
+    case 'ATRASO_LEVE':
+      return 'Atraso Leve';
+    case 'ATRASO':
+      return 'Atrasada';
+    case 'SEM_DATA':
+    default:
+      return 'Sem Data';
   }
-
-  // Sem previsão: considera atrasada se passou mais de 7 dias desde emissão
-  const diffMs = hoje.getTime() - emissao.getTime();
-  const diffDias = diffMs / (1000 * 60 * 60 * 24);
-  return diffDias > 7;
-}
-
-export function calcularDiasCiclo(os: OsRecord): number | null {
-  if (!os.dataEmissao) return null;
-
-  const inicio = new Date(os.dataEmissao);
-  const status = mapStatus(os);
-
-  let fim: Date;
-
-  // Prioridades para data final:
-  // 1) se ENTREGUE e tiver dataHoraEntradaUltima, usa ela
-  // 2) senão, se tiver dataHoraSaidaUltima, usa ela
-  // 3) senão, se tiver dataPrevisao, usa ela
-  // 4) senão, usa dataEmissao
-  if (status === "ENTREGUE" && os.dataHoraEntradaUltima) {
-    fim = new Date(os.dataHoraEntradaUltima);
-  } else if (os.dataHoraSaidaUltima) {
-    fim = new Date(os.dataHoraSaidaUltima);
-  } else if (os.dataPrevisao) {
-    fim = new Date(os.dataPrevisao);
-  } else {
-    fim = new Date(os.dataEmissao);
-  }
-
-  const diffMs = fim.getTime() - inicio.getTime();
-  const diffDias = diffMs / (1000 * 60 * 60 * 24);
-
-  if (!isFinite(diffDias) || diffDias < 0) return 0;
-
-  return diffDias;
 }
 
 export function calculateOsMetrics(data: OsRecord[]): OsMetrics {
   const totalOs = data.length;
-
-  let emProducao = 0;
-  let atrasadas = 0;
-  let entreguesNoPeriodo = 0;
-  let semPrevisao = 0;
-  let reparo = 0;
-  let ecommerce = 0;
-  const ciclos: number[] = [];
-
-  for (const os of data) {
-    const status = mapStatus(os);
-
-    if (status === "EM_ANDAMENTO" || status === "CONCLUIDA_LOJA") {
-      emProducao++;
-    }
-
-    if (status === "ENTREGUE") {
-      entreguesNoPeriodo++;
-      const ciclo = calcularDiasCiclo(os);
-      if (ciclo !== null) {
-        ciclos.push(ciclo);
-      }
-    }
-
-    if (isAtrasada(os, status)) {
-      atrasadas++;
-    }
-
-    if (!os.dataPrevisao) {
-      semPrevisao++;
-    }
-
-    if (os.isReparo) {
-      reparo++;
-    }
-
-    if (os.isEcommerce) {
-      ecommerce++;
-    }
-  }
-
+  
+  // Em andamento = tudo que NÃO é ENTREGUE
+  const emAndamento = data.filter(os => os.statusAtraso !== 'ENTREGUE').length;
+  
+  // Entregues
+  const entregues = data.filter(os => os.statusAtraso === 'ENTREGUE').length;
+  
+  // Atrasadas = ATRASO + ATRASO_LEVE
+  const atrasadas = data.filter(os => 
+    os.statusAtraso === 'ATRASO' || os.statusAtraso === 'ATRASO_LEVE'
+  ).length;
+  
+  // Sem previsão = SEM_DATA
+  const semPrevisao = data.filter(os => os.statusAtraso === 'SEM_DATA').length;
+  
+  // Tempo médio de ciclo (somente ENTREGUE, usando dataHoraEntrada)
+  const entreguesComData = data.filter(os => 
+    os.statusAtraso === 'ENTREGUE' && os.dataEmissao && os.dataHoraEntrada
+  );
+  
   let tempoMedioCicloDias: number | null = null;
-  if (ciclos.length > 0) {
-    const soma = ciclos.reduce((acc, c) => acc + c, 0);
-    tempoMedioCicloDias = Math.round((soma / ciclos.length) * 10) / 10;
+  if (entreguesComData.length > 0) {
+    const ciclos = entreguesComData.map(os => {
+      const inicio = new Date(os.dataEmissao!);
+      const fim = new Date(os.dataHoraEntrada!);
+      const diffMs = fim.getTime() - inicio.getTime();
+      return diffMs / (1000 * 60 * 60 * 24);
+    }).filter(d => d >= 0 && isFinite(d));
+    
+    if (ciclos.length > 0) {
+      const soma = ciclos.reduce((acc, c) => acc + c, 0);
+      tempoMedioCicloDias = Math.round((soma / ciclos.length) * 10) / 10;
+    }
   }
-
-  console.log("[OS Metrics] entregues:", entreguesNoPeriodo, "diasCiclo exemplos:", ciclos.slice(0, 10), "tempoMedio:", tempoMedioCicloDias);
 
   return {
     totalOs,
-    emProducao,
+    emAndamento,
+    entregues,
     atrasadas,
-    entreguesNoPeriodo,
-    tempoMedioCicloDias,
     semPrevisao,
-    reparo,
-    ecommerce,
+    tempoMedioCicloDias,
   };
+}
+
+// Ordenação padrão: Atrasadas > Em andamento > Entregues
+export function sortOsByPriority(data: OsRecord[]): OsRecord[] {
+  const priorityOrder: Record<StatusAtraso, number> = {
+    'ATRASO': 0,
+    'ATRASO_LEVE': 1,
+    'SEM_DATA': 2,
+    'NO_PRAZO': 3,
+    'ENTREGUE': 4,
+  };
+  
+  return [...data].sort((a, b) => {
+    const priorityDiff = priorityOrder[a.statusAtraso] - priorityOrder[b.statusAtraso];
+    if (priorityDiff !== 0) return priorityDiff;
+    // Dentro da mesma prioridade, ordenar por atraso_dias DESC
+    return b.atrasoDias - a.atrasoDias;
+  });
 }

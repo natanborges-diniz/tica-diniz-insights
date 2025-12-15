@@ -1,195 +1,146 @@
 // src/components/os-dashboard/OsKpiCards.tsx
 
 import React from "react";
-import { OsMetrics } from "../../utils/osMetrics";
-import { OsFilterState } from "../../hooks/useOsMonitor";
-import {
-  ClipboardList,
-  Clock,
-  AlertTriangle,
-  CheckCircle,
-  Timer,
-  CalendarOff,
-  Wrench,
-  ShoppingCart,
+import { Card, CardContent } from "@/components/ui/card";
+import { 
+  ClipboardList, 
+  Clock, 
+  CheckCircle2, 
+  AlertTriangle, 
+  Calendar,
+  Timer
 } from "lucide-react";
+import { OsMetrics } from "@/utils/osMetrics";
+import { OsFilterState, OsStatusFilter } from "@/hooks/useOsMonitor";
 import { cn } from "@/lib/utils";
 
-type Props = {
+interface Props {
   metrics: OsMetrics;
   filters: OsFilterState;
   onChangeFilters: (next: Partial<OsFilterState>) => void;
   loading?: boolean;
-};
+}
 
-export const OsKpiCards: React.FC<Props> = ({ metrics, filters, onChangeFilters, loading }) => {
-  const cards = [
+interface KpiCardConfig {
+  title: string;
+  value: number | string;
+  icon: React.ElementType;
+  filterValue?: OsStatusFilter;
+  highlight?: "default" | "blue" | "green" | "amber" | "destructive";
+}
+
+export const OsKpiCards: React.FC<Props> = ({
+  metrics,
+  filters,
+  onChangeFilters,
+  loading,
+}) => {
+  const cards: KpiCardConfig[] = [
     {
       title: "Total de OS",
       value: metrics.totalOs,
       icon: ClipboardList,
-      format: (v: number) => v.toLocaleString("pt-BR"),
-      isActive: filters.status === "TODOS" && !filters.somenteReparo && !filters.somenteEcommerce && !filters.somenteSemPrevisao,
-      onClick: () =>
-        onChangeFilters({
-          status: "TODOS",
-          somenteReparo: false,
-          somenteEcommerce: false,
-          somenteSemPrevisao: false,
-        }),
+      filterValue: "TODOS",
+      highlight: "default",
     },
     {
-      title: "Em Produção",
-      value: metrics.emProducao,
+      title: "Em Andamento",
+      value: metrics.emAndamento,
       icon: Clock,
-      format: (v: number) => v.toLocaleString("pt-BR"),
-      isActive: filters.status === "EM_ANDAMENTO",
-      onClick: () =>
-        onChangeFilters({
-          status: "EM_ANDAMENTO",
-          somenteReparo: false,
-          somenteEcommerce: false,
-          somenteSemPrevisao: false,
-        }),
+      filterValue: "NO_PRAZO",
+      highlight: "blue",
+    },
+    {
+      title: "Entregues",
+      value: metrics.entregues,
+      icon: CheckCircle2,
+      filterValue: "ENTREGUE",
+      highlight: "green",
     },
     {
       title: "Atrasadas",
       value: metrics.atrasadas,
       icon: AlertTriangle,
-      format: (v: number) => v.toLocaleString("pt-BR"),
-      highlight: metrics.atrasadas > 0,
-      highlightColor: "destructive",
-      isActive: filters.status === "ATRASADAS",
-      onClick: () =>
-        onChangeFilters({
-          status: "ATRASADAS",
-          somenteReparo: false,
-          somenteEcommerce: false,
-          somenteSemPrevisao: false,
-        }),
-    },
-    {
-      title: "Entregues",
-      value: metrics.entreguesNoPeriodo,
-      icon: CheckCircle,
-      format: (v: number) => v.toLocaleString("pt-BR"),
-      isActive: filters.status === "ENTREGUES",
-      onClick: () =>
-        onChangeFilters({
-          status: "ENTREGUES",
-          somenteReparo: false,
-          somenteEcommerce: false,
-          somenteSemPrevisao: false,
-        }),
-    },
-    {
-      title: "Tempo Médio (dias)",
-      value: metrics.tempoMedioCicloDias,
-      icon: Timer,
-      format: (v: number | null) => (v !== null ? v.toFixed(1) : "-"),
-      isActive: false,
-      onClick: undefined,
+      filterValue: "ATRASADAS",
+      highlight: "destructive",
     },
     {
       title: "Sem Previsão",
       value: metrics.semPrevisao,
-      icon: CalendarOff,
-      format: (v: number) => v.toLocaleString("pt-BR"),
-      highlight: metrics.semPrevisao > 0,
-      highlightColor: "warning",
-      isActive: filters.somenteSemPrevisao,
-      onClick: () =>
-        onChangeFilters({
-          status: "TODOS",
-          somenteSemPrevisao: true,
-          somenteReparo: false,
-          somenteEcommerce: false,
-        }),
+      icon: Calendar,
+      filterValue: "SEM_DATA",
+      highlight: "amber",
     },
     {
-      title: "Reparo",
-      value: metrics.reparo,
-      icon: Wrench,
-      format: (v: number) => v.toLocaleString("pt-BR"),
-      highlightColor: "amber",
-      isActive: filters.somenteReparo,
-      onClick: () =>
-        onChangeFilters({
-          status: "TODOS",
-          somenteReparo: true,
-          somenteEcommerce: false,
-          somenteSemPrevisao: false,
-        }),
-    },
-    {
-      title: "E-commerce",
-      value: metrics.ecommerce,
-      icon: ShoppingCart,
-      format: (v: number) => v.toLocaleString("pt-BR"),
-      highlightColor: "blue",
-      isActive: filters.somenteEcommerce,
-      onClick: () =>
-        onChangeFilters({
-          status: "TODOS",
-          somenteEcommerce: true,
-          somenteReparo: false,
-          somenteSemPrevisao: false,
-        }),
+      title: "Tempo Médio (dias)",
+      value: metrics.tempoMedioCicloDias ?? "-",
+      icon: Timer,
+      highlight: "default",
     },
   ];
 
+  const getHighlightStyles = (highlight: string, isActive: boolean) => {
+    const base = isActive ? "ring-2 ring-offset-2" : "";
+    switch (highlight) {
+      case "blue":
+        return cn(base, isActive && "ring-blue-500");
+      case "green":
+        return cn(base, isActive && "ring-green-500");
+      case "amber":
+        return cn(base, isActive && "ring-amber-500");
+      case "destructive":
+        return cn(base, isActive && "ring-destructive");
+      default:
+        return cn(base, isActive && "ring-primary");
+    }
+  };
+
+  const getIconStyles = (highlight: string) => {
+    switch (highlight) {
+      case "blue":
+        return "text-blue-500";
+      case "green":
+        return "text-green-500";
+      case "amber":
+        return "text-amber-500";
+      case "destructive":
+        return "text-destructive";
+      default:
+        return "text-primary";
+    }
+  };
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
       {cards.map((card) => {
-        const isWarning = card.highlight && card.highlightColor === "warning";
-        const isDestructive = card.highlight && card.highlightColor === "destructive";
-        const isAmber = card.highlightColor === "amber";
-        const isBlue = card.highlightColor === "blue";
-        const isClickable = !!card.onClick;
+        const Icon = card.icon;
+        const isActive = card.filterValue !== undefined && filters.status === card.filterValue;
+        const isClickable = card.filterValue !== undefined;
 
         return (
-          <div
+          <Card
             key={card.title}
-            onClick={card.onClick}
             className={cn(
-              "border border-border rounded-lg p-4 bg-card shadow-sm transition-all",
-              isClickable && "cursor-pointer hover:shadow-md hover:border-primary/50",
-              card.isActive && "ring-2 ring-primary border-primary bg-primary/5",
-              isDestructive && "border-destructive bg-destructive/5",
-              isWarning && "border-amber-500 bg-amber-500/5",
-              isAmber && !card.isActive && "border-amber-400/50",
-              isBlue && !card.isActive && "border-blue-400/50"
+              "transition-all duration-200",
+              isClickable && "cursor-pointer hover:shadow-md",
+              getHighlightStyles(card.highlight ?? "default", isActive)
             )}
+            onClick={() => {
+              if (isClickable && card.filterValue) {
+                onChangeFilters({ status: card.filterValue });
+              }
+            }}
           >
-            <div className="flex items-center gap-2 mb-2">
-              <card.icon
-                className={cn(
-                  "h-4 w-4",
-                  isDestructive
-                    ? "text-destructive"
-                    : isWarning
-                    ? "text-amber-500"
-                    : isAmber
-                    ? "text-amber-600"
-                    : isBlue
-                    ? "text-blue-600"
-                    : "text-muted-foreground"
-                )}
-              />
-              <span className="text-xs text-muted-foreground">{card.title}</span>
-            </div>
-            <div
-              className={cn(
-                "text-2xl font-semibold",
-                isDestructive && "text-destructive",
-                isWarning && "text-amber-600",
-                isAmber && "text-amber-700",
-                isBlue && "text-blue-700"
-              )}
-            >
-              {loading ? "..." : card.format(card.value as any)}
-            </div>
-          </div>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <Icon className={cn("h-5 w-5", getIconStyles(card.highlight ?? "default"))} />
+              </div>
+              <div className="text-2xl font-bold">
+                {loading ? "..." : card.value}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{card.title}</p>
+            </CardContent>
+          </Card>
         );
       })}
     </div>

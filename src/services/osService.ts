@@ -1,50 +1,47 @@
 // src/services/osService.ts
-// Service para endpoint de OS Monitor
+// Service para endpoint de OS Monitor - Última Etapa
 
-import { apiGet, EmpresaParam, formatEmpresaParam } from './firebirdBridge';
+import { apiGet, EmpresaParam } from './firebirdBridge';
 
 // ============================================
 // INTERFACES
 // ============================================
 
 interface OsRecordRaw {
-  OS: number;
-  EMPRESA?: string;
-  CODEMPRESA?: number;
-  COD_EMPRESA?: number;
-  CLIENTE?: string;
-  CODCLIENTE?: number;
-  CPF?: string;
-  TOTAL?: number;
-  DATAEMISSAO?: string;
-  DATAPREVISAO?: string;
-  CODETAPA_ATUAL?: number;
-  DATAHORAENTRADA_ULTIMA?: string;
-  DATAHORASAIDA_ULTIMA?: string;
-  IS_REPARO?: number;
-  IS_ECOMMERCE?: number;
-  ETAPA?: string;
-  NUMEROORDEMSERVICO?: string;
-  TELEFONE?: string;
+  cod_os?: number;
+  os?: string;
+  empresa?: string;
+  codempresa?: number;
+  cliente?: string;
+  etapa?: string;
+  status_atraso?: string;
+  atraso_dias?: number;
+  dataemissao?: string;
+  dataprevisao?: string;
+  datahoraentrada?: string;
+  datahorasaida?: string;
+  total?: number;
+  usuario?: string;
+  telefone?: string;
 }
 
+export type StatusAtraso = 'ENTREGUE' | 'NO_PRAZO' | 'ATRASO_LEVE' | 'ATRASO' | 'SEM_DATA';
+
 export interface OsRecord {
-  numeroOs: number;
-  empresa: string | null;
+  codOs: number;
+  os: string;
+  empresa: string;
   codEmpresa: number | null;
-  cliente: string | null;
-  codCliente: number | null;
-  cpf: string | null;
-  total: number | null;
+  cliente: string;
+  etapa: string;
+  statusAtraso: StatusAtraso;
+  atrasoDias: number;
   dataEmissao: string | null;
   dataPrevisao: string | null;
-  codEtapaAtual: number | null;
-  dataHoraEntradaUltima: string | null;
-  dataHoraSaidaUltima: string | null;
-  isReparo: boolean;
-  isEcommerce: boolean;
-  etapa: string | null;
-  numeroOrdemServico: string | null;
+  dataHoraEntrada: string | null;
+  dataHoraSaida: string | null;
+  total: number;
+  usuario: string;
   telefone: string | null;
 }
 
@@ -54,43 +51,55 @@ export interface GetOsMonitorParams {
   dataFim: string;
 }
 
+function normalizeStatusAtraso(value: string | undefined): StatusAtraso {
+  const trimmed = value?.trim()?.toUpperCase() ?? '';
+  const valid: StatusAtraso[] = ['ENTREGUE', 'NO_PRAZO', 'ATRASO_LEVE', 'ATRASO', 'SEM_DATA'];
+  return valid.includes(trimmed as StatusAtraso) ? (trimmed as StatusAtraso) : 'SEM_DATA';
+}
+
 function mapOsRecordRaw(r: OsRecordRaw): OsRecord {
   return {
-    numeroOs: r.OS ?? 0,
-    empresa: r.EMPRESA ?? null,
-    codEmpresa: r.CODEMPRESA ?? r.COD_EMPRESA ?? null,
-    cliente: r.CLIENTE ?? null,
-    codCliente: r.CODCLIENTE ?? null,
-    cpf: r.CPF ?? null,
-    total: r.TOTAL ?? null,
-    dataEmissao: r.DATAEMISSAO ?? null,
-    dataPrevisao: r.DATAPREVISAO ?? null,
-    codEtapaAtual: r.CODETAPA_ATUAL ?? null,
-    dataHoraEntradaUltima: r.DATAHORAENTRADA_ULTIMA ?? null,
-    dataHoraSaidaUltima: r.DATAHORASAIDA_ULTIMA ?? null,
-    isReparo: r.IS_REPARO === 1,
-    isEcommerce: r.IS_ECOMMERCE === 1,
-    etapa: r.ETAPA ?? null,
-    numeroOrdemServico: r.NUMEROORDEMSERVICO ?? null,
-    telefone: r.TELEFONE ?? null,
+    codOs: r.cod_os ?? 0,
+    os: r.os?.trim() ?? '',
+    empresa: r.empresa?.trim() ?? '',
+    codEmpresa: r.codempresa ?? null,
+    cliente: r.cliente?.trim() ?? '',
+    etapa: r.etapa?.trim() ?? '',
+    statusAtraso: normalizeStatusAtraso(r.status_atraso),
+    atrasoDias: r.atraso_dias ?? 0,
+    dataEmissao: r.dataemissao ?? null,
+    dataPrevisao: r.dataprevisao ?? null,
+    dataHoraEntrada: r.datahoraentrada ?? null,
+    dataHoraSaida: r.datahorasaida ?? null,
+    total: r.total ?? 0,
+    usuario: r.usuario?.trim() ?? '',
+    telefone: r.telefone?.trim() ?? null,
   };
 }
 
 export async function getOsMonitor(params: GetOsMonitorParams): Promise<OsRecord[]> {
-  const queryParams = {
-    empresa: formatEmpresaParam(params.empresa),
+  const queryParams: Record<string, string | number | undefined> = {
     dataInicio: params.dataInicio,
     dataFim: params.dataFim,
   };
   
-  console.log('[osService] Sending params:', queryParams);
+  // codEmpresa: ALL ou número
+  if (params.empresa === 'ALL' || params.empresa === null) {
+    queryParams.codEmpresa = 'ALL';
+  } else {
+    queryParams.codEmpresa = Number(params.empresa);
+  }
   
-  const raw = await apiGet<OsRecordRaw>('/os/monitor', queryParams);
+  console.log('[osService] Calling /os/monitor-ultima-etapa with:', queryParams);
+  
+  const raw = await apiGet<OsRecordRaw>('/os/monitor-ultima-etapa', queryParams);
 
-  console.log('[osService] Raw data sample:', raw[0]);
+  console.log('[osService] Raw data count:', raw.length);
+  if (raw.length > 0) {
+    console.log('[osService] Sample raw record:', raw[0]);
+  }
   
   const mapped = raw.map(mapOsRecordRaw);
-  console.log('[osService] Mapped data sample:', mapped[0]);
   
   return mapped;
 }
