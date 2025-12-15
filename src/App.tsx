@@ -14,6 +14,8 @@ import FluxoCaixaDashboard from "./pages/FluxoCaixaDashboard";
 import RankingLojasDashboard from "./pages/RankingLojasDashboard";
 import RankingVendedoresDashboard from "./pages/RankingVendedoresDashboard";
 import MetasVendasDashboard from "./pages/MetasVendasDashboard";
+import MetasAcompanhamentoDashboard from "./pages/MetasAcompanhamentoDashboard";
+import MetasConfigDashboard from "./pages/MetasConfigDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +38,8 @@ const App = () => (
           <Route path="/ranking-lojas" element={<RankingLojasDashboard />} />
           <Route path="/ranking-vendedores" element={<RankingVendedoresDashboard />} />
           <Route path="/metas" element={<MetasVendasDashboard />} />
+          <Route path="/metas/acompanhamento" element={<MetasAcompanhamentoDashboard />} />
+          <Route path="/metas/config" element={<MetasConfigDashboard />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

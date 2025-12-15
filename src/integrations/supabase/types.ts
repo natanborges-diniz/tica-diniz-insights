@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      calendario_feriados: {
+        Row: {
+          cidade: string | null
+          created_at: string
+          data: string
+          descricao: string
+          id: string
+          recorrente: boolean | null
+          tipo: string
+          uf: string | null
+        }
+        Insert: {
+          cidade?: string | null
+          created_at?: string
+          data: string
+          descricao: string
+          id?: string
+          recorrente?: boolean | null
+          tipo?: string
+          uf?: string | null
+        }
+        Update: {
+          cidade?: string | null
+          created_at?: string
+          data?: string
+          descricao?: string
+          id?: string
+          recorrente?: boolean | null
+          tipo?: string
+          uf?: string | null
+        }
+        Relationships: []
+      }
       empresa: {
         Row: {
           cidade: string | null
@@ -74,11 +107,109 @@ export type Database = {
         }
         Relationships: []
       }
+      lojas_configuracao: {
+        Row: {
+          abre_domingo: boolean | null
+          abre_feriado: boolean | null
+          cod_empresa: number
+          created_at: string
+          id: string
+          tipo_loja: string
+          updated_at: string
+        }
+        Insert: {
+          abre_domingo?: boolean | null
+          abre_feriado?: boolean | null
+          cod_empresa: number
+          created_at?: string
+          id?: string
+          tipo_loja?: string
+          updated_at?: string
+        }
+        Update: {
+          abre_domingo?: boolean | null
+          abre_feriado?: boolean | null
+          cod_empresa?: number
+          created_at?: string
+          id?: string
+          tipo_loja?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      lojas_excecoes: {
+        Row: {
+          aberto: boolean
+          cod_empresa: number
+          created_at: string
+          data: string
+          id: string
+          motivo: string | null
+        }
+        Insert: {
+          aberto: boolean
+          cod_empresa: number
+          created_at?: string
+          data: string
+          id?: string
+          motivo?: string | null
+        }
+        Update: {
+          aberto?: boolean
+          cod_empresa?: number
+          created_at?: string
+          data?: string
+          id?: string
+          motivo?: string | null
+        }
+        Relationships: []
+      }
+      metas_periodos: {
+        Row: {
+          ano: number
+          created_at: string
+          descricao: string | null
+          dia_fim: number
+          dia_inicio: number
+          id: string
+          mes: number
+          mes_fim: number | null
+          mes_inicio: number | null
+          updated_at: string
+        }
+        Insert: {
+          ano: number
+          created_at?: string
+          descricao?: string | null
+          dia_fim?: number
+          dia_inicio?: number
+          id?: string
+          mes: number
+          mes_fim?: number | null
+          mes_inicio?: number | null
+          updated_at?: string
+        }
+        Update: {
+          ano?: number
+          created_at?: string
+          descricao?: string | null
+          dia_fim?: number
+          dia_inicio?: number
+          id?: string
+          mes?: number
+          mes_fim?: number | null
+          mes_inicio?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       metas_vendas: {
         Row: {
           ano: number
           cod_referencia: number
           created_at: string
+          dia_fim: number | null
+          dia_inicio: number | null
           id: string
           mes: number
           meta_desconto_max: number | null
@@ -93,6 +224,8 @@ export type Database = {
           ano: number
           cod_referencia: number
           created_at?: string
+          dia_fim?: number | null
+          dia_inicio?: number | null
           id?: string
           mes: number
           meta_desconto_max?: number | null
@@ -107,6 +240,8 @@ export type Database = {
           ano?: number
           cod_referencia?: number
           created_at?: string
+          dia_fim?: number | null
+          dia_inicio?: number | null
           id?: string
           mes?: number
           meta_desconto_max?: number | null

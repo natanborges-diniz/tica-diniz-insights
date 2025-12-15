@@ -1,0 +1,751 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { 
+  ArrowLeft, Calendar, Store, Settings, Plus, Trash2, Save, 
+  Building2, CalendarDays, AlertCircle
+} from "lucide-react";
+import { useCalendarioConfig } from "@/hooks/useCalendarioConfig";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+
+const MESES = [
+  { value: 1, label: "Janeiro" },
+  { value: 2, label: "Fevereiro" },
+  { value: 3, label: "Março" },
+  { value: 4, label: "Abril" },
+  { value: 5, label: "Maio" },
+  { value: 6, label: "Junho" },
+  { value: 7, label: "Julho" },
+  { value: 8, label: "Agosto" },
+  { value: 9, label: "Setembro" },
+  { value: 10, label: "Outubro" },
+  { value: 11, label: "Novembro" },
+  { value: 12, label: "Dezembro" },
+];
+
+export default function MetasConfigDashboard() {
+  const {
+    ano,
+    setAno,
+    periodos,
+    feriados,
+    lojasConfig,
+    excecoes,
+    empresas,
+    loading,
+    salvarPeriodo,
+    salvarFeriado,
+    excluirFeriado,
+    salvarLojaConfig,
+    configurarLojasEmLote,
+    salvarExcecao,
+    excluirExcecao,
+  } = useCalendarioConfig();
+
+  const anoAtual = new Date().getFullYear();
+  const anos = [anoAtual - 1, anoAtual, anoAtual + 1, anoAtual + 2];
+
+  // Estado para formulários
+  const [novoPeriodo, setNovoPeriodo] = useState({
+    mes: 1,
+    diaInicio: 1,
+    diaFim: 31,
+    mesInicio: null as number | null,
+    mesFim: null as number | null,
+    descricao: "",
+  });
+
+  const [novoFeriado, setNovoFeriado] = useState({
+    data: "",
+    descricao: "",
+    tipo: "NACIONAL" as 'NACIONAL' | 'ESTADUAL' | 'MUNICIPAL',
+    recorrente: true,
+  });
+
+  const [lojasParaConfigurar, setLojasParaConfigurar] = useState<number[]>([]);
+  const [configLote, setConfigLote] = useState({
+    tipoLoja: "RUA" as 'RUA' | 'SHOPPING',
+    abreDomingo: false,
+    abreFeriado: false,
+  });
+
+  const [novaExcecao, setNovaExcecao] = useState({
+    codEmpresa: null as number | null,
+    data: "",
+    aberto: true,
+    motivo: "",
+  });
+
+  const handleSalvarPeriodo = async () => {
+    await salvarPeriodo({
+      ano,
+      mes: novoPeriodo.mes,
+      diaInicio: novoPeriodo.diaInicio,
+      diaFim: novoPeriodo.diaFim,
+      mesInicio: novoPeriodo.mesInicio,
+      mesFim: novoPeriodo.mesFim,
+      descricao: novoPeriodo.descricao || null,
+    });
+  };
+
+  const handleSalvarFeriado = async () => {
+    if (!novoFeriado.data || !novoFeriado.descricao) return;
+    await salvarFeriado({
+      data: novoFeriado.data,
+      descricao: novoFeriado.descricao,
+      tipo: novoFeriado.tipo,
+      uf: null,
+      cidade: null,
+      recorrente: novoFeriado.recorrente,
+    });
+    setNovoFeriado({ data: "", descricao: "", tipo: "NACIONAL", recorrente: true });
+  };
+
+  const handleConfigurarLojasEmLote = async () => {
+    if (lojasParaConfigurar.length === 0) return;
+    await configurarLojasEmLote(lojasParaConfigurar, configLote);
+    setLojasParaConfigurar([]);
+  };
+
+  const handleSalvarExcecao = async () => {
+    if (!novaExcecao.codEmpresa || !novaExcecao.data) return;
+    await salvarExcecao({
+      codEmpresa: novaExcecao.codEmpresa,
+      data: novaExcecao.data,
+      aberto: novaExcecao.aberto,
+      motivo: novaExcecao.motivo || null,
+    });
+    setNovaExcecao({ codEmpresa: null, data: "", aberto: true, motivo: "" });
+  };
+
+  const toggleLojaSelecao = (codEmpresa: number) => {
+    setLojasParaConfigurar(prev => 
+      prev.includes(codEmpresa)
+        ? prev.filter(c => c !== codEmpresa)
+        : [...prev, codEmpresa]
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b bg-card">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link to="/metas/acompanhamento">
+                <Button variant="ghost" size="icon">
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              </Link>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Settings className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold">Configurações de Metas</h1>
+                  <p className="text-sm text-muted-foreground">
+                    Períodos, feriados e regras de funcionamento
+                  </p>
+                </div>
+              </div>
+            </div>
+            <Select value={String(ano)} onValueChange={(v) => setAno(Number(v))}>
+              <SelectTrigger className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {anos.map(a => (
+                  <SelectItem key={a} value={String(a)}>{a}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </header>
+
+      {/* Conteúdo */}
+      <main className="container mx-auto px-4 py-6">
+        {loading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-96" />
+          </div>
+        ) : (
+          <Tabs defaultValue="periodos" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="periodos">
+                <CalendarDays className="h-4 w-4 mr-2" />
+                Períodos
+              </TabsTrigger>
+              <TabsTrigger value="feriados">
+                <Calendar className="h-4 w-4 mr-2" />
+                Feriados
+              </TabsTrigger>
+              <TabsTrigger value="lojas">
+                <Store className="h-4 w-4 mr-2" />
+                Regras de Lojas
+              </TabsTrigger>
+              <TabsTrigger value="excecoes">
+                <AlertCircle className="h-4 w-4 mr-2" />
+                Exceções
+              </TabsTrigger>
+            </TabsList>
+
+            {/* ========== PERÍODOS ========== */}
+            <TabsContent value="periodos">
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Configurar Período do Mês</CardTitle>
+                    <CardDescription>
+                      Defina o dia de início e fim para cada mês (ex: 21/11 a 20/12)
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Mês de Referência</Label>
+                        <Select 
+                          value={String(novoPeriodo.mes)} 
+                          onValueChange={(v) => setNovoPeriodo(p => ({ ...p, mes: Number(v) }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MESES.map(m => (
+                              <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Descrição (opcional)</Label>
+                        <Input 
+                          placeholder="Ex: Black Friday"
+                          value={novoPeriodo.descricao}
+                          onChange={(e) => setNovoPeriodo(p => ({ ...p, descricao: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Dia Início</Label>
+                        <Input 
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={novoPeriodo.diaInicio}
+                          onChange={(e) => setNovoPeriodo(p => ({ ...p, diaInicio: Number(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Mês do Início (opcional)</Label>
+                        <Select 
+                          value={novoPeriodo.mesInicio ? String(novoPeriodo.mesInicio) : "mesmo"} 
+                          onValueChange={(v) => setNovoPeriodo(p => ({ ...p, mesInicio: v === "mesmo" ? null : Number(v) }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Mesmo mês" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="mesmo">Mesmo mês</SelectItem>
+                            {MESES.map(m => (
+                              <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Dia Fim</Label>
+                        <Input 
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={novoPeriodo.diaFim}
+                          onChange={(e) => setNovoPeriodo(p => ({ ...p, diaFim: Number(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Mês do Fim (opcional)</Label>
+                        <Select 
+                          value={novoPeriodo.mesFim ? String(novoPeriodo.mesFim) : "mesmo"} 
+                          onValueChange={(v) => setNovoPeriodo(p => ({ ...p, mesFim: v === "mesmo" ? null : Number(v) }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Mesmo mês" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="mesmo">Mesmo mês</SelectItem>
+                            {MESES.map(m => (
+                              <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <Button onClick={handleSalvarPeriodo} className="w-full">
+                      <Save className="h-4 w-4 mr-2" />
+                      Salvar Período
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Períodos Configurados - {ano}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {periodos.length === 0 ? (
+                      <p className="text-muted-foreground text-center py-4">
+                        Nenhum período configurado. Use o padrão (1º ao último dia do mês).
+                      </p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Mês</TableHead>
+                            <TableHead>Período</TableHead>
+                            <TableHead>Descrição</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {periodos.map(p => (
+                            <TableRow key={p.id}>
+                              <TableCell>{MESES.find(m => m.value === p.mes)?.label}</TableCell>
+                              <TableCell>
+                                {p.diaInicio}/{p.mesInicio || p.mes} a {p.diaFim}/{p.mesFim || p.mes}
+                              </TableCell>
+                              <TableCell>{p.descricao || "-"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            {/* ========== FERIADOS ========== */}
+            <TabsContent value="feriados">
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Adicionar Feriado</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Data</Label>
+                      <Input 
+                        type="date"
+                        value={novoFeriado.data}
+                        onChange={(e) => setNovoFeriado(f => ({ ...f, data: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Descrição</Label>
+                      <Input 
+                        placeholder="Ex: Natal"
+                        value={novoFeriado.descricao}
+                        onChange={(e) => setNovoFeriado(f => ({ ...f, descricao: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Tipo</Label>
+                      <Select 
+                        value={novoFeriado.tipo} 
+                        onValueChange={(v) => setNovoFeriado(f => ({ ...f, tipo: v as any }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="NACIONAL">Nacional</SelectItem>
+                          <SelectItem value="ESTADUAL">Estadual</SelectItem>
+                          <SelectItem value="MUNICIPAL">Municipal</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="recorrente"
+                        checked={novoFeriado.recorrente}
+                        onCheckedChange={(v) => setNovoFeriado(f => ({ ...f, recorrente: v }))}
+                      />
+                      <Label htmlFor="recorrente">Repete todo ano</Label>
+                    </div>
+                    <Button onClick={handleSalvarFeriado} className="w-full">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Adicionar Feriado
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Feriados Cadastrados</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {feriados.length === 0 ? (
+                      <p className="text-muted-foreground text-center py-4">
+                        Nenhum feriado cadastrado.
+                      </p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Data</TableHead>
+                            <TableHead>Descrição</TableHead>
+                            <TableHead>Tipo</TableHead>
+                            <TableHead></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {feriados.map(f => (
+                            <TableRow key={f.id}>
+                              <TableCell>
+                                {new Date(f.data + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                {f.recorrente && <Badge variant="outline" className="ml-2">Anual</Badge>}
+                              </TableCell>
+                              <TableCell>{f.descricao}</TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">{f.tipo}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="ghost" size="icon">
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Excluir feriado?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Esta ação não pode ser desfeita.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => excluirFeriado(f.id)}>
+                                        Excluir
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            {/* ========== REGRAS DE LOJAS ========== */}
+            <TabsContent value="lojas">
+              <div className="grid gap-6 lg:grid-cols-3">
+                <Card className="lg:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Configuração das Lojas</CardTitle>
+                    <CardDescription>
+                      Selecione as lojas e aplique as regras de funcionamento em lote
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap gap-2">
+                        {empresas.map(emp => {
+                          const config = lojasConfig.find(c => c.codEmpresa === emp.codEmpresa);
+                          return (
+                            <div 
+                              key={emp.codEmpresa}
+                              onClick={() => toggleLojaSelecao(emp.codEmpresa)}
+                              className={`
+                                flex items-center gap-2 p-2 border rounded-lg cursor-pointer transition-colors
+                                ${lojasParaConfigurar.includes(emp.codEmpresa) ? 'bg-primary/10 border-primary' : 'hover:bg-muted'}
+                              `}
+                            >
+                              <Checkbox 
+                                checked={lojasParaConfigurar.includes(emp.codEmpresa)}
+                                onCheckedChange={() => toggleLojaSelecao(emp.codEmpresa)}
+                              />
+                              <div className="text-sm">
+                                <p className="font-medium">{emp.nome}</p>
+                                {config && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {config.tipoLoja} • {config.abreDomingo ? 'Abre Dom' : 'Fecha Dom'}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {lojasParaConfigurar.length > 0 && (
+                        <div className="p-4 border rounded-lg bg-muted/50 space-y-4">
+                          <p className="text-sm font-medium">
+                            {lojasParaConfigurar.length} loja(s) selecionada(s)
+                          </p>
+                          
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                              <Label>Tipo de Loja</Label>
+                              <Select 
+                                value={configLote.tipoLoja} 
+                                onValueChange={(v) => setConfigLote(c => ({ ...c, tipoLoja: v as any }))}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="RUA">Loja de Rua</SelectItem>
+                                  <SelectItem value="SHOPPING">Loja de Shopping</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="flex items-center space-x-2">
+                              <Switch
+                                id="abreDomingo"
+                                checked={configLote.abreDomingo}
+                                onCheckedChange={(v) => setConfigLote(c => ({ ...c, abreDomingo: v }))}
+                              />
+                              <Label htmlFor="abreDomingo">Abre Domingo</Label>
+                            </div>
+
+                            <div className="flex items-center space-x-2">
+                              <Switch
+                                id="abreFeriado"
+                                checked={configLote.abreFeriado}
+                                onCheckedChange={(v) => setConfigLote(c => ({ ...c, abreFeriado: v }))}
+                              />
+                              <Label htmlFor="abreFeriado">Abre Feriado</Label>
+                            </div>
+                          </div>
+
+                          <Button onClick={handleConfigurarLojasEmLote} className="w-full">
+                            <Save className="h-4 w-4 mr-2" />
+                            Aplicar Configuração
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Resumo</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">Lojas de Rua</span>
+                      </div>
+                      <p className="text-2xl font-bold">
+                        {lojasConfig.filter(c => c.tipoLoja === 'RUA').length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Geralmente fecham domingos e feriados
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Store className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">Lojas de Shopping</span>
+                      </div>
+                      <p className="text-2xl font-bold">
+                        {lojasConfig.filter(c => c.tipoLoja === 'SHOPPING').length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Geralmente abrem domingos e feriados
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="text-sm text-muted-foreground">Sem configuração</span>
+                      <p className="text-2xl font-bold">
+                        {empresas.length - lojasConfig.length}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            {/* ========== EXCEÇÕES ========== */}
+            <TabsContent value="excecoes">
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Adicionar Exceção</CardTitle>
+                    <CardDescription>
+                      Defina datas específicas em que uma loja abre ou fecha diferente do padrão
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Loja</Label>
+                      <Select 
+                        value={novaExcecao.codEmpresa ? String(novaExcecao.codEmpresa) : ""} 
+                        onValueChange={(v) => setNovaExcecao(e => ({ ...e, codEmpresa: Number(v) }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a loja..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {empresas.map(emp => (
+                            <SelectItem key={emp.codEmpresa} value={String(emp.codEmpresa)}>
+                              {emp.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Data</Label>
+                      <Input 
+                        type="date"
+                        value={novaExcecao.data}
+                        onChange={(e) => setNovaExcecao(ex => ({ ...ex, data: e.target.value }))}
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="aberto"
+                        checked={novaExcecao.aberto}
+                        onCheckedChange={(v) => setNovaExcecao(ex => ({ ...ex, aberto: v }))}
+                      />
+                      <Label htmlFor="aberto">
+                        {novaExcecao.aberto ? "Loja ABERTA nesta data" : "Loja FECHADA nesta data"}
+                      </Label>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Motivo (opcional)</Label>
+                      <Input 
+                        placeholder="Ex: Inventário"
+                        value={novaExcecao.motivo}
+                        onChange={(e) => setNovaExcecao(ex => ({ ...ex, motivo: e.target.value }))}
+                      />
+                    </div>
+                    <Button onClick={handleSalvarExcecao} className="w-full">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Adicionar Exceção
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Exceções Cadastradas</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {excecoes.length === 0 ? (
+                      <p className="text-muted-foreground text-center py-4">
+                        Nenhuma exceção cadastrada.
+                      </p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Loja</TableHead>
+                            <TableHead>Data</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {excecoes.map(e => {
+                            const empresa = empresas.find(emp => emp.codEmpresa === e.codEmpresa);
+                            return (
+                              <TableRow key={e.id}>
+                                <TableCell>{empresa?.nome || e.codEmpresa}</TableCell>
+                                <TableCell>
+                                  {new Date(e.data + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={e.aberto ? "default" : "destructive"}>
+                                    {e.aberto ? "ABERTA" : "FECHADA"}
+                                  </Badge>
+                                  {e.motivo && (
+                                    <p className="text-xs text-muted-foreground mt-1">{e.motivo}</p>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="ghost" size="icon">
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Excluir exceção?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Esta ação não pode ser desfeita.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => excluirExcecao(e.id)}>
+                                          Excluir
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          </Tabs>
+        )}
+      </main>
+    </div>
+  );
+}
