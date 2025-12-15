@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { BarChart3, Database, Users, RefreshCw, Package, Layers, ClipboardList, Wallet, Store, Trophy, Brain, Target } from 'lucide-react';
+import { BarChart3, Database, Users, RefreshCw, Package, Layers, ClipboardList, Wallet, Store, Trophy, Brain, Target, TrendingUp } from 'lucide-react';
 
 const Index = () => {
   return (
@@ -22,7 +22,14 @@ const Index = () => {
             <Brain className="h-4 w-4" />
             Inteligência de Vendas
           </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 max-w-4xl mx-auto">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl mx-auto">
+            <Link to="/metas/acompanhamento">
+              <Button className="w-full h-auto py-4 flex flex-col gap-2 bg-gradient-to-br from-green-600 to-green-500" size="lg">
+                <TrendingUp className="h-6 w-6" />
+                <span>Acompanhamento de Metas</span>
+              </Button>
+            </Link>
+
             <Link to="/ranking-lojas">
               <Button className="w-full h-auto py-4 flex flex-col gap-2 bg-gradient-to-br from-primary to-primary/80" size="lg">
                 <Store className="h-6 w-6" />
