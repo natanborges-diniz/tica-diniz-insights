@@ -373,7 +373,7 @@ export function calcularDiasUteis(
 /**
  * Retorna as datas do período da meta (considerando config de período customizado)
  */
-export function getDatasDoPeríodo(
+export function getDatasDoPeriodo(
   ano: number,
   mes: number,
   periodoConfig: MetaPeriodo | null

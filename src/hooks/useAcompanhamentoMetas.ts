@@ -8,7 +8,7 @@ import {
   getLojasConfiguracao,
   getLojasExcecoes,
   calcularDiasUteis,
-  getDatasDoPeríodo,
+  getDatasDoPeriodo,
   MetaPeriodo,
   Feriado,
   LojaConfiguracao,
@@ -100,7 +100,7 @@ export function useAcompanhamentoMetas() {
       setPeriodoConfig(periodo);
 
       // 2. Calcular datas do período
-      const { dataInicio, dataFim } = getDatasDoPeríodo(filters.ano, filters.mes, periodo);
+      const { dataInicio, dataFim } = getDatasDoPeriodo(filters.ano, filters.mes, periodo);
       const dataInicioStr = formatLocalDate(dataInicio);
       const dataFimStr = formatLocalDate(dataFim);
 
@@ -131,7 +131,7 @@ export function useAcompanhamentoMetas() {
     if (!metas.length) return [];
 
     const hoje = new Date();
-    const { dataInicio, dataFim } = getDatasDoPeríodo(filters.ano, filters.mes, periodoConfig);
+    const { dataInicio, dataFim } = getDatasDoPeriodo(filters.ano, filters.mes, periodoConfig);
     
     // Se a data atual está antes do período, usar data de início
     // Se está depois, usar data fim
@@ -238,7 +238,7 @@ export function useAcompanhamentoMetas() {
 
   // Período formatado
   const periodoInfo = useMemo(() => {
-    const { dataInicio, dataFim } = getDatasDoPeríodo(filters.ano, filters.mes, periodoConfig);
+    const { dataInicio, dataFim } = getDatasDoPeriodo(filters.ano, filters.mes, periodoConfig);
     return {
       dataInicio: formatLocalDate(dataInicio),
       dataFim: formatLocalDate(dataFim),
