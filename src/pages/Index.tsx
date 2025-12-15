@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { BarChart3, Database, Users, RefreshCw, Package, Layers, ClipboardList, Wallet, Store, Trophy, Brain } from 'lucide-react';
+import { BarChart3, Database, Users, RefreshCw, Package, Layers, ClipboardList, Wallet, Store, Trophy, Brain, Target } from 'lucide-react';
 
 const Index = () => {
   return (
@@ -22,7 +22,7 @@ const Index = () => {
             <Brain className="h-4 w-4" />
             Inteligência de Vendas
           </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 max-w-3xl mx-auto">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 max-w-4xl mx-auto">
             <Link to="/ranking-lojas">
               <Button className="w-full h-auto py-4 flex flex-col gap-2 bg-gradient-to-br from-primary to-primary/80" size="lg">
                 <Store className="h-6 w-6" />
@@ -48,6 +48,13 @@ const Index = () => {
               <Button variant="secondary" className="w-full h-auto py-4 flex flex-col gap-2" size="lg">
                 <Layers className="h-6 w-6" />
                 <span>Vendas por Família</span>
+              </Button>
+            </Link>
+
+            <Link to="/metas">
+              <Button variant="outline" className="w-full h-auto py-4 flex flex-col gap-2 border-primary/50" size="lg">
+                <Target className="h-6 w-6" />
+                <span>Cadastro de Metas</span>
               </Button>
             </Link>
           </div>
