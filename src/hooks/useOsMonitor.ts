@@ -1,12 +1,11 @@
 // src/hooks/useOsMonitor.ts
 
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { getOsMonitor, OsRecord, GetOsMonitorParams } from "../services/osService";
-import { calculateOsMetrics, OsMetrics, mapStatus, isAtrasada } from "../utils/osMetrics";
+import { getOsMonitor, OsRecord, GetOsMonitorParams, StatusAtraso } from "../services/osService";
+import { calculateOsMetrics, OsMetrics, sortOsByPriority } from "../utils/osMetrics";
 import { EmpresaParam } from "@/services/firebirdBridge";
 
-export type OsStatusFilter = "TODOS" | "EM_ANDAMENTO" | "ATRASADAS" | "ENTREGUES" | "CANCELADAS";
-export type OsEmpresaFilter = string | null;
+export type OsStatusFilter = "TODOS" | StatusAtraso | "ATRASADAS";
 
 export interface OsApiFilters {
   empresa: EmpresaParam;
@@ -16,10 +15,9 @@ export interface OsApiFilters {
 
 export interface OsFilterState {
   status: OsStatusFilter;
-  empresaVisual: OsEmpresaFilter; // Para filtro visual na tabela
-  somenteReparo: boolean;
-  somenteEcommerce: boolean;
-  somenteSemPrevisao: boolean;
+  empresaVisual: string | null;
+  etapa: string | null;
+  busca: string;
 }
 
 export function useOsMonitor(initialFilters: OsApiFilters) {
@@ -31,33 +29,55 @@ export function useOsMonitor(initialFilters: OsApiFilters) {
   const [filters, setFilters] = useState<OsFilterState>({
     status: "TODOS",
     empresaVisual: null,
-    somenteReparo: false,
-    somenteEcommerce: false,
-    somenteSemPrevisao: false,
+    etapa: null,
+    busca: "",
   });
 
+  // Filtrar dados client-side
   const filteredData = useMemo(() => {
-    return data.filter((os) => {
-      const status = mapStatus(os);
-      const atrasada = isAtrasada(os, status);
+    let result = data;
 
-      if (filters.status === "EM_ANDAMENTO" && status !== "EM_ANDAMENTO") return false;
-      if (filters.status === "ATRASADAS" && !atrasada) return false;
-      if (filters.status === "ENTREGUES" && status !== "ENTREGUE") return false;
-      if (filters.status === "CANCELADAS" && status !== "CANCELADA") return false;
+    // Filtro por status
+    if (filters.status === "ATRASADAS") {
+      result = result.filter(os => os.statusAtraso === 'ATRASO' || os.statusAtraso === 'ATRASO_LEVE');
+    } else if (filters.status !== "TODOS") {
+      result = result.filter(os => os.statusAtraso === filters.status);
+    }
 
-      if (filters.empresaVisual !== null && filters.empresaVisual !== "TODAS" && os.empresa !== filters.empresaVisual) return false;
+    // Filtro visual por empresa
+    if (filters.empresaVisual && filters.empresaVisual !== "TODAS") {
+      result = result.filter(os => os.empresa === filters.empresaVisual);
+    }
 
-      if (filters.somenteReparo && !os.isReparo) return false;
-      if (filters.somenteEcommerce && !os.isEcommerce) return false;
-      if (filters.somenteSemPrevisao && os.dataPrevisao) return false;
+    // Filtro por etapa
+    if (filters.etapa && filters.etapa !== "TODAS") {
+      result = result.filter(os => os.etapa === filters.etapa);
+    }
 
-      return true;
-    });
+    // Busca por OS ou Cliente
+    if (filters.busca.trim()) {
+      const termo = filters.busca.toLowerCase().trim();
+      result = result.filter(os => 
+        os.os.toLowerCase().includes(termo) ||
+        os.cliente.toLowerCase().includes(termo)
+      );
+    }
+
+    // Ordenar por prioridade
+    return sortOsByPriority(result);
   }, [data, filters]);
 
   const metrics: OsMetrics = useMemo(() => calculateOsMetrics(data), [data]);
   const filteredMetrics: OsMetrics = useMemo(() => calculateOsMetrics(filteredData), [filteredData]);
+
+  // Listas únicas para filtros
+  const empresasUnicas = useMemo(() => 
+    Array.from(new Set(data.map(os => os.empresa).filter(Boolean))).sort()
+  , [data]);
+
+  const etapasUnicas = useMemo(() => 
+    Array.from(new Set(data.map(os => os.etapa).filter(Boolean))).sort()
+  , [data]);
 
   const fetchData = useCallback(async (f: OsApiFilters) => {
     try {
@@ -70,14 +90,14 @@ export function useOsMonitor(initialFilters: OsApiFilters) {
       });
       setData(result);
     } catch (err: unknown) {
-      console.error(err);
+      console.error('[useOsMonitor] Error:', err);
       setError(err instanceof Error ? err.message : "Erro ao carregar monitor de OS");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Busca automaticamente se empresa estiver definida (incluindo 'ALL')
+  // Busca automaticamente se empresa estiver definida
   useEffect(() => {
     if (apiFilters.empresa !== null) {
       fetchData(apiFilters);
@@ -87,8 +107,7 @@ export function useOsMonitor(initialFilters: OsApiFilters) {
   const reload = useCallback((newApiFilters?: Partial<OsApiFilters>) => {
     const merged = { ...apiFilters, ...newApiFilters };
     setApiFilters(merged);
-    fetchData(merged);
-  }, [apiFilters, fetchData]);
+  }, [apiFilters]);
 
   return {
     data,
@@ -101,9 +120,10 @@ export function useOsMonitor(initialFilters: OsApiFilters) {
     setFilters,
     metrics,
     filteredMetrics,
+    empresasUnicas,
+    etapasUnicas,
     reload,
   };
 }
 
-// Re-export types
 export type { OsRecord } from '../services/osService';
