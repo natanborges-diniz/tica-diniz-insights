@@ -37,9 +37,9 @@ const App = () => (
           <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaDashboard />} />
           <Route path="/ranking-lojas" element={<RankingLojasDashboard />} />
           <Route path="/ranking-vendedores" element={<RankingVendedoresDashboard />} />
-          <Route path="/metas" element={<MetasVendasDashboard />} />
-          <Route path="/metas/acompanhamento" element={<MetasAcompanhamentoDashboard />} />
-          <Route path="/metas/config" element={<MetasConfigDashboard />} />
+          <Route path="/vendas/metas" element={<MetasAcompanhamentoDashboard />} />
+          <Route path="/config/metas" element={<MetasVendasDashboard />} />
+          <Route path="/config/calendario" element={<MetasConfigDashboard />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
