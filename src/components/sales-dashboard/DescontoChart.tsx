@@ -1,40 +1,31 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { BarChart3 } from 'lucide-react';
+import { Percent } from 'lucide-react';
 import { ResumoEmpresaVendedor } from '@/services/vendasService';
 
-interface SellerChartProps {
+interface DescontoChartProps {
   dados: ResumoEmpresaVendedor[];
   isLoading?: boolean;
 }
 
 // Cores para diferentes empresas
 const COLORS = [
-  '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444',
+  '#f59e0b', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6',
   '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1'
 ];
 
-function formatCurrency(value: number): string {
-  if (value >= 1000000) {
-    return `R$ ${(value / 1000000).toFixed(1)}M`;
-  }
-  if (value >= 1000) {
-    return `R$ ${(value / 1000).toFixed(1)}k`;
-  }
-  return `R$ ${value.toFixed(0)}`;
-}
-
-export function SellerChart({ dados, isLoading }: SellerChartProps) {
+export function DescontoChart({ dados, isLoading }: DescontoChartProps) {
   // Preparar dados agrupados por vendedor com empresa para cor
   const empresas = [...new Set(dados.map(d => d.empresaNomeLogico || d.empresa))];
   const empresaColorMap = Object.fromEntries(
     empresas.map((empresa, index) => [empresa, COLORS[index % COLORS.length]])
   );
 
-  // Ordenar por total líquido sem devoluções decrescente
+  // Ordenar por % desconto decrescente
   const chartData = [...dados]
-    .sort((a, b) => (b.totalLiquidoSemDevolucoes || 0) - (a.totalLiquidoSemDevolucoes || 0))
+    .filter(d => d.totalBruto > 0) // Só incluir quem tem vendas
+    .sort((a, b) => (b.percentualDesconto || 0) - (a.percentualDesconto || 0))
     .slice(0, 15) // Limitar a 15 para visualização
     .map(item => ({
       vendedor: item.vendedor?.length > 12 
@@ -42,7 +33,7 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
         : item.vendedor,
       vendedorFull: item.vendedor,
       empresa: item.empresaNomeLogico || item.empresa,
-      totalLiquidoSemDevolucoes: item.totalLiquidoSemDevolucoes || 0,
+      percentualDesconto: item.percentualDesconto || 0,
       cor: empresaColorMap[item.empresaNomeLogico || item.empresa],
     }));
 
@@ -50,8 +41,8 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
     <Card>
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-primary" />
-          Total Líquido sem Devoluções por Vendedor
+          <Percent className="h-5 w-5 text-orange-500" />
+          % Desconto por Vendedor
         </CardTitle>
         <div className="flex flex-wrap gap-2 mt-2">
           {empresas.map((empresa, index) => (
@@ -77,8 +68,9 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
             <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
               <XAxis 
                 type="number" 
-                tickFormatter={formatCurrency}
+                tickFormatter={(value) => `${value.toFixed(1)}%`}
                 tick={{ fontSize: 12 }}
+                domain={[0, 'auto']}
               />
               <YAxis 
                 type="category" 
@@ -88,8 +80,8 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
               />
               <Tooltip 
                 formatter={(value: number) => [
-                  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value),
-                  'Líquido s/ Devoluções'
+                  `${value.toFixed(2)}%`,
+                  '% Desconto'
                 ]}
                 labelFormatter={(label, payload) => {
                   if (payload && payload[0]) {
@@ -103,7 +95,7 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
                   borderRadius: '8px'
                 }}
               />
-              <Bar dataKey="totalLiquidoSemDevolucoes" radius={[0, 4, 4, 0]}>
+              <Bar dataKey="percentualDesconto" radius={[0, 4, 4, 0]}>
                 {chartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.cor} />
                 ))}

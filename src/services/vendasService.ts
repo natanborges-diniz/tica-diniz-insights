@@ -16,6 +16,9 @@ interface ResumoEmpresaVendedorRaw {
   vendedor: string;
   qtd_transacao: number;
   qtd_produtos: number;
+  total_bruto: number;
+  total_desconto: number;
+  total_ipi: number;
   total_vendido: number;
   total_devolucao: number;
   qtd_devolucao: number;
@@ -23,15 +26,23 @@ interface ResumoEmpresaVendedorRaw {
 
 export interface ResumoEmpresaVendedor {
   codEmpresa: number;
+  codEmpresaLogico: number;
   empresa: string;
+  empresaNomeLogico: string;
   codVendedor: number;
   vendedor: string;
-  totalOriginal: number;
-  totalVendido: number;
-  ticketMedio: number;
-  totalDevolucao: number;
   qtdTransacao: number;
+  qtdProdutos: number;
+  totalBruto: number;
+  totalDesconto: number;
+  totalIpi: number;
+  totalVendido: number;
+  totalDevolucao: number;
   qtdDevolucao: number;
+  // Campos calculados
+  percentualDesconto: number;
+  totalLiquidoSemDevolucoes: number;
+  ticketMedioLiquido: number;
 }
 
 export interface GetResumoEmpresaVendedorParams {
@@ -51,22 +62,35 @@ export async function getResumoEmpresaVendedor(
 
   console.log('[vendasService] Raw data count:', raw.length);
   console.log('[vendasService] Raw data sample:', raw[0]);
-  console.log('[vendasService] Raw data keys:', raw[0] ? Object.keys(raw[0]) : 'N/A');
 
-  const mapped = raw.map((r) => ({
-    codEmpresa: r.cod_empresa ?? 0,
-    empresa: r.empresa ?? '',
-    codVendedor: r.cod_vendedor ?? 0,
-    vendedor: (r.vendedor ?? '').trim(),
-    totalOriginal: r.total_vendido ?? 0,
-    totalVendido: r.total_vendido ?? 0,
-    ticketMedio: r.qtd_transacao > 0 ? r.total_vendido / r.qtd_transacao : 0,
-    totalDevolucao: r.total_devolucao ?? 0,
-    qtdTransacao: r.qtd_transacao ?? 0,
-    qtdDevolucao: r.qtd_devolucao ?? 0,
-  }));
+  const mapped = raw.map((r) => {
+    const totalBruto = r.total_bruto ?? 0;
+    const totalDesconto = r.total_desconto ?? 0;
+    const totalVendido = r.total_vendido ?? 0;
+    const totalDevolucao = r.total_devolucao ?? 0;
+    const qtdTransacao = r.qtd_transacao ?? 0;
 
-  console.log('[vendasService] Mapped data sample:', mapped[0]);
+    return {
+      codEmpresa: r.cod_empresa ?? 0,
+      codEmpresaLogico: r.empresa_cod_logico ?? r.cod_empresa ?? 0,
+      empresa: (r.empresa ?? '').trim(),
+      empresaNomeLogico: (r.empresa_nome_logico ?? r.empresa ?? '').trim(),
+      codVendedor: r.cod_vendedor ?? 0,
+      vendedor: (r.vendedor ?? '').trim(),
+      qtdTransacao,
+      qtdProdutos: r.qtd_produtos ?? 0,
+      totalBruto,
+      totalDesconto,
+      totalIpi: r.total_ipi ?? 0,
+      totalVendido,
+      totalDevolucao,
+      qtdDevolucao: r.qtd_devolucao ?? 0,
+      // Campos calculados
+      percentualDesconto: totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0,
+      totalLiquidoSemDevolucoes: totalVendido - totalDevolucao,
+      ticketMedioLiquido: qtdTransacao > 0 ? totalVendido / qtdTransacao : 0,
+    };
+  });
 
   return mapped;
 }
