@@ -29,6 +29,8 @@ export interface LojaConfiguracao {
   tipoLoja: 'RUA' | 'SHOPPING';
   abreDomingo: boolean;
   abreFeriado: boolean;
+  numVendedores: number;
+  percentualAceitavel: number;
 }
 
 export interface LojaExcecao {
@@ -194,6 +196,8 @@ export async function getLojasConfiguracao(): Promise<LojaConfiguracao[]> {
     tipoLoja: l.tipo_loja,
     abreDomingo: l.abre_domingo,
     abreFeriado: l.abre_feriado,
+    numVendedores: l.num_vendedores ?? 1,
+    percentualAceitavel: l.percentual_aceitavel ?? 100,
   }));
 }
 
@@ -214,6 +218,8 @@ export async function getLojaConfiguracao(codEmpresa: number): Promise<LojaConfi
     tipoLoja: data.tipo_loja as 'RUA' | 'SHOPPING',
     abreDomingo: data.abre_domingo,
     abreFeriado: data.abre_feriado,
+    numVendedores: data.num_vendedores ?? 1,
+    percentualAceitavel: data.percentual_aceitavel ?? 100,
   };
 }
 
@@ -225,6 +231,8 @@ export async function upsertLojaConfiguracao(config: Omit<LojaConfiguracao, 'id'
       tipo_loja: config.tipoLoja,
       abre_domingo: config.abreDomingo,
       abre_feriado: config.abreFeriado,
+      num_vendedores: config.numVendedores,
+      percentual_aceitavel: config.percentualAceitavel,
     }, {
       onConflict: 'cod_empresa'
     });

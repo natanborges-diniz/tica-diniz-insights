@@ -18,6 +18,9 @@ import {
 import { getEmpresas, Empresa } from "@/services/empresaService";
 import { toast } from "sonner";
 
+// Empresas que não devem aparecer nos filtros (sem operação ativa)
+const EMPRESAS_INATIVAS = [10]; // Loja 10 não tem mais operação
+
 export function useCalendarioConfig() {
   const anoAtual = new Date().getFullYear();
 
@@ -47,7 +50,11 @@ export function useCalendarioConfig() {
       setFeriados(feriadosData);
       setLojasConfig(lojasData);
       setExcecoes(excecoesData);
-      setEmpresas(empresasData);
+      // Filtrar empresas inativas
+      const empresasAtivas = empresasData.filter(
+        (emp) => !EMPRESAS_INATIVAS.includes(emp.codEmpresa)
+      );
+      setEmpresas(empresasAtivas);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao carregar configurações";
       setError(message);
@@ -133,7 +140,13 @@ export function useCalendarioConfig() {
 
   const configurarLojasEmLote = useCallback(async (
     codEmpresas: number[],
-    config: { tipoLoja: 'RUA' | 'SHOPPING'; abreDomingo: boolean; abreFeriado: boolean }
+    config: { 
+      tipoLoja: 'RUA' | 'SHOPPING'; 
+      abreDomingo: boolean; 
+      abreFeriado: boolean;
+      numVendedores: number;
+      percentualAceitavel: number;
+    }
   ): Promise<boolean> => {
     try {
       const promises = codEmpresas.map(codEmpresa => 
@@ -142,6 +155,8 @@ export function useCalendarioConfig() {
           tipoLoja: config.tipoLoja,
           abreDomingo: config.abreDomingo,
           abreFeriado: config.abreFeriado,
+          numVendedores: config.numVendedores,
+          percentualAceitavel: config.percentualAceitavel,
         })
       );
       await Promise.all(promises);
