@@ -114,6 +114,8 @@ export type Database = {
           cod_empresa: number
           created_at: string
           id: string
+          num_vendedores: number | null
+          percentual_aceitavel: number | null
           tipo_loja: string
           updated_at: string
         }
@@ -123,6 +125,8 @@ export type Database = {
           cod_empresa: number
           created_at?: string
           id?: string
+          num_vendedores?: number | null
+          percentual_aceitavel?: number | null
           tipo_loja?: string
           updated_at?: string
         }
@@ -132,6 +136,8 @@ export type Database = {
           cod_empresa?: number
           created_at?: string
           id?: string
+          num_vendedores?: number | null
+          percentual_aceitavel?: number | null
           tipo_loja?: string
           updated_at?: string
         }

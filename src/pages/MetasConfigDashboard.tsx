@@ -90,7 +90,7 @@ export default function MetasConfigDashboard() {
   
   // ========== ESTADOS: METAS EM LOTE ==========
   const [lojasSelecionadas, setLojasSelecionadas] = useState<number[]>([]);
-  const [mesMeta, setMesMeta] = useState(mesAtual);
+  const [mesesMeta, setMesesMeta] = useState<number[]>([mesAtual]);
   const [metaFaturamento, setMetaFaturamento] = useState("");
   const [metaTicketMedio, setMetaTicketMedio] = useState("");
   const [metaQtdVendas, setMetaQtdVendas] = useState("");
@@ -124,6 +124,8 @@ export default function MetasConfigDashboard() {
     tipoLoja: "RUA" as 'RUA' | 'SHOPPING',
     abreDomingo: false,
     abreFeriado: false,
+    numVendedores: 1,
+    percentualAceitavel: 100,
   });
 
   // ========== ESTADOS: EXCEÇÕES ==========
@@ -168,26 +170,39 @@ export default function MetasConfigDashboard() {
       toast.error("Selecione pelo menos uma loja");
       return;
     }
+    if (mesesMeta.length === 0) {
+      toast.error("Selecione pelo menos um mês");
+      return;
+    }
     
     setSavingMetas(true);
     try {
-      const promises = lojasSelecionadas.map(codEmpresa => {
+      const promises: Promise<boolean>[] = [];
+      
+      for (const codEmpresa of lojasSelecionadas) {
         const empresa = empresas.find(e => e.codEmpresa === codEmpresa);
-        return upsertMeta({
-          tipo: 'LOJA',
-          codReferencia: codEmpresa,
-          nomeReferencia: empresa?.nome || null,
-          ano,
-          mes: mesMeta,
-          metaFaturamento: Number(metaFaturamento) || 0,
-          metaTicketMedio: Number(metaTicketMedio) || 0,
-          metaDescontoMax: 0,
-          metaQtdVendas: Number(metaQtdVendas) || 0,
-        });
-      });
+        const config = lojasConfig.find(c => c.codEmpresa === codEmpresa);
+        const numVendedores = config?.numVendedores || 1;
+        const metaLoja = Number(metaFaturamento) || 0;
+        
+        for (const mes of mesesMeta) {
+          // Meta da Loja
+          promises.push(upsertMeta({
+            tipo: 'LOJA',
+            codReferencia: codEmpresa,
+            nomeReferencia: empresa?.nome || null,
+            ano,
+            mes,
+            metaFaturamento: metaLoja,
+            metaTicketMedio: Number(metaTicketMedio) || 0,
+            metaDescontoMax: 0,
+            metaQtdVendas: Number(metaQtdVendas) || 0,
+          }));
+        }
+      }
       
       await Promise.all(promises);
-      toast.success(`Metas salvas para ${lojasSelecionadas.length} loja(s)!`);
+      toast.success(`Metas salvas para ${lojasSelecionadas.length} loja(s) em ${mesesMeta.length} mês(es)!`);
       setLojasSelecionadas([]);
       setMetaFaturamento("");
       setMetaTicketMedio("");
@@ -197,6 +212,23 @@ export default function MetasConfigDashboard() {
       toast.error("Erro ao salvar metas");
     } finally {
       setSavingMetas(false);
+    }
+  };
+
+  // Toggle mês na seleção múltipla
+  const toggleMesMeta = (mes: number) => {
+    setMesesMeta(prev => 
+      prev.includes(mes)
+        ? prev.filter(m => m !== mes)
+        : [...prev, mes].sort((a, b) => a - b)
+    );
+  };
+
+  const selecionarTodosMeses = () => {
+    if (mesesMeta.length === 12) {
+      setMesesMeta([mesAtual]);
+    } else {
+      setMesesMeta([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     }
   };
 
@@ -214,26 +246,34 @@ export default function MetasConfigDashboard() {
       toast.error("Selecione pelo menos um vendedor");
       return;
     }
+    if (mesesMeta.length === 0) {
+      toast.error("Selecione pelo menos um mês");
+      return;
+    }
     
     setSavingMetas(true);
     try {
-      const promises = vendedoresSelecionados.map(codVendedor => {
+      const promises: Promise<boolean>[] = [];
+      
+      for (const codVendedor of vendedoresSelecionados) {
         const vendedor = vendedores.find(v => v.codVendedor === codVendedor);
-        return upsertMeta({
-          tipo: 'VENDEDOR',
-          codReferencia: codVendedor,
-          nomeReferencia: vendedor?.nome || null,
-          ano,
-          mes: mesMeta,
-          metaFaturamento: Number(metaFaturamento) || 0,
-          metaTicketMedio: Number(metaTicketMedio) || 0,
-          metaDescontoMax: 0,
-          metaQtdVendas: Number(metaQtdVendas) || 0,
-        });
-      });
+        for (const mes of mesesMeta) {
+          promises.push(upsertMeta({
+            tipo: 'VENDEDOR',
+            codReferencia: codVendedor,
+            nomeReferencia: vendedor?.nome || null,
+            ano,
+            mes,
+            metaFaturamento: Number(metaFaturamento) || 0,
+            metaTicketMedio: Number(metaTicketMedio) || 0,
+            metaDescontoMax: 0,
+            metaQtdVendas: Number(metaQtdVendas) || 0,
+          }));
+        }
+      }
       
       await Promise.all(promises);
-      toast.success(`Metas salvas para ${vendedoresSelecionados.length} vendedor(es)!`);
+      toast.success(`Metas salvas para ${vendedoresSelecionados.length} vendedor(es) em ${mesesMeta.length} mês(es)!`);
       setVendedoresSelecionados([]);
       setMetaFaturamento("");
       setMetaTicketMedio("");
@@ -302,9 +342,9 @@ export default function MetasConfigDashboard() {
 
   const loading = loadingCalendario;
 
-  // Metas já cadastradas para o período
-  const metasLojas = metas.filter(m => m.tipo === 'LOJA' && m.ano === ano && m.mes === mesMeta);
-  const metasVendedores = metas.filter(m => m.tipo === 'VENDEDOR' && m.ano === ano && m.mes === mesMeta);
+  // Metas já cadastradas para os períodos selecionados
+  const metasLojas = metas.filter(m => m.tipo === 'LOJA' && m.ano === ano && mesesMeta.includes(m.mes));
+  const metasVendedores = metas.filter(m => m.tipo === 'VENDEDOR' && m.ano === ano && mesesMeta.includes(m.mes));
 
   // Vendedores filtrados por empresa
   const vendedoresFiltrados = empresaFiltro === 'ALL' 
@@ -459,17 +499,24 @@ export default function MetasConfigDashboard() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Mês</Label>
-                      <Select value={String(mesMeta)} onValueChange={(v) => setMesMeta(Number(v))}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {MESES.map(m => (
-                            <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center justify-between">
+                        <Label>Meses</Label>
+                        <Button variant="link" size="sm" className="h-auto p-0" onClick={selecionarTodosMeses}>
+                          {mesesMeta.length === 12 ? "Limpar" : "Todos"}
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {MESES.map(m => (
+                          <Badge
+                            key={m.value}
+                            variant={mesesMeta.includes(m.value) ? "default" : "outline"}
+                            className="cursor-pointer"
+                            onClick={() => toggleMesMeta(m.value)}
+                          >
+                            {m.label.substring(0, 3)}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -522,13 +569,18 @@ export default function MetasConfigDashboard() {
                 {metasLojas.length > 0 && (
                   <Card className="lg:col-span-3">
                     <CardHeader>
-                      <CardTitle>Metas de Lojas - {MESES.find(m => m.value === mesMeta)?.label} {ano}</CardTitle>
+                      <CardTitle>
+                        Metas de Lojas - {mesesMeta.length === 1 
+                          ? MESES.find(m => m.value === mesesMeta[0])?.label 
+                          : `${mesesMeta.length} meses`} {ano}
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead>Loja</TableHead>
+                            <TableHead>Mês</TableHead>
                             <TableHead className="text-right">Faturamento</TableHead>
                             <TableHead className="text-right">Ticket Médio</TableHead>
                             <TableHead className="text-right">Qtd Vendas</TableHead>
@@ -539,6 +591,9 @@ export default function MetasConfigDashboard() {
                           {metasLojas.map(m => (
                             <TableRow key={m.id}>
                               <TableCell className="font-medium">{m.nomeReferencia}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{MESES.find(mes => mes.value === m.mes)?.label.substring(0, 3)}</Badge>
+                              </TableCell>
                               <TableCell className="text-right">
                                 R$ {m.metaFaturamento?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </TableCell>
@@ -662,17 +717,24 @@ export default function MetasConfigDashboard() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Mês</Label>
-                      <Select value={String(mesMeta)} onValueChange={(v) => setMesMeta(Number(v))}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {MESES.map(m => (
-                            <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center justify-between">
+                        <Label>Meses</Label>
+                        <Button variant="link" size="sm" className="h-auto p-0" onClick={selecionarTodosMeses}>
+                          {mesesMeta.length === 12 ? "Limpar" : "Todos"}
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {MESES.map(m => (
+                          <Badge
+                            key={m.value}
+                            variant={mesesMeta.includes(m.value) ? "default" : "outline"}
+                            className="cursor-pointer"
+                            onClick={() => toggleMesMeta(m.value)}
+                          >
+                            {m.label.substring(0, 3)}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -725,13 +787,18 @@ export default function MetasConfigDashboard() {
                 {metasVendedores.length > 0 && (
                   <Card className="lg:col-span-3">
                     <CardHeader>
-                      <CardTitle>Metas de Vendedores - {MESES.find(m => m.value === mesMeta)?.label} {ano}</CardTitle>
+                      <CardTitle>
+                        Metas de Vendedores - {mesesMeta.length === 1 
+                          ? MESES.find(m => m.value === mesesMeta[0])?.label 
+                          : `${mesesMeta.length} meses`} {ano}
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead>Vendedor</TableHead>
+                            <TableHead>Mês</TableHead>
                             <TableHead className="text-right">Faturamento</TableHead>
                             <TableHead className="text-right">Ticket Médio</TableHead>
                             <TableHead className="text-right">Qtd Vendas</TableHead>
@@ -742,6 +809,9 @@ export default function MetasConfigDashboard() {
                           {metasVendedores.map(m => (
                             <TableRow key={m.id}>
                               <TableCell className="font-medium">{m.nomeReferencia}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{MESES.find(mes => mes.value === m.mes)?.label.substring(0, 3)}</Badge>
+                              </TableCell>
                               <TableCell className="text-right">
                                 R$ {m.metaFaturamento?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </TableCell>
@@ -1072,7 +1142,7 @@ export default function MetasConfigDashboard() {
                                 <p className="font-medium">{emp.nome}</p>
                                 {config && (
                                   <p className="text-xs text-muted-foreground">
-                                    {config.tipoLoja} • {config.abreDomingo ? 'Abre Dom' : 'Fecha Dom'}
+                                    {config.tipoLoja} • {config.numVendedores} vend. • {config.percentualAceitavel}% mín
                                   </p>
                                 )}
                               </div>
@@ -1087,7 +1157,7 @@ export default function MetasConfigDashboard() {
                             {lojasParaConfigurar.length} loja(s) selecionada(s)
                           </p>
                           
-                          <div className="grid grid-cols-3 gap-4">
+                          <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <Label>Tipo de Loja</Label>
                               <Select 
@@ -1104,22 +1174,46 @@ export default function MetasConfigDashboard() {
                               </Select>
                             </div>
 
-                            <div className="flex items-center space-x-2">
-                              <Switch
-                                id="abreDomingo"
-                                checked={configLote.abreDomingo}
-                                onCheckedChange={(v) => setConfigLote(c => ({ ...c, abreDomingo: v }))}
+                            <div className="space-y-2">
+                              <Label>Nº de Vendedores</Label>
+                              <Input 
+                                type="number"
+                                min={1}
+                                value={configLote.numVendedores}
+                                onChange={(e) => setConfigLote(c => ({ ...c, numVendedores: Number(e.target.value) || 1 }))}
                               />
-                              <Label htmlFor="abreDomingo">Abre Domingo</Label>
                             </div>
 
-                            <div className="flex items-center space-x-2">
-                              <Switch
-                                id="abreFeriado"
-                                checked={configLote.abreFeriado}
-                                onCheckedChange={(v) => setConfigLote(c => ({ ...c, abreFeriado: v }))}
+                            <div className="space-y-2">
+                              <Label>% Mínimo Aceitável</Label>
+                              <Input 
+                                type="number"
+                                min={0}
+                                max={100}
+                                value={configLote.percentualAceitavel}
+                                onChange={(e) => setConfigLote(c => ({ ...c, percentualAceitavel: Number(e.target.value) || 100 }))}
                               />
-                              <Label htmlFor="abreFeriado">Abre Feriado</Label>
+                              <p className="text-xs text-muted-foreground">Ex: 90 = aceita a partir de 90% da meta</p>
+                            </div>
+
+                            <div className="space-y-3">
+                              <div className="flex items-center space-x-2">
+                                <Switch
+                                  id="abreDomingo"
+                                  checked={configLote.abreDomingo}
+                                  onCheckedChange={(v) => setConfigLote(c => ({ ...c, abreDomingo: v }))}
+                                />
+                                <Label htmlFor="abreDomingo">Abre Domingo</Label>
+                              </div>
+
+                              <div className="flex items-center space-x-2">
+                                <Switch
+                                  id="abreFeriado"
+                                  checked={configLote.abreFeriado}
+                                  onCheckedChange={(v) => setConfigLote(c => ({ ...c, abreFeriado: v }))}
+                                />
+                                <Label htmlFor="abreFeriado">Abre Feriado</Label>
+                              </div>
                             </div>
                           </div>
 
