@@ -90,22 +90,33 @@ export function useMetasVendas() {
     }
   }, []);
 
-  // Buscar metas
+  // Buscar metas - agora busca todos os meses do ano
   const fetchMetas = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      let resultado: MetaVenda[] = [];
+      // Buscar todos os meses do ano para ter dados completos
+      const promisesLoja: Promise<MetaVenda[]>[] = [];
+      const promisesVendedor: Promise<MetaVenda[]>[] = [];
       
-      if (filters.tipo === 'TODOS') {
-        const [metasLoja, metasVendedor] = await Promise.all([
-          getMetasPorPeriodo('LOJA', filters.ano, filters.mes),
-          getMetasPorPeriodo('VENDEDOR', filters.ano, filters.mes),
-        ]);
-        resultado = [...metasLoja, ...metasVendedor];
-      } else {
-        resultado = await getMetasPorPeriodo(filters.tipo, filters.ano, filters.mes);
+      for (let mes = 1; mes <= 12; mes++) {
+        if (filters.tipo === 'TODOS' || filters.tipo === 'LOJA') {
+          promisesLoja.push(getMetasPorPeriodo('LOJA', filters.ano, mes));
+        }
+        if (filters.tipo === 'TODOS' || filters.tipo === 'VENDEDOR') {
+          promisesVendedor.push(getMetasPorPeriodo('VENDEDOR', filters.ano, mes));
+        }
       }
+
+      const [metasLojaResults, metasVendedorResults] = await Promise.all([
+        Promise.all(promisesLoja),
+        Promise.all(promisesVendedor),
+      ]);
+
+      let resultado: MetaVenda[] = [
+        ...metasLojaResults.flat(),
+        ...metasVendedorResults.flat(),
+      ];
 
       // Filtrar por empresa se necessário
       if (filters.empresa !== 'ALL' && filters.tipo !== 'LOJA') {
@@ -124,7 +135,7 @@ export function useMetasVendas() {
     } finally {
       setLoading(false);
     }
-  }, [filters, vendedores]);
+  }, [filters.ano, filters.tipo, filters.empresa, vendedores]);
 
   // Salvar meta
   const salvarMeta = useCallback(async (meta: Omit<MetaVenda, 'id'>): Promise<boolean> => {
