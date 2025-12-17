@@ -11,6 +11,7 @@ export interface MetaVenda {
   metaTicketMedio: number;
   metaDescontoMax: number;
   metaQtdVendas: number;
+  numVendedores: number;
 }
 
 export async function getMetasPorPeriodo(
@@ -41,6 +42,7 @@ export async function getMetasPorPeriodo(
     metaTicketMedio: Number(m.meta_ticket_medio) || 0,
     metaDescontoMax: Number(m.meta_desconto_max) || 0,
     metaQtdVendas: m.meta_qtd_vendas || 0,
+    numVendedores: m.num_vendedores || 1,
   }));
 }
 
@@ -57,6 +59,7 @@ export async function upsertMeta(meta: Omit<MetaVenda, 'id'>): Promise<boolean> 
       meta_ticket_medio: meta.metaTicketMedio,
       meta_desconto_max: meta.metaDescontoMax,
       meta_qtd_vendas: meta.metaQtdVendas,
+      num_vendedores: meta.numVendedores || 1,
     }, {
       onConflict: 'tipo,cod_referencia,ano,mes'
     });

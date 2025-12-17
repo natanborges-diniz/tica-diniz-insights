@@ -223,6 +223,7 @@ export type Database = {
           meta_qtd_vendas: number | null
           meta_ticket_medio: number | null
           nome_referencia: string | null
+          num_vendedores: number | null
           tipo: string
           updated_at: string
         }
@@ -239,6 +240,7 @@ export type Database = {
           meta_qtd_vendas?: number | null
           meta_ticket_medio?: number | null
           nome_referencia?: string | null
+          num_vendedores?: number | null
           tipo: string
           updated_at?: string
         }
@@ -255,6 +257,7 @@ export type Database = {
           meta_qtd_vendas?: number | null
           meta_ticket_medio?: number | null
           nome_referencia?: string | null
+          num_vendedores?: number | null
           tipo?: string
           updated_at?: string
         }
