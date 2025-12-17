@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Trophy, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Trophy } from "lucide-react";
 
 interface RankingLojasTableProps {
   ranking: RankingLoja[];
@@ -40,10 +40,10 @@ export function RankingLojasTable({ ranking }: RankingLojasTableProps) {
           <TableRow>
             <TableHead className="w-16 text-center">#</TableHead>
             <TableHead>Loja</TableHead>
-            <TableHead className="text-right">Faturamento</TableHead>
+            <TableHead className="text-right">Vendas Válidas</TableHead>
             <TableHead className="text-right">Ticket Médio</TableHead>
             <TableHead className="text-right">Qtd Vendas</TableHead>
-            <TableHead className="text-right">% Devolução</TableHead>
+            <TableHead className="text-right">% Desconto</TableHead>
             <TableHead className="text-center">Meta</TableHead>
             <TableHead className="w-32">Progresso</TableHead>
           </TableRow>
@@ -55,16 +55,16 @@ export function RankingLojasTable({ ranking }: RankingLojasTableProps) {
                 {getMedalha(loja.posicao)}
               </TableCell>
               <TableCell className="font-medium">{loja.empresa}</TableCell>
-              <TableCell className="text-right font-semibold">
-                {formatCurrency(loja.totalVendido)}
+              <TableCell className="text-right font-semibold text-emerald-600">
+                {formatCurrency(loja.totalVendidoSemCreditos)}
               </TableCell>
               <TableCell className="text-right">
                 {formatCurrency(loja.ticketMedio)}
               </TableCell>
               <TableCell className="text-right">{loja.qtdTransacoes.toLocaleString('pt-BR')}</TableCell>
               <TableCell className="text-right">
-                <span className={loja.percentualDevolucao > 5 ? "text-destructive" : ""}>
-                  {loja.percentualDevolucao.toFixed(1)}%
+                <span className={loja.percentualDesconto > 15 ? "text-destructive" : ""}>
+                  {loja.percentualDesconto.toFixed(1)}%
                 </span>
               </TableCell>
               <TableCell className="text-center">
