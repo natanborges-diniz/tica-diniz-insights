@@ -11,12 +11,11 @@ interface SalesTableProps {
   dados: ResumoEmpresaVendedor[];
   isLoading?: boolean;
   limiteDesconto?: number;
-  limiteDevolucao?: number;
 }
 
 type SortField = 'empresaNomeLogico' | 'vendedor' | 'qtdTransacao' | 'qtdProdutos' | 'totalBruto' | 
-                 'totalDesconto' | 'percentualDesconto' | 'totalVendido' | 'totalDevolucao' | 
-                 'percentualDevolucao' | 'ticketMedioLiquido' | 'totalLiquidoComDevolucoes';
+                 'totalDesconto' | 'percentualDesconto' | 'totalVendido' | 'totalCreditos' |
+                 'totalVendidoSemCreditos' | 'ticketMedio';
 type SortDirection = 'asc' | 'desc' | null;
 
 function formatCurrency(value: number): string {
@@ -34,9 +33,9 @@ function formatPercent(value: number): string {
   return `${value.toFixed(2)}%`;
 }
 
-export function SalesTable({ dados, isLoading, limiteDesconto = 15, limiteDevolucao = 5 }: SalesTableProps) {
+export function SalesTable({ dados, isLoading, limiteDesconto = 15 }: SalesTableProps) {
   const [search, setSearch] = useState('');
-  const [sortField, setSortField] = useState<SortField>('totalLiquidoComDevolucoes');
+  const [sortField, setSortField] = useState<SortField>('totalVendidoSemCreditos');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const handleSort = (field: SortField) => {
@@ -55,21 +54,13 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15, limiteDevolu
     return <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />;
   };
 
-  // Dados enriquecidos com % devolução calculado
-  const dadosEnriquecidos = useMemo(() => {
-    return dados.map(d => ({
-      ...d,
-      percentualDevolucao: d.totalVendido > 0 ? (d.totalDevolucao / d.totalVendido) * 100 : 0,
-    }));
-  }, [dados]);
-
   const filteredAndSortedData = useMemo(() => {
-    let filtered = dadosEnriquecidos;
+    let filtered = dados;
 
     // Filtro de busca
     if (search) {
       const searchLower = search.toLowerCase();
-      filtered = dadosEnriquecidos.filter(row => 
+      filtered = dados.filter(row => 
         row.empresaNomeLogico?.toLowerCase().includes(searchLower) ||
         row.vendedor?.toLowerCase().includes(searchLower)
       );
@@ -94,7 +85,7 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15, limiteDevolu
     }
 
     return filtered;
-  }, [dadosEnriquecidos, search, sortField, sortDirection]);
+  }, [dados, search, sortField, sortDirection]);
 
   return (
     <Card>
@@ -160,15 +151,6 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15, limiteDevolu
                   </TableHead>
                   <TableHead 
                     className="text-right cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('qtdProdutos')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Qtd Prod.
-                      <SortIcon field="qtdProdutos" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="text-right cursor-pointer hover:bg-muted/50"
                     onClick={() => handleSort('totalBruto')}
                   >
                     <div className="flex items-center justify-end">
@@ -205,38 +187,29 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15, limiteDevolu
                   </TableHead>
                   <TableHead 
                     className="text-right cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('totalDevolucao')}
+                    onClick={() => handleSort('totalCreditos')}
                   >
                     <div className="flex items-center justify-end">
-                      Devolução
-                      <SortIcon field="totalDevolucao" />
+                      Créditos
+                      <SortIcon field="totalCreditos" />
                     </div>
                   </TableHead>
                   <TableHead 
                     className="text-right cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('percentualDevolucao')}
-                  >
-                    <div className="flex items-center justify-end">
-                      % Dev.
-                      <SortIcon field="percentualDevolucao" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="text-right cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('ticketMedioLiquido')}
+                    onClick={() => handleSort('ticketMedio')}
                   >
                     <div className="flex items-center justify-end">
                       Ticket Médio
-                      <SortIcon field="ticketMedioLiquido" />
+                      <SortIcon field="ticketMedio" />
                     </div>
                   </TableHead>
                   <TableHead 
                     className="text-right cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('totalLiquidoComDevolucoes')}
+                    onClick={() => handleSort('totalVendidoSemCreditos')}
                   >
                     <div className="flex items-center justify-end">
-                      Fat. Real
-                      <SortIcon field="totalLiquidoComDevolucoes" />
+                      Vendas Válidas
+                      <SortIcon field="totalVendidoSemCreditos" />
                     </div>
                   </TableHead>
                   <TableHead className="text-center">
@@ -246,36 +219,32 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15, limiteDevolu
               </TableHeader>
               <TableBody>
                 {filteredAndSortedData.map((row, index) => (
-                  <TableRow key={`${row.codEmpresa}-${row.codVendedor}-${index}`}>
+                  <TableRow key={`${row.empresaCodLogico}-${row.vendedor}-${index}`}>
                     <TableCell className="font-medium">{row.empresaNomeLogico}</TableCell>
                     <TableCell>{row.vendedor}</TableCell>
                     <TableCell className="text-right">{formatNumber(row.qtdTransacao)}</TableCell>
-                    <TableCell className="text-right">{formatNumber(row.qtdProdutos)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(row.totalBruto)}</TableCell>
                     <TableCell className="text-right text-amber-600">{formatCurrency(row.totalDesconto)}</TableCell>
-                    <TableCell className="text-right text-orange-600">{formatPercent(row.percentualDesconto)}</TableCell>
-                    <TableCell className="text-right font-semibold text-emerald-600">
+                    <TableCell className={`text-right ${row.percentualDesconto > limiteDesconto ? 'text-red-600 font-semibold' : 'text-orange-600'}`}>
+                      {formatPercent(row.percentualDesconto)}
+                    </TableCell>
+                    <TableCell className="text-right">
                       {formatCurrency(row.totalVendido)}
                     </TableCell>
-                    <TableCell className="text-right text-red-600">
-                      {formatCurrency(row.totalDevolucao)}
-                    </TableCell>
-                    <TableCell className={`text-right ${row.percentualDevolucao > 5 ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
-                      {formatPercent(row.percentualDevolucao)}
+                    <TableCell className="text-right text-blue-600">
+                      {formatCurrency(row.totalCreditos)}
                     </TableCell>
                     <TableCell className="text-right text-indigo-600">
-                      {formatCurrency(row.ticketMedioLiquido)}
+                      {formatCurrency(row.ticketMedio)}
                     </TableCell>
-                    <TableCell className="text-right font-bold text-purple-600">
-                      {formatCurrency(row.totalLiquidoComDevolucoes)}
+                    <TableCell className="text-right font-bold text-emerald-600">
+                      {formatCurrency(row.totalVendidoSemCreditos)}
                     </TableCell>
                     <TableCell className="text-center">
-                      {row.percentualDesconto > limiteDesconto || row.percentualDevolucao > limiteDevolucao ? (
+                      {row.percentualDesconto > limiteDesconto ? (
                         <Badge variant="destructive" className="gap-1">
                           <AlertTriangle className="h-3 w-3" />
-                          {row.percentualDesconto > limiteDesconto && `Desc ${formatPercent(row.percentualDesconto)}`}
-                          {row.percentualDesconto > limiteDesconto && row.percentualDevolucao > limiteDevolucao && ' / '}
-                          {row.percentualDevolucao > limiteDevolucao && `Dev ${formatPercent(row.percentualDevolucao)}`}
+                          Desc {formatPercent(row.percentualDesconto)}
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="gap-1 text-emerald-600 border-emerald-600">

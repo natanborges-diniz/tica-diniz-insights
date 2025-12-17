@@ -18,6 +18,7 @@ export interface MetasFilters {
 
 export interface VendedorOption {
   codVendedor: number;
+  vendedor: string;
   nome: string;
   empresa: string;
   codEmpresa: number;
@@ -69,14 +70,16 @@ export function useMetasVendas() {
         dataFim: dataFim.toISOString().split('T')[0],
       });
 
-      const vendedoresUnicos = new Map<number, VendedorOption>();
+      const vendedoresUnicos = new Map<string, VendedorOption>();
       result.forEach((r: ResumoEmpresaVendedor) => {
-        if (r.codVendedor && r.vendedor && r.vendedor.trim()) {
-          vendedoresUnicos.set(r.codVendedor, {
-            codVendedor: r.codVendedor,
+        if (r.vendedor && r.vendedor.trim()) {
+          const key = `${r.empresaCodLogico}-${r.vendedor}`;
+          vendedoresUnicos.set(key, {
+            codVendedor: r.empresaCodLogico || 0,
+            vendedor: r.vendedor,
             nome: r.vendedor,
-            empresa: r.empresa,
-            codEmpresa: r.codEmpresa || 0,
+            empresa: r.empresaNomeLogico || r.empresa,
+            codEmpresa: r.empresaCodLogico || 0,
           });
         }
       });
@@ -122,7 +125,7 @@ export function useMetasVendas() {
       if (filters.empresa !== 'ALL' && filters.tipo !== 'LOJA') {
         resultado = resultado.filter(m => {
           if (m.tipo === 'LOJA') return true;
-          const vendedor = vendedores.find(v => v.codVendedor === m.codReferencia);
+          const vendedor = vendedores.find(v => v.vendedor === m.nomeReferencia);
           return vendedor?.codEmpresa === filters.empresa;
         });
       }

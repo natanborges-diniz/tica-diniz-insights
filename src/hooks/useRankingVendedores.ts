@@ -7,18 +7,17 @@ import { getDefaultPeriodoMesAtual } from "@/utils/dateValidation";
 
 export interface RankingVendedor {
   posicao: number;
-  codVendedor: number;
   vendedor: string;
   empresa: string;
   codEmpresa: number;
   totalVendido: number;
+  totalVendidoSemCreditos: number;
   ticketMedio: number;
   qtdTransacoes: number;
-  totalDevolucao: number;
-  percentualDevolucao: number;
+  percentualDesconto: number;
   meta?: MetaVenda;
   percentualMeta?: number;
-  comparativoMediaLoja?: number; // % acima/abaixo da média da loja
+  comparativoMediaLoja?: number;
 }
 
 export interface RankingVendedoresFilters {
@@ -74,25 +73,26 @@ export function useRankingVendedores() {
 
   // Calcular média por loja para comparativo
   const mediasPorLoja = useMemo(() => {
-    const mediasMap = new Map<string, { totalVendido: number; qtdVendedores: number; ticketMedio: number }>();
+    const mediasMap = new Map<string, { totalVendidoSemCreditos: number; qtdVendedores: number; mediaVendedor: number }>();
     
     dados.forEach(d => {
-      const existing = mediasMap.get(d.empresa);
+      const key = d.empresaNomeLogico || d.empresa;
+      const existing = mediasMap.get(key);
       if (existing) {
-        existing.totalVendido += d.totalVendido || 0;
+        existing.totalVendidoSemCreditos += d.totalVendidoSemCreditos || 0;
         existing.qtdVendedores += 1;
       } else {
-        mediasMap.set(d.empresa, {
-          totalVendido: d.totalVendido || 0,
+        mediasMap.set(key, {
+          totalVendidoSemCreditos: d.totalVendidoSemCreditos || 0,
           qtdVendedores: 1,
-          ticketMedio: 0,
+          mediaVendedor: 0,
         });
       }
     });
 
     // Calcular médias
-    mediasMap.forEach((value, key) => {
-      value.ticketMedio = value.qtdVendedores > 0 ? value.totalVendido / value.qtdVendedores : 0;
+    mediasMap.forEach((value) => {
+      value.mediaVendedor = value.qtdVendedores > 0 ? value.totalVendidoSemCreditos / value.qtdVendedores : 0;
     });
 
     return mediasMap;
@@ -102,54 +102,50 @@ export function useRankingVendedores() {
     const lista = dados
       .filter(d => d.vendedor && d.vendedor.trim() !== '')
       .map(d => {
-        const ticketMedio = d.qtdTransacao > 0 ? d.totalVendido / d.qtdTransacao : 0;
-        const mediaLoja = mediasPorLoja.get(d.empresa);
-        const mediaTicketLoja = mediaLoja?.ticketMedio || 0;
+        const ticketMedio = d.qtdTransacao > 0 ? d.totalVendidoSemCreditos / d.qtdTransacao : 0;
+        const empresaKey = d.empresaNomeLogico || d.empresa;
+        const mediaLoja = mediasPorLoja.get(empresaKey);
+        const mediaVendedorLoja = mediaLoja?.mediaVendedor || 0;
         
         return {
-          codVendedor: d.codVendedor || 0,
           vendedor: d.vendedor,
-          empresa: d.empresa,
-          codEmpresa: d.codEmpresa || 0,
+          empresa: empresaKey,
+          codEmpresa: d.empresaCodLogico || 0,
           totalVendido: d.totalVendido || 0,
+          totalVendidoSemCreditos: d.totalVendidoSemCreditos || 0,
           ticketMedio,
           qtdTransacoes: d.qtdTransacao || 0,
-          totalDevolucao: d.totalDevolucao || 0,
-          percentualDevolucao: d.totalVendido > 0 
-            ? (d.totalDevolucao / (d.totalVendido + d.totalDevolucao)) * 100 
-            : 0,
-          comparativoMediaLoja: mediaTicketLoja > 0 
-            ? ((ticketMedio - mediaTicketLoja) / mediaTicketLoja) * 100 
+          percentualDesconto: d.percentualDesconto || 0,
+          comparativoMediaLoja: mediaVendedorLoja > 0 
+            ? ((d.totalVendidoSemCreditos - mediaVendedorLoja) / mediaVendedorLoja) * 100 
             : 0,
         };
       })
-      .sort((a, b) => b.totalVendido - a.totalVendido);
+      .sort((a, b) => b.totalVendidoSemCreditos - a.totalVendidoSemCreditos);
 
     // Adicionar posição e metas
     return lista.map((vendedor, index) => {
-      const meta = metas.find(m => m.codReferencia === vendedor.codVendedor);
+      // Metas de vendedor não têm referência direta, usar posição
       return {
         posicao: index + 1,
         ...vendedor,
-        meta,
-        percentualMeta: meta && meta.metaFaturamento > 0 
-          ? (vendedor.totalVendido / meta.metaFaturamento) * 100 
-          : undefined,
       };
     });
-  }, [dados, metas, mediasPorLoja]);
+  }, [dados, mediasPorLoja]);
 
   const totais = useMemo(() => {
     const qtdVendedores = ranking.length;
     const totalVendido = ranking.reduce((acc, r) => acc + r.totalVendido, 0);
+    const totalVendidoSemCreditos = ranking.reduce((acc, r) => acc + r.totalVendidoSemCreditos, 0);
     const totalTransacoes = ranking.reduce((acc, r) => acc + r.qtdTransacoes, 0);
     
     return {
       qtdVendedores,
       totalVendido,
+      totalVendidoSemCreditos,
       totalTransacoes,
-      ticketMedioGeral: totalTransacoes > 0 ? totalVendido / totalTransacoes : 0,
-      mediaVendaPorVendedor: qtdVendedores > 0 ? totalVendido / qtdVendedores : 0,
+      ticketMedioGeral: totalTransacoes > 0 ? totalVendidoSemCreditos / totalTransacoes : 0,
+      mediaVendaPorVendedor: qtdVendedores > 0 ? totalVendidoSemCreditos / qtdVendedores : 0,
     };
   }, [ranking]);
 
@@ -166,10 +162,10 @@ export function useRankingVendedores() {
           posicao: r.posicao,
           vendedor: r.vendedor,
           loja: r.empresa,
-          faturamento: r.totalVendido,
+          faturamento: r.totalVendidoSemCreditos,
           ticketMedio: r.ticketMedio,
           qtdVendas: r.qtdTransacoes,
-          percentualDevolucao: r.percentualDevolucao.toFixed(1) + '%',
+          percentualDesconto: r.percentualDesconto.toFixed(1) + '%',
           comparativoLoja: (r.comparativoMediaLoja || 0) > 0 
             ? `+${r.comparativoMediaLoja?.toFixed(1)}%` 
             : `${r.comparativoMediaLoja?.toFixed(1)}%`,
