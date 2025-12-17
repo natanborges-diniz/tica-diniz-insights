@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DollarSign, Percent, ShoppingCart, RotateCcw, TrendingDown, Calculator, Receipt } from 'lucide-react';
+import { DollarSign, Percent, ShoppingCart, RotateCcw, TrendingDown, Receipt, Hash, Ticket } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VendasMetrics } from '@/hooks/useVendasDashboard';
 
@@ -19,6 +19,10 @@ function formatPercent(value: number): string {
   return `${value.toFixed(2)}%`;
 }
 
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('pt-BR').format(value);
+}
+
 export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
   const cards = [
     {
@@ -29,20 +33,6 @@ export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
       bgColor: 'bg-blue-50',
     },
     {
-      title: 'Total Desconto',
-      value: formatCurrency(metrics.totalDesconto),
-      icon: TrendingDown,
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50',
-    },
-    {
-      title: '% Desconto',
-      value: formatPercent(metrics.percentualDesconto),
-      icon: Percent,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50',
-    },
-    {
       title: 'Faturamento Líquido',
       value: formatCurrency(metrics.totalVendido),
       icon: ShoppingCart,
@@ -50,18 +40,20 @@ export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
       bgColor: 'bg-emerald-50',
     },
     {
+      title: 'Total Desconto',
+      value: formatCurrency(metrics.totalDesconto),
+      subtitle: formatPercent(metrics.percentualDesconto),
+      icon: TrendingDown,
+      color: 'text-amber-600',
+      bgColor: 'bg-amber-50',
+    },
+    {
       title: 'Total Devolução',
       value: formatCurrency(metrics.totalDevolucao),
+      subtitle: formatPercent(metrics.percentualDevolucao),
       icon: RotateCcw,
       color: 'text-red-600',
       bgColor: 'bg-red-50',
-    },
-    {
-      title: '% Devolução',
-      value: formatPercent(metrics.percentualDevolucao),
-      icon: Percent,
-      color: 'text-rose-600',
-      bgColor: 'bg-rose-50',
     },
     {
       title: 'Faturamento Real',
@@ -70,6 +62,20 @@ export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
       highlight: true,
+    },
+    {
+      title: 'Qtd. Transações',
+      value: formatNumber(metrics.qtdTransacoes),
+      icon: Hash,
+      color: 'text-cyan-600',
+      bgColor: 'bg-cyan-50',
+    },
+    {
+      title: 'Ticket Médio',
+      value: formatCurrency(metrics.ticketMedioLiquido),
+      icon: Ticket,
+      color: 'text-indigo-600',
+      bgColor: 'bg-indigo-50',
     },
   ];
 
@@ -89,7 +95,12 @@ export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
             {isLoading ? (
               <Skeleton className="h-7 w-24" />
             ) : (
-              <p className={`text-xl font-bold ${card.highlight ? 'text-purple-700' : ''}`}>{card.value}</p>
+              <>
+                <p className={`text-xl font-bold ${card.highlight ? 'text-purple-700' : ''}`}>{card.value}</p>
+                {card.subtitle && (
+                  <p className="text-xs text-muted-foreground">{card.subtitle}</p>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
