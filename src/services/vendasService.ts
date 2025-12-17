@@ -25,6 +25,9 @@ interface ResumoEmpresaVendedorRaw {
   perc_desconto: number;
   total_liquido_sem_devolucao: number;
   total_liquido_com_devolucao: number;
+  // Novos campos para créditos
+  total_creditos: number;
+  total_vendido_sem_creditos: number;
 }
 
 export interface ResumoEmpresaVendedor {
@@ -45,6 +48,9 @@ export interface ResumoEmpresaVendedor {
   percentualDesconto: number;
   totalLiquidoSemDevolucoes: number;
   totalLiquidoComDevolucoes: number;
+  // Novos campos para créditos
+  totalCreditos: number;
+  totalVendidoSemCreditos: number;
   // Calculado no frontend
   ticketMedioLiquido: number;
 }
@@ -89,6 +95,9 @@ export async function getResumoEmpresaVendedor(
       percentualDesconto: r.perc_desconto ?? 0,
       totalLiquidoSemDevolucoes: r.total_liquido_sem_devolucao ?? 0,
       totalLiquidoComDevolucoes: r.total_liquido_com_devolucao ?? 0,
+      // Novos campos para créditos
+      totalCreditos: r.total_creditos ?? 0,
+      totalVendidoSemCreditos: r.total_vendido_sem_creditos ?? 0,
       // Ticket médio calculado no frontend
       ticketMedioLiquido: qtdTransacao > 0 ? totalVendido / qtdTransacao : 0,
     };
