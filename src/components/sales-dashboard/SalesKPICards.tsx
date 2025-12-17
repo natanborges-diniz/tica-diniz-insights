@@ -1,11 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DollarSign, Percent, ShoppingCart, RotateCcw, TrendingDown, Receipt, Hash, Ticket } from 'lucide-react';
+import { DollarSign, Percent, ShoppingCart, RotateCcw, TrendingDown, Receipt, Hash, Ticket, CreditCard, Banknote } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VendasMetrics } from '@/hooks/useVendasDashboard';
 
 interface SalesKPICardsProps {
   metrics: VendasMetrics;
   isLoading?: boolean;
+  usarVendasSemCreditos?: boolean;
 }
 
 function formatCurrency(value: number): string {
@@ -23,7 +24,12 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat('pt-BR').format(value);
 }
 
-export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
+export function SalesKPICards({ metrics, isLoading, usarVendasSemCreditos = true }: SalesKPICardsProps) {
+  // Valor principal de faturamento baseado no toggle
+  const valorFaturamentoPrincipal = usarVendasSemCreditos 
+    ? metrics.totalVendidoSemCreditos 
+    : metrics.totalVendido;
+
   const cards = [
     {
       title: 'Faturamento Bruto',
@@ -33,6 +39,14 @@ export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
       bgColor: 'bg-blue-50',
     },
     {
+      title: 'Total Desconto',
+      value: formatCurrency(metrics.totalDesconto),
+      subtitle: formatPercent(metrics.percentualDesconto),
+      icon: TrendingDown,
+      color: 'text-amber-600',
+      bgColor: 'bg-amber-50',
+    },
+    {
       title: 'Faturamento Líquido',
       value: formatCurrency(metrics.totalVendido),
       icon: ShoppingCart,
@@ -40,12 +54,19 @@ export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
       bgColor: 'bg-emerald-50',
     },
     {
-      title: 'Total Desconto',
-      value: formatCurrency(metrics.totalDesconto),
-      subtitle: formatPercent(metrics.percentualDesconto),
-      icon: TrendingDown,
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50',
+      title: 'Créditos Utilizados',
+      value: formatCurrency(metrics.totalCreditos),
+      icon: CreditCard,
+      color: 'text-orange-600',
+      bgColor: 'bg-orange-50',
+    },
+    {
+      title: usarVendasSemCreditos ? 'Vendas Válidas (Sem Créditos)' : 'Vendas Totais',
+      value: formatCurrency(valorFaturamentoPrincipal),
+      icon: Banknote,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-50',
+      highlight: true,
     },
     {
       title: 'Total Devolução',
@@ -59,9 +80,8 @@ export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
       title: 'Faturamento Real',
       value: formatCurrency(metrics.totalLiquidoComDevolucoes),
       icon: Receipt,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50',
-      highlight: true,
+      color: 'text-teal-600',
+      bgColor: 'bg-teal-50',
     },
     {
       title: 'Qtd. Transações',
@@ -80,7 +100,7 @@ export function SalesKPICards({ metrics, isLoading }: SalesKPICardsProps) {
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       {cards.map((card) => (
         <Card key={card.title} className={`overflow-hidden ${card.highlight ? 'ring-2 ring-purple-500' : ''}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

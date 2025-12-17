@@ -31,6 +31,8 @@ export interface ResumoLoja {
   qtdDevolucao: number;
   percentualDesconto: number;
   ticketMedioLiquido: number;
+  totalCreditos: number;
+  totalVendidoSemCreditos: number;
 }
 
 export interface VendasMetrics {
@@ -44,6 +46,8 @@ export interface VendasMetrics {
   qtdTransacoes: number;
   ticketMedioLiquido: number;
   percentualDevolucao: number;
+  totalCreditos: number;
+  totalVendidoSemCreditos: number;
 }
 
 function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
@@ -61,6 +65,8 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
       existing.totalLiquidoComDevolucoes += d.totalLiquidoComDevolucoes || 0;
       existing.qtdTransacao += d.qtdTransacao || 0;
       existing.qtdDevolucao += d.qtdDevolucao || 0;
+      existing.totalCreditos += d.totalCreditos || 0;
+      existing.totalVendidoSemCreditos += d.totalVendidoSemCreditos || 0;
     } else {
       mapa.set(key, {
         empresa: key,
@@ -74,6 +80,8 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
         qtdDevolucao: d.qtdDevolucao || 0,
         percentualDesconto: 0,
         ticketMedioLiquido: 0,
+        totalCreditos: d.totalCreditos || 0,
+        totalVendidoSemCreditos: d.totalVendidoSemCreditos || 0,
       });
     }
   });
@@ -151,6 +159,8 @@ export function useVendasDashboard() {
     const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
     const ticketMedioLiquido = qtdTransacoes > 0 ? totalVendido / qtdTransacoes : 0;
     const percentualDevolucao = totalVendido > 0 ? (totalDevolucao / totalVendido) * 100 : 0;
+    const totalCreditos = dados.reduce((acc, d) => acc + (d.totalCreditos || 0), 0);
+    const totalVendidoSemCreditos = dados.reduce((acc, d) => acc + (d.totalVendidoSemCreditos || 0), 0);
 
     return { 
       totalBruto, 
@@ -163,6 +173,8 @@ export function useVendasDashboard() {
       qtdTransacoes,
       ticketMedioLiquido,
       percentualDevolucao,
+      totalCreditos,
+      totalVendidoSemCreditos,
     };
   }, [dados]);
 

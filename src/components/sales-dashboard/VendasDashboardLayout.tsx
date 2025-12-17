@@ -1,11 +1,14 @@
 // src/components/sales-dashboard/VendasDashboardLayout.tsx
 
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, BarChart3, RefreshCw, AlertCircle, Building2, Users, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 import { VendasFiltersState, ViewMode, ResumoLoja, VendasMetrics } from "@/hooks/useVendasDashboard";
 import { ResumoEmpresaVendedor, ResumoFormaPagamento } from "@/services/vendasService";
@@ -99,6 +102,7 @@ export function VendasDashboardLayout({
 }: VendasDashboardLayoutProps) {
   const isLoading = loading || loadingFormas;
   const showEmptyState = !dataLoaded && !loading;
+  const [usarVendasSemCreditos, setUsarVendasSemCreditos] = useState(true);
 
   const handleViewModeChange = (mode: ViewMode) => {
     setFilters((prev) => ({ ...prev, viewMode: mode }));
@@ -139,24 +143,38 @@ export function VendasDashboardLayout({
           isLoading={isLoading}
         />
 
-        {/* Toggle de Visão */}
-        <div className="flex gap-2">
-          <Button
-            variant={filters.viewMode === "loja" ? "default" : "outline"}
-            size="sm"
-            onClick={() => handleViewModeChange("loja")}
-          >
-            <Building2 className="h-4 w-4 mr-2" />
-            Por Loja
-          </Button>
-          <Button
-            variant={filters.viewMode === "vendedor" ? "default" : "outline"}
-            size="sm"
-            onClick={() => handleViewModeChange("vendedor")}
-          >
-            <Users className="h-4 w-4 mr-2" />
-            Por Vendedor
-          </Button>
+        {/* Toggle de Visão e Toggle de Créditos */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex gap-2">
+            <Button
+              variant={filters.viewMode === "loja" ? "default" : "outline"}
+              size="sm"
+              onClick={() => handleViewModeChange("loja")}
+            >
+              <Building2 className="h-4 w-4 mr-2" />
+              Por Loja
+            </Button>
+            <Button
+              variant={filters.viewMode === "vendedor" ? "default" : "outline"}
+              size="sm"
+              onClick={() => handleViewModeChange("vendedor")}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Por Vendedor
+            </Button>
+          </div>
+          
+          {/* Toggle Vendas sem Créditos */}
+          <div className="flex items-center gap-2 bg-muted/50 px-3 py-2 rounded-lg">
+            <Switch
+              id="vendas-sem-creditos"
+              checked={usarVendasSemCreditos}
+              onCheckedChange={setUsarVendasSemCreditos}
+            />
+            <Label htmlFor="vendas-sem-creditos" className="text-sm cursor-pointer">
+              {usarVendasSemCreditos ? "Vendas sem Créditos (padrão)" : "Vendas Totais"}
+            </Label>
+          </div>
         </div>
 
         {/* Erros */}
@@ -190,7 +208,7 @@ export function VendasDashboardLayout({
         ) : dataLoaded && (
           <>
             {/* KPIs */}
-            <SalesKPICards metrics={metrics} isLoading={loading} />
+            <SalesKPICards metrics={metrics} isLoading={loading} usarVendasSemCreditos={usarVendasSemCreditos} />
 
             {/* Gráfico e Tabela - Condicional por modo */}
             {filters.viewMode === "loja" ? (
