@@ -752,7 +752,6 @@ export default function MetasConfigDashboard() {
                               <Checkbox checked={selecionado} />
                               <div className="text-sm">
                                 <p className="font-medium">{v.nome}</p>
-                                <p className="text-xs text-muted-foreground">{v.empresa}</p>
                                 {metaExistente && (
                                   <Badge variant="secondary" className="text-xs mt-1">
                                     Meta: R$ {metaExistente.metaFaturamento?.toLocaleString('pt-BR')}
