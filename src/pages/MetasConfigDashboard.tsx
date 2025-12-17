@@ -712,19 +712,37 @@ export default function MetasConfigDashboard() {
                           Filtre por loja e selecione os vendedores
                         </CardDescription>
                       </div>
-                      <Select value={empresaFiltro === 'ALL' ? 'ALL' : String(empresaFiltro)} onValueChange={(v) => setEmpresaFiltro(v === 'ALL' ? 'ALL' : Number(v))}>
-                        <SelectTrigger className="w-48">
-                          <SelectValue placeholder="Filtrar por loja..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ALL">Todas as lojas</SelectItem>
-                          {empresas.map(emp => (
-                            <SelectItem key={emp.codEmpresa} value={String(emp.codEmpresa)}>
-                              {emp.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            if (vendedoresSelecionados.length === vendedoresFiltrados.length) {
+                              setVendedoresSelecionados([]);
+                            } else {
+                              setVendedoresSelecionados(vendedoresFiltrados.map(v => v.codVendedor));
+                            }
+                          }}
+                          disabled={vendedoresFiltrados.length === 0}
+                        >
+                          {vendedoresSelecionados.length === vendedoresFiltrados.length && vendedoresFiltrados.length > 0 
+                            ? "Desmarcar Todos" 
+                            : "Selecionar Todos"}
+                        </Button>
+                        <Select value={empresaFiltro === 'ALL' ? 'ALL' : String(empresaFiltro)} onValueChange={(v) => setEmpresaFiltro(v === 'ALL' ? 'ALL' : Number(v))}>
+                          <SelectTrigger className="w-48">
+                            <SelectValue placeholder="Filtrar por loja..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ALL">Todas as lojas</SelectItem>
+                            {empresas.map(emp => (
+                              <SelectItem key={emp.codEmpresa} value={String(emp.codEmpresa)}>
+                                {emp.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
