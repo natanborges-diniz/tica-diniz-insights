@@ -94,7 +94,7 @@ export default function MetasConfigDashboard() {
   const [metaFaturamento, setMetaFaturamento] = useState("");
   const [metaTicketMedio, setMetaTicketMedio] = useState("");
   const [numVendedoresMeta, setNumVendedoresMeta] = useState("1");
-  
+  const [percentualAceitavelLoja, setPercentualAceitavelLoja] = useState("100");
   const [savingMetas, setSavingMetas] = useState(false);
   const [calcularAutomatico, setCalcularAutomatico] = useState(true);
   
@@ -104,6 +104,7 @@ export default function MetasConfigDashboard() {
   // ========== ESTADOS: METAS VENDEDOR ==========
   const [vendedoresSelecionados, setVendedoresSelecionados] = useState<number[]>([]);
   const [empresaFiltro, setEmpresaFiltro] = useState<number | 'ALL'>('ALL');
+  const [percentualAceitavelVendedor, setPercentualAceitavelVendedor] = useState("100");
 
   // ========== ESTADOS: PERÍODOS ==========
   const [novoPeriodo, setNovoPeriodo] = useState({
@@ -201,6 +202,7 @@ export default function MetasConfigDashboard() {
             metaDescontoMax: 0,
             metaQtdVendas: 0,
             numVendedores: Number(numVendedoresMeta) || 1,
+            percentualAceitavel: Number(percentualAceitavelLoja) || 100,
           }));
         }
       }
@@ -211,6 +213,7 @@ export default function MetasConfigDashboard() {
       setMetaFaturamento("");
       setMetaTicketMedio("");
       setNumVendedoresMeta("1");
+      setPercentualAceitavelLoja("100");
       fetchMetas();
     } catch (err) {
       toast.error("Erro ao salvar metas");
@@ -327,6 +330,7 @@ export default function MetasConfigDashboard() {
             metaDescontoMax: 0,
             metaQtdVendas: 0,
             numVendedores: 1,
+            percentualAceitavel: Number(percentualAceitavelVendedor) || 100,
           }));
         }
       }
@@ -603,18 +607,35 @@ export default function MetasConfigDashboard() {
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Nº de Vendedores</Label>
-                      <Input 
-                        type="number"
-                        min="1"
-                        value={numVendedoresMeta}
-                        onChange={(e) => setNumVendedoresMeta(e.target.value)}
-                        placeholder="1"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Para cálculo da meta individual por vendedor
-                      </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Nº de Vendedores</Label>
+                        <Input 
+                          type="number"
+                          min="1"
+                          value={numVendedoresMeta}
+                          onChange={(e) => setNumVendedoresMeta(e.target.value)}
+                          placeholder="1"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Para cálculo da meta individual
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>% Mínimo Aceitável</Label>
+                        <Input 
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={percentualAceitavelLoja}
+                          onChange={(e) => setPercentualAceitavelLoja(e.target.value)}
+                          placeholder="100"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Ex: 90 = meta atingida a 90%
+                        </p>
+                      </div>
                     </div>
 
                     <Button 
@@ -647,6 +668,7 @@ export default function MetasConfigDashboard() {
                             <TableHead className="text-right">Faturamento</TableHead>
                             <TableHead className="text-right">Ticket Médio</TableHead>
                             <TableHead className="text-center">Nº Vend.</TableHead>
+                            <TableHead className="text-center">% Mín.</TableHead>
                             <TableHead></TableHead>
                           </TableRow>
                         </TableHeader>
@@ -665,6 +687,9 @@ export default function MetasConfigDashboard() {
                               </TableCell>
                               <TableCell className="text-center">
                                 <Badge variant="secondary">{m.numVendedores || 1}</Badge>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="outline">{m.percentualAceitavel || 100}%</Badge>
                               </TableCell>
                               <TableCell>
                                 <AlertDialog>
@@ -893,6 +918,21 @@ export default function MetasConfigDashboard() {
                       </>
                     )}
 
+                    <div className="space-y-2">
+                      <Label>% Mínimo Aceitável</Label>
+                      <Input 
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={percentualAceitavelVendedor}
+                        onChange={(e) => setPercentualAceitavelVendedor(e.target.value)}
+                        placeholder="100"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Ex: 90 = meta atingida a 90%
+                      </p>
+                    </div>
+
                     {calcularAutomatico && lojaBaseCalculo && vendedoresSelecionados.length > 0 && (
                       <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg space-y-1 text-sm">
                         <p className="font-medium text-primary">Prévia do cálculo:</p>
@@ -941,6 +981,7 @@ export default function MetasConfigDashboard() {
                             <TableHead>Mês</TableHead>
                             <TableHead className="text-right">Faturamento</TableHead>
                             <TableHead className="text-right">Ticket Médio</TableHead>
+                            <TableHead className="text-center">% Mín.</TableHead>
                             <TableHead></TableHead>
                           </TableRow>
                         </TableHeader>
@@ -956,6 +997,9 @@ export default function MetasConfigDashboard() {
                               </TableCell>
                               <TableCell className="text-right">
                                 R$ {m.metaTicketMedio?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="outline">{m.percentualAceitavel || 100}%</Badge>
                               </TableCell>
                               <TableCell>
                                 <AlertDialog>
@@ -1280,7 +1324,7 @@ export default function MetasConfigDashboard() {
                                 <p className="font-medium">{emp.nome}</p>
                                 {config && (
                                   <p className="text-xs text-muted-foreground">
-                                    {config.tipoLoja} • {config.numVendedores} vend. • {config.percentualAceitavel}% mín
+                                    {config.tipoLoja} • {config.percentualAceitavel}% mín
                                   </p>
                                 )}
                               </div>
@@ -1310,16 +1354,6 @@ export default function MetasConfigDashboard() {
                                   <SelectItem value="SHOPPING">Loja de Shopping</SelectItem>
                                 </SelectContent>
                               </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label>Nº de Vendedores</Label>
-                              <Input 
-                                type="number"
-                                min={1}
-                                value={configLote.numVendedores}
-                                onChange={(e) => setConfigLote(c => ({ ...c, numVendedores: Number(e.target.value) || 1 }))}
-                              />
                             </div>
 
                             <div className="space-y-2">

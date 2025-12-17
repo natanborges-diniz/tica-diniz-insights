@@ -12,6 +12,7 @@ export interface MetaVenda {
   metaDescontoMax: number;
   metaQtdVendas: number;
   numVendedores: number;
+  percentualAceitavel: number;
 }
 
 export async function getMetasPorPeriodo(
@@ -43,6 +44,7 @@ export async function getMetasPorPeriodo(
     metaDescontoMax: Number(m.meta_desconto_max) || 0,
     metaQtdVendas: m.meta_qtd_vendas || 0,
     numVendedores: m.num_vendedores || 1,
+    percentualAceitavel: Number(m.percentual_aceitavel) || 100,
   }));
 }
 
@@ -60,6 +62,7 @@ export async function upsertMeta(meta: Omit<MetaVenda, 'id'>): Promise<boolean> 
       meta_desconto_max: meta.metaDescontoMax,
       meta_qtd_vendas: meta.metaQtdVendas,
       num_vendedores: meta.numVendedores || 1,
+      percentual_aceitavel: meta.percentualAceitavel || 100,
     }, {
       onConflict: 'tipo,cod_referencia,ano,mes'
     });
