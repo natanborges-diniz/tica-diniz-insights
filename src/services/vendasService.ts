@@ -7,20 +7,20 @@ import { apiGet, EmpresaParam, formatEmpresaParam } from './firebirdBridge';
 // INTERFACES - RESUMO EMPRESA/VENDEDOR
 // ============================================
 
-// Interface RAW - campos UPPERCASE como vêm da API
+// Interface RAW - campos snake_case como vêm da API (padrão dos endpoints)
 interface ResumoEmpresaVendedorRaw {
-  EMPRESA: string;
-  EMPRESA_COD_LOGICO: number;
-  EMPRESA_NOME_LOGICO: string;
-  VENDEDOR: string;
-  QTD_TRANSACAO: number;
-  QTD_PRODUTOS: number;
-  TOTAL_BRUTO: number;
-  TOTAL_VENDIDO: number;
-  TOTAL_DESCONTO: number;
-  PERC_DESCONTO: number;
-  TOTAL_CREDITOS: number;
-  TOTAL_VENDIDO_SEM_CREDITOS: number;
+  empresa: string;
+  empresa_cod_logico: number;
+  empresa_nome_logico: string;
+  vendedor: string;
+  qtd_transacao: number;
+  qtd_produtos: number;
+  total_bruto: number;
+  total_vendido: number;
+  total_desconto: number;
+  perc_desconto: number;
+  total_creditos: number;
+  total_vendido_sem_creditos: number;
 }
 
 // Interface normalizada para o frontend (camelCase)
@@ -59,24 +59,24 @@ export async function getResumoEmpresaVendedor(
   console.log('[vendasService] Raw data count:', raw.length);
   console.log('[vendasService] Raw data sample:', raw[0]);
 
-  // Mapear campos UPPERCASE da API para camelCase
+  // Mapear campos snake_case da API para camelCase
   const mapped = raw.map((r) => {
-    const totalVendidoSemCreditos = r.TOTAL_VENDIDO_SEM_CREDITOS ?? 0;
-    const qtdTransacao = r.QTD_TRANSACAO ?? 0;
+    const totalVendidoSemCreditos = r.total_vendido_sem_creditos ?? 0;
+    const qtdTransacao = r.qtd_transacao ?? 0;
 
     return {
-      empresa: (r.EMPRESA ?? '').trim(),
-      empresaCodLogico: r.EMPRESA_COD_LOGICO ?? 0,
-      empresaNomeLogico: (r.EMPRESA_NOME_LOGICO ?? r.EMPRESA ?? '').trim(),
-      vendedor: (r.VENDEDOR ?? '').trim(),
+      empresa: (r.empresa ?? '').trim(),
+      empresaCodLogico: r.empresa_cod_logico ?? 0,
+      empresaNomeLogico: (r.empresa_nome_logico ?? r.empresa ?? '').trim(),
+      vendedor: (r.vendedor ?? '').trim(),
       qtdTransacao,
-      qtdProdutos: r.QTD_PRODUTOS ?? 0,
+      qtdProdutos: r.qtd_produtos ?? 0,
       // Valores do backend - NÃO recalcular
-      totalBruto: r.TOTAL_BRUTO ?? 0,
-      totalVendido: r.TOTAL_VENDIDO ?? 0,
-      totalDesconto: r.TOTAL_DESCONTO ?? 0,
-      percentualDesconto: r.PERC_DESCONTO ?? 0,
-      totalCreditos: r.TOTAL_CREDITOS ?? 0,
+      totalBruto: r.total_bruto ?? 0,
+      totalVendido: r.total_vendido ?? 0,
+      totalDesconto: r.total_desconto ?? 0,
+      percentualDesconto: r.perc_desconto ?? 0,
+      totalCreditos: r.total_creditos ?? 0,
       totalVendidoSemCreditos,
       // Ticket médio calculado usando vendas sem créditos
       ticketMedio: qtdTransacao > 0 ? totalVendidoSemCreditos / qtdTransacao : 0,
