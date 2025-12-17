@@ -4,8 +4,8 @@
 import { apiGet } from './firebirdBridge';
 import { supabase } from '@/integrations/supabase/client';
 
-// Empresas que não devem aparecer nos filtros (sem operação ativa)
-const EMPRESAS_INATIVAS = [3, 5, 7, 8, 10, 11, 12];
+// Apenas Loja 10 é inativa (cod_empresa = 10 no Supabase)
+const EMPRESAS_INATIVAS_SUPABASE = [10];
 
 // ============================================
 // INTERFACES
@@ -27,7 +27,7 @@ export interface Empresa {
 
 export async function getEmpresas(): Promise<Empresa[]> {
   try {
-    // Tenta buscar do firebird-bridge primeiro
+    // Tenta buscar do firebird-bridge primeiro (já vem filtrado pelo backend)
     const raw = await apiGet<EmpresaRaw>('/empresas');
     
     if (raw && raw.length > 0) {
@@ -40,7 +40,7 @@ export async function getEmpresas(): Promise<Empresa[]> {
     console.warn('Firebird bridge indisponível, usando fallback Supabase:', err);
   }
   
-  // Fallback: buscar do Supabase
+  // Fallback: buscar do Supabase (apenas filtra Loja 10)
   const { data, error } = await supabase
     .from('empresa')
     .select('cod_empresa, nome_fantasia')
@@ -52,7 +52,7 @@ export async function getEmpresas(): Promise<Empresa[]> {
   }
   
   return (data || [])
-    .filter(e => !EMPRESAS_INATIVAS.includes(e.cod_empresa))
+    .filter(e => !EMPRESAS_INATIVAS_SUPABASE.includes(e.cod_empresa))
     .map(e => ({
       codEmpresa: e.cod_empresa,
       nome: e.nome_fantasia || `Loja ${e.cod_empresa}`,
