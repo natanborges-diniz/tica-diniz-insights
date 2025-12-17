@@ -3,12 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
-import { TableIcon, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { TableIcon, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle } from 'lucide-react';
 import { ResumoEmpresaVendedor } from '@/services/vendasService';
 
 interface SalesTableProps {
   dados: ResumoEmpresaVendedor[];
   isLoading?: boolean;
+  limiteDesconto?: number;
+  limiteDevolucao?: number;
 }
 
 type SortField = 'empresaNomeLogico' | 'vendedor' | 'qtdTransacao' | 'qtdProdutos' | 'totalBruto' | 
@@ -31,7 +34,7 @@ function formatPercent(value: number): string {
   return `${value.toFixed(2)}%`;
 }
 
-export function SalesTable({ dados, isLoading }: SalesTableProps) {
+export function SalesTable({ dados, isLoading, limiteDesconto = 15, limiteDevolucao = 5 }: SalesTableProps) {
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('totalLiquidoComDevolucoes');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -236,6 +239,9 @@ export function SalesTable({ dados, isLoading }: SalesTableProps) {
                       <SortIcon field="totalLiquidoComDevolucoes" />
                     </div>
                   </TableHead>
+                  <TableHead className="text-center">
+                    Qualidade
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -262,6 +268,21 @@ export function SalesTable({ dados, isLoading }: SalesTableProps) {
                     </TableCell>
                     <TableCell className="text-right font-bold text-purple-600">
                       {formatCurrency(row.totalLiquidoComDevolucoes)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {row.percentualDesconto > limiteDesconto || row.percentualDevolucao > limiteDevolucao ? (
+                        <Badge variant="destructive" className="gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          {row.percentualDesconto > limiteDesconto && `Desc ${formatPercent(row.percentualDesconto)}`}
+                          {row.percentualDesconto > limiteDesconto && row.percentualDevolucao > limiteDevolucao && ' / '}
+                          {row.percentualDevolucao > limiteDevolucao && `Dev ${formatPercent(row.percentualDevolucao)}`}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="gap-1 text-emerald-600 border-emerald-600">
+                          <CheckCircle className="h-3 w-3" />
+                          OK
+                        </Badge>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
