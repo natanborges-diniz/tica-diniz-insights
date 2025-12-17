@@ -95,6 +95,7 @@ export default function MetasConfigDashboard() {
   const [metaTicketMedio, setMetaTicketMedio] = useState("");
   const [metaQtdVendas, setMetaQtdVendas] = useState("");
   const [savingMetas, setSavingMetas] = useState(false);
+  const [calcularAutomatico, setCalcularAutomatico] = useState(true);
 
   // ========== ESTADOS: METAS VENDEDOR ==========
   const [vendedoresSelecionados, setVendedoresSelecionados] = useState<number[]>([]);
@@ -241,6 +242,30 @@ export default function MetasConfigDashboard() {
     );
   };
 
+  // Função para calcular meta do vendedor baseado na loja
+  const calcularMetaVendedor = (codEmpresa: number, mes: number): { faturamento: number; ticketMedio: number; qtdVendas: number } => {
+    const config = lojasConfig.find(c => c.codEmpresa === codEmpresa);
+    const numVendedores = config?.numVendedores || 1;
+    
+    // Buscar meta da loja para o período
+    const metaLoja = metas.find(m => 
+      m.tipo === 'LOJA' && 
+      m.codReferencia === codEmpresa && 
+      m.ano === ano && 
+      m.mes === mes
+    );
+    
+    if (!metaLoja) {
+      return { faturamento: 0, ticketMedio: 0, qtdVendas: 0 };
+    }
+    
+    return {
+      faturamento: Math.round((metaLoja.metaFaturamento || 0) / numVendedores),
+      ticketMedio: metaLoja.metaTicketMedio || 0, // Ticket médio não divide
+      qtdVendas: Math.round((metaLoja.metaQtdVendas || 0) / numVendedores),
+    };
+  };
+
   const handleSalvarMetasVendedorEmLote = async () => {
     if (vendedoresSelecionados.length === 0) {
       toast.error("Selecione pelo menos um vendedor");
@@ -251,23 +276,56 @@ export default function MetasConfigDashboard() {
       return;
     }
     
+    // Verificar se há metas de lojas cadastradas para calcular automaticamente
+    if (calcularAutomatico) {
+      const vendedoresSemMeta: string[] = [];
+      for (const codVendedor of vendedoresSelecionados) {
+        const vendedor = vendedores.find(v => v.codVendedor === codVendedor);
+        if (vendedor) {
+          for (const mes of mesesMeta) {
+            const metaCalc = calcularMetaVendedor(vendedor.codEmpresa, mes);
+            if (metaCalc.faturamento === 0) {
+              vendedoresSemMeta.push(`${vendedor.nome} (${MESES.find(m => m.value === mes)?.label})`);
+            }
+          }
+        }
+      }
+      if (vendedoresSemMeta.length > 0) {
+        toast.warning(`Meta da loja não cadastrada para: ${vendedoresSemMeta.slice(0, 3).join(", ")}${vendedoresSemMeta.length > 3 ? ` e mais ${vendedoresSemMeta.length - 3}` : ""}`);
+      }
+    }
+    
     setSavingMetas(true);
     try {
       const promises: Promise<boolean>[] = [];
       
       for (const codVendedor of vendedoresSelecionados) {
         const vendedor = vendedores.find(v => v.codVendedor === codVendedor);
+        if (!vendedor) continue;
+        
         for (const mes of mesesMeta) {
+          let faturamento = Number(metaFaturamento) || 0;
+          let ticketMedio = Number(metaTicketMedio) || 0;
+          let qtdVendas = Number(metaQtdVendas) || 0;
+          
+          // Se cálculo automático ativado, usa meta da loja / num vendedores
+          if (calcularAutomatico) {
+            const metaCalc = calcularMetaVendedor(vendedor.codEmpresa, mes);
+            faturamento = metaCalc.faturamento;
+            ticketMedio = metaCalc.ticketMedio;
+            qtdVendas = metaCalc.qtdVendas;
+          }
+          
           promises.push(upsertMeta({
             tipo: 'VENDEDOR',
             codReferencia: codVendedor,
             nomeReferencia: vendedor?.nome || null,
             ano,
             mes,
-            metaFaturamento: Number(metaFaturamento) || 0,
-            metaTicketMedio: Number(metaTicketMedio) || 0,
+            metaFaturamento: faturamento,
+            metaTicketMedio: ticketMedio,
             metaDescontoMax: 0,
-            metaQtdVendas: Number(metaQtdVendas) || 0,
+            metaQtdVendas: qtdVendas,
           }));
         }
       }
@@ -275,9 +333,11 @@ export default function MetasConfigDashboard() {
       await Promise.all(promises);
       toast.success(`Metas salvas para ${vendedoresSelecionados.length} vendedor(es) em ${mesesMeta.length} mês(es)!`);
       setVendedoresSelecionados([]);
-      setMetaFaturamento("");
-      setMetaTicketMedio("");
-      setMetaQtdVendas("");
+      if (!calcularAutomatico) {
+        setMetaFaturamento("");
+        setMetaTicketMedio("");
+        setMetaQtdVendas("");
+      }
       fetchMetas();
     } catch (err) {
       toast.error("Erro ao salvar metas");
@@ -737,40 +797,76 @@ export default function MetasConfigDashboard() {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Meta Faturamento (R$)</Label>
-                      <Input 
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={metaFaturamento}
-                        onChange={(e) => setMetaFaturamento(e.target.value)}
-                        placeholder="0,00"
+                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <div>
+                        <Label>Calcular automaticamente</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Meta Loja ÷ Nº de Vendedores
+                        </p>
+                      </div>
+                      <Switch 
+                        checked={calcularAutomatico}
+                        onCheckedChange={setCalcularAutomatico}
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Meta Ticket Médio (R$)</Label>
-                      <Input 
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={metaTicketMedio}
-                        onChange={(e) => setMetaTicketMedio(e.target.value)}
-                        placeholder="0,00"
-                      />
-                    </div>
+                    {!calcularAutomatico && (
+                      <>
+                        <div className="space-y-2">
+                          <Label>Meta Faturamento (R$)</Label>
+                          <Input 
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={metaFaturamento}
+                            onChange={(e) => setMetaFaturamento(e.target.value)}
+                            placeholder="0,00"
+                          />
+                        </div>
 
-                    <div className="space-y-2">
-                      <Label>Meta Qtd Vendas</Label>
-                      <Input 
-                        type="number"
-                        min="0"
-                        value={metaQtdVendas}
-                        onChange={(e) => setMetaQtdVendas(e.target.value)}
-                        placeholder="0"
-                      />
-                    </div>
+                        <div className="space-y-2">
+                          <Label>Meta Ticket Médio (R$)</Label>
+                          <Input 
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={metaTicketMedio}
+                            onChange={(e) => setMetaTicketMedio(e.target.value)}
+                            placeholder="0,00"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Meta Qtd Vendas</Label>
+                          <Input 
+                            type="number"
+                            min="0"
+                            value={metaQtdVendas}
+                            onChange={(e) => setMetaQtdVendas(e.target.value)}
+                            placeholder="0"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {calcularAutomatico && vendedoresSelecionados.length > 0 && (
+                      <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg space-y-1 text-sm">
+                        <p className="font-medium text-primary">Prévia do cálculo:</p>
+                        {vendedoresSelecionados.slice(0, 3).map(codVendedor => {
+                          const vendedor = vendedores.find(v => v.codVendedor === codVendedor);
+                          if (!vendedor) return null;
+                          const metaCalc = calcularMetaVendedor(vendedor.codEmpresa, mesesMeta[0] || mesAtual);
+                          return (
+                            <p key={codVendedor} className="text-muted-foreground">
+                              {vendedor.nome}: R$ {metaCalc.faturamento.toLocaleString('pt-BR')}
+                            </p>
+                          );
+                        })}
+                        {vendedoresSelecionados.length > 3 && (
+                          <p className="text-muted-foreground">... e mais {vendedoresSelecionados.length - 3}</p>
+                        )}
+                      </div>
+                    )}
 
                     <Button 
                       onClick={handleSalvarMetasVendedorEmLote} 
