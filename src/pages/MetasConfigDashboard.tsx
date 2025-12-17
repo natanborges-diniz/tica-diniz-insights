@@ -93,7 +93,7 @@ export default function MetasConfigDashboard() {
   const [mesesMeta, setMesesMeta] = useState<number[]>([mesAtual]);
   const [metaFaturamento, setMetaFaturamento] = useState("");
   const [metaTicketMedio, setMetaTicketMedio] = useState("");
-  const [metaQtdVendas, setMetaQtdVendas] = useState("");
+  
   const [savingMetas, setSavingMetas] = useState(false);
   const [calcularAutomatico, setCalcularAutomatico] = useState(true);
 
@@ -197,7 +197,7 @@ export default function MetasConfigDashboard() {
             metaFaturamento: metaLoja,
             metaTicketMedio: Number(metaTicketMedio) || 0,
             metaDescontoMax: 0,
-            metaQtdVendas: Number(metaQtdVendas) || 0,
+            metaQtdVendas: 0,
           }));
         }
       }
@@ -207,7 +207,6 @@ export default function MetasConfigDashboard() {
       setLojasSelecionadas([]);
       setMetaFaturamento("");
       setMetaTicketMedio("");
-      setMetaQtdVendas("");
       fetchMetas();
     } catch (err) {
       toast.error("Erro ao salvar metas");
@@ -243,7 +242,7 @@ export default function MetasConfigDashboard() {
   };
 
   // Função para calcular meta do vendedor baseado na loja
-  const calcularMetaVendedor = (codEmpresa: number, mes: number): { faturamento: number; ticketMedio: number; qtdVendas: number } => {
+  const calcularMetaVendedor = (codEmpresa: number, mes: number): { faturamento: number; ticketMedio: number } => {
     const config = lojasConfig.find(c => c.codEmpresa === codEmpresa);
     const numVendedores = config?.numVendedores || 1;
     
@@ -256,13 +255,12 @@ export default function MetasConfigDashboard() {
     );
     
     if (!metaLoja) {
-      return { faturamento: 0, ticketMedio: 0, qtdVendas: 0 };
+      return { faturamento: 0, ticketMedio: 0 };
     }
     
     return {
       faturamento: Math.round((metaLoja.metaFaturamento || 0) / numVendedores),
       ticketMedio: metaLoja.metaTicketMedio || 0, // Ticket médio não divide
-      qtdVendas: Math.round((metaLoja.metaQtdVendas || 0) / numVendedores),
     };
   };
 
@@ -306,14 +304,12 @@ export default function MetasConfigDashboard() {
         for (const mes of mesesMeta) {
           let faturamento = Number(metaFaturamento) || 0;
           let ticketMedio = Number(metaTicketMedio) || 0;
-          let qtdVendas = Number(metaQtdVendas) || 0;
           
           // Se cálculo automático ativado, usa meta da loja / num vendedores
           if (calcularAutomatico) {
             const metaCalc = calcularMetaVendedor(vendedor.codEmpresa, mes);
             faturamento = metaCalc.faturamento;
             ticketMedio = metaCalc.ticketMedio;
-            qtdVendas = metaCalc.qtdVendas;
           }
           
           promises.push(upsertMeta({
@@ -325,7 +321,7 @@ export default function MetasConfigDashboard() {
             metaFaturamento: faturamento,
             metaTicketMedio: ticketMedio,
             metaDescontoMax: 0,
-            metaQtdVendas: qtdVendas,
+            metaQtdVendas: 0,
           }));
         }
       }
@@ -336,7 +332,6 @@ export default function MetasConfigDashboard() {
       if (!calcularAutomatico) {
         setMetaFaturamento("");
         setMetaTicketMedio("");
-        setMetaQtdVendas("");
       }
       fetchMetas();
     } catch (err) {
@@ -603,16 +598,6 @@ export default function MetasConfigDashboard() {
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Meta Qtd Vendas</Label>
-                      <Input 
-                        type="number"
-                        min="0"
-                        value={metaQtdVendas}
-                        onChange={(e) => setMetaQtdVendas(e.target.value)}
-                        placeholder="0"
-                      />
-                    </div>
 
                     <Button 
                       onClick={handleSalvarMetasEmLote} 
@@ -643,7 +628,6 @@ export default function MetasConfigDashboard() {
                             <TableHead>Mês</TableHead>
                             <TableHead className="text-right">Faturamento</TableHead>
                             <TableHead className="text-right">Ticket Médio</TableHead>
-                            <TableHead className="text-right">Qtd Vendas</TableHead>
                             <TableHead></TableHead>
                           </TableRow>
                         </TableHeader>
@@ -660,7 +644,6 @@ export default function MetasConfigDashboard() {
                               <TableCell className="text-right">
                                 R$ {m.metaTicketMedio?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </TableCell>
-                              <TableCell className="text-right">{m.metaQtdVendas}</TableCell>
                               <TableCell>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
@@ -836,16 +819,6 @@ export default function MetasConfigDashboard() {
                           />
                         </div>
 
-                        <div className="space-y-2">
-                          <Label>Meta Qtd Vendas</Label>
-                          <Input 
-                            type="number"
-                            min="0"
-                            value={metaQtdVendas}
-                            onChange={(e) => setMetaQtdVendas(e.target.value)}
-                            placeholder="0"
-                          />
-                        </div>
                       </>
                     )}
 
@@ -897,7 +870,6 @@ export default function MetasConfigDashboard() {
                             <TableHead>Mês</TableHead>
                             <TableHead className="text-right">Faturamento</TableHead>
                             <TableHead className="text-right">Ticket Médio</TableHead>
-                            <TableHead className="text-right">Qtd Vendas</TableHead>
                             <TableHead></TableHead>
                           </TableRow>
                         </TableHeader>
@@ -914,7 +886,6 @@ export default function MetasConfigDashboard() {
                               <TableCell className="text-right">
                                 R$ {m.metaTicketMedio?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </TableCell>
-                              <TableCell className="text-right">{m.metaQtdVendas}</TableCell>
                               <TableCell>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
