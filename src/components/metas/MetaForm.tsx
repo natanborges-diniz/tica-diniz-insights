@@ -119,6 +119,7 @@ export function MetaForm({
       metaDescontoMax: 0,
       metaQtdVendas: Number(metaQtdVendas) || 0,
       numVendedores: 1,
+      percentualAceitavel: 100,
     });
 
     setSaving(false);
