@@ -13,7 +13,7 @@ interface SalesTableProps {
 
 type SortField = 'empresaNomeLogico' | 'vendedor' | 'qtdTransacao' | 'qtdProdutos' | 'totalBruto' | 
                  'totalDesconto' | 'percentualDesconto' | 'totalVendido' | 'totalDevolucao' | 
-                 'totalLiquidoSemDevolucoes' | 'totalLiquidoComDevolucoes';
+                 'percentualDevolucao' | 'ticketMedioLiquido' | 'totalLiquidoComDevolucoes';
 type SortDirection = 'asc' | 'desc' | null;
 
 function formatCurrency(value: number): string {
@@ -52,13 +52,21 @@ export function SalesTable({ dados, isLoading }: SalesTableProps) {
     return <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />;
   };
 
+  // Dados enriquecidos com % devolução calculado
+  const dadosEnriquecidos = useMemo(() => {
+    return dados.map(d => ({
+      ...d,
+      percentualDevolucao: d.totalVendido > 0 ? (d.totalDevolucao / d.totalVendido) * 100 : 0,
+    }));
+  }, [dados]);
+
   const filteredAndSortedData = useMemo(() => {
-    let filtered = dados;
+    let filtered = dadosEnriquecidos;
 
     // Filtro de busca
     if (search) {
       const searchLower = search.toLowerCase();
-      filtered = dados.filter(row => 
+      filtered = dadosEnriquecidos.filter(row => 
         row.empresaNomeLogico?.toLowerCase().includes(searchLower) ||
         row.vendedor?.toLowerCase().includes(searchLower)
       );
@@ -67,8 +75,8 @@ export function SalesTable({ dados, isLoading }: SalesTableProps) {
     // Ordenação
     if (sortField && sortDirection) {
       filtered = [...filtered].sort((a, b) => {
-        const aVal = a[sortField] ?? 0;
-        const bVal = b[sortField] ?? 0;
+        const aVal = a[sortField as keyof typeof a] ?? 0;
+        const bVal = b[sortField as keyof typeof b] ?? 0;
         
         if (typeof aVal === 'string' && typeof bVal === 'string') {
           return sortDirection === 'asc' 
@@ -83,7 +91,7 @@ export function SalesTable({ dados, isLoading }: SalesTableProps) {
     }
 
     return filtered;
-  }, [dados, search, sortField, sortDirection]);
+  }, [dadosEnriquecidos, search, sortField, sortDirection]);
 
   return (
     <Card>
@@ -203,11 +211,20 @@ export function SalesTable({ dados, isLoading }: SalesTableProps) {
                   </TableHead>
                   <TableHead 
                     className="text-right cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('totalLiquidoSemDevolucoes')}
+                    onClick={() => handleSort('percentualDevolucao')}
                   >
                     <div className="flex items-center justify-end">
-                      Líquido s/ Dev.
-                      <SortIcon field="totalLiquidoSemDevolucoes" />
+                      % Dev.
+                      <SortIcon field="percentualDevolucao" />
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="text-right cursor-pointer hover:bg-muted/50"
+                    onClick={() => handleSort('ticketMedioLiquido')}
+                  >
+                    <div className="flex items-center justify-end">
+                      Ticket Médio
+                      <SortIcon field="ticketMedioLiquido" />
                     </div>
                   </TableHead>
                   <TableHead 
@@ -237,8 +254,11 @@ export function SalesTable({ dados, isLoading }: SalesTableProps) {
                     <TableCell className="text-right text-red-600">
                       {formatCurrency(row.totalDevolucao)}
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {formatCurrency(row.totalLiquidoSemDevolucoes)}
+                    <TableCell className={`text-right ${row.percentualDevolucao > 5 ? 'text-red-600 font-semibold' : 'text-muted-foreground'}`}>
+                      {formatPercent(row.percentualDevolucao)}
+                    </TableCell>
+                    <TableCell className="text-right text-indigo-600">
+                      {formatCurrency(row.ticketMedioLiquido)}
                     </TableCell>
                     <TableCell className="text-right font-bold text-purple-600">
                       {formatCurrency(row.totalLiquidoComDevolucoes)}

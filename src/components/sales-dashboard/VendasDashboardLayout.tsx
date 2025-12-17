@@ -18,6 +18,7 @@ import { StoreChart } from "./StoreChart";
 import { StoreTable } from "./StoreTable";
 import { PaymentMethodsChart } from "./PaymentMethodsChart";
 import { PaymentMethodsTable } from "./PaymentMethodsTable";
+import { SalesAlerts } from "./SalesAlerts";
 
 interface VendasDashboardLayoutProps {
   // Dados
@@ -188,6 +189,9 @@ export function VendasDashboardLayout({
           <LoadingSkeleton />
         ) : dataLoaded && (
           <>
+            {/* Alertas de Qualidade */}
+            <SalesAlerts dados={dados} limiteDesconto={15} limiteDevolucao={5} />
+
             {/* KPIs */}
             <SalesKPICards metrics={metrics} isLoading={loading} />
 
