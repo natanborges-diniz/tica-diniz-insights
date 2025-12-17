@@ -31,10 +31,12 @@ export async function getEmpresas(): Promise<Empresa[]> {
     const raw = await apiGet<EmpresaRaw>('/empresas');
     
     if (raw && raw.length > 0) {
-      return raw.map((r) => ({
-        codEmpresa: r.cod_empresa,
-        nome: r.empresa_nome,
-      }));
+      return raw
+        .filter(r => !EMPRESAS_INATIVAS_SUPABASE.includes(r.cod_empresa))
+        .map((r) => ({
+          codEmpresa: r.cod_empresa,
+          nome: r.empresa_nome,
+        }));
     }
   } catch (err) {
     console.warn('Firebird bridge indisponível, usando fallback Supabase:', err);
