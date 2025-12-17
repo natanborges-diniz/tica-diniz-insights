@@ -18,8 +18,7 @@ import {
 import { getEmpresas, Empresa } from "@/services/empresaService";
 import { toast } from "sonner";
 
-// Empresas que não devem aparecer nos filtros (sem operação ativa)
-const EMPRESAS_INATIVAS = [10]; // Loja 10 não tem mais operação
+// Empresas inativas agora são filtradas no empresaService.ts
 
 export function useCalendarioConfig() {
   const anoAtual = new Date().getFullYear();
@@ -50,11 +49,8 @@ export function useCalendarioConfig() {
       setFeriados(feriadosData);
       setLojasConfig(lojasData);
       setExcecoes(excecoesData);
-      // Filtrar empresas inativas
-      const empresasAtivas = empresasData.filter(
-        (emp) => !EMPRESAS_INATIVAS.includes(emp.codEmpresa)
-      );
-      setEmpresas(empresasAtivas);
+      // Empresas já vêm filtradas do service
+      setEmpresas(empresasData);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao carregar configurações";
       setError(message);
