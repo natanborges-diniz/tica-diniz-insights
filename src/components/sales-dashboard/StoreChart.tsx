@@ -10,54 +10,34 @@ interface StoreChartProps {
 
 export function StoreChart({ dados, isLoading }: StoreChartProps) {
   const chartData = dados
-    .filter(d => d.totalLiquidoComDevolucoes > 0)
-    .sort((a, b) => b.totalLiquidoComDevolucoes - a.totalLiquidoComDevolucoes)
+    .filter(d => d.totalVendidoSemCreditos > 0)
+    .sort((a, b) => b.totalVendidoSemCreditos - a.totalVendidoSemCreditos)
     .slice(0, 15)
     .map(d => ({
       loja: d.empresa.replace('DINIZ ', ''),
-      total: d.totalLiquidoComDevolucoes,
+      total: d.totalVendidoSemCreditos,
       quantidade: d.qtdTransacao,
     }));
 
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Faturamento Real por Loja</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-[300px] w-full" />
-        </CardContent>
+        <CardHeader><CardTitle>Vendas Válidas por Loja</CardTitle></CardHeader>
+        <CardContent><Skeleton className="h-[300px] w-full" /></CardContent>
       </Card>
     );
   }
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Faturamento Real por Loja</CardTitle>
-      </CardHeader>
+      <CardHeader><CardTitle>Vendas Válidas por Loja</CardTitle></CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData} layout="vertical" margin={{ left: 80 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis 
-              type="number" 
-              tickFormatter={(value) => 
-                new Intl.NumberFormat('pt-BR', { 
-                  style: 'currency', 
-                  currency: 'BRL',
-                  notation: 'compact'
-                }).format(value)
-              } 
-            />
+            <XAxis type="number" tickFormatter={(value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(value)} />
             <YAxis dataKey="loja" type="category" width={75} tick={{ fontSize: 12 }} />
-            <Tooltip
-              formatter={(value: number) => [
-                new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value),
-                'Faturamento Real'
-              ]}
-            />
+            <Tooltip formatter={(value: number) => [new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value), 'Vendas Válidas']} />
             <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>

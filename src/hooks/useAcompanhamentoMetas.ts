@@ -144,14 +144,12 @@ export function useAcompanhamentoMetas() {
         const config = lojasConfig.find(c => c.codEmpresa === meta.codReferencia) || null;
         const excecoesLoja = excecoes.filter(e => e.codEmpresa === meta.codReferencia);
         
-        // Total vendido pela loja
-        const vendasLoja = vendas.filter(v => v.codEmpresa === meta.codReferencia);
-        const totalVendido = vendasLoja.reduce((sum, v) => sum + (v.totalVendido || 0), 0);
+        // Total vendido pela loja - usar empresaCodLogico para match
+        const vendasLoja = vendas.filter(v => v.empresaCodLogico === meta.codReferencia);
+        const totalVendido = vendasLoja.reduce((sum, v) => sum + (v.totalVendidoSemCreditos || 0), 0);
         
         // Dias com venda (para média real)
-        const diasComVenda = new Set(vendasLoja.map(v => v.codEmpresa)).size > 0 
-          ? vendasLoja.length 
-          : 0;
+        const diasComVenda = vendasLoja.length > 0 ? vendasLoja.length : 0;
         
         // Dias úteis
         const diasUteisTotal = calcularDiasUteis(dataInicio, dataFim, config, feriados, excecoesLoja);

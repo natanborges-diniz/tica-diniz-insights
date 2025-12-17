@@ -222,7 +222,7 @@ export function VendasDashboardLayout({
                   <SellerChart dados={dados} isLoading={loading} />
                   <DescontoChart dados={dados} isLoading={loading} />
                 </div>
-                <SalesTable dados={dados} isLoading={loading} limiteDesconto={15} limiteDevolucao={5} />
+                <SalesTable dados={dados} isLoading={loading} limiteDesconto={15} />
               </>
             )}
 

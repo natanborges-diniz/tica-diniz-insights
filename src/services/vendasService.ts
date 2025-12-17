@@ -7,52 +7,38 @@ import { apiGet, EmpresaParam, formatEmpresaParam } from './firebirdBridge';
 // INTERFACES - RESUMO EMPRESA/VENDEDOR
 // ============================================
 
+// Interface RAW - campos UPPERCASE como vêm da API
 interface ResumoEmpresaVendedorRaw {
-  cod_empresa: number;
-  empresa: string;
-  empresa_cod_logico: number;
-  empresa_nome_logico: string;
-  cod_vendedor: number;
-  vendedor: string;
-  qtd_transacao: number;
-  qtd_produtos: number;
-  total_bruto: number;
-  total_desconto: number;
-  total_vendido: number;
-  total_devolucao: number;
-  qtd_devolucao: number;
-  // Campos pré-calculados pelo backend
-  perc_desconto: number;
-  total_liquido_sem_devolucao: number;
-  total_liquido_com_devolucao: number;
-  // Novos campos para créditos
-  total_creditos: number;
-  total_vendido_sem_creditos: number;
+  EMPRESA: string;
+  EMPRESA_COD_LOGICO: number;
+  EMPRESA_NOME_LOGICO: string;
+  VENDEDOR: string;
+  QTD_TRANSACAO: number;
+  QTD_PRODUTOS: number;
+  TOTAL_BRUTO: number;
+  TOTAL_VENDIDO: number;
+  TOTAL_DESCONTO: number;
+  PERC_DESCONTO: number;
+  TOTAL_CREDITOS: number;
+  TOTAL_VENDIDO_SEM_CREDITOS: number;
 }
 
+// Interface normalizada para o frontend (camelCase)
 export interface ResumoEmpresaVendedor {
-  codEmpresa: number;
-  codEmpresaLogico: number;
   empresa: string;
+  empresaCodLogico: number;
   empresaNomeLogico: string;
-  codVendedor: number;
   vendedor: string;
   qtdTransacao: number;
   qtdProdutos: number;
   totalBruto: number;
-  totalDesconto: number;
   totalVendido: number;
-  totalDevolucao: number;
-  qtdDevolucao: number;
-  // Campos do backend (pré-calculados)
+  totalDesconto: number;
   percentualDesconto: number;
-  totalLiquidoSemDevolucoes: number;
-  totalLiquidoComDevolucoes: number;
-  // Novos campos para créditos
   totalCreditos: number;
   totalVendidoSemCreditos: number;
   // Calculado no frontend
-  ticketMedioLiquido: number;
+  ticketMedio: number;
 }
 
 export interface GetResumoEmpresaVendedorParams {
@@ -73,33 +59,27 @@ export async function getResumoEmpresaVendedor(
   console.log('[vendasService] Raw data count:', raw.length);
   console.log('[vendasService] Raw data sample:', raw[0]);
 
+  // Mapear campos UPPERCASE da API para camelCase
   const mapped = raw.map((r) => {
-    const totalVendido = r.total_vendido ?? 0;
-    const qtdTransacao = r.qtd_transacao ?? 0;
+    const totalVendidoSemCreditos = r.TOTAL_VENDIDO_SEM_CREDITOS ?? 0;
+    const qtdTransacao = r.QTD_TRANSACAO ?? 0;
 
     return {
-      codEmpresa: r.cod_empresa ?? 0,
-      codEmpresaLogico: r.empresa_cod_logico ?? r.cod_empresa ?? 0,
-      empresa: (r.empresa ?? '').trim(),
-      empresaNomeLogico: (r.empresa_nome_logico ?? r.empresa ?? '').trim(),
-      codVendedor: r.cod_vendedor ?? 0,
-      vendedor: (r.vendedor ?? '').trim(),
+      empresa: (r.EMPRESA ?? '').trim(),
+      empresaCodLogico: r.EMPRESA_COD_LOGICO ?? 0,
+      empresaNomeLogico: (r.EMPRESA_NOME_LOGICO ?? r.EMPRESA ?? '').trim(),
+      vendedor: (r.VENDEDOR ?? '').trim(),
       qtdTransacao,
-      qtdProdutos: r.qtd_produtos ?? 0,
-      totalBruto: r.total_bruto ?? 0,
-      totalDesconto: r.total_desconto ?? 0,
-      totalVendido,
-      totalDevolucao: r.total_devolucao ?? 0,
-      qtdDevolucao: r.qtd_devolucao ?? 0,
-      // Usar valores pré-calculados do backend
-      percentualDesconto: r.perc_desconto ?? 0,
-      totalLiquidoSemDevolucoes: r.total_liquido_sem_devolucao ?? 0,
-      totalLiquidoComDevolucoes: r.total_liquido_com_devolucao ?? 0,
-      // Novos campos para créditos
-      totalCreditos: r.total_creditos ?? 0,
-      totalVendidoSemCreditos: r.total_vendido_sem_creditos ?? 0,
-      // Ticket médio calculado no frontend
-      ticketMedioLiquido: qtdTransacao > 0 ? totalVendido / qtdTransacao : 0,
+      qtdProdutos: r.QTD_PRODUTOS ?? 0,
+      // Valores do backend - NÃO recalcular
+      totalBruto: r.TOTAL_BRUTO ?? 0,
+      totalVendido: r.TOTAL_VENDIDO ?? 0,
+      totalDesconto: r.TOTAL_DESCONTO ?? 0,
+      percentualDesconto: r.PERC_DESCONTO ?? 0,
+      totalCreditos: r.TOTAL_CREDITOS ?? 0,
+      totalVendidoSemCreditos,
+      // Ticket médio calculado usando vendas sem créditos
+      ticketMedio: qtdTransacao > 0 ? totalVendidoSemCreditos / qtdTransacao : 0,
     };
   });
 

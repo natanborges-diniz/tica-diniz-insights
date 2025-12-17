@@ -9,13 +9,12 @@ export interface RankingLoja {
   codEmpresa: number;
   empresa: string;
   totalVendido: number;
+  totalVendidoSemCreditos: number;
   ticketMedio: number;
   qtdTransacoes: number;
-  totalDevolucao: number;
-  percentualDevolucao: number;
+  percentualDesconto: number;
   meta?: MetaVenda;
   percentualMeta?: number;
-  variacao?: number;
 }
 
 export interface RankingLojasFilters {
@@ -73,39 +72,42 @@ export function useRankingLojas() {
       codEmpresa: number;
       empresa: string;
       totalVendido: number;
-      ticketMedio: number;
+      totalVendidoSemCreditos: number;
+      totalDesconto: number;
+      totalBruto: number;
       qtdTransacoes: number;
-      totalDevolucao: number;
     }>();
 
     dados.forEach(d => {
-      const existing = porLoja.get(d.empresa);
+      const key = d.empresaNomeLogico || d.empresa;
+      const existing = porLoja.get(key);
       if (existing) {
         existing.totalVendido += d.totalVendido || 0;
+        existing.totalVendidoSemCreditos += d.totalVendidoSemCreditos || 0;
+        existing.totalDesconto += d.totalDesconto || 0;
+        existing.totalBruto += d.totalBruto || 0;
         existing.qtdTransacoes += d.qtdTransacao || 0;
-        existing.totalDevolucao += d.totalDevolucao || 0;
       } else {
-        porLoja.set(d.empresa, {
-          codEmpresa: d.codEmpresa || 0,
-          empresa: d.empresa,
+        porLoja.set(key, {
+          codEmpresa: d.empresaCodLogico || 0,
+          empresa: key,
           totalVendido: d.totalVendido || 0,
-          ticketMedio: 0,
+          totalVendidoSemCreditos: d.totalVendidoSemCreditos || 0,
+          totalDesconto: d.totalDesconto || 0,
+          totalBruto: d.totalBruto || 0,
           qtdTransacoes: d.qtdTransacao || 0,
-          totalDevolucao: d.totalDevolucao || 0,
         });
       }
     });
 
-    // Calcular métricas e ordenar
+    // Calcular métricas e ordenar por vendas válidas
     const lista = Array.from(porLoja.values())
       .map(loja => ({
         ...loja,
-        ticketMedio: loja.qtdTransacoes > 0 ? loja.totalVendido / loja.qtdTransacoes : 0,
-        percentualDevolucao: loja.totalVendido > 0 
-          ? (loja.totalDevolucao / (loja.totalVendido + loja.totalDevolucao)) * 100 
-          : 0,
+        ticketMedio: loja.qtdTransacoes > 0 ? loja.totalVendidoSemCreditos / loja.qtdTransacoes : 0,
+        percentualDesconto: loja.totalBruto > 0 ? (loja.totalDesconto / loja.totalBruto) * 100 : 0,
       }))
-      .sort((a, b) => b.totalVendido - a.totalVendido);
+      .sort((a, b) => b.totalVendidoSemCreditos - a.totalVendidoSemCreditos);
 
     // Adicionar posição e metas
     return lista.map((loja, index) => {
@@ -115,7 +117,7 @@ export function useRankingLojas() {
         ...loja,
         meta,
         percentualMeta: meta && meta.metaFaturamento > 0 
-          ? (loja.totalVendido / meta.metaFaturamento) * 100 
+          ? (loja.totalVendidoSemCreditos / meta.metaFaturamento) * 100 
           : undefined,
       };
     });
@@ -124,11 +126,11 @@ export function useRankingLojas() {
   const totais = useMemo(() => {
     return {
       totalVendido: ranking.reduce((acc, r) => acc + r.totalVendido, 0),
+      totalVendidoSemCreditos: ranking.reduce((acc, r) => acc + r.totalVendidoSemCreditos, 0),
       totalTransacoes: ranking.reduce((acc, r) => acc + r.qtdTransacoes, 0),
       ticketMedioGeral: ranking.length > 0 
-        ? ranking.reduce((acc, r) => acc + r.totalVendido, 0) / ranking.reduce((acc, r) => acc + r.qtdTransacoes, 0) 
+        ? ranking.reduce((acc, r) => acc + r.totalVendidoSemCreditos, 0) / ranking.reduce((acc, r) => acc + r.qtdTransacoes, 0) 
         : 0,
-      totalDevolucao: ranking.reduce((acc, r) => acc + r.totalDevolucao, 0),
     };
   }, [ranking]);
 
@@ -144,10 +146,10 @@ export function useRankingLojas() {
         dados: ranking.map(r => ({
           posicao: r.posicao,
           loja: r.empresa,
-          faturamento: r.totalVendido,
+          faturamento: r.totalVendidoSemCreditos,
           ticketMedio: r.ticketMedio,
           qtdVendas: r.qtdTransacoes,
-          percentualDevolucao: r.percentualDevolucao.toFixed(1) + '%',
+          percentualDesconto: r.percentualDesconto.toFixed(1) + '%',
           percentualMeta: r.percentualMeta ? r.percentualMeta.toFixed(1) + '%' : 'Sem meta',
         })),
         periodo,

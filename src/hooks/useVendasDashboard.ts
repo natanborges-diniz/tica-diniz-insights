@@ -16,7 +16,7 @@ export interface VendasFiltersState {
   dataInicio: string;
   dataFim: string;
   viewMode: ViewMode;
-  empresa: EmpresaParam; // 'ALL' | string | number | null
+  empresa: EmpresaParam;
 }
 
 export interface ResumoLoja {
@@ -24,15 +24,11 @@ export interface ResumoLoja {
   totalBruto: number;
   totalDesconto: number;
   totalVendido: number;
-  totalDevolucao: number;
-  totalLiquidoSemDevolucoes: number;
-  totalLiquidoComDevolucoes: number;
-  qtdTransacao: number;
-  qtdDevolucao: number;
   percentualDesconto: number;
-  ticketMedioLiquido: number;
   totalCreditos: number;
   totalVendidoSemCreditos: number;
+  qtdTransacao: number;
+  ticketMedio: number;
 }
 
 export interface VendasMetrics {
@@ -40,14 +36,10 @@ export interface VendasMetrics {
   totalDesconto: number;
   percentualDesconto: number;
   totalVendido: number;
-  totalDevolucao: number;
-  totalLiquidoSemDevolucoes: number;
-  totalLiquidoComDevolucoes: number;
-  qtdTransacoes: number;
-  ticketMedioLiquido: number;
-  percentualDevolucao: number;
   totalCreditos: number;
   totalVendidoSemCreditos: number;
+  qtdTransacoes: number;
+  ticketMedio: number;
 }
 
 function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
@@ -60,11 +52,7 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
       existing.totalBruto += d.totalBruto || 0;
       existing.totalDesconto += d.totalDesconto || 0;
       existing.totalVendido += d.totalVendido || 0;
-      existing.totalDevolucao += d.totalDevolucao || 0;
-      existing.totalLiquidoSemDevolucoes += d.totalLiquidoSemDevolucoes || 0;
-      existing.totalLiquidoComDevolucoes += d.totalLiquidoComDevolucoes || 0;
       existing.qtdTransacao += d.qtdTransacao || 0;
-      existing.qtdDevolucao += d.qtdDevolucao || 0;
       existing.totalCreditos += d.totalCreditos || 0;
       existing.totalVendidoSemCreditos += d.totalVendidoSemCreditos || 0;
     } else {
@@ -73,13 +61,9 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
         totalBruto: d.totalBruto || 0,
         totalDesconto: d.totalDesconto || 0,
         totalVendido: d.totalVendido || 0,
-        totalDevolucao: d.totalDevolucao || 0,
-        totalLiquidoSemDevolucoes: d.totalLiquidoSemDevolucoes || 0,
-        totalLiquidoComDevolucoes: d.totalLiquidoComDevolucoes || 0,
         qtdTransacao: d.qtdTransacao || 0,
-        qtdDevolucao: d.qtdDevolucao || 0,
         percentualDesconto: 0,
-        ticketMedioLiquido: 0,
+        ticketMedio: 0,
         totalCreditos: d.totalCreditos || 0,
         totalVendidoSemCreditos: d.totalVendidoSemCreditos || 0,
       });
@@ -89,7 +73,7 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
   return Array.from(mapa.values()).map((loja) => ({
     ...loja,
     percentualDesconto: loja.totalBruto > 0 ? (loja.totalDesconto / loja.totalBruto) * 100 : 0,
-    ticketMedioLiquido: loja.qtdTransacao > 0 ? loja.totalVendido / loja.qtdTransacao : 0,
+    ticketMedio: loja.qtdTransacao > 0 ? loja.totalVendidoSemCreditos / loja.qtdTransacao : 0,
   }));
 }
 
@@ -100,7 +84,7 @@ export function useVendasDashboard() {
     dataInicio: defaultPeriodo.dataIni,
     dataFim: defaultPeriodo.dataFim,
     viewMode: "loja",
-    empresa: 'ALL', // Default: todas as empresas
+    empresa: 'ALL',
   });
 
   const [dados, setDados] = useState<ResumoEmpresaVendedor[]>([]);
@@ -152,29 +136,23 @@ export function useVendasDashboard() {
     const totalBruto = dados.reduce((acc, d) => acc + (d.totalBruto || 0), 0);
     const totalDesconto = dados.reduce((acc, d) => acc + (d.totalDesconto || 0), 0);
     const totalVendido = dados.reduce((acc, d) => acc + (d.totalVendido || 0), 0);
-    const totalDevolucao = dados.reduce((acc, d) => acc + (d.totalDevolucao || 0), 0);
-    const totalLiquidoSemDevolucoes = dados.reduce((acc, d) => acc + (d.totalLiquidoSemDevolucoes || 0), 0);
-    const totalLiquidoComDevolucoes = dados.reduce((acc, d) => acc + (d.totalLiquidoComDevolucoes || 0), 0);
     const qtdTransacoes = dados.reduce((acc, d) => acc + (d.qtdTransacao || 0), 0);
-    const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
-    const ticketMedioLiquido = qtdTransacoes > 0 ? totalVendido / qtdTransacoes : 0;
-    const percentualDevolucao = totalVendido > 0 ? (totalDevolucao / totalVendido) * 100 : 0;
     const totalCreditos = dados.reduce((acc, d) => acc + (d.totalCreditos || 0), 0);
     const totalVendidoSemCreditos = dados.reduce((acc, d) => acc + (d.totalVendidoSemCreditos || 0), 0);
+    
+    // Usar valores do backend para percentual
+    const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
+    const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
 
     return { 
       totalBruto, 
       totalDesconto, 
       percentualDesconto, 
       totalVendido, 
-      totalDevolucao, 
-      totalLiquidoSemDevolucoes,
-      totalLiquidoComDevolucoes,
-      qtdTransacoes,
-      ticketMedioLiquido,
-      percentualDevolucao,
       totalCreditos,
       totalVendidoSemCreditos,
+      qtdTransacoes,
+      ticketMedio,
     };
   }, [dados]);
 
