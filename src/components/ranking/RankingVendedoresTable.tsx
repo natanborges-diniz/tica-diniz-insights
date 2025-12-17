@@ -56,7 +56,7 @@ export function RankingVendedoresTable({ ranking }: RankingVendedoresTableProps)
         </TableHeader>
         <TableBody>
           {ranking.map((vendedor) => (
-            <TableRow key={`${vendedor.codVendedor}-${vendedor.empresa}`} className={vendedor.posicao <= 3 ? "bg-muted/30" : ""}>
+            <TableRow key={`${vendedor.codEmpresa}-${vendedor.vendedor}`} className={vendedor.posicao <= 3 ? "bg-muted/30" : ""}>
               <TableCell className="text-center font-medium">
                 {getMedalha(vendedor.posicao)}
               </TableCell>
