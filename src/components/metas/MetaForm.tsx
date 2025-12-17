@@ -118,6 +118,7 @@ export function MetaForm({
       metaTicketMedio: Number(metaTicketMedio) || 0,
       metaDescontoMax: 0,
       metaQtdVendas: Number(metaQtdVendas) || 0,
+      numVendedores: 1,
     });
 
     setSaving(false);
