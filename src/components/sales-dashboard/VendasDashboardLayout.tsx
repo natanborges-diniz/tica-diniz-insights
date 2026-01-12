@@ -139,12 +139,14 @@ export function VendasDashboardLayout({
       </header>
 
       <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* Filtros de Data */}
+        {/* Filtros */}
         <SalesFilters
           dataInicio={filters.dataInicio}
           dataFim={filters.dataFim}
+          empresa={filters.empresa === "ALL" ? "ALL" : String(filters.empresa)}
           onDataInicioChange={(v) => setFilters((p) => ({ ...p, dataInicio: v }))}
           onDataFimChange={(v) => setFilters((p) => ({ ...p, dataFim: v }))}
+          onEmpresaChange={(v) => setFilters((p) => ({ ...p, empresa: v === "ALL" ? "ALL" : Number(v) }))}
           onRefresh={reload}
           isLoading={isLoading}
         />
