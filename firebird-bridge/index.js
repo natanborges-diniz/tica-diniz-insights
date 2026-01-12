@@ -286,6 +286,137 @@ app.get('/api/v1/financeiro/dre', async (req, res) => {
 });
 
 // ============================================
+// API v1 - Resumo por Empresa e Vendedor (com desconto)
+// ============================================
+app.get('/api/v1/vendas/resumo-empresa-vendedor', async (req, res) => {
+  try {
+    const { dataInicio, dataFim, empresa } = req.query;
+
+    if (!dataInicio || !dataFim) {
+      return res.status(400).json({ 
+        ok: false, 
+        data: null,
+        error: { code: 'INVALID_PARAMS', message: 'Parâmetros obrigatórios: dataInicio, dataFim' }
+      });
+    }
+
+    let whereClauses = [
+      `t.DATAEMISSAO >= '${dataInicio}'`,
+      `t.DATAEMISSAO <= '${dataFim}'`,
+      "no.TIPO = 1",  // Apenas vendas
+      getWhereEmpresasAtivas('e')
+    ];
+
+    if (empresa && empresa !== 'ALL' && empresa !== 'null' && empresa !== '') {
+      whereClauses.push(`e.codempresa = ${parseInt(empresa)}`);
+    }
+
+    const whereSQL = whereClauses.join(' AND ');
+
+    const sql = `
+      SELECT
+        e.CODEMPRESA AS cod_empresa,
+        e.NOMEFANTASIA AS empresa,
+        e.CODEMPRESA AS empresa_cod_logico,
+        e.NOMEFANTASIA AS empresa_nome_logico,
+        v.CODVENDEDOR AS cod_vendedor,
+        v.NOME AS vendedor,
+        COUNT(DISTINCT t.IDTRANSACAO) AS qtd_transacao,
+        SUM(ti.QUANTIDADE) AS qtd_produtos,
+        SUM(ti.VALORORIGINAL) AS total_bruto,
+        SUM(ti.VALORORIGINAL - COALESCE(ti.VALORDESCONTO, 0)) AS total_vendido,
+        SUM(COALESCE(ti.VALORDESCONTO, 0)) AS total_desconto,
+        CASE 
+          WHEN SUM(ti.VALORORIGINAL) > 0 
+          THEN (SUM(COALESCE(ti.VALORDESCONTO, 0)) / SUM(ti.VALORORIGINAL)) * 100
+          ELSE 0 
+        END AS perc_desconto,
+        0 AS total_creditos,
+        SUM(ti.VALORORIGINAL - COALESCE(ti.VALORDESCONTO, 0)) AS total_vendido_sem_creditos
+      FROM TRANSACAO t
+      INNER JOIN TRANSACAO_ITEM ti ON ti.IDTRANSACAO = t.IDTRANSACAO
+      INNER JOIN NATUREZAOPERACAO no ON no.IDNATUREZAOPERACAO = t.IDNATUREZAOPERACAO
+      INNER JOIN EMPRESA e ON e.CODEMPRESA = t.CODEMPRESA
+      INNER JOIN VENDEDOR v ON v.CODVENDEDOR = t.CODVENDEDOR
+      WHERE ${whereSQL}
+      GROUP BY e.CODEMPRESA, e.NOMEFANTASIA, v.CODVENDEDOR, v.NOME
+      ORDER BY total_vendido DESC
+    `;
+
+    console.log('[API] GET /api/v1/vendas/resumo-empresa-vendedor', { empresa: empresa || 'ALL', dataInicio, dataFim });
+    const rows = await executeQuery(sql);
+    return apiResponse(res, rows);
+  } catch (error) {
+    return apiResponse(res, null, error);
+  }
+});
+
+// ============================================
+// API v1 - Resumo por Forma de Pagamento
+// ============================================
+app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
+  try {
+    const { dataInicio, dataFim, empresa } = req.query;
+
+    if (!dataInicio || !dataFim) {
+      return res.status(400).json({ 
+        ok: false, 
+        data: null,
+        error: { code: 'INVALID_PARAMS', message: 'Parâmetros obrigatórios: dataInicio, dataFim' }
+      });
+    }
+
+    let whereClauses = [
+      `t.DATAEMISSAO >= '${dataInicio}'`,
+      `t.DATAEMISSAO <= '${dataFim}'`,
+      "no.TIPO = 1",
+      getWhereEmpresasAtivas('e')
+    ];
+
+    if (empresa && empresa !== 'ALL' && empresa !== 'null' && empresa !== '') {
+      whereClauses.push(`e.codempresa = ${parseInt(empresa)}`);
+    }
+
+    const whereSQL = whereClauses.join(' AND ');
+
+    const sql = `
+      SELECT
+        e.CODEMPRESA AS cod_empresa,
+        e.NOMEFANTASIA AS empresa,
+        v.CODVENDEDOR AS cod_vendedor,
+        v.NOME AS vendedor,
+        fp.DESCRICAO AS forma_pagamento,
+        COUNT(DISTINCT t.IDTRANSACAO) AS qtd_transacao,
+        SUM(ti.QUANTIDADE) AS qtd_produtos,
+        SUM(ti.VALORORIGINAL) AS total_bruto,
+        SUM(ti.VALORORIGINAL - COALESCE(ti.VALORDESCONTO, 0)) AS total_vendido,
+        SUM(COALESCE(ti.VALORDESCONTO, 0)) AS total_desconto,
+        CASE 
+          WHEN SUM(ti.VALORORIGINAL) > 0 
+          THEN (SUM(COALESCE(ti.VALORDESCONTO, 0)) / SUM(ti.VALORORIGINAL)) * 100
+          ELSE 0 
+        END AS perc_desconto
+      FROM TRANSACAO t
+      INNER JOIN TRANSACAO_ITEM ti ON ti.IDTRANSACAO = t.IDTRANSACAO
+      INNER JOIN NATUREZAOPERACAO no ON no.IDNATUREZAOPERACAO = t.IDNATUREZAOPERACAO
+      INNER JOIN EMPRESA e ON e.CODEMPRESA = t.CODEMPRESA
+      INNER JOIN VENDEDOR v ON v.CODVENDEDOR = t.CODVENDEDOR
+      LEFT JOIN TRANSACAO_PAGAMENTO tp ON tp.IDTRANSACAO = t.IDTRANSACAO
+      LEFT JOIN FORMAPAGAMENTO fp ON fp.IDFORMAPAGAMENTO = tp.IDFORMAPAGAMENTO
+      WHERE ${whereSQL}
+      GROUP BY e.CODEMPRESA, e.NOMEFANTASIA, v.CODVENDEDOR, v.NOME, fp.DESCRICAO
+      ORDER BY total_vendido DESC
+    `;
+
+    console.log('[API] GET /api/v1/vendas/resumo-formas-pagamento', { empresa: empresa || 'ALL', dataInicio, dataFim });
+    const rows = await executeQuery(sql);
+    return apiResponse(res, rows);
+  } catch (error) {
+    return apiResponse(res, null, error);
+  }
+});
+
+// ============================================
 // ENDPOINTS LEGADOS (mantidos para compatibilidade)
 // ============================================
 
