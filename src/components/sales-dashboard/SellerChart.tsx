@@ -3,11 +3,14 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { BarChart3 } from 'lucide-react';
 import { ResumoEmpresaVendedor } from '@/services/vendasService';
 import { ExportableCard } from '@/components/ui/exportable-card';
+import { cn } from '@/lib/utils';
 
 interface SellerChartProps {
   dados: ResumoEmpresaVendedor[];
   isLoading?: boolean;
   usarVendasSemCreditos?: boolean;
+  selectedVendedor?: string | null;
+  onVendedorClick?: (vendedor: string) => void;
 }
 
 // Cores para diferentes empresas
@@ -15,6 +18,8 @@ const COLORS = [
   '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444',
   '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1'
 ];
+
+const DIMMED_COLOR = 'hsl(var(--muted))';
 
 function formatCurrency(value: number): string {
   if (value >= 1000000) {
@@ -26,7 +31,13 @@ function formatCurrency(value: number): string {
   return `R$ ${value.toFixed(0)}`;
 }
 
-export function SellerChart({ dados, isLoading, usarVendasSemCreditos = true }: SellerChartProps) {
+export function SellerChart({ 
+  dados, 
+  isLoading, 
+  usarVendasSemCreditos = true,
+  selectedVendedor,
+  onVendedorClick,
+}: SellerChartProps) {
   // Preparar dados agrupados por vendedor com empresa para cor
   const empresas = [...new Set(dados.map(d => d.empresaNomeLogico || d.empresa))];
   const empresaColorMap = Object.fromEntries(
@@ -54,11 +65,23 @@ export function SellerChart({ dados, isLoading, usarVendasSemCreditos = true }: 
   const titulo = usarVendasSemCreditos ? 'Vendas Válidas por Vendedor' : 'Vendas Totais por Vendedor';
   const tooltipLabel = usarVendasSemCreditos ? 'Vendas Válidas' : 'Vendas Totais';
 
+  const handleBarClick = (data: any) => {
+    if (onVendedorClick && data?.vendedorFull) {
+      onVendedorClick(data.vendedorFull);
+    }
+  };
+
+  const getBarColor = (vendedorFull: string, empresaCor: string) => {
+    if (!selectedVendedor) return empresaCor;
+    return vendedorFull === selectedVendedor ? empresaCor : DIMMED_COLOR;
+  };
+
   return (
     <ExportableCard
       title={titulo}
       filename={`vendas_vendedor_${new Date().toISOString().split('T')[0]}`}
       icon={<BarChart3 className="h-5 w-5 text-primary" />}
+      subtitle={onVendedorClick ? "Clique em uma barra para filtrar" : undefined}
       actions={
         <div className="flex flex-wrap gap-2">
           {empresas.map((empresa, index) => (
@@ -81,7 +104,12 @@ export function SellerChart({ dados, isLoading, usarVendasSemCreditos = true }: 
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={350}>
-          <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
+          <BarChart 
+            data={chartData} 
+            layout="vertical" 
+            margin={{ left: 20, right: 20 }}
+            className={cn(onVendedorClick && "cursor-pointer")}
+          >
             <XAxis 
               type="number" 
               tickFormatter={formatCurrency}
@@ -109,10 +137,20 @@ export function SellerChart({ dados, isLoading, usarVendasSemCreditos = true }: 
                 border: '1px solid hsl(var(--border))',
                 borderRadius: '8px'
               }}
+              cursor={{ fill: 'hsl(var(--muted)/0.3)' }}
             />
-            <Bar dataKey="valorVendas" radius={[0, 4, 4, 0]}>
+            <Bar 
+              dataKey="valorVendas" 
+              radius={[0, 4, 4, 0]}
+              onClick={handleBarClick}
+              style={{ cursor: onVendedorClick ? 'pointer' : 'default' }}
+            >
               {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.cor} />
+                <Cell 
+                  key={`cell-${index}`} 
+                  fill={getBarColor(entry.vendedorFull, entry.cor)}
+                  className="transition-all duration-200"
+                />
               ))}
             </Bar>
           </BarChart>

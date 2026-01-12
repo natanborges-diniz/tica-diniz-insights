@@ -4,10 +4,13 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, Sector } fro
 import { PieChart as PieChartIcon } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { ExportableCard } from '@/components/ui/exportable-card';
+import { cn } from '@/lib/utils';
 
 interface PaymentMethodsChartProps {
   dados: ResumoFormaPagamento[];
   isLoading?: boolean;
+  selectedFormaPagamento?: string | null;
+  onFormaPagamentoClick?: (formaPagamento: string) => void;
 }
 
 const COLORS = [
@@ -22,6 +25,8 @@ const COLORS = [
   '#ff7300',
   '#00C49F',
 ];
+
+const DIMMED_COLOR = 'hsl(var(--muted))';
 
 function formatCurrency(value: number): string {
   if (value >= 1000000) {
@@ -85,7 +90,12 @@ const renderActiveShape = (props: any) => {
   );
 };
 
-export function PaymentMethodsChart({ dados, isLoading }: PaymentMethodsChartProps) {
+export function PaymentMethodsChart({ 
+  dados, 
+  isLoading,
+  selectedFormaPagamento,
+  onFormaPagamentoClick,
+}: PaymentMethodsChartProps) {
   const [activeIndex, setActiveIndex] = useState(0);
 
   const onPieEnter = useCallback((_: any, index: number) => {
@@ -107,18 +117,30 @@ export function PaymentMethodsChart({ dados, isLoading }: PaymentMethodsChartPro
   // Ordena por valor decrescente
   chartData.sort((a, b) => b.value - a.value);
 
+  const handlePieClick = (data: any) => {
+    if (onFormaPagamentoClick && data?.name) {
+      onFormaPagamentoClick(data.name);
+    }
+  };
+
+  const getCellColor = (name: string, index: number) => {
+    if (!selectedFormaPagamento) return COLORS[index % COLORS.length];
+    return name === selectedFormaPagamento ? COLORS[index % COLORS.length] : DIMMED_COLOR;
+  };
+
   return (
     <ExportableCard
       title="Distribuição por Forma de Pagamento"
       filename={`distribuicao_pagamento_${new Date().toISOString().split('T')[0]}`}
       icon={<PieChartIcon className="h-5 w-5" />}
+      subtitle={onFormaPagamentoClick ? "Clique em uma fatia para filtrar" : undefined}
     >
       {isLoading ? (
         <Skeleton className="h-[320px] w-full" />
       ) : chartData.length === 0 ? (
         <p className="text-muted-foreground text-center py-8">Nenhum dado para exibir</p>
       ) : (
-        <div className="h-[320px]">
+        <div className={cn("h-[320px]", onFormaPagamentoClick && "cursor-pointer")}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -132,9 +154,15 @@ export function PaymentMethodsChart({ dados, isLoading }: PaymentMethodsChartPro
                 fill="#8884d8"
                 dataKey="value"
                 onMouseEnter={onPieEnter}
+                onClick={handlePieClick}
+                style={{ cursor: onFormaPagamentoClick ? 'pointer' : 'default' }}
               >
-                {chartData.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                {chartData.map((entry, index) => (
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={getCellColor(entry.name, index)}
+                    className="transition-all duration-200"
+                  />
                 ))}
               </Pie>
               <Tooltip
