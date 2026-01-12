@@ -12,8 +12,10 @@ export default function SalesDashboard() {
     dataLoaded,
     loading,
     loadingFormas,
+    loadingDesconto,
     error,
     errorFormas,
+    erroDesconto,
     filters,
     setFilters,
     metrics,
@@ -29,8 +31,10 @@ export default function SalesDashboard() {
       dataLoaded={dataLoaded}
       loading={loading}
       loadingFormas={loadingFormas}
+      loadingDesconto={loadingDesconto}
       error={error}
       errorFormas={errorFormas}
+      erroDesconto={erroDesconto}
       filters={filters}
       setFilters={setFilters}
       metrics={metrics}

@@ -33,8 +33,10 @@ interface VendasDashboardLayoutProps {
   // Loading/Error
   loading: boolean;
   loadingFormas: boolean;
+  loadingDesconto?: boolean;
   error: string | null;
   errorFormas: string | null;
+  erroDesconto?: string | null;
   // Filtros
   filters: VendasFiltersState;
   setFilters: React.Dispatch<React.SetStateAction<VendasFiltersState>>;
@@ -95,8 +97,10 @@ export function VendasDashboardLayout({
   dataLoaded,
   loading,
   loadingFormas,
+  loadingDesconto,
   error,
   errorFormas,
+  erroDesconto,
   filters,
   setFilters,
   metrics,
@@ -222,7 +226,7 @@ export function VendasDashboardLayout({
               <>
                 <div className="grid gap-6 lg:grid-cols-2">
                   <SellerChart dados={dados} isLoading={loading} usarVendasSemCreditos={usarVendasSemCreditos} />
-                  <DescontoChart dados={dadosComDesconto} isLoading={loading} />
+                  <DescontoChart dados={dadosComDesconto} isLoading={loadingDesconto} erro={erroDesconto} />
                 </div>
                 <SalesTable dados={dados} isLoading={loading} limiteDesconto={15} usarVendasSemCreditos={usarVendasSemCreditos} />
               </>
