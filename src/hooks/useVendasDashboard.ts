@@ -34,6 +34,7 @@ export interface ResumoEmpresaVendedor {
   totalDesconto: number;
   percentualDesconto: number;
   totalCreditos: number;
+  totalDevolucoes: number;
   totalVendidoSemCreditos: number;
   ticketMedio: number;
 }
@@ -45,6 +46,7 @@ export interface ResumoLoja {
   totalVendido: number;
   percentualDesconto: number;
   totalCreditos: number;
+  totalDevolucoes: number;
   totalVendidoSemCreditos: number;
   qtdTransacao: number;
   ticketMedio: number;
@@ -56,6 +58,7 @@ export interface VendasMetrics {
   percentualDesconto: number;
   totalVendido: number;
   totalCreditos: number;
+  totalDevolucoes: number;
   totalVendidoSemCreditos: number;
   qtdTransacoes: number;
   ticketMedio: number;
@@ -69,6 +72,7 @@ function agruparPorEmpresaVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresa
     vendedor: string;
     totalVendido: number;
     totalCreditos: number;
+    totalDevolucoes: number;
     qtdTransacao: number;
   }>();
 
@@ -81,14 +85,18 @@ function agruparPorEmpresaVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresa
     const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
     const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
     
-    const valorVenda = isDevolucao ? d.totalGeral : (isCredito ? 0 : d.totalGeral);
+    // Devoluções: ignorar no total de vendas, guardar separadamente como indicador
+    // Créditos: não somar no valorVenda, somar separadamente
+    const valorVenda = (isDevolucao || isCredito) ? 0 : d.totalGeral;
     const valorCredito = isCredito ? d.totalGeral : 0;
+    const valorDevolucao = isDevolucao ? Math.abs(d.totalGeral) : 0;
     // Não contar devoluções nas transações
     const qtdVendas = isDevolucao ? 0 : d.qtdVendas;
     
     if (existing) {
       existing.totalVendido += valorVenda + valorCredito;
       existing.totalCreditos += valorCredito;
+      existing.totalDevolucoes += valorDevolucao;
       existing.qtdTransacao += qtdVendas;
     } else {
       mapa.set(key, {
@@ -97,6 +105,7 @@ function agruparPorEmpresaVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresa
         vendedor: d.vendedor,
         totalVendido: valorVenda + valorCredito,
         totalCreditos: valorCredito,
+        totalDevolucoes: valorDevolucao,
         qtdTransacao: qtdVendas,
       });
     }
@@ -118,6 +127,7 @@ function agruparPorEmpresaVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresa
       totalDesconto: 0, // Não disponível neste endpoint
       percentualDesconto: 0, // Não disponível
       totalCreditos: item.totalCreditos,
+      totalDevolucoes: item.totalDevolucoes,
       totalVendidoSemCreditos,
       ticketMedio,
     };
@@ -137,6 +147,7 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
       existing.totalVendido += d.totalVendido || 0;
       existing.qtdTransacao += d.qtdTransacao || 0;
       existing.totalCreditos += d.totalCreditos || 0;
+      existing.totalDevolucoes += d.totalDevolucoes || 0;
       existing.totalVendidoSemCreditos += d.totalVendidoSemCreditos || 0;
     } else {
       mapa.set(key, {
@@ -148,6 +159,7 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
         percentualDesconto: 0,
         ticketMedio: 0,
         totalCreditos: d.totalCreditos || 0,
+        totalDevolucoes: d.totalDevolucoes || 0,
         totalVendidoSemCreditos: d.totalVendidoSemCreditos || 0,
       });
     }
@@ -164,6 +176,7 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
 function calcularMetricasDeFormasPagamento(dados: ResumoFormaPagamento[]): VendasMetrics {
   let totalVendido = 0;
   let totalCreditos = 0;
+  let totalDevolucoes = 0;
   let qtdTransacoes = 0;
 
   // Debug: Log das formas de pagamento únicas encontradas
@@ -176,21 +189,25 @@ function calcularMetricasDeFormasPagamento(dados: ResumoFormaPagamento[]): Venda
     const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
     const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
     
-    // Devoluções são valores negativos, somam normalmente
-    totalVendido += d.totalGeral;
-    
-    if (isCredito) {
-      totalCreditos += d.totalGeral;
-    }
-    
-    // Não contar devoluções nas transações
-    if (!isDevolucao) {
+    // Devoluções: NÃO subtrair do total de vendas, apenas guardar como indicador
+    if (isDevolucao) {
+      totalDevolucoes += Math.abs(d.totalGeral);
+    } else {
+      // Vendas normais e créditos
+      totalVendido += d.totalGeral;
+      
+      if (isCredito) {
+        totalCreditos += d.totalGeral;
+      }
+      
+      // Contar transações (exceto devoluções)
       qtdTransacoes += d.qtdVendas;
     }
   });
 
-  console.log('[Métricas] Total Vendido:', totalVendido);
+  console.log('[Métricas] Total Vendido (sem devoluções):', totalVendido);
   console.log('[Métricas] Total Créditos:', totalCreditos);
+  console.log('[Métricas] Total Devoluções (indicador):', totalDevolucoes);
   console.log('[Métricas] Total Vendido Sem Créditos:', totalVendido - totalCreditos);
 
   const totalVendidoSemCreditos = totalVendido - totalCreditos;
@@ -202,6 +219,7 @@ function calcularMetricasDeFormasPagamento(dados: ResumoFormaPagamento[]): Venda
     percentualDesconto: 0, // Não disponível
     totalVendido,
     totalCreditos,
+    totalDevolucoes,
     totalVendidoSemCreditos,
     qtdTransacoes,
     ticketMedio,

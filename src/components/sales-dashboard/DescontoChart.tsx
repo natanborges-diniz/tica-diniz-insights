@@ -17,6 +17,18 @@ const COLORS = [
 ];
 
 export function DescontoChart({ dados, isLoading, erro }: DescontoChartProps) {
+  // Debug: verificar dados recebidos
+  console.log('[DescontoChart] dados recebidos:', dados.length, 'registros');
+  if (dados.length > 0) {
+    console.log('[DescontoChart] Amostra de dados:', dados.slice(0, 3).map(d => ({
+      vendedor: d.vendedor,
+      empresa: d.empresa,
+      percentualDesconto: d.percentualDesconto,
+      totalDesconto: d.totalDesconto,
+      totalBruto: d.totalBruto,
+    })));
+  }
+
   // Preparar dados agrupados por vendedor com empresa para cor
   const empresas = [...new Set(dados.map(d => d.empresaNomeLogico || d.empresa))];
   const empresaColorMap = Object.fromEntries(
@@ -37,6 +49,8 @@ export function DescontoChart({ dados, isLoading, erro }: DescontoChartProps) {
       percentualDesconto: item.percentualDesconto || 0,
       cor: empresaColorMap[item.empresaNomeLogico || item.empresa],
     }));
+  
+  console.log('[DescontoChart] chartData processado:', chartData.length, 'itens', chartData.slice(0, 3));
 
   // Se tiver erro, mostrar mensagem amigável
   if (erro) {
