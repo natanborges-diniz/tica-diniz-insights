@@ -1,9 +1,9 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ResumoFormaPagamento } from '@/services/vendasService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, Sector } from 'recharts';
 import { PieChart as PieChartIcon } from 'lucide-react';
 import { useState, useCallback } from 'react';
+import { ExportableCard } from '@/components/ui/exportable-card';
 
 interface PaymentMethodsChartProps {
   dados: ResumoFormaPagamento[];
@@ -108,60 +108,56 @@ export function PaymentMethodsChart({ dados, isLoading }: PaymentMethodsChartPro
   chartData.sort((a, b) => b.value - a.value);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <PieChartIcon className="h-5 w-5" />
-          Distribuição por Forma de Pagamento
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <Skeleton className="h-[320px] w-full" />
-        ) : chartData.length === 0 ? (
-          <p className="text-muted-foreground text-center py-8">Nenhum dado para exibir</p>
-        ) : (
-          <div className="h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  activeIndex={activeIndex}
-                  activeShape={renderActiveShape}
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={90}
-                  fill="#8884d8"
-                  dataKey="value"
-                  onMouseEnter={onPieEnter}
-                >
-                  {chartData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value: number, name: string, props: any) => [
-                    `${formatCurrency(value)} (${props.payload.qtd} vendas)`,
-                    name
-                  ]}
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Legend 
-                  layout="horizontal" 
-                  verticalAlign="bottom" 
-                  align="center"
-                  wrapperStyle={{ paddingTop: '10px' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <ExportableCard
+      title="Distribuição por Forma de Pagamento"
+      filename={`distribuicao_pagamento_${new Date().toISOString().split('T')[0]}`}
+      icon={<PieChartIcon className="h-5 w-5" />}
+    >
+      {isLoading ? (
+        <Skeleton className="h-[320px] w-full" />
+      ) : chartData.length === 0 ? (
+        <p className="text-muted-foreground text-center py-8">Nenhum dado para exibir</p>
+      ) : (
+        <div className="h-[320px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                activeIndex={activeIndex}
+                activeShape={renderActiveShape}
+                data={chartData}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={90}
+                fill="#8884d8"
+                dataKey="value"
+                onMouseEnter={onPieEnter}
+              >
+                {chartData.map((_, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(value: number, name: string, props: any) => [
+                  `${formatCurrency(value)} (${props.payload.qtd} vendas)`,
+                  name
+                ]}
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--card))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '8px',
+                }}
+              />
+              <Legend 
+                layout="horizontal" 
+                verticalAlign="bottom" 
+                align="center"
+                wrapperStyle={{ paddingTop: '10px' }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </ExportableCard>
   );
 }
