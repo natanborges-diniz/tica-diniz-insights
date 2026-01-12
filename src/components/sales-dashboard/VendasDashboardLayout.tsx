@@ -213,16 +213,16 @@ export function VendasDashboardLayout({
             {/* Gráfico e Tabela - Condicional por modo */}
             {filters.viewMode === "loja" ? (
               <>
-                <StoreChart dados={dadosPorLoja} isLoading={loading} />
-                <StoreTable dados={dadosPorLoja} isLoading={loading} />
+                <StoreChart dados={dadosPorLoja} isLoading={loading} usarVendasSemCreditos={usarVendasSemCreditos} />
+                <StoreTable dados={dadosPorLoja} isLoading={loading} usarVendasSemCreditos={usarVendasSemCreditos} />
               </>
             ) : (
               <>
                 <div className="grid gap-6 lg:grid-cols-2">
-                  <SellerChart dados={dados} isLoading={loading} />
+                  <SellerChart dados={dados} isLoading={loading} usarVendasSemCreditos={usarVendasSemCreditos} />
                   <DescontoChart dados={dados} isLoading={loading} />
                 </div>
-                <SalesTable dados={dados} isLoading={loading} limiteDesconto={15} />
+                <SalesTable dados={dados} isLoading={loading} limiteDesconto={15} usarVendasSemCreditos={usarVendasSemCreditos} />
               </>
             )}
 

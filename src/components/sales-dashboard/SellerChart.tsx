@@ -7,6 +7,7 @@ import { ResumoEmpresaVendedor } from '@/services/vendasService';
 interface SellerChartProps {
   dados: ResumoEmpresaVendedor[];
   isLoading?: boolean;
+  usarVendasSemCreditos?: boolean;
 }
 
 // Cores para diferentes empresas
@@ -25,16 +26,20 @@ function formatCurrency(value: number): string {
   return `R$ ${value.toFixed(0)}`;
 }
 
-export function SellerChart({ dados, isLoading }: SellerChartProps) {
+export function SellerChart({ dados, isLoading, usarVendasSemCreditos = true }: SellerChartProps) {
   // Preparar dados agrupados por vendedor com empresa para cor
   const empresas = [...new Set(dados.map(d => d.empresaNomeLogico || d.empresa))];
   const empresaColorMap = Object.fromEntries(
     empresas.map((empresa, index) => [empresa, COLORS[index % COLORS.length]])
   );
 
-  // Ordenar por vendas válidas (sem créditos) decrescente
+  // Ordenar por vendas (com ou sem créditos) decrescente
   const chartData = [...dados]
-    .sort((a, b) => (b.totalVendidoSemCreditos || 0) - (a.totalVendidoSemCreditos || 0))
+    .sort((a, b) => 
+      usarVendasSemCreditos 
+        ? (b.totalVendidoSemCreditos || 0) - (a.totalVendidoSemCreditos || 0)
+        : (b.totalVendido || 0) - (a.totalVendido || 0)
+    )
     .slice(0, 15) // Limitar a 15 para visualização
     .map(item => ({
       vendedor: item.vendedor?.length > 12 
@@ -42,16 +47,19 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
         : item.vendedor,
       vendedorFull: item.vendedor,
       empresa: item.empresaNomeLogico || item.empresa,
-      totalVendidoSemCreditos: item.totalVendidoSemCreditos || 0,
+      valorVendas: usarVendasSemCreditos ? (item.totalVendidoSemCreditos || 0) : (item.totalVendido || 0),
       cor: empresaColorMap[item.empresaNomeLogico || item.empresa],
     }));
+
+  const titulo = usarVendasSemCreditos ? 'Vendas Válidas por Vendedor' : 'Vendas Totais por Vendedor';
+  const tooltipLabel = usarVendasSemCreditos ? 'Vendas Válidas' : 'Vendas Totais';
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg font-semibold flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-primary" />
-          Vendas Válidas por Vendedor
+          {titulo}
         </CardTitle>
         <div className="flex flex-wrap gap-2 mt-2">
           {empresas.map((empresa, index) => (
@@ -89,7 +97,7 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
               <Tooltip 
                 formatter={(value: number) => [
                   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value),
-                  'Vendas Válidas'
+                  tooltipLabel
                 ]}
                 labelFormatter={(label, payload) => {
                   if (payload && payload[0]) {
@@ -103,7 +111,7 @@ export function SellerChart({ dados, isLoading }: SellerChartProps) {
                   borderRadius: '8px'
                 }}
               />
-              <Bar dataKey="totalVendidoSemCreditos" radius={[0, 4, 4, 0]}>
+              <Bar dataKey="valorVendas" radius={[0, 4, 4, 0]}>
                 {chartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.cor} />
                 ))}
