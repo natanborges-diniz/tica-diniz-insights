@@ -1,8 +1,9 @@
 // src/components/stock-dashboard/StockDashboardLayout.tsx
 
+import { useMemo } from "react";
 import { Package, RefreshCw, AlertCircle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -16,6 +17,8 @@ import {
 import { AnaliseEstoqueAcao } from "@/services/estoqueService";
 import { Empresa } from "@/services/empresaService";
 import { StockFiltersState } from "@/hooks/useEstoqueDashboard";
+import { useChartFilter, ChartFilter } from "@/hooks/useChartFilter";
+import { ActiveFilterBadges } from "@/components/ui/active-filter-badges";
 import { StockFilters } from "./StockFilters";
 import { StockKPICards } from "./StockKPICards";
 import { StockActionChart } from "./StockActionChart";
@@ -81,6 +84,13 @@ function LoadingSkeleton() {
   );
 }
 
+// Labels para os campos de filtro
+const FILTER_LABELS: Record<string, string> = {
+  acao: "Ação",
+  fornecedor: "Fornecedor",
+  marca: "Marca",
+};
+
 export function StockDashboardLayout({
   empresas,
   loadingEmpresas,
@@ -93,7 +103,33 @@ export function StockDashboardLayout({
   setFilters,
   reload,
 }: StockDashboardLayoutProps) {
+  // Hook para filtros interativos dos gráficos
+  const chartFilter = useChartFilter<string>({
+    onChange: (newFilters) => {
+      // Sincroniza filtros do gráfico com filtros globais
+      const acaoFilter = newFilters.find(f => f.field === 'acao');
+      setFilters(prev => ({
+        ...prev,
+        acao: acaoFilter?.value || 'TODAS',
+      }));
+    },
+  });
+
+  // Dados filtrados considerando filtros do gráfico
+  const chartFilteredData = useMemo(() => {
+    let result = filteredData;
+    
+    // Aplica filtro de ação do gráfico
+    const acaoValue = chartFilter.getFilterValue('acao');
+    if (acaoValue) {
+      result = result.filter(item => (item.acaoSugerida || 'SEM AÇÃO') === acaoValue);
+    }
+    
+    return result;
+  }, [filteredData, chartFilter]);
+
   const handleEmpresaChange = (value: string) => {
+    chartFilter.clearAllFilters();
     setFilters((prev) => ({
       ...prev,
       empresa: Number(value),
@@ -102,6 +138,14 @@ export function StockDashboardLayout({
       acao: "TODAS",
       busca: "",
     }));
+  };
+
+  const handleChartAcaoClick = (acao: string) => {
+    chartFilter.toggleFilter('acao', acao, acao);
+  };
+
+  const handleRemoveFilter = (field: string, value: string) => {
+    chartFilter.toggleFilter(field, value);
   };
 
   return (
@@ -197,7 +241,7 @@ export function StockDashboardLayout({
                 <CardHeader>
                   <CardTitle className="text-lg">Filtros</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
                   <StockFilters
                     dados={dados}
                     fornecedorSelecionado={filters.fornecedor}
@@ -205,22 +249,37 @@ export function StockDashboardLayout({
                     marcaSelecionada={filters.marca}
                     setMarcaSelecionada={(v) => setFilters((p) => ({ ...p, marca: v }))}
                     acaoSelecionada={filters.acao}
-                    setAcaoSelecionada={(v) => setFilters((p) => ({ ...p, acao: v }))}
+                    setAcaoSelecionada={(v) => {
+                      chartFilter.clearFilter('acao');
+                      setFilters((p) => ({ ...p, acao: v }));
+                    }}
                     buscaTexto={filters.busca}
                     setBuscaTexto={(v) => setFilters((p) => ({ ...p, busca: v }))}
+                  />
+                  
+                  {/* Badges de filtros ativos do gráfico */}
+                  <ActiveFilterBadges
+                    filters={chartFilter.activeFilters}
+                    onRemove={handleRemoveFilter}
+                    onClearAll={chartFilter.clearAllFilters}
+                    fieldLabels={FILTER_LABELS}
                   />
                 </CardContent>
               </Card>
 
-              <StockKPICards dados={filteredData} />
-              <StockActionChart dados={filteredData} />
+              <StockKPICards dados={chartFilteredData} />
+              <StockActionChart 
+                dados={filteredData}
+                selectedAcao={chartFilter.getFilterValue('acao')}
+                onAcaoClick={handleChartAcaoClick}
+              />
 
               <Card>
                 <CardHeader>
                   <CardTitle>Detalhamento do Estoque</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <StockTable dados={filteredData} />
+                  <StockTable dados={chartFilteredData} />
                 </CardContent>
               </Card>
             </>

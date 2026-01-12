@@ -23,6 +23,7 @@ interface ExportableCardProps {
   headerClassName?: string;
   contentClassName?: string;
   actions?: React.ReactNode;
+  subtitle?: string;
 }
 
 export function ExportableCard({
@@ -34,6 +35,7 @@ export function ExportableCard({
   headerClassName = '',
   contentClassName = '',
   actions,
+  subtitle,
 }: ExportableCardProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -67,10 +69,15 @@ export function ExportableCard({
   return (
     <Card className={className}>
       <CardHeader className={`flex flex-row items-center justify-between ${headerClassName}`}>
-        <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-          {icon}
-          {title}
-        </CardTitle>
+        <div>
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+            {icon}
+            {title}
+          </CardTitle>
+          {subtitle && (
+            <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {actions}
           <DropdownMenu>

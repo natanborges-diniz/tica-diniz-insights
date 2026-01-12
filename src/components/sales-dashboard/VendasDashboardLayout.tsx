@@ -1,6 +1,6 @@
 // src/components/sales-dashboard/VendasDashboardLayout.tsx
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { RefreshCw, AlertCircle, Building2, Users, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 
 import { VendasFiltersState, ViewMode, ResumoLoja, VendasMetrics } from "@/hooks/useVendasDashboard";
 import { ResumoEmpresaVendedor, ResumoFormaPagamento } from "@/services/vendasService";
+import { useChartFilter } from "@/hooks/useChartFilter";
+import { ActiveFilterBadges } from "@/components/ui/active-filter-badges";
 import { SalesFilters } from "./SalesFilters";
 import { SalesKPICards } from "./SalesKPICards";
 import { SellerChart } from "./SellerChart";
@@ -87,6 +89,13 @@ function LoadingSkeleton() {
   );
 }
 
+// Labels para os campos de filtro
+const FILTER_LABELS: Record<string, string> = {
+  loja: "Loja",
+  vendedor: "Vendedor",
+  formaPagamento: "Forma de Pagamento",
+};
+
 export function VendasDashboardLayout({
   dadosPorLoja,
   dadosFormasPagamento,
@@ -107,8 +116,106 @@ export function VendasDashboardLayout({
   const showEmptyState = !dataLoaded && !loading;
   const [usarVendasSemCreditos, setUsarVendasSemCreditos] = useState(true);
 
+  // Hook para filtros interativos dos gráficos
+  const chartFilter = useChartFilter<string>();
+
+  // Dados filtrados por loja (considerando filtros do gráfico)
+  const filteredDadosPorLoja = useMemo(() => {
+    const lojaValue = chartFilter.getFilterValue('loja');
+    if (!lojaValue) return dadosPorLoja;
+    return dadosPorLoja.filter(d => d.empresa === lojaValue);
+  }, [dadosPorLoja, chartFilter]);
+
+  // Dados filtrados por vendedor (considerando filtros do gráfico)
+  const filteredDadosVendedor = useMemo(() => {
+    const vendedorValue = chartFilter.getFilterValue('vendedor');
+    if (!vendedorValue) return dadosComDesconto;
+    return dadosComDesconto.filter(d => d.vendedor === vendedorValue);
+  }, [dadosComDesconto, chartFilter]);
+
+  // Dados filtrados por forma de pagamento
+  const filteredDadosFormasPagamento = useMemo(() => {
+    const formaValue = chartFilter.getFilterValue('formaPagamento');
+    if (!formaValue) return dadosFormasPagamento;
+    return dadosFormasPagamento.filter(d => d.formaPagamento === formaValue);
+  }, [dadosFormasPagamento, chartFilter]);
+
+  // Métricas recalculadas com base nos filtros do gráfico
+  const filteredMetrics = useMemo<VendasMetrics>(() => {
+    // Se não há filtros ativos, retorna métricas originais
+    if (!chartFilter.hasActiveFilters) return metrics;
+
+    // Recalcula métricas com dados filtrados
+    let totalVendido = 0;
+    let totalCreditos = 0;
+    let totalDevolucoes = 0;
+    let qtdTransacoes = 0;
+
+    filteredDadosFormasPagamento.forEach((d) => {
+      const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
+      const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
+      const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
+      
+      if (isDevolucao) {
+        totalDevolucoes += Math.abs(d.totalGeral);
+      } else {
+        totalVendido += d.totalGeral;
+        if (isCredito) {
+          totalCreditos += d.totalGeral;
+        }
+        qtdTransacoes += d.qtdVendas;
+      }
+    });
+
+    const totalVendidoSemCreditos = totalVendido - totalCreditos;
+    const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
+
+    // Desconto dos dados filtrados
+    let totalBruto = 0;
+    let totalDesconto = 0;
+    filteredDadosVendedor.forEach((d) => {
+      totalBruto += d.totalBruto || 0;
+      totalDesconto += d.totalDesconto || 0;
+    });
+    const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
+
+    return {
+      totalVendido,
+      totalCreditos,
+      totalDevolucoes,
+      totalVendidoSemCreditos,
+      qtdTransacoes,
+      ticketMedio,
+      totalBruto,
+      totalDesconto,
+      percentualDesconto,
+      descontoDisponivel: filteredDadosVendedor.length > 0,
+    };
+  }, [metrics, chartFilter.hasActiveFilters, filteredDadosFormasPagamento, filteredDadosVendedor]);
+
   const handleViewModeChange = (mode: ViewMode) => {
+    chartFilter.clearAllFilters();
     setFilters((prev) => ({ ...prev, viewMode: mode }));
+  };
+
+  const handleLojaClick = (loja: string) => {
+    chartFilter.clearFilter('vendedor');
+    chartFilter.clearFilter('formaPagamento');
+    chartFilter.toggleFilter('loja', loja, loja.replace('DINIZ ', ''));
+  };
+
+  const handleVendedorClick = (vendedor: string) => {
+    chartFilter.clearFilter('loja');
+    chartFilter.clearFilter('formaPagamento');
+    chartFilter.toggleFilter('vendedor', vendedor, vendedor);
+  };
+
+  const handleFormaPagamentoClick = (formaPagamento: string) => {
+    chartFilter.toggleFilter('formaPagamento', formaPagamento, formaPagamento);
+  };
+
+  const handleRemoveFilter = (field: string, value: string) => {
+    chartFilter.toggleFilter(field, value);
   };
 
   return (
@@ -171,6 +278,14 @@ export function VendasDashboardLayout({
         </div>
       </div>
 
+      {/* Badges de filtros ativos do gráfico */}
+      <ActiveFilterBadges
+        filters={chartFilter.activeFilters}
+        onRemove={handleRemoveFilter}
+        onClearAll={chartFilter.clearAllFilters}
+        fieldLabels={FILTER_LABELS}
+      />
+
       {/* Erros */}
       {error && (
         <Alert variant="destructive">
@@ -203,7 +318,7 @@ export function VendasDashboardLayout({
         <>
           {/* KPIs */}
           <SalesKPICards 
-            metrics={metrics} 
+            metrics={filteredMetrics} 
             isLoading={loading} 
             loadingDesconto={loadingDesconto}
             usarVendasSemCreditos={usarVendasSemCreditos} 
@@ -212,17 +327,37 @@ export function VendasDashboardLayout({
           {/* Gráfico e Tabela - Condicional por modo */}
           {filters.viewMode === "loja" ? (
             <>
-              <StoreChart dados={dadosPorLoja} isLoading={loading} usarVendasSemCreditos={usarVendasSemCreditos} />
-              <StoreTable dados={dadosPorLoja} isLoading={loading} usarVendasSemCreditos={usarVendasSemCreditos} />
+              <StoreChart 
+                dados={dadosPorLoja} 
+                isLoading={loading} 
+                usarVendasSemCreditos={usarVendasSemCreditos}
+                selectedLoja={chartFilter.getFilterValue('loja')}
+                onLojaClick={handleLojaClick}
+              />
+              <StoreTable 
+                dados={filteredDadosPorLoja} 
+                isLoading={loading} 
+                usarVendasSemCreditos={usarVendasSemCreditos} 
+              />
             </>
           ) : (
             <>
               <div className="grid gap-6 lg:grid-cols-2">
-                <SellerChart dados={dadosComDesconto} isLoading={loading} usarVendasSemCreditos={usarVendasSemCreditos} />
-                <DescontoChart dados={dadosComDesconto} isLoading={loadingDesconto} erro={erroDesconto} />
+                <SellerChart 
+                  dados={dadosComDesconto} 
+                  isLoading={loading} 
+                  usarVendasSemCreditos={usarVendasSemCreditos}
+                  selectedVendedor={chartFilter.getFilterValue('vendedor')}
+                  onVendedorClick={handleVendedorClick}
+                />
+                <DescontoChart 
+                  dados={filteredDadosVendedor} 
+                  isLoading={loadingDesconto} 
+                  erro={erroDesconto} 
+                />
               </div>
               <SalesTable 
-                dados={dadosComDesconto} 
+                dados={filteredDadosVendedor} 
                 isLoading={loading} 
                 loadingDesconto={loadingDesconto}
                 limiteDesconto={15} 
@@ -240,8 +375,16 @@ export function VendasDashboardLayout({
           )}
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <PaymentMethodsChart dados={dadosFormasPagamento} isLoading={loadingFormas} />
-            <PaymentMethodsTable dados={dadosFormasPagamento} isLoading={loadingFormas} />
+            <PaymentMethodsChart 
+              dados={dadosFormasPagamento} 
+              isLoading={loadingFormas}
+              selectedFormaPagamento={chartFilter.getFilterValue('formaPagamento')}
+              onFormaPagamentoClick={handleFormaPagamentoClick}
+            />
+            <PaymentMethodsTable 
+              dados={filteredDadosFormasPagamento} 
+              isLoading={loadingFormas} 
+            />
           </div>
         </>
       )}
