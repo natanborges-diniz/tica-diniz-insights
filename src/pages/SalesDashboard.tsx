@@ -5,7 +5,6 @@ import { VendasDashboardLayout } from "@/components/sales-dashboard/VendasDashbo
 
 export default function SalesDashboard() {
   const {
-    dados,
     dadosPorLoja,
     dadosFormasPagamento,
     dadosComDesconto,
@@ -24,7 +23,6 @@ export default function SalesDashboard() {
 
   return (
     <VendasDashboardLayout
-      dados={dados}
       dadosPorLoja={dadosPorLoja}
       dadosFormasPagamento={dadosFormasPagamento}
       dadosComDesconto={dadosComDesconto}
