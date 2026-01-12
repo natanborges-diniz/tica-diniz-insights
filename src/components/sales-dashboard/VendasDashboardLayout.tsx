@@ -28,6 +28,7 @@ interface VendasDashboardLayoutProps {
   dados: ResumoEmpresaVendedor[];
   dadosPorLoja: ResumoLoja[];
   dadosFormasPagamento: ResumoFormaPagamento[];
+  dadosComDesconto: ResumoEmpresaVendedor[];
   dataLoaded: boolean;
   // Loading/Error
   loading: boolean;
@@ -90,6 +91,7 @@ export function VendasDashboardLayout({
   dados,
   dadosPorLoja,
   dadosFormasPagamento,
+  dadosComDesconto,
   dataLoaded,
   loading,
   loadingFormas,
@@ -220,7 +222,7 @@ export function VendasDashboardLayout({
               <>
                 <div className="grid gap-6 lg:grid-cols-2">
                   <SellerChart dados={dados} isLoading={loading} usarVendasSemCreditos={usarVendasSemCreditos} />
-                  <DescontoChart dados={dados} isLoading={loading} />
+                  <DescontoChart dados={dadosComDesconto} isLoading={loading} />
                 </div>
                 <SalesTable dados={dados} isLoading={loading} limiteDesconto={15} usarVendasSemCreditos={usarVendasSemCreditos} />
               </>
