@@ -1,7 +1,6 @@
 // src/components/os-dashboard/OsDashboardLayout.tsx
 
 import React from "react";
-import { Link } from "react-router-dom";
 import { OsRecord } from "@/services/osService";
 import { OsMetrics, getStatusColor, getStatusLabel } from "@/utils/osMetrics";
 import { OsFilterState, OsStatusFilter } from "@/hooks/useOsMonitor";
@@ -10,7 +9,7 @@ import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { RefreshCw, Info, AlertTriangle, Search, ArrowLeft } from "lucide-react";
+import { RefreshCw, Info, AlertTriangle, Search } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -115,17 +114,12 @@ export const OsDashboardLayout: React.FC<Props> = ({
   const osSemData = data.filter(os => os.statusAtraso === 'SEM_DATA');
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Link to="/">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Voltar
-            </Button>
-          </Link>
+        <div>
           <h1 className="text-2xl font-bold">Monitor de Produção (OS)</h1>
+          <p className="text-sm text-muted-foreground">Acompanhamento de ordens de serviço</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={handleChangeToday}>

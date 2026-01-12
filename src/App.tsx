@@ -2,8 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AppLayout } from "@/components/layout/AppLayout";
 import SalesDashboard from "./pages/SalesDashboard";
 import StockDashboard from "./pages/StockDashboard";
 import SalesFamilyDashboard from "./pages/SalesFamilyDashboard";
@@ -26,19 +26,33 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/vendas" element={<SalesDashboard />} />
-          <Route path="/estoque" element={<StockDashboard />} />
-          <Route path="/vendas-familia" element={<SalesFamilyDashboard />} />
-          <Route path="/os" element={<OsDashboard />} />
-          <Route path="/financeiro" element={<FinanceiroDashboard />} />
-          <Route path="/financeiro/dre" element={<FinanceiroDreDashboard />} />
-          <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaDashboard />} />
-          <Route path="/ranking-lojas" element={<RankingLojasDashboard />} />
-          <Route path="/ranking-vendedores" element={<RankingVendedoresDashboard />} />
-          <Route path="/vendas/metas" element={<MetasAcompanhamentoDashboard />} />
-          <Route path="/config/metas" element={<MetasConfigDashboard />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route element={<AppLayout />}>
+            {/* Redirect root to default page */}
+            <Route path="/" element={<Navigate to="/vendas/metas" replace />} />
+            
+            {/* Vendas */}
+            <Route path="/vendas" element={<SalesDashboard />} />
+            <Route path="/vendas-familia" element={<SalesFamilyDashboard />} />
+            <Route path="/vendas/metas" element={<MetasAcompanhamentoDashboard />} />
+            <Route path="/ranking-lojas" element={<RankingLojasDashboard />} />
+            <Route path="/ranking-vendedores" element={<RankingVendedoresDashboard />} />
+            
+            {/* Estoque */}
+            <Route path="/estoque" element={<StockDashboard />} />
+            
+            {/* Monitor */}
+            <Route path="/os" element={<OsDashboard />} />
+            
+            {/* Financeiro */}
+            <Route path="/financeiro" element={<FinanceiroDashboard />} />
+            <Route path="/financeiro/dre" element={<FinanceiroDreDashboard />} />
+            <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaDashboard />} />
+            
+            {/* Config */}
+            <Route path="/config/metas" element={<MetasConfigDashboard />} />
+          </Route>
+          
+          {/* Catch-all */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
