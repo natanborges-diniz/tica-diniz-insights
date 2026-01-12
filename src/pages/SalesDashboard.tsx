@@ -8,6 +8,7 @@ export default function SalesDashboard() {
     dados,
     dadosPorLoja,
     dadosFormasPagamento,
+    dadosComDesconto,
     dataLoaded,
     loading,
     loadingFormas,
@@ -24,6 +25,7 @@ export default function SalesDashboard() {
       dados={dados}
       dadosPorLoja={dadosPorLoja}
       dadosFormasPagamento={dadosFormasPagamento}
+      dadosComDesconto={dadosComDesconto}
       dataLoaded={dataLoaded}
       loading={loading}
       loadingFormas={loadingFormas}

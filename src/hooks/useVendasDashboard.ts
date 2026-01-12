@@ -5,7 +5,9 @@
 import { useState, useMemo, useCallback } from "react";
 import {
   getResumoFormasPagamento,
+  getResumoEmpresaVendedor,
   ResumoFormaPagamento,
+  ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getDefaultPeriodoMesAtual } from "@/utils/dateValidation";
@@ -217,26 +219,32 @@ export function useVendasDashboard() {
   });
 
   const [dadosFormasPagamento, setDadosFormasPagamento] = useState<ResumoFormaPagamento[]>([]);
+  const [dadosComDesconto, setDadosComDesconto] = useState<ResumoEmpresaVendedorAPI[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
 
-  // Buscar APENAS formas de pagamento (endpoint rápido)
+  // Buscar formas de pagamento E dados de desconto em paralelo
   const fetchData = useCallback(async (empresa: EmpresaParam, dataInicio: string, dataFim: string) => {
     setLoading(true);
     setError(null);
-    console.log('[useVendasDashboard] Fetching formas de pagamento...', { empresa, dataInicio, dataFim });
     
     try {
-      const result = await getResumoFormasPagamento({ empresa, dataInicio, dataFim });
-      console.log('[useVendasDashboard] Formas pagamento recebidas:', result.length, 'registros');
-      setDadosFormasPagamento(result);
+      // Buscar ambos endpoints em paralelo
+      const [resultFormas, resultCompleto] = await Promise.all([
+        getResumoFormasPagamento({ empresa, dataInicio, dataFim }),
+        getResumoEmpresaVendedor({ empresa, dataInicio, dataFim }),
+      ]);
+      
+      setDadosFormasPagamento(resultFormas);
+      setDadosComDesconto(resultCompleto);
       setDataLoaded(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao buscar dados de vendas";
       console.error('[useVendasDashboard] Erro:', message);
       setError(message);
       setDadosFormasPagamento([]);
+      setDadosComDesconto([]);
     } finally {
       setLoading(false);
     }
@@ -259,6 +267,7 @@ export function useVendasDashboard() {
     dados,
     dadosPorLoja,
     dadosFormasPagamento,
+    dadosComDesconto,
     dataLoaded,
     loading,
     loadingFormas: loading, // Mantém compatibilidade
