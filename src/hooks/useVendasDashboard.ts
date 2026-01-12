@@ -74,9 +74,10 @@ function agruparPorEmpresaVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresa
     const key = `${d.codEmpresa}-${d.vendedor}`;
     const existing = mapa.get(key);
     
-    // Devoluções são negativas, não contam como vendas
-    const isDevolucao = d.formaPagamento === 'DEVOLUCAO';
-    const isCredito = d.formaPagamento === 'CREDITOS';
+    // Comparação case-insensitive para robustez
+    const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
+    const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
+    const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
     
     const valorVenda = isDevolucao ? d.totalGeral : (isCredito ? 0 : d.totalGeral);
     const valorCredito = isCredito ? d.totalGeral : 0;
@@ -163,9 +164,15 @@ function calcularMetricasDeFormasPagamento(dados: ResumoFormaPagamento[]): Venda
   let totalCreditos = 0;
   let qtdTransacoes = 0;
 
+  // Debug: Log das formas de pagamento únicas encontradas
+  const formasUnicas = [...new Set(dados.map(d => d.formaPagamento))];
+  console.log('[Métricas] Formas de pagamento encontradas:', formasUnicas);
+
   dados.forEach((d) => {
-    const isDevolucao = d.formaPagamento === 'DEVOLUCAO';
-    const isCredito = d.formaPagamento === 'CREDITOS';
+    // Comparação case-insensitive para robustez
+    const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
+    const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
+    const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
     
     // Devoluções são valores negativos, somam normalmente
     totalVendido += d.totalGeral;
@@ -179,6 +186,10 @@ function calcularMetricasDeFormasPagamento(dados: ResumoFormaPagamento[]): Venda
       qtdTransacoes += d.qtdVendas;
     }
   });
+
+  console.log('[Métricas] Total Vendido:', totalVendido);
+  console.log('[Métricas] Total Créditos:', totalCreditos);
+  console.log('[Métricas] Total Vendido Sem Créditos:', totalVendido - totalCreditos);
 
   const totalVendidoSemCreditos = totalVendido - totalCreditos;
   const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
