@@ -221,32 +221,43 @@ export function useVendasDashboard() {
   const [dadosFormasPagamento, setDadosFormasPagamento] = useState<ResumoFormaPagamento[]>([]);
   const [dadosComDesconto, setDadosComDesconto] = useState<ResumoEmpresaVendedorAPI[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingDesconto, setLoadingDesconto] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [erroDesconto, setErroDesconto] = useState<string | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
 
-  // Buscar formas de pagamento E dados de desconto em paralelo
+  // Buscar formas de pagamento (rápido) - não bloqueia por desconto
   const fetchData = useCallback(async (empresa: EmpresaParam, dataInicio: string, dataFim: string) => {
     setLoading(true);
     setError(null);
+    setLoadingDesconto(true);
+    setErroDesconto(null);
     
+    // Buscar formas de pagamento primeiro (endpoint rápido)
     try {
-      // Buscar ambos endpoints em paralelo
-      const [resultFormas, resultCompleto] = await Promise.all([
-        getResumoFormasPagamento({ empresa, dataInicio, dataFim }),
-        getResumoEmpresaVendedor({ empresa, dataInicio, dataFim }),
-      ]);
-      
+      const resultFormas = await getResumoFormasPagamento({ empresa, dataInicio, dataFim });
       setDadosFormasPagamento(resultFormas);
-      setDadosComDesconto(resultCompleto);
       setDataLoaded(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao buscar dados de vendas";
-      console.error('[useVendasDashboard] Erro:', message);
+      console.error('[useVendasDashboard] Erro formas pagamento:', message);
       setError(message);
       setDadosFormasPagamento([]);
-      setDadosComDesconto([]);
     } finally {
       setLoading(false);
+    }
+
+    // Buscar dados de desconto separadamente (endpoint lento, pode dar timeout)
+    try {
+      const resultDesconto = await getResumoEmpresaVendedor({ empresa, dataInicio, dataFim });
+      setDadosComDesconto(resultDesconto);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao buscar dados de desconto";
+      console.warn('[useVendasDashboard] Erro desconto (não crítico):', message);
+      setErroDesconto('Não foi possível carregar dados de desconto. Tente filtrar por loja.');
+      setDadosComDesconto([]);
+    } finally {
+      setLoadingDesconto(false);
     }
   }, []);
 
@@ -271,8 +282,10 @@ export function useVendasDashboard() {
     dataLoaded,
     loading,
     loadingFormas: loading, // Mantém compatibilidade
+    loadingDesconto,
     error,
     errorFormas: error, // Mantém compatibilidade
+    erroDesconto,
     filters,
     setFilters,
     metrics,

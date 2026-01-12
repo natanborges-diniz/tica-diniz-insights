@@ -7,6 +7,7 @@ import { ResumoEmpresaVendedor } from '@/services/vendasService';
 interface DescontoChartProps {
   dados: ResumoEmpresaVendedor[];
   isLoading?: boolean;
+  erro?: string | null;
 }
 
 // Cores para diferentes empresas
@@ -15,7 +16,7 @@ const COLORS = [
   '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1'
 ];
 
-export function DescontoChart({ dados, isLoading }: DescontoChartProps) {
+export function DescontoChart({ dados, isLoading, erro }: DescontoChartProps) {
   // Preparar dados agrupados por vendedor com empresa para cor
   const empresas = [...new Set(dados.map(d => d.empresaNomeLogico || d.empresa))];
   const empresaColorMap = Object.fromEntries(
@@ -36,6 +37,26 @@ export function DescontoChart({ dados, isLoading }: DescontoChartProps) {
       percentualDesconto: item.percentualDesconto || 0,
       cor: empresaColorMap[item.empresaNomeLogico || item.empresa],
     }));
+
+  // Se tiver erro, mostrar mensagem amigável
+  if (erro) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <Percent className="h-5 w-5 text-orange-500" />
+            % Desconto por Vendedor
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[350px] flex flex-col items-center justify-center text-muted-foreground">
+            <p className="text-center mb-2">⏱️ Timeout ao carregar dados de desconto.</p>
+            <p className="text-sm text-center">Tente filtrar por uma loja específica para reduzir o volume de dados.</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
