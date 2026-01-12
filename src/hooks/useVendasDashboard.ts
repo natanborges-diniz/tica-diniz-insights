@@ -249,7 +249,29 @@ export function useVendasDashboard() {
 
     // Buscar dados de desconto separadamente (endpoint lento, pode dar timeout)
     try {
+      console.log('[useVendasDashboard] Iniciando busca de desconto...', { empresa, dataInicio, dataFim });
       const resultDesconto = await getResumoEmpresaVendedor({ empresa, dataInicio, dataFim });
+      
+      // Debug detalhado dos dados de desconto
+      console.log('[useVendasDashboard] Desconto recebido:', resultDesconto.length, 'registros');
+      if (resultDesconto.length > 0) {
+        console.log('[useVendasDashboard] Primeiro registro completo:', JSON.stringify(resultDesconto[0], null, 2));
+        console.log('[useVendasDashboard] Campos de desconto do primeiro:', {
+          totalDesconto: resultDesconto[0].totalDesconto,
+          percentualDesconto: resultDesconto[0].percentualDesconto,
+          totalBruto: resultDesconto[0].totalBruto,
+          totalVendido: resultDesconto[0].totalVendido,
+        });
+        
+        const temDesconto = resultDesconto.some(d => d.percentualDesconto > 0 || d.totalDesconto > 0);
+        console.log('[useVendasDashboard] Algum registro tem desconto > 0?', temDesconto);
+        
+        if (!temDesconto) {
+          console.warn('[useVendasDashboard] ATENÇÃO: Nenhum registro tem desconto > 0!');
+          console.log('[useVendasDashboard] Amostra de 3 registros:', resultDesconto.slice(0, 3));
+        }
+      }
+      
       setDadosComDesconto(resultDesconto);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao buscar dados de desconto";
