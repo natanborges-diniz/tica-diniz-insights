@@ -11,6 +11,7 @@ interface SalesTableProps {
   dados: ResumoEmpresaVendedor[];
   isLoading?: boolean;
   limiteDesconto?: number;
+  usarVendasSemCreditos?: boolean;
 }
 
 type SortField = 'empresaNomeLogico' | 'vendedor' | 'qtdTransacao' | 'qtdProdutos' | 'totalBruto' | 
@@ -33,9 +34,10 @@ function formatPercent(value: number): string {
   return `${value.toFixed(2)}%`;
 }
 
-export function SalesTable({ dados, isLoading, limiteDesconto = 15 }: SalesTableProps) {
+export function SalesTable({ dados, isLoading, limiteDesconto = 15, usarVendasSemCreditos = true }: SalesTableProps) {
   const [search, setSearch] = useState('');
-  const [sortField, setSortField] = useState<SortField>('totalVendidoSemCreditos');
+  const defaultSortField: SortField = usarVendasSemCreditos ? 'totalVendidoSemCreditos' : 'totalVendido';
+  const [sortField, setSortField] = useState<SortField>(defaultSortField);
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const handleSort = (field: SortField) => {
@@ -177,7 +179,7 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15 }: SalesTable
                     </div>
                   </TableHead>
                   <TableHead 
-                    className="text-right cursor-pointer hover:bg-muted/50"
+                    className={`text-right cursor-pointer hover:bg-muted/50 ${!usarVendasSemCreditos ? 'bg-primary/10' : ''}`}
                     onClick={() => handleSort('totalVendido')}
                   >
                     <div className="flex items-center justify-end">
@@ -204,7 +206,7 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15 }: SalesTable
                     </div>
                   </TableHead>
                   <TableHead 
-                    className="text-right cursor-pointer hover:bg-muted/50"
+                    className={`text-right cursor-pointer hover:bg-muted/50 ${usarVendasSemCreditos ? 'bg-primary/10' : ''}`}
                     onClick={() => handleSort('totalVendidoSemCreditos')}
                   >
                     <div className="flex items-center justify-end">
@@ -228,7 +230,7 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15 }: SalesTable
                     <TableCell className={`text-right ${row.percentualDesconto > limiteDesconto ? 'text-red-600 font-semibold' : 'text-orange-600'}`}>
                       {formatPercent(row.percentualDesconto)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className={`text-right ${!usarVendasSemCreditos ? 'font-bold text-emerald-600 bg-primary/5' : ''}`}>
                       {formatCurrency(row.totalVendido)}
                     </TableCell>
                     <TableCell className="text-right text-blue-600">
@@ -237,7 +239,7 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15 }: SalesTable
                     <TableCell className="text-right text-indigo-600">
                       {formatCurrency(row.ticketMedio)}
                     </TableCell>
-                    <TableCell className="text-right font-bold text-emerald-600">
+                    <TableCell className={`text-right ${usarVendasSemCreditos ? 'font-bold text-emerald-600 bg-primary/5' : ''}`}>
                       {formatCurrency(row.totalVendidoSemCreditos)}
                     </TableCell>
                     <TableCell className="text-center">

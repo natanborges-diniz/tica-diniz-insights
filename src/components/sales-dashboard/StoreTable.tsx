@@ -6,13 +6,18 @@ import { ResumoLoja } from '@/hooks/useVendasDashboard';
 interface StoreTableProps {
   dados: ResumoLoja[];
   isLoading: boolean;
+  usarVendasSemCreditos?: boolean;
 }
 
 const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 const formatPercent = (value: number) => `${value.toFixed(2)}%`;
 
-export function StoreTable({ dados, isLoading }: StoreTableProps) {
-  const dadosOrdenados = [...dados].sort((a, b) => b.totalVendidoSemCreditos - a.totalVendidoSemCreditos);
+export function StoreTable({ dados, isLoading, usarVendasSemCreditos = true }: StoreTableProps) {
+  const dadosOrdenados = [...dados].sort((a, b) => 
+    usarVendasSemCreditos 
+      ? b.totalVendidoSemCreditos - a.totalVendidoSemCreditos
+      : b.totalVendido - a.totalVendido
+  );
   const totais = dados.reduce((acc, d) => ({
     totalBruto: acc.totalBruto + (d.totalBruto || 0),
     totalDesconto: acc.totalDesconto + (d.totalDesconto || 0),
@@ -37,9 +42,9 @@ export function StoreTable({ dados, isLoading }: StoreTableProps) {
                 <TableHead className="text-right">Total Bruto</TableHead>
                 <TableHead className="text-right">Desconto</TableHead>
                 <TableHead className="text-right">% Desc.</TableHead>
-                <TableHead className="text-right">Total Vendido</TableHead>
+                <TableHead className={`text-right ${!usarVendasSemCreditos ? 'bg-primary/10 font-bold' : ''}`}>Total Vendido</TableHead>
                 <TableHead className="text-right">Créditos</TableHead>
-                <TableHead className="text-right">Vendas Válidas</TableHead>
+                <TableHead className={`text-right ${usarVendasSemCreditos ? 'bg-primary/10 font-bold' : ''}`}>Vendas Válidas</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -53,9 +58,9 @@ export function StoreTable({ dados, isLoading }: StoreTableProps) {
                       <TableCell className="text-right">{formatCurrency(item.totalBruto)}</TableCell>
                       <TableCell className="text-right text-amber-600">{formatCurrency(item.totalDesconto)}</TableCell>
                       <TableCell className="text-right text-orange-600">{formatPercent(item.percentualDesconto)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.totalVendido)}</TableCell>
+                      <TableCell className={`text-right ${!usarVendasSemCreditos ? 'font-bold text-emerald-600 bg-primary/5' : ''}`}>{formatCurrency(item.totalVendido)}</TableCell>
                       <TableCell className="text-right text-blue-600">{formatCurrency(item.totalCreditos)}</TableCell>
-                      <TableCell className="text-right font-bold text-emerald-600">{formatCurrency(item.totalVendidoSemCreditos)}</TableCell>
+                      <TableCell className={`text-right ${usarVendasSemCreditos ? 'font-bold text-emerald-600 bg-primary/5' : ''}`}>{formatCurrency(item.totalVendidoSemCreditos)}</TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="bg-muted/50 font-bold">
@@ -63,9 +68,9 @@ export function StoreTable({ dados, isLoading }: StoreTableProps) {
                     <TableCell className="text-right">{formatCurrency(totais.totalBruto)}</TableCell>
                     <TableCell className="text-right text-amber-600">{formatCurrency(totais.totalDesconto)}</TableCell>
                     <TableCell className="text-right text-orange-600">{formatPercent(percentualDescontoTotal)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(totais.totalVendido)}</TableCell>
+                    <TableCell className={`text-right ${!usarVendasSemCreditos ? 'font-bold text-emerald-600' : ''}`}>{formatCurrency(totais.totalVendido)}</TableCell>
                     <TableCell className="text-right text-blue-600">{formatCurrency(totais.totalCreditos)}</TableCell>
-                    <TableCell className="text-right text-emerald-600">{formatCurrency(totais.totalVendidoSemCreditos)}</TableCell>
+                    <TableCell className={`text-right ${usarVendasSemCreditos ? 'font-bold text-emerald-600' : ''}`}>{formatCurrency(totais.totalVendidoSemCreditos)}</TableCell>
                   </TableRow>
                 </>
               )}
