@@ -1,7 +1,6 @@
 // src/components/financeiro-dashboard/FinanceiroDashboardLayout.tsx
 
-import { Link } from "react-router-dom";
-import { ArrowLeft, Wallet, RefreshCw, AlertCircle, Calendar, FileText, TrendingUp } from "lucide-react";
+import { Wallet, RefreshCw, AlertCircle, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -139,112 +138,89 @@ export function FinanceiroDashboardLayout({
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-4">
-              <Link to="/">
-                <Button variant="ghost" size="icon">
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-              </Link>
-              <div className="flex items-center gap-2">
-                <Wallet className="h-6 w-6 text-primary" />
-                <h1 className="text-xl font-bold">Financeiro – Contas a Pagar / Receber</h1>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Link to="/financeiro/dre">
-                <Button variant="outline" size="sm">
-                  <FileText className="h-4 w-4 mr-2" />
-                  DRE
-                </Button>
-              </Link>
-              <Link to="/financeiro/fluxo-caixa">
-                <Button variant="outline" size="sm">
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Fluxo de Caixa
-                </Button>
-              </Link>
-              <Button variant="default" size="sm" onClick={reload} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                Atualizar
-              </Button>
-            </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-2">
+          <Wallet className="h-6 w-6 text-primary" />
+          <div>
+            <h1 className="text-2xl font-bold">Contas a Pagar / Receber</h1>
+            <p className="text-sm text-muted-foreground">Gestão financeira de parcelas</p>
           </div>
         </div>
-      </header>
+        <Button variant="default" size="sm" onClick={reload} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </Button>
+      </div>
 
-      <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* Botões de atalho rápido */}
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" onClick={handleHojeVencimento}>
-            <Calendar className="h-4 w-4 mr-2" />
-            Hoje (vencimento)
-          </Button>
-          <Button variant="secondary" size="sm" onClick={handleHojePagamento}>
-            <Calendar className="h-4 w-4 mr-2" />
-            Hoje (pagamento)
-          </Button>
-          <Button variant="secondary" size="sm" onClick={handleMesAtualCompetencia}>
-            <Calendar className="h-4 w-4 mr-2" />
-            Mês atual (competência)
-          </Button>
-        </div>
+      {/* Botões de atalho rápido */}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" onClick={handleHojeVencimento}>
+          <Calendar className="h-4 w-4 mr-2" />
+          Hoje (vencimento)
+        </Button>
+        <Button variant="secondary" size="sm" onClick={handleHojePagamento}>
+          <Calendar className="h-4 w-4 mr-2" />
+          Hoje (pagamento)
+        </Button>
+        <Button variant="secondary" size="sm" onClick={handleMesAtualCompetencia}>
+          <Calendar className="h-4 w-4 mr-2" />
+          Mês atual (competência)
+        </Button>
+      </div>
 
-        <FinanceiroFilters
-          filters={filters}
-          onChange={(updates) => setFilters((prev) => ({ ...prev, ...updates }))}
-        />
+      <FinanceiroFilters
+        filters={filters}
+        onChange={(updates) => setFilters((prev) => ({ ...prev, ...updates }))}
+      />
 
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-        {/* Aviso quando carregando dados de todas as empresas */}
-        {loading && filters.empresa === null && (
-          <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
-            <AlertCircle className="h-4 w-4 text-yellow-600" />
-            <AlertDescription className="text-yellow-800 dark:text-yellow-200">
-              Carregando dados de todas as empresas. Esta consulta pode demorar até 60 segundos...
-            </AlertDescription>
-          </Alert>
-        )}
+      {/* Aviso quando carregando dados de todas as empresas */}
+      {loading && filters.empresa === null && (
+        <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+            Carregando dados de todas as empresas. Esta consulta pode demorar até 60 segundos...
+          </AlertDescription>
+        </Alert>
+      )}
 
-        {loading ? (
-          <LoadingSkeleton />
-        ) : (
-          <>
-            <FinanceiroKPICards 
-              metrics={metrics} 
-              activeFilter={filters.kpiFilter}
-              onFilterChange={handleKPIFilterChange}
-            />
-            
-            {/* Indicador de filtro ativo */}
-            {filters.kpiFilter !== "TODOS" && (
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="text-sm">
-                  Filtro ativo: {KPI_FILTER_LABELS[filters.kpiFilter]}
-                </Badge>
-                <Button variant="ghost" size="sm" onClick={clearKPIFilter}>
-                  Limpar filtro
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  ({filteredParcelas.length} de {parcelas.length} parcelas)
-                </span>
-              </div>
-            )}
-            
-            <FinanceiroVencimentoChart data={filteredParcelas} />
-            <FinanceiroParcelasTable data={filteredParcelas} />
-          </>
-        )}
-      </main>
+      {loading ? (
+        <LoadingSkeleton />
+      ) : (
+        <>
+          <FinanceiroKPICards 
+            metrics={metrics} 
+            activeFilter={filters.kpiFilter}
+            onFilterChange={handleKPIFilterChange}
+          />
+          
+          {/* Indicador de filtro ativo */}
+          {filters.kpiFilter !== "TODOS" && (
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-sm">
+                Filtro ativo: {KPI_FILTER_LABELS[filters.kpiFilter]}
+              </Badge>
+              <Button variant="ghost" size="sm" onClick={clearKPIFilter}>
+                Limpar filtro
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                ({filteredParcelas.length} de {parcelas.length} parcelas)
+              </span>
+            </div>
+          )}
+          
+          <FinanceiroVencimentoChart data={filteredParcelas} />
+          <FinanceiroParcelasTable data={filteredParcelas} />
+        </>
+      )}
     </div>
   );
 }

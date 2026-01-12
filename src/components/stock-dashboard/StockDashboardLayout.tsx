@@ -1,7 +1,6 @@
 // src/components/stock-dashboard/StockDashboardLayout.tsx
 
-import { Link } from "react-router-dom";
-import { ArrowLeft, Package, RefreshCw, AlertCircle, Info } from "lucide-react";
+import { Package, RefreshCw, AlertCircle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -106,146 +105,137 @@ export function StockDashboardLayout({
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-4">
-              <Link to="/">
-                <Button variant="ghost" size="icon">
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-              </Link>
-              <div className="flex items-center gap-2">
-                <Package className="h-6 w-6 text-primary" />
-                <h1 className="text-xl font-bold">Painel de Estoque / OTB</h1>
-              </div>
-            </div>
-            <Button variant="outline" size="sm" onClick={reload} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-              Atualizar
-            </Button>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-2">
+          <Package className="h-6 w-6 text-primary" />
+          <div>
+            <h1 className="text-2xl font-bold">Painel de Estoque / OTB</h1>
+            <p className="text-sm text-muted-foreground">Análise de estoque por loja</p>
           </div>
         </div>
-      </header>
+        <Button variant="outline" size="sm" onClick={reload} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+          Atualizar
+        </Button>
+      </div>
 
-      <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* Loading Empresas */}
-        {loadingEmpresas && (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-muted-foreground">Carregando empresas...</p>
-            </div>
+      {/* Loading Empresas */}
+      {loadingEmpresas && (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Carregando empresas...</p>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Erro Empresas */}
-        {errorEmpresas && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>Erro ao carregar empresas: {errorEmpresas}</AlertDescription>
-          </Alert>
-        )}
+      {/* Erro Empresas */}
+      {errorEmpresas && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>Erro ao carregar empresas: {errorEmpresas}</AlertDescription>
+        </Alert>
+      )}
 
-        {/* Conteúdo quando empresas carregadas */}
-        {!loadingEmpresas && !errorEmpresas && empresas.length > 0 && (
-          <>
-            {/* Seletor de Empresa */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Selecione a Loja</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Select
-                  value={filters.empresa !== null ? String(filters.empresa) : ""}
-                  onValueChange={handleEmpresaChange}
-                >
-                  <SelectTrigger className="w-full max-w-xs">
-                    <SelectValue placeholder="Selecione uma empresa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {empresas.map((emp) => (
-                      <SelectItem key={emp.codEmpresa} value={emp.codEmpresa.toString()}>
-                        {emp.codEmpresa} - {emp.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </CardContent>
-            </Card>
-
-            {/* Erro Dados */}
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            {/* Estado vazio - empresa não selecionada */}
-            {filters.empresa === null && !loading && (
-              <Card className="border-dashed">
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <Info className="h-12 w-12 text-muted-foreground mb-4" />
-                  <CardTitle className="text-lg mb-2">Selecione uma empresa</CardTitle>
-                  <p className="text-sm text-muted-foreground text-center max-w-md">
-                    Escolha uma empresa no seletor acima para visualizar a análise de estoque.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Loading ou Dados */}
-            {loading ? (
-              <LoadingSkeleton />
-            ) : filters.empresa !== null && (
-              <>
-                {/* Filtros */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Filtros</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <StockFilters
-                      dados={dados}
-                      fornecedorSelecionado={filters.fornecedor}
-                      setFornecedorSelecionado={(v) => setFilters((p) => ({ ...p, fornecedor: v }))}
-                      marcaSelecionada={filters.marca}
-                      setMarcaSelecionada={(v) => setFilters((p) => ({ ...p, marca: v }))}
-                      acaoSelecionada={filters.acao}
-                      setAcaoSelecionada={(v) => setFilters((p) => ({ ...p, acao: v }))}
-                      buscaTexto={filters.busca}
-                      setBuscaTexto={(v) => setFilters((p) => ({ ...p, busca: v }))}
-                    />
-                  </CardContent>
-                </Card>
-
-                <StockKPICards dados={filteredData} />
-                <StockActionChart dados={filteredData} />
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Detalhamento do Estoque</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <StockTable dados={filteredData} />
-                  </CardContent>
-                </Card>
-              </>
-            )}
-          </>
-        )}
-
-        {/* Sem empresas */}
-        {!loadingEmpresas && !errorEmpresas && empresas.length === 0 && (
+      {/* Conteúdo quando empresas carregadas */}
+      {!loadingEmpresas && !errorEmpresas && empresas.length > 0 && (
+        <>
+          {/* Seletor de Empresa */}
           <Card>
-            <CardContent className="pt-6">
-              <p className="text-muted-foreground text-center">Nenhuma empresa encontrada</p>
+            <CardHeader>
+              <CardTitle className="text-lg">Selecione a Loja</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Select
+                value={filters.empresa !== null ? String(filters.empresa) : ""}
+                onValueChange={handleEmpresaChange}
+              >
+                <SelectTrigger className="w-full max-w-xs">
+                  <SelectValue placeholder="Selecione uma empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {empresas.map((emp) => (
+                    <SelectItem key={emp.codEmpresa} value={emp.codEmpresa.toString()}>
+                      {emp.codEmpresa} - {emp.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </CardContent>
           </Card>
-        )}
-      </main>
+
+          {/* Erro Dados */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Estado vazio - empresa não selecionada */}
+          {filters.empresa === null && !loading && (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Info className="h-12 w-12 text-muted-foreground mb-4" />
+                <CardTitle className="text-lg mb-2">Selecione uma empresa</CardTitle>
+                <p className="text-sm text-muted-foreground text-center max-w-md">
+                  Escolha uma empresa no seletor acima para visualizar a análise de estoque.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Loading ou Dados */}
+          {loading ? (
+            <LoadingSkeleton />
+          ) : filters.empresa !== null && (
+            <>
+              {/* Filtros */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Filtros</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <StockFilters
+                    dados={dados}
+                    fornecedorSelecionado={filters.fornecedor}
+                    setFornecedorSelecionado={(v) => setFilters((p) => ({ ...p, fornecedor: v }))}
+                    marcaSelecionada={filters.marca}
+                    setMarcaSelecionada={(v) => setFilters((p) => ({ ...p, marca: v }))}
+                    acaoSelecionada={filters.acao}
+                    setAcaoSelecionada={(v) => setFilters((p) => ({ ...p, acao: v }))}
+                    buscaTexto={filters.busca}
+                    setBuscaTexto={(v) => setFilters((p) => ({ ...p, busca: v }))}
+                  />
+                </CardContent>
+              </Card>
+
+              <StockKPICards dados={filteredData} />
+              <StockActionChart dados={filteredData} />
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Detalhamento do Estoque</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <StockTable dados={filteredData} />
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </>
+      )}
+
+      {/* Sem empresas */}
+      {!loadingEmpresas && !errorEmpresas && empresas.length === 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground text-center">Nenhuma empresa encontrada</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
