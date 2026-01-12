@@ -4,6 +4,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ResumoFormaPagamento } from '@/services/vendasService';
 import { CreditCard, TrendingUp, TrendingDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { DataTableToolbar } from '@/components/ui/data-table-toolbar';
+import { formatters, ExportColumn } from '@/utils/exportData';
 
 interface PaymentMethodsTableProps {
   dados: ResumoFormaPagamento[];
@@ -24,6 +26,14 @@ interface ResumoAgrupado {
   ticketMedio: number;
   percentual: number;
 }
+
+const exportColumns: ExportColumn[] = [
+  { key: 'formaPagamento', header: 'Forma de Pagamento' },
+  { key: 'totalGeral', header: 'Total', format: formatters.currency },
+  { key: 'qtdVendas', header: 'Qtd Vendas', format: formatters.number },
+  { key: 'ticketMedio', header: 'Ticket Médio', format: formatters.currency },
+  { key: 'percentual', header: '% Part.', format: (v) => `${v.toFixed(1)}%` },
+];
 
 export function PaymentMethodsTable({ dados, isLoading }: PaymentMethodsTableProps) {
   // Agrupa por forma de pagamento - padrão de mercado: visão consolidada
@@ -60,10 +70,19 @@ export function PaymentMethodsTable({ dados, isLoading }: PaymentMethodsTablePro
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CreditCard className="h-5 w-5" />
-          Análise por Forma de Pagamento
-        </CardTitle>
+        <DataTableToolbar
+          exportOptions={{
+            filename: `formas_pagamento_${new Date().toISOString().split('T')[0]}`,
+            title: 'Análise por Forma de Pagamento',
+            columns: exportColumns,
+            data: dadosFinais,
+          }}
+        >
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5" />
+            Análise por Forma de Pagamento
+          </CardTitle>
+        </DataTableToolbar>
       </CardHeader>
       <CardContent>
         {isLoading ? (

@@ -1,6 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AnaliseEstoqueAcao } from '@/services/estoqueService';
+import { BarChart3 } from 'lucide-react';
+import { ExportableCard } from '@/components/ui/exportable-card';
 
 interface StockActionChartProps {
   dados: AnaliseEstoqueAcao[];
@@ -21,23 +22,22 @@ export function StockActionChart({ dados }: StockActionChartProps) {
     .sort((a, b) => b.total - a.total);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Estoque por Ação Sugerida</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={chartData} layout="vertical" margin={{ left: 100 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" tickFormatter={(value) => value.toLocaleString('pt-BR')} />
-            <YAxis dataKey="acao" type="category" width={90} tick={{ fontSize: 12 }} />
-            <Tooltip
-              formatter={(value: number) => [value.toLocaleString('pt-BR') + ' peças', 'Quantidade']}
-            />
-            <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
+    <ExportableCard
+      title="Estoque por Ação Sugerida"
+      filename={`estoque_acao_${new Date().toISOString().split('T')[0]}`}
+      icon={<BarChart3 className="h-5 w-5" />}
+    >
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={chartData} layout="vertical" margin={{ left: 100 }}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis type="number" tickFormatter={(value) => value.toLocaleString('pt-BR')} />
+          <YAxis dataKey="acao" type="category" width={90} tick={{ fontSize: 12 }} />
+          <Tooltip
+            formatter={(value: number) => [value.toLocaleString('pt-BR') + ' peças', 'Quantidade']}
+          />
+          <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </ExportableCard>
   );
 }

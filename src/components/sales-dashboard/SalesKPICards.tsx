@@ -9,9 +9,23 @@ import {
   CreditCard,
   BadgeCheck,
   RotateCcw,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Image,
+  FileText,
+  Loader2
 } from 'lucide-react';
 import { VendasMetrics } from '@/hooks/useVendasDashboard';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useRef, useState } from 'react';
+import { exportToImage, exportVisualToPDF } from '@/utils/exportVisual';
+import { toast } from 'sonner';
 
 interface SalesKPICardsProps {
   metrics: VendasMetrics;
@@ -41,9 +55,44 @@ export function SalesKPICards({
   loadingDesconto,
   usarVendasSemCreditos = true 
 }: SalesKPICardsProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+
   const kpiPrincipal = usarVendasSemCreditos 
     ? metrics.totalVendidoSemCreditos 
     : metrics.totalVendido;
+
+  const handleExportImage = async () => {
+    if (!containerRef.current) return;
+    setExporting(true);
+    try {
+      await exportToImage(containerRef.current, { 
+        filename: `kpi_vendas_${new Date().toISOString().split('T')[0]}`, 
+        title: 'Resumo de Vendas' 
+      });
+      toast.success('Imagem exportada com sucesso!');
+    } catch (error) {
+      toast.error('Erro ao exportar imagem');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!containerRef.current) return;
+    setExporting(true);
+    try {
+      await exportVisualToPDF(containerRef.current, { 
+        filename: `kpi_vendas_${new Date().toISOString().split('T')[0]}`, 
+        title: 'Resumo de Vendas' 
+      });
+      toast.success('PDF exportado com sucesso!');
+    } catch (error) {
+      toast.error('Erro ao exportar PDF');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Cards sempre visíveis (dados do endpoint rápido)
   const cardsVendas = [
@@ -135,52 +184,79 @@ export function SalesKPICards({
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-      {/* Cards de vendas */}
-      {cardsVendas.map((card, i) => (
-        <Card key={i} className={card.highlight ? 'ring-2 ring-emerald-500 ring-offset-2' : ''}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
-            <div className={`p-2 rounded-full ${card.bgColor}`}>
-              <card.icon className={`h-4 w-4 ${card.color}`} />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-xl font-bold ${card.highlight ? 'text-emerald-600' : ''}`}>
-              {card.value}
-            </div>
-            {card.subtitle && (
-              <p className="text-xs text-muted-foreground mt-1">{card.subtitle}</p>
-            )}
-          </CardContent>
-        </Card>
-      ))}
-
-      {/* Cards de desconto */}
-      {cardsDesconto.map((card, i) => (
-        <Card key={`desc-${i}`} className={card.indisponivel ? 'opacity-60' : ''}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
-            <div className={`p-2 rounded-full ${card.bgColor}`}>
-              {card.indisponivel ? (
-                <AlertCircle className="h-4 w-4 text-muted-foreground" />
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" disabled={exporting}>
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
-                <card.icon className={`h-4 w-4 ${card.color}`} />
+                <Download className="h-4 w-4 mr-2" />
               )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {card.loading ? (
-              <Skeleton className="h-7 w-24" />
-            ) : (
-              <div className="text-xl font-bold">{card.value}</div>
-            )}
-            {card.indisponivel && (
-              <p className="text-xs text-muted-foreground mt-1">Filtre por loja</p>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+              Exportar KPIs
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleExportImage}>
+              <Image className="h-4 w-4 mr-2" />
+              Exportar Imagem
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExportPDF}>
+              <FileText className="h-4 w-4 mr-2" />
+              Exportar PDF
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div ref={containerRef} className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 p-1">
+        {/* Cards de vendas */}
+        {cardsVendas.map((card, i) => (
+          <Card key={i} className={card.highlight ? 'ring-2 ring-emerald-500 ring-offset-2' : ''}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
+              <div className={`p-2 rounded-full ${card.bgColor}`}>
+                <card.icon className={`h-4 w-4 ${card.color}`} />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className={`text-xl font-bold ${card.highlight ? 'text-emerald-600' : ''}`}>
+                {card.value}
+              </div>
+              {card.subtitle && (
+                <p className="text-xs text-muted-foreground mt-1">{card.subtitle}</p>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+
+        {/* Cards de desconto */}
+        {cardsDesconto.map((card, i) => (
+          <Card key={`desc-${i}`} className={card.indisponivel ? 'opacity-60' : ''}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
+              <div className={`p-2 rounded-full ${card.bgColor}`}>
+                {card.indisponivel ? (
+                  <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <card.icon className={`h-4 w-4 ${card.color}`} />
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {card.loading ? (
+                <Skeleton className="h-7 w-24" />
+              ) : (
+                <div className="text-xl font-bold">{card.value}</div>
+              )}
+              {card.indisponivel && (
+                <p className="text-xs text-muted-foreground mt-1">Filtre por loja</p>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
