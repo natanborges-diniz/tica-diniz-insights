@@ -1,10 +1,10 @@
 // src/hooks/useVendasDashboard.ts
+// Hook refatorado para usar APENAS o endpoint de formas de pagamento (mais rápido)
+// e calcular métricas agregadas no frontend
 
 import { useState, useMemo, useCallback } from "react";
 import {
-  getResumoEmpresaVendedor,
   getResumoFormasPagamento,
-  ResumoEmpresaVendedor,
   ResumoFormaPagamento,
 } from "@/services/vendasService";
 import { EmpresaParam } from "@/services/firebirdBridge";
@@ -17,6 +17,23 @@ export interface VendasFiltersState {
   dataFim: string;
   viewMode: ViewMode;
   empresa: EmpresaParam;
+}
+
+// Interface agregada por empresa/vendedor (calculada a partir das formas de pagamento)
+export interface ResumoEmpresaVendedor {
+  empresa: string;
+  empresaCodLogico: number;
+  empresaNomeLogico: string;
+  vendedor: string;
+  qtdTransacao: number;
+  qtdProdutos: number;
+  totalBruto: number;
+  totalVendido: number;
+  totalDesconto: number;
+  percentualDesconto: number;
+  totalCreditos: number;
+  totalVendidoSemCreditos: number;
+  ticketMedio: number;
 }
 
 export interface ResumoLoja {
@@ -42,6 +59,69 @@ export interface VendasMetrics {
   ticketMedio: number;
 }
 
+// Função para agregar dados de formas de pagamento por empresa/vendedor
+function agruparPorEmpresaVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedor[] {
+  const mapa = new Map<string, {
+    empresa: string;
+    codEmpresa: number;
+    vendedor: string;
+    totalVendido: number;
+    totalCreditos: number;
+    qtdTransacao: number;
+  }>();
+
+  dados.forEach((d) => {
+    const key = `${d.codEmpresa}-${d.vendedor}`;
+    const existing = mapa.get(key);
+    
+    // Devoluções são negativas, não contam como vendas
+    const isDevolucao = d.formaPagamento === 'DEVOLUCAO';
+    const isCredito = d.formaPagamento === 'CREDITOS';
+    
+    const valorVenda = isDevolucao ? d.totalGeral : (isCredito ? 0 : d.totalGeral);
+    const valorCredito = isCredito ? d.totalGeral : 0;
+    // Não contar devoluções nas transações
+    const qtdVendas = isDevolucao ? 0 : d.qtdVendas;
+    
+    if (existing) {
+      existing.totalVendido += valorVenda + valorCredito;
+      existing.totalCreditos += valorCredito;
+      existing.qtdTransacao += qtdVendas;
+    } else {
+      mapa.set(key, {
+        empresa: d.empresa,
+        codEmpresa: d.codEmpresa,
+        vendedor: d.vendedor,
+        totalVendido: valorVenda + valorCredito,
+        totalCreditos: valorCredito,
+        qtdTransacao: qtdVendas,
+      });
+    }
+  });
+
+  return Array.from(mapa.values()).map((item) => {
+    const totalVendidoSemCreditos = item.totalVendido - item.totalCreditos;
+    const ticketMedio = item.qtdTransacao > 0 ? totalVendidoSemCreditos / item.qtdTransacao : 0;
+    
+    return {
+      empresa: item.empresa,
+      empresaCodLogico: item.codEmpresa,
+      empresaNomeLogico: item.empresa,
+      vendedor: item.vendedor,
+      qtdTransacao: item.qtdTransacao,
+      qtdProdutos: 0, // Não disponível neste endpoint
+      totalBruto: item.totalVendido, // Aproximação: total vendido
+      totalVendido: item.totalVendido,
+      totalDesconto: 0, // Não disponível neste endpoint
+      percentualDesconto: 0, // Não disponível
+      totalCreditos: item.totalCreditos,
+      totalVendidoSemCreditos,
+      ticketMedio,
+    };
+  });
+}
+
+// Função para agregar por loja
 function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
   const mapa = new Map<string, ResumoLoja>();
 
@@ -77,6 +157,44 @@ function agruparPorLoja(dados: ResumoEmpresaVendedor[]): ResumoLoja[] {
   }));
 }
 
+// Função para calcular métricas globais a partir das formas de pagamento
+function calcularMetricasDeFormasPagamento(dados: ResumoFormaPagamento[]): VendasMetrics {
+  let totalVendido = 0;
+  let totalCreditos = 0;
+  let qtdTransacoes = 0;
+
+  dados.forEach((d) => {
+    const isDevolucao = d.formaPagamento === 'DEVOLUCAO';
+    const isCredito = d.formaPagamento === 'CREDITOS';
+    
+    // Devoluções são valores negativos, somam normalmente
+    totalVendido += d.totalGeral;
+    
+    if (isCredito) {
+      totalCreditos += d.totalGeral;
+    }
+    
+    // Não contar devoluções nas transações
+    if (!isDevolucao) {
+      qtdTransacoes += d.qtdVendas;
+    }
+  });
+
+  const totalVendidoSemCreditos = totalVendido - totalCreditos;
+  const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
+
+  return {
+    totalBruto: totalVendido, // Aproximação
+    totalDesconto: 0, // Não disponível
+    percentualDesconto: 0, // Não disponível
+    totalVendido,
+    totalCreditos,
+    totalVendidoSemCreditos,
+    qtdTransacoes,
+    ticketMedio,
+  };
+}
+
 export function useVendasDashboard() {
   const defaultPeriodo = getDefaultPeriodoMesAtual();
 
@@ -87,79 +205,44 @@ export function useVendasDashboard() {
     empresa: 'ALL',
   });
 
-  const [dados, setDados] = useState<ResumoEmpresaVendedor[]>([]);
   const [dadosFormasPagamento, setDadosFormasPagamento] = useState<ResumoFormaPagamento[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingFormas, setLoadingFormas] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [errorFormas, setErrorFormas] = useState<string | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
 
+  // Buscar APENAS formas de pagamento (endpoint rápido)
   const fetchData = useCallback(async (empresa: EmpresaParam, dataInicio: string, dataFim: string) => {
     setLoading(true);
     setError(null);
-    console.log('[useVendasDashboard] Fetching data...', { empresa, dataInicio, dataFim });
+    console.log('[useVendasDashboard] Fetching formas de pagamento...', { empresa, dataInicio, dataFim });
+    
     try {
-      const result = await getResumoEmpresaVendedor({ empresa, dataInicio, dataFim });
-      console.log('[useVendasDashboard] Dados recebidos:', result.length, 'registros');
-      console.log('[useVendasDashboard] Primeiro registro:', result[0]);
-      setDados(result);
+      const result = await getResumoFormasPagamento({ empresa, dataInicio, dataFim });
+      console.log('[useVendasDashboard] Formas pagamento recebidas:', result.length, 'registros');
+      setDadosFormasPagamento(result);
       setDataLoaded(true);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Erro ao buscar resumo de vendas";
+      const message = err instanceof Error ? err.message : "Erro ao buscar dados de vendas";
       console.error('[useVendasDashboard] Erro:', message);
       setError(message);
-      setDados([]);
+      setDadosFormasPagamento([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const fetchFormas = useCallback(async (empresa: EmpresaParam, dataInicio: string, dataFim: string) => {
-    setLoadingFormas(true);
-    setErrorFormas(null);
-    try {
-      const result = await getResumoFormasPagamento({ empresa, dataInicio, dataFim });
-      setDadosFormasPagamento(result);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Erro ao buscar formas de pagamento";
-      setErrorFormas(message);
-      setDadosFormasPagamento([]);
-    } finally {
-      setLoadingFormas(false);
-    }
-  }, []);
-
+  // Dados agregados por empresa/vendedor (calculados a partir das formas de pagamento)
+  const dados = useMemo(() => agruparPorEmpresaVendedor(dadosFormasPagamento), [dadosFormasPagamento]);
+  
+  // Dados agregados por loja
   const dadosPorLoja = useMemo(() => agruparPorLoja(dados), [dados]);
 
-  const metrics = useMemo<VendasMetrics>(() => {
-    const totalBruto = dados.reduce((acc, d) => acc + (d.totalBruto || 0), 0);
-    const totalDesconto = dados.reduce((acc, d) => acc + (d.totalDesconto || 0), 0);
-    const totalVendido = dados.reduce((acc, d) => acc + (d.totalVendido || 0), 0);
-    const qtdTransacoes = dados.reduce((acc, d) => acc + (d.qtdTransacao || 0), 0);
-    const totalCreditos = dados.reduce((acc, d) => acc + (d.totalCreditos || 0), 0);
-    const totalVendidoSemCreditos = dados.reduce((acc, d) => acc + (d.totalVendidoSemCreditos || 0), 0);
-    
-    // Usar valores do backend para percentual
-    const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
-    const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
-
-    return { 
-      totalBruto, 
-      totalDesconto, 
-      percentualDesconto, 
-      totalVendido, 
-      totalCreditos,
-      totalVendidoSemCreditos,
-      qtdTransacoes,
-      ticketMedio,
-    };
-  }, [dados]);
+  // Métricas globais calculadas a partir das formas de pagamento
+  const metrics = useMemo<VendasMetrics>(() => calcularMetricasDeFormasPagamento(dadosFormasPagamento), [dadosFormasPagamento]);
 
   const reload = useCallback(() => {
     fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
-    fetchFormas(filters.empresa, filters.dataInicio, filters.dataFim);
-  }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchData, fetchFormas]);
+  }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchData]);
 
   return {
     dados,
@@ -167,9 +250,9 @@ export function useVendasDashboard() {
     dadosFormasPagamento,
     dataLoaded,
     loading,
-    loadingFormas,
+    loadingFormas: loading, // Mantém compatibilidade
     error,
-    errorFormas,
+    errorFormas: error, // Mantém compatibilidade
     filters,
     setFilters,
     metrics,
@@ -178,4 +261,4 @@ export function useVendasDashboard() {
 }
 
 // Re-export types
-export type { ResumoEmpresaVendedor, ResumoFormaPagamento } from '@/services/vendasService';
+export type { ResumoFormaPagamento } from '@/services/vendasService';
