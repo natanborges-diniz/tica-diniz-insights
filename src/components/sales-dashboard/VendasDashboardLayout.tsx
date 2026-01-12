@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3, RefreshCw, AlertCircle, Building2, Users, Info } from "lucide-react";
+import { ArrowLeft, RefreshCw, AlertCircle, Building2, Users, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -25,7 +25,6 @@ import { PaymentMethodsTable } from "./PaymentMethodsTable";
 
 interface VendasDashboardLayoutProps {
   // Dados
-  dados: ResumoEmpresaVendedor[];
   dadosPorLoja: ResumoLoja[];
   dadosFormasPagamento: ResumoFormaPagamento[];
   dadosComDesconto: ResumoEmpresaVendedor[];
@@ -90,7 +89,6 @@ function LoadingSkeleton() {
 }
 
 export function VendasDashboardLayout({
-  dados,
   dadosPorLoja,
   dadosFormasPagamento,
   dadosComDesconto,
@@ -216,7 +214,12 @@ export function VendasDashboardLayout({
         ) : dataLoaded && (
           <>
             {/* KPIs */}
-            <SalesKPICards metrics={metrics} isLoading={loading} usarVendasSemCreditos={usarVendasSemCreditos} />
+            <SalesKPICards 
+              metrics={metrics} 
+              isLoading={loading} 
+              loadingDesconto={loadingDesconto}
+              usarVendasSemCreditos={usarVendasSemCreditos} 
+            />
 
             {/* Gráfico e Tabela - Condicional por modo */}
             {filters.viewMode === "loja" ? (
@@ -227,10 +230,16 @@ export function VendasDashboardLayout({
             ) : (
               <>
                 <div className="grid gap-6 lg:grid-cols-2">
-                  <SellerChart dados={dados} isLoading={loading} usarVendasSemCreditos={usarVendasSemCreditos} />
+                  <SellerChart dados={dadosComDesconto} isLoading={loading} usarVendasSemCreditos={usarVendasSemCreditos} />
                   <DescontoChart dados={dadosComDesconto} isLoading={loadingDesconto} erro={erroDesconto} />
                 </div>
-                <SalesTable dados={dados} isLoading={loading} limiteDesconto={15} usarVendasSemCreditos={usarVendasSemCreditos} />
+                <SalesTable 
+                  dados={dadosComDesconto} 
+                  isLoading={loading} 
+                  loadingDesconto={loadingDesconto}
+                  limiteDesconto={15} 
+                  usarVendasSemCreditos={usarVendasSemCreditos} 
+                />
               </>
             )}
 

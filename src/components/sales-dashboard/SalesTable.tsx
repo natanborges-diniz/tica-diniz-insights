@@ -4,12 +4,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { TableIcon, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle } from 'lucide-react';
+import { TableIcon, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { ResumoEmpresaVendedor } from '@/services/vendasService';
 
 interface SalesTableProps {
   dados: ResumoEmpresaVendedor[];
   isLoading?: boolean;
+  loadingDesconto?: boolean;
   limiteDesconto?: number;
   usarVendasSemCreditos?: boolean;
 }
@@ -34,11 +35,20 @@ function formatPercent(value: number): string {
   return `${value.toFixed(2)}%`;
 }
 
-export function SalesTable({ dados, isLoading, limiteDesconto = 15, usarVendasSemCreditos = true }: SalesTableProps) {
+export function SalesTable({ 
+  dados, 
+  isLoading, 
+  loadingDesconto,
+  limiteDesconto = 15, 
+  usarVendasSemCreditos = true 
+}: SalesTableProps) {
   const [search, setSearch] = useState('');
   const defaultSortField: SortField = usarVendasSemCreditos ? 'totalVendidoSemCreditos' : 'totalVendido';
   const [sortField, setSortField] = useState<SortField>(defaultSortField);
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  // Verificar se temos dados de desconto disponíveis
+  const temDesconto = dados.some(d => d.totalDesconto > 0 || d.percentualDesconto > 0);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -93,10 +103,23 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15, usarVendasSe
     <Card>
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <TableIcon className="h-5 w-5 text-primary" />
-            Ranking de Vendedores
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <TableIcon className="h-5 w-5 text-primary" />
+              Ranking de Vendedores
+            </CardTitle>
+            {loadingDesconto && (
+              <Badge variant="outline" className="gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Carregando desconto...
+              </Badge>
+            )}
+            {!temDesconto && !loadingDesconto && (
+              <Badge variant="secondary" className="gap-1">
+                Desconto indisponível
+              </Badge>
+            )}
+          </div>
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -214,9 +237,11 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15, usarVendasSe
                       <SortIcon field="totalVendidoSemCreditos" />
                     </div>
                   </TableHead>
-                  <TableHead className="text-center">
-                    Qualidade
-                  </TableHead>
+                  {temDesconto && (
+                    <TableHead className="text-center">
+                      Qualidade
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -225,10 +250,20 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15, usarVendasSe
                     <TableCell className="font-medium">{row.empresaNomeLogico}</TableCell>
                     <TableCell>{row.vendedor}</TableCell>
                     <TableCell className="text-right">{formatNumber(row.qtdTransacao)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(row.totalBruto)}</TableCell>
-                    <TableCell className="text-right text-amber-600">{formatCurrency(row.totalDesconto)}</TableCell>
+                    <TableCell className="text-right">
+                      {row.totalBruto > 0 ? formatCurrency(row.totalBruto) : (
+                        loadingDesconto ? <Skeleton className="h-4 w-16 ml-auto" /> : '—'
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right text-amber-600">
+                      {row.totalDesconto > 0 ? formatCurrency(row.totalDesconto) : (
+                        loadingDesconto ? <Skeleton className="h-4 w-16 ml-auto" /> : '—'
+                      )}
+                    </TableCell>
                     <TableCell className={`text-right ${row.percentualDesconto > limiteDesconto ? 'text-red-600 font-semibold' : 'text-orange-600'}`}>
-                      {formatPercent(row.percentualDesconto)}
+                      {row.percentualDesconto > 0 ? formatPercent(row.percentualDesconto) : (
+                        loadingDesconto ? <Skeleton className="h-4 w-12 ml-auto" /> : '—'
+                      )}
                     </TableCell>
                     <TableCell className={`text-right ${!usarVendasSemCreditos ? 'font-bold text-emerald-600 bg-primary/5' : ''}`}>
                       {formatCurrency(row.totalVendido)}
@@ -242,19 +277,21 @@ export function SalesTable({ dados, isLoading, limiteDesconto = 15, usarVendasSe
                     <TableCell className={`text-right ${usarVendasSemCreditos ? 'font-bold text-emerald-600 bg-primary/5' : ''}`}>
                       {formatCurrency(row.totalVendidoSemCreditos)}
                     </TableCell>
-                    <TableCell className="text-center">
-                      {row.percentualDesconto > limiteDesconto ? (
-                        <Badge variant="destructive" className="gap-1">
-                          <AlertTriangle className="h-3 w-3" />
-                          Desc {formatPercent(row.percentualDesconto)}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="gap-1 text-emerald-600 border-emerald-600">
-                          <CheckCircle className="h-3 w-3" />
-                          OK
-                        </Badge>
-                      )}
-                    </TableCell>
+                    {temDesconto && (
+                      <TableCell className="text-center">
+                        {row.percentualDesconto > limiteDesconto ? (
+                          <Badge variant="destructive" className="gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            Desc {formatPercent(row.percentualDesconto)}
+                          </Badge>
+                        ) : row.percentualDesconto > 0 ? (
+                          <Badge variant="outline" className="gap-1 text-emerald-600 border-emerald-600">
+                            <CheckCircle className="h-3 w-3" />
+                            OK
+                          </Badge>
+                        ) : null}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
