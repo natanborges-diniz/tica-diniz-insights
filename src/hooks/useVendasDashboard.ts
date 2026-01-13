@@ -1,7 +1,7 @@
 // src/hooks/useVendasDashboard.ts
-// Hook para dashboard de vendas
-// Dados de vendas E desconto vêm do endpoint resumo-formas-pagamento (rápido)
-// Endpoint resumo-empresa-vendedor usado apenas para gráfico de desconto por vendedor
+// Hook para dashboard de vendas - ESTRATÉGIA HÍBRIDA
+// Dados históricos: Supabase (instantâneo, ~50ms)
+// Dados do dia atual: Firebird (tempo real)
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import {
@@ -10,8 +10,10 @@ import {
   ResumoFormaPagamento,
   ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
+import { getVendasAgregado, AgregadoFormaPagamento } from "@/services/agregadosService";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
+import { supabase } from "@/integrations/supabase/client";
 
 export type ViewMode = "loja" | "vendedor";
 
@@ -67,6 +69,43 @@ export interface ResumoLoja {
 // Re-export da interface do service para usar nos componentes
 export type { ResumoEmpresaVendedorAPI as ResumoEmpresaVendedor };
 export type { ResumoFormaPagamento };
+
+// Cache de nomes de empresas
+let empresasCache: Map<number, string> | null = null;
+
+async function getEmpresasMap(): Promise<Map<number, string>> {
+  if (empresasCache) return empresasCache;
+  
+  const { data } = await supabase
+    .from('empresa')
+    .select('cod_empresa, nome_fantasia');
+  
+  empresasCache = new Map();
+  data?.forEach((e) => {
+    empresasCache!.set(e.cod_empresa, e.nome_fantasia || `Loja ${e.cod_empresa}`);
+  });
+  
+  return empresasCache;
+}
+
+// Converte AgregadoFormaPagamento para ResumoFormaPagamento
+async function converterAgregadoParaResumo(
+  agregados: AgregadoFormaPagamento[]
+): Promise<ResumoFormaPagamento[]> {
+  const empresasMap = await getEmpresasMap();
+  
+  return agregados.map((a) => ({
+    codEmpresa: a.codEmpresa,
+    empresa: empresasMap.get(a.codEmpresa) || `Loja ${a.codEmpresa}`,
+    vendedor: a.vendedor,
+    formaPagamento: a.formaPagamento,
+    totalGeral: a.totalGeral,
+    qtdVendas: a.qtdVendas,
+    totalBruto: a.totalBruto,
+    totalDesconto: a.totalDesconto,
+    percentualDesconto: a.percentualDesconto,
+  }));
+}
 
 // Função para calcular métricas de formas de pagamento (inclui desconto do endpoint rápido!)
 function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
@@ -203,6 +242,42 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
   });
 }
 
+// Combina dados do Supabase (histórico) + Firebird (dia atual)
+function combinarDados(
+  dadosSupabase: ResumoFormaPagamento[],
+  dadosFirebird: ResumoFormaPagamento[]
+): ResumoFormaPagamento[] {
+  // Usar mapa para agregar por empresa + vendedor + forma de pagamento
+  const mapa = new Map<string, ResumoFormaPagamento>();
+  
+  // Adicionar dados do Supabase primeiro
+  dadosSupabase.forEach((d) => {
+    const key = `${d.codEmpresa}|${d.vendedor}|${d.formaPagamento}`;
+    mapa.set(key, { ...d });
+  });
+  
+  // Somar dados do Firebird (dia atual)
+  dadosFirebird.forEach((d) => {
+    const key = `${d.codEmpresa}|${d.vendedor}|${d.formaPagamento}`;
+    const existing = mapa.get(key);
+    
+    if (existing) {
+      existing.totalGeral += d.totalGeral;
+      existing.qtdVendas += d.qtdVendas;
+      existing.totalBruto = (existing.totalBruto ?? 0) + (d.totalBruto ?? 0);
+      existing.totalDesconto = (existing.totalDesconto ?? 0) + (d.totalDesconto ?? 0);
+      // Recalcular percentual
+      existing.percentualDesconto = existing.totalBruto && existing.totalBruto > 0
+        ? ((existing.totalDesconto ?? 0) / existing.totalBruto) * 100
+        : 0;
+    } else {
+      mapa.set(key, { ...d });
+    }
+  });
+  
+  return Array.from(mapa.values());
+}
+
 export function useVendasDashboard() {
   // Período comercial: dia 21 do mês anterior ao dia 20 do mês atual
   const defaultPeriodo = getPeriodoComercial();
@@ -221,6 +296,10 @@ export function useVendasDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [erroDesconto, setErroDesconto] = useState<string | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [fontesDados, setFontesDados] = useState<{ supabase: boolean; firebird: boolean }>({ 
+    supabase: false, 
+    firebird: false 
+  });
 
   const fetchData = useCallback(async (
     empresa: EmpresaParam, 
@@ -234,21 +313,100 @@ export function useVendasDashboard() {
     setError(null);
     setLoadingDesconto(true);
     setErroDesconto(null);
+    setFontesDados({ supabase: false, firebird: false });
     
-    // Buscar formas de pagamento primeiro (endpoint rápido)
+    const hoje = formatLocalDate(new Date());
+    const ontem = formatLocalDate(new Date(Date.now() - 86400000));
+    
+    // Determinar estratégia:
+    // - Se dataFim < hoje: usar APENAS Supabase (dados históricos completos)
+    // - Se dataFim >= hoje: usar Supabase (até ontem) + Firebird (hoje)
+    const precisaFirebird = dataFim >= hoje;
+    const dataFimSupabase = precisaFirebird ? ontem : dataFim;
+    const temDadosHistoricos = dataInicio <= dataFimSupabase;
+    
+    console.log('[useVendasDashboard] Estratégia híbrida:', {
+      dataInicio,
+      dataFim,
+      hoje,
+      ontem,
+      precisaFirebird,
+      dataFimSupabase,
+      temDadosHistoricos,
+      bypassCache,
+    });
+    
     try {
-      const resultFormas = await getResumoFormasPagamento({ 
-        empresa, 
-        dataInicio, 
-        dataFim,
-        bypassCache,
-      });
-      console.log('[useVendasDashboard] Formas de pagamento:', resultFormas.length, 'registros', bypassCache ? '(sem cache)' : '(cache)');
-      setDadosFormasPagamento(resultFormas);
+      let dadosFinais: ResumoFormaPagamento[] = [];
+      
+      // 1. Buscar dados históricos do Supabase (instantâneo!)
+      if (temDadosHistoricos) {
+        console.log('[useVendasDashboard] Buscando Supabase:', dataInicio, 'a', dataFimSupabase);
+        const startSupabase = performance.now();
+        
+        const agregados = await getVendasAgregado({
+          empresa,
+          dataInicio,
+          dataFim: dataFimSupabase,
+        });
+        
+        const dadosSupabase = await converterAgregadoParaResumo(agregados);
+        const tempoSupabase = Math.round(performance.now() - startSupabase);
+        
+        console.log(`[useVendasDashboard] Supabase: ${dadosSupabase.length} registros em ${tempoSupabase}ms`);
+        
+        if (dadosSupabase.length > 0) {
+          dadosFinais = dadosSupabase;
+          setFontesDados(prev => ({ ...prev, supabase: true }));
+        }
+      }
+      
+      // 2. Buscar dados do dia atual do Firebird (se necessário)
+      if (precisaFirebird) {
+        console.log('[useVendasDashboard] Buscando Firebird (hoje):', hoje);
+        const startFirebird = performance.now();
+        
+        try {
+          const dadosHoje = await getResumoFormasPagamento({
+            empresa,
+            dataInicio: hoje,
+            dataFim: hoje,
+            bypassCache: true, // Sempre dados frescos para hoje
+          });
+          
+          const tempoFirebird = Math.round(performance.now() - startFirebird);
+          console.log(`[useVendasDashboard] Firebird: ${dadosHoje.length} registros em ${tempoFirebird}ms`);
+          
+          if (dadosHoje.length > 0) {
+            dadosFinais = combinarDados(dadosFinais, dadosHoje);
+            setFontesDados(prev => ({ ...prev, firebird: true }));
+          }
+        } catch (errFirebird) {
+          // Se Firebird falhar, continuar com dados do Supabase
+          console.warn('[useVendasDashboard] Firebird falhou, usando apenas Supabase:', errFirebird);
+        }
+      }
+      
+      // 3. Fallback: se não tem dados do Supabase, buscar tudo do Firebird
+      if (dadosFinais.length === 0 && !temDadosHistoricos) {
+        console.log('[useVendasDashboard] Sem dados Supabase, buscando Firebird completo');
+        const dadosFirebird = await getResumoFormasPagamento({
+          empresa,
+          dataInicio,
+          dataFim,
+          bypassCache,
+        });
+        dadosFinais = dadosFirebird;
+        setFontesDados({ supabase: false, firebird: true });
+      }
+      
+      console.log('[useVendasDashboard] Total final:', dadosFinais.length, 'registros');
+      setDadosFormasPagamento(dadosFinais);
       setDataLoaded(true);
+      
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao buscar dados de vendas";
-      console.error('[useVendasDashboard] Erro formas pagamento:', message);
+      console.error('[useVendasDashboard] Erro:', message);
       setError(message);
       setDadosFormasPagamento([]);
     } finally {
@@ -383,6 +541,7 @@ export function useVendasDashboard() {
     dadosComDesconto, // Dados com desconto do endpoint lento
     dadosPorLoja,
     dataLoaded,
+    fontesDados, // Indica quais fontes foram usadas (supabase/firebird)
     // Loading/Error
     loading,
     loadingFormas: loading,
