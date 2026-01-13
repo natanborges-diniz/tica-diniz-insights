@@ -2,7 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
   DollarSign, 
-  TrendingDown, 
+  TrendingDown,
+  TrendingUp,
   Percent, 
   ShoppingCart, 
   Receipt, 
@@ -15,7 +16,7 @@ import {
   FileText,
   Loader2
 } from 'lucide-react';
-import { VendasMetrics } from '@/hooks/useVendasDashboard';
+import { VendasMetrics, ProjecaoFechamento } from '@/hooks/useVendasDashboard';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -29,6 +30,7 @@ import { toast } from 'sonner';
 
 interface SalesKPICardsProps {
   metrics: VendasMetrics;
+  projecao?: ProjecaoFechamento;
   isLoading?: boolean;
   loadingDesconto?: boolean;
   usarVendasSemCreditos?: boolean;
@@ -51,6 +53,7 @@ function formatNumber(value: number): string {
 
 export function SalesKPICards({ 
   metrics, 
+  projecao,
   isLoading, 
   loadingDesconto,
   usarVendasSemCreditos = true 
@@ -135,6 +138,17 @@ export function SalesKPICards({
     },
   ];
 
+  // Card de projeção (somente se houver datas futuras no período)
+  const cardProjecao = projecao?.temProjecao ? {
+    title: 'Projeção Fechamento',
+    value: formatCurrency(projecao.projecaoFechamento),
+    subtitle: `${projecao.diasDecorridos}/${projecao.diasTotais} dias (${projecao.percentualPeriodo.toFixed(0)}%)`,
+    icon: TrendingUp,
+    color: 'text-sky-600',
+    bgColor: 'bg-sky-50 dark:bg-sky-950/20',
+    isProjecao: true,
+  } : null;
+
   // Cards de desconto (podem estar carregando ou indisponíveis)
   const cardsDesconto = [
     {
@@ -210,7 +224,7 @@ export function SalesKPICards({
         </DropdownMenu>
       </div>
 
-      <div ref={containerRef} className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 p-1">
+      <div ref={containerRef} className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 p-1">
         {/* Cards de vendas */}
         {cardsVendas.map((card, i) => (
           <Card key={i} className={card.highlight ? 'ring-2 ring-emerald-500 ring-offset-2' : ''}>
@@ -230,6 +244,24 @@ export function SalesKPICards({
             </CardContent>
           </Card>
         ))}
+
+        {/* Card de projeção (somente se houver datas futuras) */}
+        {cardProjecao && (
+          <Card className="ring-2 ring-sky-500 ring-offset-2 bg-sky-50/50 dark:bg-sky-950/20">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-sky-700 dark:text-sky-300">{cardProjecao.title}</CardTitle>
+              <div className={`p-2 rounded-full ${cardProjecao.bgColor}`}>
+                <TrendingUp className={`h-4 w-4 ${cardProjecao.color}`} />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-xl font-bold text-sky-600">{cardProjecao.value}</div>
+              {cardProjecao.subtitle && (
+                <p className="text-xs text-sky-600/80 mt-1">{cardProjecao.subtitle}</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Cards de desconto */}
         {cardsDesconto.map((card, i) => (
