@@ -379,17 +379,18 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
 
     const whereSQL = whereClauses.join(' AND ');
 
+    // Query simples - agrupa por empresa/vendedor/forma de pagamento
+    // Os campos de desconto são calculados a partir de TRANSACAO_ITEM
     const sql = `
       SELECT
-        e.CODEMPRESA AS cod_empresa,
         e.NOMEFANTASIA AS empresa,
-        v.CODVENDEDOR AS cod_vendedor,
+        e.CODEMPRESA AS empresa_cod_logico,
+        e.NOMEFANTASIA AS empresa_nome_logico,
         v.NOME AS vendedor,
-        fp.DESCRICAO AS forma_pagamento,
-        COUNT(DISTINCT t.IDTRANSACAO) AS qtd_transacao,
-        SUM(ti.QUANTIDADE) AS qtd_produtos,
+        fp.DESCRICAO AS formapagamento,
+        COUNT(DISTINCT t.IDTRANSACAO) AS qtd_vendas,
+        SUM(ti.VALORORIGINAL - COALESCE(ti.VALORDESCONTO, 0)) AS totalgeral,
         SUM(ti.VALORORIGINAL) AS total_bruto,
-        SUM(ti.VALORORIGINAL - COALESCE(ti.VALORDESCONTO, 0)) AS total_vendido,
         SUM(COALESCE(ti.VALORDESCONTO, 0)) AS total_desconto,
         CASE 
           WHEN SUM(ti.VALORORIGINAL) > 0 
@@ -401,11 +402,11 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
       INNER JOIN NATUREZAOPERACAO no ON no.IDNATUREZAOPERACAO = t.IDNATUREZAOPERACAO
       INNER JOIN EMPRESA e ON e.CODEMPRESA = t.CODEMPRESA
       INNER JOIN VENDEDOR v ON v.CODVENDEDOR = t.CODVENDEDOR
-      LEFT JOIN TRANSACAO_PAGAMENTO tp ON tp.IDTRANSACAO = t.IDTRANSACAO
-      LEFT JOIN FORMAPAGAMENTO fp ON fp.IDFORMAPAGAMENTO = tp.IDFORMAPAGAMENTO
+      INNER JOIN TRANSACAO_PAGAMENTO tp ON tp.IDTRANSACAO = t.IDTRANSACAO
+      INNER JOIN FORMAPAGAMENTO fp ON fp.IDFORMAPAGAMENTO = tp.IDFORMAPAGAMENTO
       WHERE ${whereSQL}
       GROUP BY e.CODEMPRESA, e.NOMEFANTASIA, v.CODVENDEDOR, v.NOME, fp.DESCRICAO
-      ORDER BY total_vendido DESC
+      ORDER BY totalgeral DESC
     `;
 
     console.log('[API] GET /api/v1/vendas/resumo-formas-pagamento', { empresa: empresa || 'ALL', dataInicio, dataFim });
