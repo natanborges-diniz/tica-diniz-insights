@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-import { VendasFiltersState, ViewMode, ResumoLoja, VendasMetrics } from "@/hooks/useVendasDashboard";
+import { VendasFiltersState, ViewMode, ResumoLoja, VendasMetrics, ProjecaoFechamento } from "@/hooks/useVendasDashboard";
 import { ResumoEmpresaVendedor, ResumoFormaPagamento } from "@/services/vendasService";
 import { useChartFilter } from "@/hooks/useChartFilter";
 import { ActiveFilterBadges } from "@/components/ui/active-filter-badges";
@@ -42,6 +42,7 @@ interface VendasDashboardLayoutProps {
   setFilters: React.Dispatch<React.SetStateAction<VendasFiltersState>>;
   // Métricas
   metrics: VendasMetrics;
+  projecao: ProjecaoFechamento;
   // Ações
   reload: () => void;
 }
@@ -110,6 +111,7 @@ export function VendasDashboardLayout({
   filters,
   setFilters,
   metrics,
+  projecao,
   reload,
 }: VendasDashboardLayoutProps) {
   const isLoading = loading || loadingFormas;
@@ -319,6 +321,7 @@ export function VendasDashboardLayout({
           {/* KPIs */}
           <SalesKPICards 
             metrics={filteredMetrics} 
+            projecao={projecao}
             isLoading={loading} 
             loadingDesconto={loadingDesconto}
             usarVendasSemCreditos={usarVendasSemCreditos} 

@@ -3,7 +3,7 @@
 // IMPORTANTE: Dados de desconto vêm APENAS do endpoint resumo-empresa-vendedor (lento)
 // Dados de formas de pagamento vêm do endpoint resumo-formas-pagamento (rápido)
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   getResumoFormasPagamento,
   getResumoEmpresaVendedor,
@@ -11,7 +11,7 @@ import {
   ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
 import { EmpresaParam } from "@/services/firebirdBridge";
-import { getPeriodoComercial } from "@/utils/dateValidation";
+import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 
 export type ViewMode = "loja" | "vendedor";
 
@@ -36,6 +36,17 @@ export interface VendasMetrics {
   totalDesconto: number;
   percentualDesconto: number;
   descontoDisponivel: boolean;
+}
+
+// Interface para projeção de fechamento
+export interface ProjecaoFechamento {
+  temProjecao: boolean; // true se há datas futuras no período
+  diasTotais: number;
+  diasDecorridos: number;
+  diasRestantes: number;
+  mediaDiaria: number;
+  projecaoFechamento: number;
+  percentualPeriodo: number;
 }
 
 // Interface agregada por loja
@@ -276,6 +287,59 @@ export function useVendasDashboard() {
     };
   }, [dadosFormasPagamento, dadosComDesconto]);
 
+  // Projeção de fechamento do período
+  const projecao = useMemo<ProjecaoFechamento>(() => {
+    const hoje = new Date();
+    const hojeStr = formatLocalDate(hoje);
+    const dataInicio = new Date(filters.dataInicio + 'T00:00:00');
+    const dataFim = new Date(filters.dataFim + 'T00:00:00');
+    
+    // Calcular dias totais do período
+    const diasTotais = diffInDays(filters.dataInicio, filters.dataFim) + 1;
+    
+    // Verificar se há datas futuras no período
+    const temProjecao = hojeStr < filters.dataFim;
+    
+    if (!temProjecao) {
+      // Período já encerrado - sem projeção
+      return {
+        temProjecao: false,
+        diasTotais,
+        diasDecorridos: diasTotais,
+        diasRestantes: 0,
+        mediaDiaria: 0,
+        projecaoFechamento: 0,
+        percentualPeriodo: 100,
+      };
+    }
+    
+    // Calcular dias decorridos (desde início até hoje ou início do período)
+    let diasDecorridos = 0;
+    if (hojeStr >= filters.dataInicio) {
+      diasDecorridos = diffInDays(filters.dataInicio, hojeStr) + 1;
+    }
+    
+    const diasRestantes = diasTotais - diasDecorridos;
+    const percentualPeriodo = diasTotais > 0 ? (diasDecorridos / diasTotais) * 100 : 0;
+    
+    // Média diária baseada no faturamento atual
+    const totalAtual = metrics.totalVendidoSemCreditos;
+    const mediaDiaria = diasDecorridos > 0 ? totalAtual / diasDecorridos : 0;
+    
+    // Projeção para o fechamento do período
+    const projecaoFechamento = mediaDiaria * diasTotais;
+    
+    return {
+      temProjecao: true,
+      diasTotais,
+      diasDecorridos,
+      diasRestantes,
+      mediaDiaria,
+      projecaoFechamento,
+      percentualPeriodo,
+    };
+  }, [filters.dataInicio, filters.dataFim, metrics.totalVendidoSemCreditos]);
+
   // Dados agregados por loja
   const dadosPorLoja = useMemo(
     () => agruparPorLoja(dadosFormasPagamento, dadosComDesconto),
@@ -285,6 +349,11 @@ export function useVendasDashboard() {
   const reload = useCallback(() => {
     fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
   }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchData]);
+
+  // Auto-load on mount
+  useEffect(() => {
+    reload();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     // Dados brutos
@@ -303,6 +372,7 @@ export function useVendasDashboard() {
     filters,
     setFilters,
     metrics,
+    projecao,
     reload,
   };
 }
