@@ -104,20 +104,34 @@ export function useAcompanhamentoMetas() {
       const dataInicioStr = formatLocalDate(dataInicio);
       const dataFimStr = formatLocalDate(dataFim);
 
-      // 3. Buscar metas, vendas e exceções em paralelo
-      const [metasData, vendasData, excecoesData] = await Promise.all([
+      // 3. Buscar metas e exceções primeiro (rápido)
+      const [metasData, excecoesData] = await Promise.all([
         getMetasPorPeriodo('LOJA', filters.ano, filters.mes),
-        getResumoEmpresaVendedor({
-          empresa: filters.empresa === 'ALL' ? 'ALL' : String(filters.empresa),
-          dataInicio: dataInicioStr,
-          dataFim: dataFimStr,
-        }),
         getLojasExcecoes(undefined, dataInicioStr, dataFimStr),
       ]);
 
       setMetas(metasData);
-      setVendas(vendasData);
       setExcecoes(excecoesData);
+
+      // 4. Buscar vendas separadamente com timeout de 30s
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
+        const vendasData = await getResumoEmpresaVendedor({
+          empresa: filters.empresa === 'ALL' ? 'ALL' : String(filters.empresa),
+          dataInicio: dataInicioStr,
+          dataFim: dataFimStr,
+        });
+        
+        clearTimeout(timeoutId);
+        setVendas(vendasData);
+      } catch (vendasErr) {
+        console.warn('[useAcompanhamentoMetas] Erro ao buscar vendas:', vendasErr);
+        setVendas([]);
+        // Não bloqueia - mostra metas sem dados de vendas
+        setError('Dados de vendas indisponíveis. Tente filtrar por uma loja específica.');
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao buscar dados";
       setError(message);

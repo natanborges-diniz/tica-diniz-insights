@@ -28,7 +28,7 @@ const App = () => (
         <Routes>
           <Route element={<AppLayout />}>
             {/* Redirect root to default page */}
-            <Route path="/" element={<Navigate to="/vendas/metas" replace />} />
+            <Route path="/" element={<Navigate to="/vendas" replace />} />
             
             {/* Vendas */}
             <Route path="/vendas" element={<SalesDashboard />} />

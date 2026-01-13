@@ -55,7 +55,7 @@ export function limitarPeriodo(
 }
 
 /**
- * Retorna as datas padrão para o mês atual
+ * Retorna as datas padrão para o mês atual (dia 1 ao último dia)
  */
 export function getDefaultPeriodoMesAtual(): { dataIni: string; dataFim: string } {
   const hoje = new Date();
@@ -65,5 +65,28 @@ export function getDefaultPeriodoMesAtual(): { dataIni: string; dataFim: string 
   return {
     dataIni: formatLocalDate(primeiroDiaMes),
     dataFim: formatLocalDate(ultimoDiaMes),
+  };
+}
+
+/**
+ * Retorna o período comercial: dia 21 do mês anterior até dia 20 do mês atual
+ * Este é o período padrão para análises de vendas
+ */
+export function getPeriodoComercial(): { dataIni: string; dataFim: string } {
+  const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const mesAtual = hoje.getMonth(); // 0-indexed
+  
+  // Data início: dia 21 do mês anterior
+  const mesAnterior = mesAtual === 0 ? 11 : mesAtual - 1;
+  const anoMesAnterior = mesAtual === 0 ? anoAtual - 1 : anoAtual;
+  const dataInicio = new Date(anoMesAnterior, mesAnterior, 21);
+  
+  // Data fim: dia 20 do mês atual
+  const dataFim = new Date(anoAtual, mesAtual, 20);
+  
+  return {
+    dataIni: formatLocalDate(dataInicio),
+    dataFim: formatLocalDate(dataFim),
   };
 }
