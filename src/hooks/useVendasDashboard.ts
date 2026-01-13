@@ -11,7 +11,7 @@ import {
   ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
 import { EmpresaParam } from "@/services/firebirdBridge";
-import { getDefaultPeriodoMesAtual } from "@/utils/dateValidation";
+import { getPeriodoComercial } from "@/utils/dateValidation";
 
 export type ViewMode = "loja" | "vendedor";
 
@@ -193,7 +193,8 @@ function agruparPorLoja(dados: ResumoFormaPagamento[], dadosDesconto: ResumoEmpr
 }
 
 export function useVendasDashboard() {
-  const defaultPeriodo = getDefaultPeriodoMesAtual();
+  // Período comercial: dia 21 do mês anterior ao dia 20 do mês atual
+  const defaultPeriodo = getPeriodoComercial();
 
   const [filters, setFilters] = useState<VendasFiltersState>({
     dataInicio: defaultPeriodo.dataIni,

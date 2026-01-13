@@ -37,18 +37,18 @@ interface MenuSection {
 const moduleMenus: Record<ModuleKey, MenuSection[]> = {
   vendas: [
     {
+      label: "Análises",
+      items: [
+        { title: "Dashboard de Vendas", url: "/vendas", icon: BarChart3 },
+        { title: "Vendas por Família", url: "/vendas-familia", icon: Layers },
+      ],
+    },
+    {
       label: "Inteligência",
       items: [
         { title: "Acompanhamento de Metas", url: "/vendas/metas", icon: TrendingUp },
         { title: "Ranking de Lojas", url: "/ranking-lojas", icon: Store },
         { title: "Ranking de Vendedores", url: "/ranking-vendedores", icon: Trophy },
-      ],
-    },
-    {
-      label: "Análises",
-      items: [
-        { title: "Dashboard de Vendas", url: "/vendas", icon: BarChart3 },
-        { title: "Vendas por Família", url: "/vendas-familia", icon: Layers },
       ],
     },
   ],
