@@ -443,6 +443,45 @@ export type Database = {
         }
         Relationships: []
       }
+      vendas_agregado_diario: {
+        Row: {
+          atualizado_em: string | null
+          cod_empresa: number
+          data: string
+          forma_pagamento: string
+          id: string
+          qtd_vendas: number | null
+          total_bruto: number | null
+          total_desconto: number | null
+          total_vendido: number | null
+          vendedor: string
+        }
+        Insert: {
+          atualizado_em?: string | null
+          cod_empresa: number
+          data: string
+          forma_pagamento: string
+          id?: string
+          qtd_vendas?: number | null
+          total_bruto?: number | null
+          total_desconto?: number | null
+          total_vendido?: number | null
+          vendedor: string
+        }
+        Update: {
+          atualizado_em?: string | null
+          cod_empresa?: number
+          data?: string
+          forma_pagamento?: string
+          id?: string
+          qtd_vendas?: number | null
+          total_bruto?: number | null
+          total_desconto?: number | null
+          total_vendido?: number | null
+          vendedor?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

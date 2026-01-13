@@ -154,6 +154,8 @@ export function VendasDashboardLayout({
     let totalCreditos = 0;
     let totalDevolucoes = 0;
     let qtdTransacoes = 0;
+    let totalBruto = 0;
+    let totalDesconto = 0;
 
     filteredDadosFormasPagamento.forEach((d) => {
       const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
@@ -168,19 +170,14 @@ export function VendasDashboardLayout({
           totalCreditos += d.totalGeral;
         }
         qtdTransacoes += d.qtdVendas;
+        // Desconto agora vem das formas de pagamento também
+        totalBruto += d.totalBruto || 0;
+        totalDesconto += d.totalDesconto || 0;
       }
     });
 
     const totalVendidoSemCreditos = totalVendido - totalCreditos;
     const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
-
-    // Desconto dos dados filtrados
-    let totalBruto = 0;
-    let totalDesconto = 0;
-    filteredDadosVendedor.forEach((d) => {
-      totalBruto += d.totalBruto || 0;
-      totalDesconto += d.totalDesconto || 0;
-    });
     const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
 
     return {
@@ -193,9 +190,9 @@ export function VendasDashboardLayout({
       totalBruto,
       totalDesconto,
       percentualDesconto,
-      descontoDisponivel: filteredDadosVendedor.length > 0,
+      descontoDisponivel: filteredDadosFormasPagamento.length > 0 && totalBruto > 0,
     };
-  }, [metrics, chartFilter.hasActiveFilters, filteredDadosFormasPagamento, filteredDadosVendedor]);
+  }, [metrics, chartFilter.hasActiveFilters, filteredDadosFormasPagamento]);
 
   const handleViewModeChange = (mode: ViewMode) => {
     chartFilter.clearAllFilters();
