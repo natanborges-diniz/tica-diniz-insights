@@ -1,7 +1,7 @@
 // src/services/vendasService.ts
 // Service para endpoints de vendas
 
-import { apiGet, EmpresaParam, formatEmpresaParam } from './firebirdBridge';
+import { apiGet, EmpresaParam, formatEmpresaParam, ApiGetOptions } from './firebirdBridge';
 
 // ============================================
 // INTERFACES - RESUMO EMPRESA/VENDEDOR
@@ -45,16 +45,20 @@ export interface GetResumoEmpresaVendedorParams {
   empresa: EmpresaParam;
   dataInicio: string;
   dataFim: string;
+  /** Se true, ignora cache e busca dados ao vivo */
+  bypassCache?: boolean;
 }
 
 export async function getResumoEmpresaVendedor(
   params: GetResumoEmpresaVendedorParams
 ): Promise<ResumoEmpresaVendedor[]> {
+  const options: ApiGetOptions = params.bypassCache ? { cache: false } : {};
+  
   const raw = await apiGet<ResumoEmpresaVendedorRaw>('/vendas/resumo-empresa-vendedor', {
     empresa: formatEmpresaParam(params.empresa),
     dataInicio: params.dataInicio,
     dataFim: params.dataFim,
-  });
+  }, options);
 
   console.log('[vendasService] Raw data count:', raw.length);
   console.log('[vendasService] Raw data sample:', raw[0]);
@@ -113,16 +117,20 @@ export interface GetResumoFormasPagamentoParams {
   empresa: EmpresaParam;
   dataInicio: string;
   dataFim: string;
+  /** Se true, ignora cache e busca dados ao vivo */
+  bypassCache?: boolean;
 }
 
 export async function getResumoFormasPagamento(
   params: GetResumoFormasPagamentoParams
 ): Promise<ResumoFormaPagamento[]> {
+  const options: ApiGetOptions = params.bypassCache ? { cache: false } : {};
+  
   const raw = await apiGet<ResumoFormaPagamentoRaw>('/vendas/resumo-formas-pagamento', {
     empresa: formatEmpresaParam(params.empresa),
     dataInicio: params.dataInicio,
     dataFim: params.dataFim,
-  });
+  }, options);
 
   return raw.map((r) => ({
     codEmpresa: r.empresa_cod_logico ?? 0,
@@ -167,17 +175,21 @@ export interface GetAnaliseFamiliaVendedorParams {
   dataInicio: string;
   dataFim: string;
   codEmpresaEstoque?: number;
+  /** Se true, ignora cache e busca dados ao vivo */
+  bypassCache?: boolean;
 }
 
 export async function getAnaliseFamiliaVendedor(
   params: GetAnaliseFamiliaVendedorParams
 ): Promise<AnaliseFamiliaVendedor[]> {
+  const options: ApiGetOptions = params.bypassCache ? { cache: false } : {};
+  
   const raw = await apiGet<AnaliseFamiliaVendedorRaw>('/vendas/analise-familia-vendedor', {
     empresa: formatEmpresaParam(params.empresa),
     dataInicio: params.dataInicio,
     dataFim: params.dataFim,
     codEmpresaEstoque: params.codEmpresaEstoque,
-  });
+  }, options);
 
   return raw.map((r) => ({
     codEmpresa: r.empresa_cod_logico ?? r.cod_empresa ?? 0,

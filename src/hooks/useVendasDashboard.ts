@@ -222,7 +222,14 @@ export function useVendasDashboard() {
   const [erroDesconto, setErroDesconto] = useState<string | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
 
-  const fetchData = useCallback(async (empresa: EmpresaParam, dataInicio: string, dataFim: string) => {
+  const fetchData = useCallback(async (
+    empresa: EmpresaParam, 
+    dataInicio: string, 
+    dataFim: string,
+    options?: { bypassCache?: boolean }
+  ) => {
+    const bypassCache = options?.bypassCache ?? false;
+    
     setLoading(true);
     setError(null);
     setLoadingDesconto(true);
@@ -230,8 +237,13 @@ export function useVendasDashboard() {
     
     // Buscar formas de pagamento primeiro (endpoint rápido)
     try {
-      const resultFormas = await getResumoFormasPagamento({ empresa, dataInicio, dataFim });
-      console.log('[useVendasDashboard] Formas de pagamento:', resultFormas.length, 'registros');
+      const resultFormas = await getResumoFormasPagamento({ 
+        empresa, 
+        dataInicio, 
+        dataFim,
+        bypassCache,
+      });
+      console.log('[useVendasDashboard] Formas de pagamento:', resultFormas.length, 'registros', bypassCache ? '(sem cache)' : '(cache)');
       setDadosFormasPagamento(resultFormas);
       setDataLoaded(true);
     } catch (err) {
@@ -245,8 +257,13 @@ export function useVendasDashboard() {
 
     // Buscar dados de desconto separadamente (endpoint lento, pode dar timeout)
     try {
-      console.log('[useVendasDashboard] Buscando dados de desconto...');
-      const resultDesconto = await getResumoEmpresaVendedor({ empresa, dataInicio, dataFim });
+      console.log('[useVendasDashboard] Buscando dados de desconto...', bypassCache ? '(sem cache)' : '(cache)');
+      const resultDesconto = await getResumoEmpresaVendedor({ 
+        empresa, 
+        dataInicio, 
+        dataFim,
+        bypassCache,
+      });
       console.log('[useVendasDashboard] Desconto recebido:', resultDesconto.length, 'registros');
       
       if (resultDesconto.length > 0) {
@@ -346,8 +363,14 @@ export function useVendasDashboard() {
     [dadosFormasPagamento, dadosComDesconto]
   );
 
+  // Reload normal (usa cache do backend)
   const reload = useCallback(() => {
     fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
+  }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchData]);
+
+  // Reload "ao vivo" - ignora cache e busca dados frescos
+  const reloadLive = useCallback(() => {
+    fetchData(filters.empresa, filters.dataInicio, filters.dataFim, { bypassCache: true });
   }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchData]);
 
   // Auto-load on mount
@@ -373,6 +396,7 @@ export function useVendasDashboard() {
     setFilters,
     metrics,
     projecao,
-    reload,
+    reload,       // Usa cache (padrão)
+    reloadLive,   // Força dados frescos (cache=0)
   };
 }

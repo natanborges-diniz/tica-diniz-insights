@@ -40,14 +40,17 @@ export function useRankingLojas() {
   const [loadingDiretrizes, setLoadingDiretrizes] = useState(false);
   const [errorDiretrizes, setErrorDiretrizes] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (options?: { bypassCache?: boolean }) => {
+    const bypassCache = options?.bypassCache ?? false;
+    
     setLoading(true);
     setError(null);
     try {
       const result = await getResumoEmpresaVendedor({
         empresa: 'ALL',
         dataInicio: filters.dataInicio,
-        dataFim: filters.dataFim
+        dataFim: filters.dataFim,
+        bypassCache,
       });
       setDados(result);
 
@@ -65,6 +68,11 @@ export function useRankingLojas() {
       setLoading(false);
     }
   }, [filters.dataInicio, filters.dataFim]);
+
+  // Reload "ao vivo" - ignora cache e busca dados frescos
+  const fetchDataLive = useCallback(() => {
+    return fetchData({ bypassCache: true });
+  }, [fetchData]);
 
   const ranking = useMemo<RankingLoja[]>(() => {
     // Agrupar por empresa
@@ -173,6 +181,7 @@ export function useRankingLojas() {
     error,
     dataLoaded,
     fetchData,
+    fetchDataLive, // Novo: buscar sem cache
     diretrizes,
     loadingDiretrizes,
     errorDiretrizes,

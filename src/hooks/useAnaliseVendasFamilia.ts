@@ -8,25 +8,27 @@ interface UseAnaliseVendasFamiliaParams {
   dataInicio: string;
   dataFim: string;
   empresa: EmpresaParam;
+  bypassCache?: boolean;
 }
 
 interface UseAnaliseVendasFamiliaReturn {
   data: AnaliseFamiliaVendedor[];
   isLoading: boolean;
   error: string | null;
-  reload: () => void;
+  reload: (bypassCache?: boolean) => void;
 }
 
 export function useAnaliseVendasFamilia({
   dataInicio,
   dataFim,
   empresa,
+  bypassCache: initialBypassCache,
 }: UseAnaliseVendasFamiliaParams): UseAnaliseVendasFamiliaReturn {
   const [data, setData] = useState<AnaliseFamiliaVendedor[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (bypassCache?: boolean) => {
     if (!dataInicio || !dataFim) {
       return;
     }
@@ -38,6 +40,7 @@ export function useAnaliseVendasFamilia({
         dataInicio,
         dataFim,
         empresa,
+        bypassCache,
       });
       setData(result);
     } catch (err) {
@@ -50,10 +53,14 @@ export function useAnaliseVendasFamilia({
   }, [dataInicio, dataFim, empresa]);
 
   useEffect(() => {
-    fetchData();
+    fetchData(initialBypassCache);
+  }, [fetchData, initialBypassCache]);
+
+  const reload = useCallback((bypassCache?: boolean) => {
+    fetchData(bypassCache);
   }, [fetchData]);
 
-  return { data, isLoading, error, reload: fetchData };
+  return { data, isLoading, error, reload };
 }
 
 // Re-export types

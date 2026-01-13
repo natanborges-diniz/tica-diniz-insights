@@ -46,12 +46,24 @@ export function toCamelCaseRow<T extends Record<string, unknown>>(row: T): Recor
 }
 
 // ============================================
+// OPÇÕES DE CACHE PARA REQUISIÇÕES
+// ============================================
+
+export interface ApiGetOptions {
+  /** Se false, adiciona cache=0 para buscar dados ao vivo (bypass cache) */
+  cache?: boolean;
+  /** TTL do cache em milissegundos (ex: 30000 = 30s) */
+  cacheTtlMs?: number;
+}
+
+// ============================================
 // FUNÇÃO GENÉRICA DE REQUISIÇÃO
 // ============================================
 
 export async function apiGet<T>(
   path: string,
-  params?: Record<string, string | number | boolean | undefined | null>
+  params?: Record<string, string | number | boolean | undefined | null>,
+  options?: ApiGetOptions
 ): Promise<T[]> {
   const url = new URL(`${FIREBIRD_BRIDGE_BASE_URL}/api/v1${path}`);
 
@@ -61,6 +73,14 @@ export async function apiGet<T>(
         url.searchParams.append(key, String(value));
       }
     });
+  }
+
+  // Adicionar parâmetros de cache se especificados
+  if (options?.cache === false) {
+    url.searchParams.append('cache', '0');
+  }
+  if (options?.cacheTtlMs !== undefined) {
+    url.searchParams.append('cacheTtlMs', String(options.cacheTtlMs));
   }
 
   // Timeout de 90 segundos para permitir consultas consolidadas pesadas
