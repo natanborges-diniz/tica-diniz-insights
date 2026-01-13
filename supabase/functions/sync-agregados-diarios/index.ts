@@ -3,12 +3,14 @@
 // Suporta carga histórica em lotes e sincronização incremental
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { firebirdGet } from '../_shared/firebirdApi.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// URL base da API Railway (sem autenticação)
+const FIREBIRD_API_BASE_URL = Deno.env.get('FIREBIRD_API_BASE_URL') || 'https://firebird-bridge-production.up.railway.app';
 
 interface ResumoFormaPagamento {
   empresa: string;
@@ -49,6 +51,34 @@ function addMonths(date: Date, months: number): Date {
 // Obter último dia do mês
 function getLastDayOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+// Fazer requisição GET à API Railway (sem autenticação)
+async function firebirdGet(path: string, params: Record<string, any> = {}) {
+  const url = new URL(path, FIREBIRD_API_BASE_URL);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      url.searchParams.set(key, String(value));
+    }
+  });
+
+  console.log('Firebird GET:', url.toString());
+
+  const res = await fetch(url.toString(), {
+    headers: {
+      'Accept': 'application/json',
+    },
+  });
+
+  console.log('Response Status:', res.status);
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error('Erro Firebird GET:', url.toString(), res.status, body.slice(0, 500));
+    throw new Error(`Erro Firebird GET ${path}: ${res.status} - ${body.slice(0, 200)}`);
+  }
+
+  return res.json();
 }
 
 // Sincronizar um período específico
