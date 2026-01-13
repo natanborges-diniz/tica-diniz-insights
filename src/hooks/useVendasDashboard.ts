@@ -70,11 +70,18 @@ export interface ResumoLoja {
 export type { ResumoEmpresaVendedorAPI as ResumoEmpresaVendedor };
 export type { ResumoFormaPagamento };
 
-// Cache de nomes de empresas
+// Cache de nomes de empresas (com TTL de 5 minutos)
 let empresasCache: Map<number, string> | null = null;
+let empresasCacheTime: number = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
 async function getEmpresasMap(): Promise<Map<number, string>> {
-  if (empresasCache) return empresasCache;
+  const now = Date.now();
+  
+  // Usar cache se ainda válido
+  if (empresasCache && (now - empresasCacheTime) < CACHE_TTL) {
+    return empresasCache;
+  }
   
   const { data } = await supabase
     .from('empresa')
@@ -84,6 +91,7 @@ async function getEmpresasMap(): Promise<Map<number, string>> {
   data?.forEach((e) => {
     empresasCache!.set(e.cod_empresa, e.nome_fantasia || `Loja ${e.cod_empresa}`);
   });
+  empresasCacheTime = now;
   
   return empresasCache;
 }
