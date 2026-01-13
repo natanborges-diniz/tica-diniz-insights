@@ -8,7 +8,7 @@ interface UseResumoFormasPagamentoReturn {
   data: ResumoFormaPagamento[];
   isLoading: boolean;
   error: string | null;
-  fetchData: (empresa: EmpresaParam, dataInicio: string, dataFim: string) => Promise<void>;
+  fetchData: (empresa: EmpresaParam, dataInicio: string, dataFim: string, bypassCache?: boolean) => Promise<void>;
 }
 
 export function useResumoFormasPagamento(): UseResumoFormasPagamentoReturn {
@@ -16,11 +16,21 @@ export function useResumoFormasPagamento(): UseResumoFormasPagamentoReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async (empresa: EmpresaParam, dataInicio: string, dataFim: string) => {
+  const fetchData = useCallback(async (
+    empresa: EmpresaParam, 
+    dataInicio: string, 
+    dataFim: string,
+    bypassCache?: boolean
+  ) => {
     try {
       setIsLoading(true);
       setError(null);
-      const result = await getResumoFormasPagamento({ empresa, dataInicio, dataFim });
+      const result = await getResumoFormasPagamento({ 
+        empresa, 
+        dataInicio, 
+        dataFim,
+        bypassCache,
+      });
       setData(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao carregar dados';
