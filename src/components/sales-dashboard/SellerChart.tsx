@@ -2,6 +2,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { BarChart3 } from 'lucide-react';
 import { ResumoEmpresaVendedor } from '@/services/vendasService';
+import { ProjecaoFechamento } from '@/hooks/useVendasDashboard';
 import { ExportableCard } from '@/components/ui/exportable-card';
 import { cn } from '@/lib/utils';
 
@@ -11,6 +12,7 @@ interface SellerChartProps {
   usarVendasSemCreditos?: boolean;
   selectedVendedor?: string | null;
   onVendedorClick?: (vendedor: string) => void;
+  projecao?: ProjecaoFechamento;
 }
 
 // Cores para diferentes empresas
@@ -20,6 +22,7 @@ const COLORS = [
 ];
 
 const DIMMED_COLOR = 'hsl(var(--muted))';
+const PROJECAO_OPACITY = 0.3;
 
 function formatCurrency(value: number): string {
   if (value >= 1000000) {
@@ -31,13 +34,25 @@ function formatCurrency(value: number): string {
   return `R$ ${value.toFixed(0)}`;
 }
 
+// Função para formatar nome da loja (remove prefixo DINIZ e mantém apelido)
+function formatarNomeLoja(nome: string): string {
+  if (!nome) return '';
+  return nome.replace(/^DINIZ\s+/i, '');
+}
+
 export function SellerChart({ 
   dados, 
   isLoading, 
   usarVendasSemCreditos = true,
   selectedVendedor,
   onVendedorClick,
+  projecao,
 }: SellerChartProps) {
+  // Calcula fator de projeção
+  const fatorProjecao = projecao?.temProjecao && projecao.diasDecorridos > 0
+    ? projecao.diasTotais / projecao.diasDecorridos
+    : 1;
+
   // Preparar dados agrupados por vendedor com empresa para cor
   const empresas = [...new Set(dados.map(d => d.empresaNomeLogico || d.empresa))];
   const empresaColorMap = Object.fromEntries(
@@ -52,15 +67,23 @@ export function SellerChart({
         : (b.totalVendido || 0) - (a.totalVendido || 0)
     )
     .slice(0, 15) // Limitar a 15 para visualização
-    .map(item => ({
-      vendedor: item.vendedor?.length > 12 
-        ? item.vendedor.substring(0, 12) + '...' 
-        : item.vendedor,
-      vendedorFull: item.vendedor,
-      empresa: item.empresaNomeLogico || item.empresa,
-      valorVendas: usarVendasSemCreditos ? (item.totalVendidoSemCreditos || 0) : (item.totalVendido || 0),
-      cor: empresaColorMap[item.empresaNomeLogico || item.empresa],
-    }));
+    .map(item => {
+      const valorAtual = usarVendasSemCreditos ? (item.totalVendidoSemCreditos || 0) : (item.totalVendido || 0);
+      const valorProjecao = projecao?.temProjecao ? valorAtual * fatorProjecao : valorAtual;
+      const empresaNome = item.empresaNomeLogico || item.empresa;
+      return {
+        vendedor: item.vendedor?.length > 12 
+          ? item.vendedor.substring(0, 12) + '...' 
+          : item.vendedor,
+        vendedorFull: item.vendedor,
+        empresa: formatarNomeLoja(empresaNome),
+        empresaOriginal: empresaNome,
+        valorVendas: valorAtual,
+        valorProjecao: valorProjecao,
+        cor: empresaColorMap[empresaNome],
+        corProjecao: empresaColorMap[empresaNome] + '4D', // 30% opacity
+      };
+    });
 
   const titulo = usarVendasSemCreditos ? 'Vendas Válidas por Vendedor' : 'Vendas Totais por Vendedor';
   const tooltipLabel = usarVendasSemCreditos ? 'Vendas Válidas' : 'Vendas Totais';
@@ -76,16 +99,23 @@ export function SellerChart({
     return vendedorFull === selectedVendedor ? empresaCor : DIMMED_COLOR;
   };
 
+  const subtitulo = projecao?.temProjecao
+    ? `Clique em uma barra para filtrar • Projeção: ${projecao.diasDecorridos}/${projecao.diasTotais} dias`
+    : onVendedorClick ? "Clique em uma barra para filtrar" : undefined;
+
+  // Formatar nomes de empresas na legenda
+  const empresasFormatadas = empresas.map(e => formatarNomeLoja(e));
+
   return (
     <ExportableCard
       title={titulo}
       filename={`vendas_vendedor_${new Date().toISOString().split('T')[0]}`}
       icon={<BarChart3 className="h-5 w-5 text-primary" />}
-      subtitle={onVendedorClick ? "Clique em uma barra para filtrar" : undefined}
+      subtitle={subtitulo}
       actions={
         <div className="flex flex-wrap gap-2">
-          {empresas.map((empresa, index) => (
-            <div key={empresa} className="flex items-center gap-1 text-xs">
+          {empresasFormatadas.map((empresa, index) => (
+            <div key={empresas[index]} className="flex items-center gap-1 text-xs">
               <div 
                 className="w-3 h-3 rounded" 
                 style={{ backgroundColor: COLORS[index % COLORS.length] }}
@@ -122,9 +152,9 @@ export function SellerChart({
               tick={{ fontSize: 11 }}
             />
             <Tooltip 
-              formatter={(value: number) => [
+              formatter={(value: number, name: string) => [
                 new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value),
-                tooltipLabel
+                name === 'valorProjecao' ? 'Projeção' : tooltipLabel
               ]}
               labelFormatter={(label, payload) => {
                 if (payload && payload[0]) {
@@ -139,6 +169,21 @@ export function SellerChart({
               }}
               cursor={{ fill: 'hsl(var(--muted)/0.3)' }}
             />
+            {/* Barra de projeção (fundo) */}
+            {projecao?.temProjecao && (
+              <Bar 
+                dataKey="valorProjecao" 
+                radius={[0, 4, 4, 0]}
+              >
+                {chartData.map((entry, index) => (
+                  <Cell 
+                    key={`cell-proj-${index}`} 
+                    fill={entry.corProjecao}
+                  />
+                ))}
+              </Bar>
+            )}
+            {/* Barra de valor atual (frente) */}
             <Bar 
               dataKey="valorVendas" 
               radius={[0, 4, 4, 0]}

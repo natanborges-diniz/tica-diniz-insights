@@ -336,6 +336,7 @@ export function VendasDashboardLayout({
                 usarVendasSemCreditos={usarVendasSemCreditos}
                 selectedLoja={chartFilter.getFilterValue('loja')}
                 onLojaClick={handleLojaClick}
+                projecao={projecao}
               />
               <StoreTable 
                 dados={filteredDadosPorLoja} 
@@ -352,8 +353,9 @@ export function VendasDashboardLayout({
                   usarVendasSemCreditos={usarVendasSemCreditos}
                   selectedVendedor={chartFilter.getFilterValue('vendedor')}
                   onVendedorClick={handleVendedorClick}
+                  projecao={projecao}
                 />
-                <DescontoChart 
+                <DescontoChart
                   dados={filteredDadosVendedor} 
                   isLoading={loadingDesconto} 
                   erro={erroDesconto} 
