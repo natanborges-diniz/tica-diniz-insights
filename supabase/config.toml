@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.sync-empresas]
 verify_jwt = false
+
+[functions.sync-agregados-diarios]
+verify_jwt = false
+
+[functions.ai-diretrizes]
+verify_jwt = false
