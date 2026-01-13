@@ -91,15 +91,21 @@ async function syncPeriodo(
   
   try {
     // Buscar dados da API Firebird (sempre sem cache para garantir dados frescos)
-    const dados = await firebirdGet('/api/v1/vendas/resumo-formas-pagamento', {
+    const response = await firebirdGet('/api/v1/vendas/resumo-formas-pagamento', {
       dataInicio,
       dataFim,
       cache: 0,
-    }) as ResumoFormaPagamento[];
+    });
     
-    console.log(`[sync] Recebidos ${dados.length} registros do Firebird`);
+    // A API pode retornar um objeto com { data: [...] } ou diretamente um array
+    const dados: ResumoFormaPagamento[] = Array.isArray(response) 
+      ? response 
+      : (response?.data && Array.isArray(response.data) ? response.data : []);
+    
+    console.log(`[sync] Recebidos ${dados.length} registros do Firebird (response type: ${typeof response})`);
     
     if (dados.length === 0) {
+      console.log(`[sync] Nenhum dado para o período ${dataInicio} a ${dataFim}`);
       return { registros: 0 };
     }
     
@@ -110,18 +116,39 @@ async function syncPeriodo(
     
     const agora = new Date().toISOString();
     
-    // Agrupar por empresa + vendedor + forma de pagamento
-    const agregados: AgregadoDiario[] = dados.map((d) => ({
-      data: dataFim, // Usar data fim como referência do período
-      cod_empresa: d.empresa_cod_logico,
-      vendedor: (d.vendedor || '').trim(),
-      forma_pagamento: d.formapagamento || '',
-      total_vendido: d.totalgeral || 0,
-      total_bruto: d.total_bruto || 0,
-      total_desconto: d.total_desconto || 0,
-      qtd_vendas: d.qtd_vendas || 0,
-      atualizado_em: agora,
-    }));
+    // Agrupar por empresa + vendedor + forma de pagamento para evitar duplicatas
+    // A API pode retornar múltiplos registros para a mesma combinação
+    const mapaAgregados = new Map<string, AgregadoDiario>();
+    
+    dados.forEach((d) => {
+      const vendedor = (d.vendedor || '').trim();
+      const formaPagamento = d.formapagamento || '';
+      const key = `${d.empresa_cod_logico}|${vendedor}|${formaPagamento}`;
+      
+      const existing = mapaAgregados.get(key);
+      if (existing) {
+        // Somar valores
+        existing.total_vendido += d.totalgeral || 0;
+        existing.total_bruto += d.total_bruto || 0;
+        existing.total_desconto += d.total_desconto || 0;
+        existing.qtd_vendas += d.qtd_vendas || 0;
+      } else {
+        mapaAgregados.set(key, {
+          data: dataFim, // Usar data fim como referência do período
+          cod_empresa: d.empresa_cod_logico,
+          vendedor,
+          forma_pagamento: formaPagamento,
+          total_vendido: d.totalgeral || 0,
+          total_bruto: d.total_bruto || 0,
+          total_desconto: d.total_desconto || 0,
+          qtd_vendas: d.qtd_vendas || 0,
+          atualizado_em: agora,
+        });
+      }
+    });
+    
+    const agregados = Array.from(mapaAgregados.values());
+    console.log(`[sync] ${dados.length} registros agrupados em ${agregados.length} únicos`);
     
     // Upsert no Supabase em lotes de 500
     const batchSize = 500;
