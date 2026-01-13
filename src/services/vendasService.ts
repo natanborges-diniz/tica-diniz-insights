@@ -102,6 +102,10 @@ interface ResumoFormaPagamentoRaw {
   formapagamento: string;
   totalgeral: number;
   qtd_vendas: number;
+  // Campos de desconto (já vêm do backend!)
+  total_bruto: number;
+  total_desconto: number;
+  perc_desconto: number;
 }
 
 export interface ResumoFormaPagamento {
@@ -111,6 +115,10 @@ export interface ResumoFormaPagamento {
   formaPagamento: string;
   totalGeral: number;
   qtdVendas: number;
+  // Campos de desconto
+  totalBruto: number;
+  totalDesconto: number;
+  percentualDesconto: number;
 }
 
 export interface GetResumoFormasPagamentoParams {
@@ -139,6 +147,10 @@ export async function getResumoFormasPagamento(
     formaPagamento: r.formapagamento ?? '',
     totalGeral: r.totalgeral ?? 0,
     qtdVendas: r.qtd_vendas ?? 0,
+    // Mapear campos de desconto
+    totalBruto: r.total_bruto ?? 0,
+    totalDesconto: r.total_desconto ?? 0,
+    percentualDesconto: r.perc_desconto ?? 0,
   }));
 }
 
