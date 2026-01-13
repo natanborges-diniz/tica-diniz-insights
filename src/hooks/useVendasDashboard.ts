@@ -1,7 +1,7 @@
 // src/hooks/useVendasDashboard.ts
 // Hook para dashboard de vendas
-// IMPORTANTE: Dados de desconto vêm APENAS do endpoint resumo-empresa-vendedor (lento)
-// Dados de formas de pagamento vêm do endpoint resumo-formas-pagamento (rápido)
+// Dados de vendas E desconto vêm do endpoint resumo-formas-pagamento (rápido)
+// Endpoint resumo-empresa-vendedor usado apenas para gráfico de desconto por vendedor
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import {
@@ -68,12 +68,14 @@ export interface ResumoLoja {
 export type { ResumoEmpresaVendedorAPI as ResumoEmpresaVendedor };
 export type { ResumoFormaPagamento };
 
-// Função para calcular métricas de formas de pagamento (rápido, sem desconto)
+// Função para calcular métricas de formas de pagamento (inclui desconto do endpoint rápido!)
 function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
   let totalVendido = 0;
   let totalCreditos = 0;
   let totalDevolucoes = 0;
   let qtdTransacoes = 0;
+  let totalBruto = 0;
+  let totalDesconto = 0;
 
   dados.forEach((d) => {
     const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
@@ -88,11 +90,15 @@ function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
         totalCreditos += d.totalGeral;
       }
       qtdTransacoes += d.qtdVendas;
+      // Somar desconto de todos os registros (exceto devoluções)
+      totalBruto += d.totalBruto ?? 0;
+      totalDesconto += d.totalDesconto ?? 0;
     }
   });
 
   const totalVendidoSemCreditos = totalVendido - totalCreditos;
   const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
+  const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
 
   return {
     totalVendido,
@@ -101,6 +107,9 @@ function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
     totalVendidoSemCreditos,
     qtdTransacoes,
     ticketMedio,
+    totalBruto,
+    totalDesconto,
+    percentualDesconto,
   };
 }
 
@@ -123,9 +132,9 @@ function calcularMetricasDesconto(dados: ResumoEmpresaVendedorAPI[]) {
   };
 }
 
-// Função para agregar dados de formas de pagamento por loja
-function agruparPorLoja(dados: ResumoFormaPagamento[], dadosDesconto: ResumoEmpresaVendedorAPI[]): ResumoLoja[] {
-  // Primeiro, agregar formas de pagamento por empresa
+// Função para agregar dados de formas de pagamento por loja (agora inclui desconto do endpoint rápido)
+function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
+  // Agregar formas de pagamento por empresa, incluindo desconto
   const mapaFormas = new Map<number, {
     empresa: string;
     codEmpresa: number;
@@ -133,6 +142,8 @@ function agruparPorLoja(dados: ResumoFormaPagamento[], dadosDesconto: ResumoEmpr
     totalCreditos: number;
     totalDevolucoes: number;
     qtdTransacao: number;
+    totalBruto: number;
+    totalDesconto: number;
   }>();
 
   dados.forEach((d) => {
@@ -146,12 +157,17 @@ function agruparPorLoja(dados: ResumoFormaPagamento[], dadosDesconto: ResumoEmpr
     const valorCredito = isCredito ? d.totalGeral : 0;
     const valorDevolucao = isDevolucao ? Math.abs(d.totalGeral) : 0;
     const qtdVendas = isDevolucao ? 0 : d.qtdVendas;
+    // Desconto não conta para devoluções
+    const valorBruto = isDevolucao ? 0 : (d.totalBruto ?? 0);
+    const valorDesconto = isDevolucao ? 0 : (d.totalDesconto ?? 0);
     
     if (existing) {
       existing.totalVendido += valorVenda + valorCredito;
       existing.totalCreditos += valorCredito;
       existing.totalDevolucoes += valorDevolucao;
       existing.qtdTransacao += qtdVendas;
+      existing.totalBruto += valorBruto;
+      existing.totalDesconto += valorDesconto;
     } else {
       mapaFormas.set(d.codEmpresa, {
         empresa: d.empresa,
@@ -160,33 +176,17 @@ function agruparPorLoja(dados: ResumoFormaPagamento[], dadosDesconto: ResumoEmpr
         totalCreditos: valorCredito,
         totalDevolucoes: valorDevolucao,
         qtdTransacao: qtdVendas,
+        totalBruto: valorBruto,
+        totalDesconto: valorDesconto,
       });
     }
   });
 
-  // Depois, agregar desconto por empresa (se disponível)
-  const mapaDesconto = new Map<number, { totalBruto: number; totalDesconto: number }>();
-  dadosDesconto.forEach((d) => {
-    const existing = mapaDesconto.get(d.empresaCodLogico);
-    if (existing) {
-      existing.totalBruto += d.totalBruto || 0;
-      existing.totalDesconto += d.totalDesconto || 0;
-    } else {
-      mapaDesconto.set(d.empresaCodLogico, {
-        totalBruto: d.totalBruto || 0,
-        totalDesconto: d.totalDesconto || 0,
-      });
-    }
-  });
-
-  // Combinar dados
+  // Converter para array e calcular percentuais
   return Array.from(mapaFormas.values()).map((item) => {
     const totalVendidoSemCreditos = item.totalVendido - item.totalCreditos;
     const ticketMedio = item.qtdTransacao > 0 ? totalVendidoSemCreditos / item.qtdTransacao : 0;
-    const desconto = mapaDesconto.get(item.codEmpresa);
-    const totalBruto = desconto?.totalBruto || 0;
-    const totalDesconto = desconto?.totalDesconto || 0;
-    const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
+    const percentualDesconto = item.totalBruto > 0 ? (item.totalDesconto / item.totalBruto) * 100 : 0;
     
     return {
       empresa: item.empresa,
@@ -196,8 +196,8 @@ function agruparPorLoja(dados: ResumoFormaPagamento[], dadosDesconto: ResumoEmpr
       totalVendidoSemCreditos,
       qtdTransacao: item.qtdTransacao,
       ticketMedio,
-      totalBruto,
-      totalDesconto,
+      totalBruto: item.totalBruto,
+      totalDesconto: item.totalDesconto,
       percentualDesconto,
     };
   });
@@ -288,21 +288,20 @@ export function useVendasDashboard() {
     }
   }, []);
 
-  // Métricas calculadas
+  // Métricas calculadas - agora usa desconto do endpoint rápido!
   const metrics = useMemo<VendasMetrics>(() => {
     const metricasFormas = calcularMetricasFormasPagamento(dadosFormasPagamento);
-    const metricasDesconto = calcularMetricasDesconto(dadosComDesconto);
-    const descontoDisponivel = dadosComDesconto.length > 0;
+    // Desconto agora vem do endpoint rápido, sempre disponível se houver dados
+    const descontoDisponivel = dadosFormasPagamento.length > 0;
 
-    console.log('[Métricas] Formas de pagamento:', metricasFormas);
-    console.log('[Métricas] Desconto:', metricasDesconto, 'disponível:', descontoDisponivel);
+    console.log('[Métricas] Formas de pagamento (com desconto):', metricasFormas);
+    console.log('[Métricas] Desconto disponível:', descontoDisponivel, 'totalBruto:', metricasFormas.totalBruto, 'totalDesconto:', metricasFormas.totalDesconto);
 
     return {
       ...metricasFormas,
-      ...metricasDesconto,
       descontoDisponivel,
     };
-  }, [dadosFormasPagamento, dadosComDesconto]);
+  }, [dadosFormasPagamento]);
 
   // Projeção de fechamento do período
   const projecao = useMemo<ProjecaoFechamento>(() => {
@@ -357,10 +356,10 @@ export function useVendasDashboard() {
     };
   }, [filters.dataInicio, filters.dataFim, metrics.totalVendidoSemCreditos]);
 
-  // Dados agregados por loja
+  // Dados agregados por loja (agora usa apenas endpoint rápido)
   const dadosPorLoja = useMemo(
-    () => agruparPorLoja(dadosFormasPagamento, dadosComDesconto),
-    [dadosFormasPagamento, dadosComDesconto]
+    () => agruparPorLoja(dadosFormasPagamento),
+    [dadosFormasPagamento]
   );
 
   // Reload normal (usa cache do backend)
