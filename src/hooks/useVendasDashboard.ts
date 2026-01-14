@@ -578,14 +578,10 @@ export function useVendasDashboard() {
     [dadosFormasPagamento]
   );
 
-  // Reload normal (usa cache do backend)
+  // Reload - usa estratégia híbrida automaticamente
+  // (Supabase para histórico, Firebird para hoje)
   const reload = useCallback(() => {
     fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
-  }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchData]);
-
-  // Reload "ao vivo" - ignora cache e busca dados frescos
-  const reloadLive = useCallback(() => {
-    fetchData(filters.empresa, filters.dataInicio, filters.dataFim, { bypassCache: true });
   }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchData]);
 
   // Auto-load on mount
@@ -612,7 +608,6 @@ export function useVendasDashboard() {
     setFilters,
     metrics,
     projecao,
-    reload,       // Usa cache (padrão)
-    reloadLive,   // Força dados frescos (cache=0)
+    reload,
   };
 }

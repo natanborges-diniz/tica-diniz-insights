@@ -2,7 +2,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RefreshCw, Calendar, Building2, Loader2, Zap } from 'lucide-react';
+import { RefreshCw, Calendar, Building2, Loader2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -20,7 +20,6 @@ interface SalesFiltersProps {
   onDataFimChange: (value: string) => void;
   onEmpresaChange: (value: string) => void;
   onRefresh: () => void;
-  onRefreshLive?: () => void;
   isLoading?: boolean;
 }
 
@@ -32,7 +31,6 @@ export function SalesFilters({
   onDataFimChange,
   onEmpresaChange,
   onRefresh,
-  onRefreshLive,
   isLoading
 }: SalesFiltersProps) {
   const { empresas, isLoading: empresasLoading } = useEmpresas();
@@ -108,19 +106,6 @@ export function SalesFilters({
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             Atualizar
           </Button>
-          
-          {onRefreshLive && (
-            <Button 
-              onClick={onRefreshLive} 
-              disabled={isLoading}
-              variant="outline"
-              className="flex items-center gap-2"
-              title="Buscar dados diretamente do banco (sem cache)"
-            >
-              <Zap className="h-4 w-4" />
-              Ao Vivo
-            </Button>
-          )}
         </div>
       </CardContent>
     </Card>

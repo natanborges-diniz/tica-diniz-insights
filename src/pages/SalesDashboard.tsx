@@ -20,7 +20,6 @@ export default function SalesDashboard() {
     metrics,
     projecao,
     reload,
-    reloadLive,
   } = useVendasDashboard();
 
   return (
@@ -40,7 +39,6 @@ export default function SalesDashboard() {
       metrics={metrics}
       projecao={projecao}
       reload={reload}
-      reloadLive={reloadLive}
     />
   );
 }
