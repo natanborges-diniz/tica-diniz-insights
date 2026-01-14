@@ -389,11 +389,8 @@ export function useVendasDashboard() {
           throw new Error('Supabase sem dados suficientes para o período');
         }
       }
-      // Estratégia 2: Período inclui hoje -> Fallback gracioso
-      // O cache Supabase só tem dados MENSAIS (último dia de cada mês), não diários!
-      // Por isso, vamos:
-      // 1. Tentar Firebird primeiro (com timeout curto de 15s)
-      // 2. Se falhar, mostrar mensagem de erro clara (cache mensal não é útil para períodos curtos)
+      // Estratégia 2: Período inclui hoje -> Tentar Firebird, fallback para Supabase
+      // Agora que o backend foi corrigido, podemos confiar no cache do Supabase novamente
       else if (!bypassCache && dataFim >= hoje) {
         console.log('[useVendasDashboard] Tentando Firebird com timeout de 15s');
         
@@ -421,15 +418,45 @@ export function useVendasDashboard() {
           setDataLoaded(true);
           setLoading(false);
         } catch (e) {
-          console.warn('[useVendasDashboard] Firebird indisponível:', e);
+          console.warn('[useVendasDashboard] Firebird indisponível, tentando Supabase como fallback:', e);
           
-          // Firebird falhou - NÃO usar cache mensal pois dá valores errados
-          // Mostrar erro claro para o usuário
-          setFontesDados({ supabase: false, firebird: false, parcial: true });
-          setError('Servidor indisponível. Os dados não puderam ser carregados. Tente novamente em alguns minutos.');
-          setDadosFormasPagamento([]);
-          setDataLoaded(true);
-          setLoading(false);
+          // FALLBACK: Tentar Supabase (cache até ontem)
+          try {
+            const dadosAgregados = await getVendasAgregado({
+              empresa,
+              dataInicio,
+              dataFim: ontemStr, // Cache só tem dados até ontem
+            });
+            
+            if (dadosAgregados.length > 0) {
+              console.log(`[useVendasDashboard] Supabase fallback: ${dadosAgregados.length} registros (até ${ontemStr})`);
+              const dadosConvertidos = await converterAgregadoParaResumo(dadosAgregados);
+              setDadosFormasPagamento(dadosConvertidos);
+              setFontesDados({ 
+                supabase: true, 
+                firebird: false, 
+                parcial: true,
+                ultimaDataCache: ontemStr 
+              });
+              setDataLoaded(true);
+              setLoading(false);
+            } else {
+              // Supabase também vazio
+              console.warn('[useVendasDashboard] Supabase fallback vazio');
+              setFontesDados({ supabase: false, firebird: false, parcial: true });
+              setError('Servidor indisponível e cache vazio. Tente novamente em alguns minutos.');
+              setDadosFormasPagamento([]);
+              setDataLoaded(true);
+              setLoading(false);
+            }
+          } catch (errSupabase) {
+            console.error('[useVendasDashboard] Supabase fallback também falhou:', errSupabase);
+            setFontesDados({ supabase: false, firebird: false, parcial: true });
+            setError('Servidor indisponível. Tente novamente em alguns minutos.');
+            setDadosFormasPagamento([]);
+            setDataLoaded(true);
+            setLoading(false);
+          }
         }
       }
       // Estratégia 3: Bypass cache ou período apenas hoje -> Firebird direto
