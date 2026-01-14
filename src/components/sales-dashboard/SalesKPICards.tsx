@@ -32,7 +32,6 @@ interface SalesKPICardsProps {
   metrics: VendasMetrics;
   projecao?: ProjecaoFechamento;
   isLoading?: boolean;
-  loadingDesconto?: boolean;
   usarVendasSemCreditos?: boolean;
 }
 
@@ -55,7 +54,6 @@ export function SalesKPICards({
   metrics, 
   projecao,
   isLoading, 
-  loadingDesconto,
   usarVendasSemCreditos = true 
 }: SalesKPICardsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -149,8 +147,7 @@ export function SalesKPICards({
     isProjecao: true,
   } : null;
 
-  // Cards de desconto (podem estar carregando ou indisponíveis)
-  // Removido "Total Bruto" conforme solicitado - mostra apenas Desconto e % Desconto
+  // Cards de desconto - agora vem do endpoint rápido (sempre disponível)
   const cardsDesconto = [
     {
       title: 'Total Desconto',
@@ -158,8 +155,7 @@ export function SalesKPICards({
       icon: TrendingDown,
       color: 'text-amber-600',
       bgColor: 'bg-amber-50 dark:bg-amber-950/20',
-      loading: loadingDesconto,
-      indisponivel: !metrics.descontoDisponivel && !loadingDesconto,
+      indisponivel: !metrics.descontoDisponivel,
     },
     {
       title: '% Desconto',
@@ -167,8 +163,7 @@ export function SalesKPICards({
       icon: Percent,
       color: 'text-orange-600',
       bgColor: 'bg-orange-50 dark:bg-orange-950/20',
-      loading: loadingDesconto,
-      indisponivel: !metrics.descontoDisponivel && !loadingDesconto,
+      indisponivel: !metrics.descontoDisponivel,
     },
   ];
 
@@ -269,11 +264,7 @@ export function SalesKPICards({
               </div>
             </CardHeader>
             <CardContent>
-              {card.loading ? (
-                <Skeleton className="h-7 w-24" />
-              ) : (
-                <div className="text-xl font-bold">{card.value}</div>
-              )}
+              <div className="text-xl font-bold">{card.value}</div>
               {card.indisponivel && (
                 <p className="text-xs text-muted-foreground mt-1">Filtre por loja</p>
               )}
