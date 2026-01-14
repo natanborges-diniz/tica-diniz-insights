@@ -150,16 +150,8 @@ export function SalesKPICards({
   } : null;
 
   // Cards de desconto (podem estar carregando ou indisponíveis)
+  // Removido "Total Bruto" conforme solicitado - mostra apenas Desconto e % Desconto
   const cardsDesconto = [
-    {
-      title: 'Total Bruto',
-      value: metrics.descontoDisponivel ? formatCurrency(metrics.totalBruto) : '—',
-      icon: DollarSign,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50 dark:bg-blue-950/20',
-      loading: loadingDesconto,
-      indisponivel: !metrics.descontoDisponivel && !loadingDesconto,
-    },
     {
       title: 'Total Desconto',
       value: metrics.descontoDisponivel ? formatCurrency(metrics.totalDesconto) : '—',

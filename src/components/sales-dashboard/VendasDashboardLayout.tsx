@@ -164,27 +164,14 @@ export function VendasDashboardLayout({
 
   // Métricas recalculadas com base nos filtros do gráfico
   const filteredMetrics = useMemo<VendasMetrics>(() => {
-    console.log('[VendasDashboardLayout] Recalculando métricas:', {
-      hasActiveFilters: chartFilter.hasActiveFilters,
-      dadosFormasPagamentoLength: dadosFormasPagamento.length,
-      filteredDadosFormasPagamentoLength: filteredDadosFormasPagamento.length,
-      metricsOriginal: {
-        totalBruto: metrics.totalBruto,
-        totalDesconto: metrics.totalDesconto,
-        descontoDisponivel: metrics.descontoDisponivel,
-      },
-    });
-
     // Se não há filtros ativos, retorna métricas originais
     if (!chartFilter.hasActiveFilters) return metrics;
 
-    // Recalcula métricas com dados filtrados
+    // Recalcula métricas de VENDAS com dados filtrados de formas de pagamento
     let totalVendido = 0;
     let totalCreditos = 0;
     let totalDevolucoes = 0;
     let qtdTransacoes = 0;
-    let totalBruto = 0;
-    let totalDesconto = 0;
 
     filteredDadosFormasPagamento.forEach((d) => {
       const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
@@ -199,22 +186,35 @@ export function VendasDashboardLayout({
           totalCreditos += d.totalGeral;
         }
         qtdTransacoes += d.qtdVendas;
-        // Desconto agora vem das formas de pagamento também
-        totalBruto += d.totalBruto || 0;
-        totalDesconto += d.totalDesconto || 0;
       }
     });
 
     const totalVendidoSemCreditos = totalVendido - totalCreditos;
     const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
-    const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
 
-    console.log('[VendasDashboardLayout] Métricas filtradas calculadas:', {
-      totalBruto,
-      totalDesconto,
-      percentualDesconto,
-      descontoDisponivel: filteredDadosFormasPagamento.length > 0 && totalBruto > 0,
+    // Recalcula métricas de DESCONTO com dados filtrados de vendedor
+    // Filtra dadosComDesconto com base nos filtros ativos
+    let filteredDadosDesconto = dadosComDesconto;
+    
+    const lojaValue = chartFilter.getFilterValue('loja');
+    if (lojaValue) {
+      filteredDadosDesconto = filteredDadosDesconto.filter(d => d.empresa === lojaValue);
+    }
+    
+    const vendedorValue = chartFilter.getFilterValue('vendedor');
+    if (vendedorValue) {
+      filteredDadosDesconto = filteredDadosDesconto.filter(d => d.vendedor === vendedorValue);
+    }
+
+    let totalBruto = 0;
+    let totalDesconto = 0;
+    filteredDadosDesconto.forEach((d) => {
+      totalBruto += d.totalBruto || 0;
+      totalDesconto += d.totalDesconto || 0;
     });
+    
+    const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
+    const descontoDisponivel = filteredDadosDesconto.length > 0 && totalBruto > 0;
 
     return {
       totalVendido,
@@ -226,9 +226,9 @@ export function VendasDashboardLayout({
       totalBruto,
       totalDesconto,
       percentualDesconto,
-      descontoDisponivel: filteredDadosFormasPagamento.length > 0 && totalBruto > 0,
+      descontoDisponivel,
     };
-  }, [metrics, chartFilter.hasActiveFilters, filteredDadosFormasPagamento, dadosFormasPagamento.length]);
+  }, [metrics, chartFilter, filteredDadosFormasPagamento, dadosComDesconto]);
 
   const handleViewModeChange = (mode: ViewMode) => {
     chartFilter.clearAllFilters();

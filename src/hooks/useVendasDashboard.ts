@@ -413,20 +413,41 @@ export function useVendasDashboard() {
     }
   }, []);
 
-  // Métricas calculadas - agora usa desconto do endpoint rápido!
+  // Métricas calculadas - vendas do endpoint rápido, desconto do endpoint de vendedor
   const metrics = useMemo<VendasMetrics>(() => {
     const metricasFormas = calcularMetricasFormasPagamento(dadosFormasPagamento);
-    // Desconto agora vem do endpoint rápido, sempre disponível se houver dados
-    const descontoDisponivel = dadosFormasPagamento.length > 0;
+    
+    // Desconto vem do endpoint resumo-empresa-vendedor (dadosComDesconto)
+    // porque esse endpoint já agrega corretamente por vendedor sem duplicação
+    const metricasDesconto = calcularMetricasDesconto(dadosComDesconto);
+    const descontoDisponivel = dadosComDesconto.length > 0 && metricasDesconto.totalBruto > 0;
 
-    console.log('[Métricas] Formas de pagamento (com desconto):', metricasFormas);
-    console.log('[Métricas] Desconto disponível:', descontoDisponivel, 'totalBruto:', metricasFormas.totalBruto, 'totalDesconto:', metricasFormas.totalDesconto);
+    console.log('[Métricas] Formas de pagamento:', {
+      totalVendido: metricasFormas.totalVendido,
+      totalVendidoSemCreditos: metricasFormas.totalVendidoSemCreditos,
+    });
+    console.log('[Métricas] Desconto (do endpoint vendedor):', {
+      totalBruto: metricasDesconto.totalBruto,
+      totalDesconto: metricasDesconto.totalDesconto,
+      percentualDesconto: metricasDesconto.percentualDesconto,
+      descontoDisponivel,
+    });
 
     return {
-      ...metricasFormas,
+      // Vendas vem do endpoint de formas de pagamento
+      totalVendido: metricasFormas.totalVendido,
+      totalCreditos: metricasFormas.totalCreditos,
+      totalDevolucoes: metricasFormas.totalDevolucoes,
+      totalVendidoSemCreditos: metricasFormas.totalVendidoSemCreditos,
+      qtdTransacoes: metricasFormas.qtdTransacoes,
+      ticketMedio: metricasFormas.ticketMedio,
+      // Desconto vem do endpoint de vendedor (agregação correta)
+      totalBruto: metricasDesconto.totalBruto,
+      totalDesconto: metricasDesconto.totalDesconto,
+      percentualDesconto: metricasDesconto.percentualDesconto,
       descontoDisponivel,
     };
-  }, [dadosFormasPagamento]);
+  }, [dadosFormasPagamento, dadosComDesconto]);
 
   // Projeção de fechamento do período
   const projecao = useMemo<ProjecaoFechamento>(() => {
