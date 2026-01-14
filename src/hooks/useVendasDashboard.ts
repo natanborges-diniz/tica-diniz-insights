@@ -119,7 +119,8 @@ async function converterAgregadoParaResumo(
 // NOTA IMPORTANTE: 
 // - "CREDITOS" são uma forma de pagamento válida (saldo do cliente usado como pagamento)
 // - "DEVOLUCAO" representa cancelamentos e deve ser excluída das vendas válidas
-// - totalVendidoSemCreditos = vendas válidas INCLUINDO créditos, EXCLUINDO devoluções
+// - totalVendido = vendas COM créditos (inclui créditos, exclui devoluções)
+// - totalVendidoSemCreditos = vendas SEM créditos (para toggle no dashboard)
 function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
   let totalVendido = 0;
   let totalCreditos = 0;
@@ -147,9 +148,9 @@ function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
     }
   });
 
-  // IMPORTANTE: Créditos SÃO vendas válidas (é uma forma de pagamento)
-  // Não subtraímos créditos - apenas devoluções são excluídas
-  const totalVendidoSemCreditos = totalVendido; // Créditos já estão incluídos
+  // totalVendidoSemCreditos = vendas excluindo créditos (para toggle "vendas sem créditos")
+  // Créditos são vendas válidas, mas o toggle permite mostrar COM ou SEM
+  const totalVendidoSemCreditos = totalVendido - totalCreditos;
   const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
   const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
 
@@ -242,11 +243,10 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
   });
 
   // Converter para array e calcular percentuais
-  // IMPORTANTE: totalVendidoSemCreditos agora = totalVendido (créditos já estão incluídos, devoluções excluídas)
+  // totalVendidoSemCreditos = vendas excluindo créditos (para toggle "vendas sem créditos")
   return Array.from(mapaFormas.values()).map((item) => {
-    // Créditos são vendas válidas, então NÃO subtraímos
-    // O nome "totalVendidoSemCreditos" é mantido para compatibilidade, mas representa vendas líquidas (sem devoluções)
-    const totalVendidoSemCreditos = item.totalVendido;
+    // Créditos são vendas válidas, mas o toggle permite mostrar COM ou SEM
+    const totalVendidoSemCreditos = item.totalVendido - item.totalCreditos;
     const ticketMedio = item.qtdTransacao > 0 ? totalVendidoSemCreditos / item.qtdTransacao : 0;
     const percentualDesconto = item.totalBruto > 0 ? (item.totalDesconto / item.totalBruto) * 100 : 0;
     
