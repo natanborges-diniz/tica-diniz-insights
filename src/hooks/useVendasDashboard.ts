@@ -324,92 +324,36 @@ export function useVendasDashboard() {
     setFontesDados({ supabase: false, firebird: false });
     
     const hoje = formatLocalDate(new Date());
-    const ontem = formatLocalDate(new Date(Date.now() - 86400000));
     
-    // Determinar estratégia:
-    // - Se dataFim < hoje: usar APENAS Supabase (dados históricos completos)
-    // - Se dataFim >= hoje: usar Supabase (até ontem) + Firebird (hoje)
-    const precisaFirebird = dataFim >= hoje;
-    const dataFimSupabase = precisaFirebird ? ontem : dataFim;
-    const temDadosHistoricos = dataInicio <= dataFimSupabase;
+    // NOTA: Os dados no Supabase estão agregados por MÊS (não por dia).
+    // Isso causa valores duplicados quando o período do filtro não coincide com meses completos.
+    // Por enquanto, usamos APENAS a API Firebird até termos granularidade diária no Supabase.
+    // TODO: Implementar sync diário e reativar estratégia híbrida
     
-    console.log('[useVendasDashboard] Estratégia híbrida:', {
+    console.log('[useVendasDashboard] Buscando Firebird (API direta):', {
       dataInicio,
       dataFim,
       hoje,
-      ontem,
-      precisaFirebird,
-      dataFimSupabase,
-      temDadosHistoricos,
       bypassCache,
     });
     
     try {
-      let dadosFinais: ResumoFormaPagamento[] = [];
+      // Buscar dados diretamente do Firebird (fonte única por enquanto)
+      console.log('[useVendasDashboard] Buscando Firebird:', dataInicio, 'a', dataFim);
+      const startFirebird = performance.now();
       
-      // 1. Buscar dados históricos do Supabase (instantâneo!)
-      if (temDadosHistoricos) {
-        console.log('[useVendasDashboard] Buscando Supabase:', dataInicio, 'a', dataFimSupabase);
-        const startSupabase = performance.now();
-        
-        const agregados = await getVendasAgregado({
-          empresa,
-          dataInicio,
-          dataFim: dataFimSupabase,
-        });
-        
-        const dadosSupabase = await converterAgregadoParaResumo(agregados);
-        const tempoSupabase = Math.round(performance.now() - startSupabase);
-        
-        console.log(`[useVendasDashboard] Supabase: ${dadosSupabase.length} registros em ${tempoSupabase}ms`);
-        
-        if (dadosSupabase.length > 0) {
-          dadosFinais = dadosSupabase;
-          setFontesDados(prev => ({ ...prev, supabase: true }));
-        }
-      }
+      const dadosFirebird = await getResumoFormasPagamento({
+        empresa,
+        dataInicio,
+        dataFim,
+        bypassCache: dataFim >= hoje ? true : bypassCache, // Sempre sem cache se inclui hoje
+      });
       
-      // 2. Buscar dados do dia atual do Firebird (se necessário)
-      if (precisaFirebird) {
-        console.log('[useVendasDashboard] Buscando Firebird (hoje):', hoje);
-        const startFirebird = performance.now();
-        
-        try {
-          const dadosHoje = await getResumoFormasPagamento({
-            empresa,
-            dataInicio: hoje,
-            dataFim: hoje,
-            bypassCache: true, // Sempre dados frescos para hoje
-          });
-          
-          const tempoFirebird = Math.round(performance.now() - startFirebird);
-          console.log(`[useVendasDashboard] Firebird: ${dadosHoje.length} registros em ${tempoFirebird}ms`);
-          
-          if (dadosHoje.length > 0) {
-            dadosFinais = combinarDados(dadosFinais, dadosHoje);
-            setFontesDados(prev => ({ ...prev, firebird: true }));
-          }
-        } catch (errFirebird) {
-          // Se Firebird falhar, continuar com dados do Supabase
-          console.warn('[useVendasDashboard] Firebird falhou, usando apenas Supabase:', errFirebird);
-        }
-      }
+      const tempoFirebird = Math.round(performance.now() - startFirebird);
+      console.log(`[useVendasDashboard] Firebird: ${dadosFirebird.length} registros em ${tempoFirebird}ms`);
       
-      // 3. Fallback: se não tem dados do Supabase, buscar tudo do Firebird
-      if (dadosFinais.length === 0 && !temDadosHistoricos) {
-        console.log('[useVendasDashboard] Sem dados Supabase, buscando Firebird completo');
-        const dadosFirebird = await getResumoFormasPagamento({
-          empresa,
-          dataInicio,
-          dataFim,
-          bypassCache,
-        });
-        dadosFinais = dadosFirebird;
-        setFontesDados({ supabase: false, firebird: true });
-      }
-      
-      console.log('[useVendasDashboard] Total final:', dadosFinais.length, 'registros');
-      setDadosFormasPagamento(dadosFinais);
+      setDadosFormasPagamento(dadosFirebird);
+      setFontesDados({ supabase: false, firebird: true });
       setDataLoaded(true);
       
     } catch (err) {
