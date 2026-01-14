@@ -163,15 +163,19 @@ export function VendasDashboardLayout({
   }, [dadosFormasPagamento, chartFilter]);
 
   // Métricas recalculadas com base nos filtros do gráfico
+  // Agora usa apenas filteredDadosFormasPagamento (dados de desconto corrigidos no backend)
   const filteredMetrics = useMemo<VendasMetrics>(() => {
     // Se não há filtros ativos, retorna métricas originais
     if (!chartFilter.hasActiveFilters) return metrics;
 
-    // Recalcula métricas de VENDAS com dados filtrados de formas de pagamento
+    // Recalcula métricas com dados filtrados de formas de pagamento
     let totalVendido = 0;
     let totalCreditos = 0;
     let totalDevolucoes = 0;
     let qtdTransacoes = 0;
+
+    // Agrupar por empresa para evitar duplicação de desconto
+    const empresasProcessadas = new Map<number, { bruto: number; desconto: number }>();
 
     filteredDadosFormasPagamento.forEach((d) => {
       const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
@@ -186,34 +190,34 @@ export function VendasDashboardLayout({
           totalCreditos += d.totalGeral;
         }
         qtdTransacoes += d.qtdVendas;
+        
+        // Acumular bruto e desconto por empresa
+        const existing = empresasProcessadas.get(d.codEmpresa);
+        if (existing) {
+          existing.bruto += d.totalBruto || 0;
+          existing.desconto += d.totalDesconto || 0;
+        } else {
+          empresasProcessadas.set(d.codEmpresa, { 
+            bruto: d.totalBruto || 0, 
+            desconto: d.totalDesconto || 0 
+          });
+        }
       }
     });
 
     const totalVendidoSemCreditos = totalVendido - totalCreditos;
     const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
 
-    // Recalcula métricas de DESCONTO com dados filtrados de dadosComDesconto
-    let filteredDadosDesconto = dadosComDesconto;
-    
-    const lojaValue = chartFilter.getFilterValue('loja');
-    if (lojaValue) {
-      filteredDadosDesconto = filteredDadosDesconto.filter(d => d.empresa === lojaValue);
-    }
-    
-    const vendedorValue = chartFilter.getFilterValue('vendedor');
-    if (vendedorValue) {
-      filteredDadosDesconto = filteredDadosDesconto.filter(d => d.vendedor === vendedorValue);
-    }
-
+    // Calcular totais de desconto
     let totalBruto = 0;
     let totalDesconto = 0;
-    filteredDadosDesconto.forEach((d) => {
-      totalBruto += d.totalBruto || 0;
-      totalDesconto += d.totalDesconto || 0;
+    empresasProcessadas.forEach((v) => {
+      totalBruto += v.bruto;
+      totalDesconto += v.desconto;
     });
     
     const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
-    const descontoDisponivel = filteredDadosDesconto.length > 0 && totalBruto > 0;
+    const descontoDisponivel = totalBruto > 0;
 
     return {
       totalVendido,
@@ -227,7 +231,7 @@ export function VendasDashboardLayout({
       percentualDesconto,
       descontoDisponivel,
     };
-  }, [metrics, chartFilter, filteredDadosFormasPagamento, dadosComDesconto]);
+  }, [metrics, chartFilter, filteredDadosFormasPagamento]);
 
   const handleViewModeChange = (mode: ViewMode) => {
     chartFilter.clearAllFilters();
@@ -358,7 +362,6 @@ export function VendasDashboardLayout({
             metrics={filteredMetrics} 
             projecao={projecao}
             isLoading={loading} 
-            loadingDesconto={loadingDesconto}
             usarVendasSemCreditos={usarVendasSemCreditos} 
           />
 
