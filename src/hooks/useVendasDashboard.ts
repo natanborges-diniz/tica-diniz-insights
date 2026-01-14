@@ -391,8 +391,9 @@ export function useVendasDashboard() {
       }
       // Estratégia 2: Período inclui hoje -> Tentar Firebird, fallback para Supabase
       // Agora que o backend foi corrigido, podemos confiar no cache do Supabase novamente
+      // NOTA: Aumentado timeout para 30s pois o backend está lento
       else if (!bypassCache && dataFim >= hoje) {
-        console.log('[useVendasDashboard] Tentando Firebird com timeout de 15s');
+        console.log('[useVendasDashboard] Tentando Firebird com timeout de 30s');
         
         try {
           const startFirebird = performance.now();
@@ -406,7 +407,7 @@ export function useVendasDashboard() {
               incluirDevolucoes: false,
             }),
             new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Firebird timeout (15s)')), 15000)
+              setTimeout(() => reject(new Error('Firebird timeout (30s)')), 30000)
             )
           ]) as ResumoFormaPagamento[];
           
