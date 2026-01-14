@@ -136,6 +136,10 @@ export interface GetResumoFormasPagamentoParams {
   dataFim: string;
   /** Se true, ignora cache e busca dados ao vivo */
   bypassCache?: boolean;
+  /** Se true, exclui forma de pagamento "Créditos" dos resultados */
+  excluirCreditos?: boolean;
+  /** Se true, inclui devoluções como registros negativos */
+  incluirDevolucoes?: boolean;
 }
 
 export async function getResumoFormasPagamento(
@@ -143,11 +147,21 @@ export async function getResumoFormasPagamento(
 ): Promise<ResumoFormaPagamento[]> {
   const options: ApiGetOptions = params.bypassCache ? { cache: false } : {};
   
-  const raw = await apiGet<ResumoFormaPagamentoRaw>('/vendas/resumo-formas-pagamento', {
+  const queryParams: Record<string, string | number | boolean | undefined> = {
     empresa: formatEmpresaParam(params.empresa),
     dataInicio: params.dataInicio,
     dataFim: params.dataFim,
-  }, options);
+  };
+  
+  // Adicionar parâmetros opcionais conforme documentação Railway
+  if (params.excluirCreditos !== undefined) {
+    queryParams.excluirCreditos = params.excluirCreditos;
+  }
+  if (params.incluirDevolucoes !== undefined) {
+    queryParams.incluirDevolucoes = params.incluirDevolucoes;
+  }
+  
+  const raw = await apiGet<ResumoFormaPagamentoRaw>('/vendas/resumo-formas-pagamento', queryParams, options);
 
   return raw.map((r) => ({
     codEmpresa: r.empresa_cod_logico ?? 0,
