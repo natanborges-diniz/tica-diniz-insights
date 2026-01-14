@@ -45,7 +45,6 @@ interface VendasDashboardLayoutProps {
   projecao: ProjecaoFechamento;
   // Ações
   reload: () => void;
-  reloadLive?: () => void;
 }
 
 function LoadingSkeleton() {
@@ -114,7 +113,6 @@ export function VendasDashboardLayout({
   metrics,
   projecao,
   reload,
-  reloadLive,
 }: VendasDashboardLayoutProps) {
   const isLoading = loading || loadingFormas;
   const showEmptyState = !dataLoaded && !loading;
@@ -267,7 +265,6 @@ export function VendasDashboardLayout({
         onDataFimChange={(v) => setFilters((p) => ({ ...p, dataFim: v }))}
         onEmpresaChange={(v) => setFilters((p) => ({ ...p, empresa: v === "ALL" ? "ALL" : Number(v) }))}
         onRefresh={reload}
-        onRefreshLive={reloadLive}
         isLoading={isLoading}
       />
 
