@@ -389,15 +389,49 @@ export function useVendasDashboard() {
           throw new Error('Supabase sem dados suficientes para o período');
         }
       }
-      // Estratégia 2: Período inclui hoje -> usar apenas Firebird (até cache diário existir)
-      // NOTA IMPORTANTE: O cache Supabase só tem dados mensais (último dia de cada mês),
-      // então NÃO PODEMOS usar a estratégia híbrida ainda. Usar apenas Firebird.
+      // Estratégia 2: Período inclui hoje -> Fallback gracioso
+      // 1. Buscar Supabase primeiro (dados parciais, mas instantâneos)
+      // 2. Mostrar imediatamente o que tiver disponível
+      // 3. Tentar Firebird em background com timeout de 15s
+      // 4. Se Firebird falhar, manter dados parciais do Supabase
       else if (!bypassCache && dataFim >= hoje) {
-        console.log('[useVendasDashboard] Usando Firebird direto (cache não é diário ainda)');
-        const startFirebird = performance.now();
+        console.log('[useVendasDashboard] Estratégia híbrida com fallback gracioso');
+        
+        // 1. Buscar Supabase primeiro (até ontem)
+        let dadosSupabase: AgregadoFormaPagamento[] = [];
+        let ultimaDataCache = ontemStr;
         
         try {
-          // Timeout de 30s para período atual
+          const startSupabase = performance.now();
+          dadosSupabase = await getVendasAgregado({
+            empresa,
+            dataInicio,
+            dataFim: ontemStr, // até ontem
+          });
+          const tempoSupabase = Math.round(performance.now() - startSupabase);
+          console.log(`[useVendasDashboard] Supabase: ${dadosSupabase.length} registros em ${tempoSupabase}ms`);
+        } catch (e) {
+          console.warn('[useVendasDashboard] Erro ao buscar Supabase:', e);
+        }
+        
+        // 2. Se tiver algo no Supabase, mostrar imediatamente como dados parciais
+        if (dadosSupabase.length > 0) {
+          const dadosConvertidos = await converterAgregadoParaResumo(dadosSupabase);
+          setDadosFormasPagamento(dadosConvertidos);
+          setFontesDados({ 
+            supabase: true, 
+            firebird: false, 
+            parcial: true,
+            ultimaDataCache,
+          });
+          setDataLoaded(true);
+          setLoading(false);
+          console.log('[useVendasDashboard] Dados parciais do Supabase exibidos, tentando Firebird em background...');
+        }
+        
+        // 3. Tentar Firebird em background (não bloqueia UI)
+        try {
+          const startFirebird = performance.now();
           const dadosFirebird = await Promise.race([
             getResumoFormasPagamento({
               empresa,
@@ -408,24 +442,34 @@ export function useVendasDashboard() {
               incluirDevolucoes: false,
             }),
             new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Firebird timeout (30s)')), 30000)
+              setTimeout(() => reject(new Error('Firebird timeout (15s)')), 15000)
             )
           ]) as ResumoFormaPagamento[];
           
           const tempoFirebird = Math.round(performance.now() - startFirebird);
           console.log(`[useVendasDashboard] Firebird: ${dadosFirebird.length} registros em ${tempoFirebird}ms`);
           
+          // Firebird respondeu! Usar dados completos
           setDadosFormasPagamento(dadosFirebird);
           setFontesDados({ supabase: false, firebird: true });
           setDataLoaded(true);
           setLoading(false);
         } catch (e) {
           console.warn('[useVendasDashboard] Firebird indisponível:', e);
-          setFontesDados({ supabase: false, firebird: false, parcial: true });
-          setError('Servidor indisponível. Tente novamente em alguns minutos.');
-          setDadosFormasPagamento([]);
-          setDataLoaded(true);
-          setLoading(false);
+          
+          // Firebird falhou - verificar se temos dados do Supabase como fallback
+          if (dadosSupabase.length > 0) {
+            // Já exibimos dados parciais acima, apenas atualizar estado
+            console.log('[useVendasDashboard] Mantendo dados parciais do Supabase');
+            // Estado já foi setado acima, não precisa fazer nada
+          } else {
+            // Nem Supabase nem Firebird têm dados
+            setFontesDados({ supabase: false, firebird: false, parcial: true });
+            setError('Servidor indisponível e cache vazio. Tente novamente em alguns minutos.');
+            setDadosFormasPagamento([]);
+            setDataLoaded(true);
+            setLoading(false);
+          }
         }
       }
       // Estratégia 3: Bypass cache ou período apenas hoje -> Firebird direto
