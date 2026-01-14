@@ -367,6 +367,8 @@ export function useVendasDashboard() {
         dataInicio,
         dataFim,
         bypassCache: dataFim >= hoje ? true : bypassCache, // Sempre sem cache se inclui hoje
+        excluirCreditos: true,   // Padrão recomendado: exclui "Créditos" dos resultados
+        incluirDevolucoes: false, // Padrão recomendado: não inclui devoluções
       });
       
       const tempoFirebird = Math.round(performance.now() - startFirebird);
