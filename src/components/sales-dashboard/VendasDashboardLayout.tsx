@@ -164,6 +164,17 @@ export function VendasDashboardLayout({
 
   // Métricas recalculadas com base nos filtros do gráfico
   const filteredMetrics = useMemo<VendasMetrics>(() => {
+    console.log('[VendasDashboardLayout] Recalculando métricas:', {
+      hasActiveFilters: chartFilter.hasActiveFilters,
+      dadosFormasPagamentoLength: dadosFormasPagamento.length,
+      filteredDadosFormasPagamentoLength: filteredDadosFormasPagamento.length,
+      metricsOriginal: {
+        totalBruto: metrics.totalBruto,
+        totalDesconto: metrics.totalDesconto,
+        descontoDisponivel: metrics.descontoDisponivel,
+      },
+    });
+
     // Se não há filtros ativos, retorna métricas originais
     if (!chartFilter.hasActiveFilters) return metrics;
 
@@ -198,6 +209,13 @@ export function VendasDashboardLayout({
     const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
     const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
 
+    console.log('[VendasDashboardLayout] Métricas filtradas calculadas:', {
+      totalBruto,
+      totalDesconto,
+      percentualDesconto,
+      descontoDisponivel: filteredDadosFormasPagamento.length > 0 && totalBruto > 0,
+    });
+
     return {
       totalVendido,
       totalCreditos,
@@ -210,7 +228,7 @@ export function VendasDashboardLayout({
       percentualDesconto,
       descontoDisponivel: filteredDadosFormasPagamento.length > 0 && totalBruto > 0,
     };
-  }, [metrics, chartFilter.hasActiveFilters, filteredDadosFormasPagamento]);
+  }, [metrics, chartFilter.hasActiveFilters, filteredDadosFormasPagamento, dadosFormasPagamento.length]);
 
   const handleViewModeChange = (mode: ViewMode) => {
     chartFilter.clearAllFilters();
