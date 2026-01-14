@@ -311,7 +311,12 @@ export function useVendasDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [erroDesconto, setErroDesconto] = useState<string | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [fontesDados, setFontesDados] = useState<{ supabase: boolean; firebird: boolean }>({ 
+  const [fontesDados, setFontesDados] = useState<{ 
+    supabase: boolean; 
+    firebird: boolean;
+    parcial?: boolean;
+    ultimaDataCache?: string;
+  }>({ 
     supabase: false, 
     firebird: false 
   });
@@ -380,39 +385,65 @@ export function useVendasDashboard() {
           throw new Error('Supabase sem dados para o período');
         }
       }
-      // Estratégia 2: Período inclui hoje -> híbrido
+      // Estratégia 2: Período inclui hoje -> híbrido com graceful degradation
       else if (!bypassCache && dataFim >= hoje && dataInicio < hoje) {
-        console.log('[useVendasDashboard] Híbrido: Supabase (histórico) + Firebird (hoje)');
+        console.log('[useVendasDashboard] Híbrido: Supabase (histórico) + tentativa Firebird (hoje)');
         
-        const startHibrido = performance.now();
+        // 1. Buscar Supabase primeiro (garantido funcionar, rápido)
+        const startSupabase = performance.now();
+        const dadosAgregados = await getVendasAgregado({
+          empresa,
+          dataInicio,
+          dataFim: ontemStr,
+        });
         
-        // Buscar em paralelo: Supabase (até ontem) + Firebird (apenas hoje)
-        const [dadosAgregados, dadosHoje] = await Promise.all([
-          getVendasAgregado({
-            empresa,
-            dataInicio,
-            dataFim: ontemStr,
-          }),
-          getResumoFormasPagamento({
-            empresa,
-            dataInicio: hoje,
-            dataFim: hoje,
-            bypassCache: true,
-            excluirCreditos: true,
-            incluirDevolucoes: false,
-          }),
-        ]);
-        
-        const tempoHibrido = Math.round(performance.now() - startHibrido);
-        console.log(`[useVendasDashboard] Híbrido: ${dadosAgregados.length} Supabase + ${dadosHoje.length} Firebird em ${tempoHibrido}ms`);
+        const tempoSupabase = Math.round(performance.now() - startSupabase);
+        console.log(`[useVendasDashboard] Supabase: ${dadosAgregados.length} registros em ${tempoSupabase}ms`);
         
         const dadosSupabaseConvertidos = await converterAgregadoParaResumo(dadosAgregados);
-        const dadosCombinados = combinarDados(dadosSupabaseConvertidos, dadosHoje);
         
-        setDadosFormasPagamento(dadosCombinados);
-        setFontesDados({ supabase: true, firebird: true });
+        // 2. Mostrar dados do Supabase imediatamente (não travar)
+        setDadosFormasPagamento(dadosSupabaseConvertidos);
+        setFontesDados({ supabase: true, firebird: false, ultimaDataCache: ontemStr });
         setDataLoaded(true);
         setLoading(false);
+        
+        // 3. Tentar Firebird em background (com timeout curto de 15s)
+        try {
+          console.log('[useVendasDashboard] Tentando Firebird (timeout 15s)...');
+          const startFirebird = performance.now();
+          
+          const dadosHoje = await Promise.race([
+            getResumoFormasPagamento({
+              empresa,
+              dataInicio: hoje,
+              dataFim: hoje,
+              bypassCache: true,
+              excluirCreditos: true,
+              incluirDevolucoes: false,
+            }),
+            new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error('Firebird timeout (15s)')), 15000)
+            )
+          ]) as ResumoFormaPagamento[];
+          
+          const tempoFirebird = Math.round(performance.now() - startFirebird);
+          console.log(`[useVendasDashboard] Firebird: ${dadosHoje.length} registros em ${tempoFirebird}ms`);
+          
+          // Se conseguir, combinar dados
+          const dadosCombinados = combinarDados(dadosSupabaseConvertidos, dadosHoje);
+          setDadosFormasPagamento(dadosCombinados);
+          setFontesDados({ supabase: true, firebird: true });
+        } catch (e) {
+          // Firebird falhou ou timeout, mas já temos dados do Supabase
+          console.warn('[useVendasDashboard] Firebird indisponível, usando apenas cache:', e);
+          setFontesDados({ 
+            supabase: true, 
+            firebird: false, 
+            parcial: true,
+            ultimaDataCache: ontemStr 
+          });
+        }
       }
       // Estratégia 3: Bypass cache ou período apenas hoje -> Firebird direto
       else {
