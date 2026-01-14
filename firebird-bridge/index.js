@@ -287,10 +287,11 @@ app.get('/api/v1/financeiro/dre', async (req, res) => {
 
 // ============================================
 // API v1 - Resumo por Empresa e Vendedor (com desconto)
+// Query sincronizada com Railway - usa CTEs para cálculo correto
 // ============================================
 app.get('/api/v1/vendas/resumo-empresa-vendedor', async (req, res) => {
   try {
-    const { dataInicio, dataFim, empresa } = req.query;
+    const { dataInicio, dataFim, empresa, excluirCreditos } = req.query;
 
     if (!dataInicio || !dataFim) {
       return res.status(400).json({ 
@@ -300,50 +301,171 @@ app.get('/api/v1/vendas/resumo-empresa-vendedor', async (req, res) => {
       });
     }
 
-    let whereClauses = [
-      `t.DATAEMISSAO >= '${dataInicio}'`,
-      `t.DATAEMISSAO <= '${dataFim}'`,
-      "no.TIPO = 1",  // Apenas vendas
-      getWhereEmpresasAtivas('e')
-    ];
+    // Determinar código da empresa para parâmetros
+    const codEmpresa = (!empresa || empresa === 'ALL' || empresa === 'null' || empresa === '') 
+      ? 0 // 0 = todas empresas (a query usa regra no CTE)
+      : parseInt(empresa);
+    
+    const pExcluiCreditos = excluirCreditos === '1' || excluirCreditos === 'true' ? 1 : 0;
 
-    if (empresa && empresa !== 'ALL' && empresa !== 'null' && empresa !== '') {
-      whereClauses.push(`e.codempresa = ${parseInt(empresa)}`);
-    }
-
-    const whereSQL = whereClauses.join(' AND ');
-
+    // Query com CTEs - parâmetros posicionais (5 parâmetros)
     const sql = `
+      WITH
+      P AS (
+        SELECT
+          CAST(${codEmpresa} AS INTEGER) AS P_EMPRESA,
+          CAST(${codEmpresa} AS INTEGER) AS P_EMPRESA2,
+          CAST('${dataInicio}' AS DATE) AS P_DATA_INI,
+          CAST('${dataFim}' AS DATE) AS P_DATA_FIM,
+          CAST(${pExcluiCreditos} AS INTEGER) AS P_EXCLUI_CREDITOS
+        FROM RDB$DATABASE
+      ),
+      empresas_filtradas AS (
+        SELECT e.COD_EMPRESA
+        FROM EMPRESA e
+        JOIN P ON 1=1
+        WHERE e.COD_EMPRESA NOT IN (${EMPRESAS_EXCLUIDAS.join(',')})
+          AND (
+            P.P_EMPRESA = 0
+            OR e.COD_EMPRESA = P.P_EMPRESA
+            OR (
+              P.P_EMPRESA2 IN (13, 18)
+              AND e.COD_EMPRESA IN (13, 18)
+            )
+          )
+      ),
+      tbempresa AS (
+        SELECT
+          e.COD_EMPRESA,
+          pe.NOME AS EMPRESA,
+          CASE WHEN e.COD_EMPRESA IN (13, 18) THEN 13 ELSE e.COD_EMPRESA END AS EMPRESA_COD_LOGICO,
+          CASE WHEN e.COD_EMPRESA IN (13, 18) THEN 'DINIZ SUPER' ELSE pe.NOME END AS EMPRESA_NOME_LOGICO
+        FROM EMPRESA e
+        JOIN PESSOA pe ON pe.COD_PESSOA = e.COD_EMPRESA
+        JOIN empresas_filtradas ef ON ef.COD_EMPRESA = e.COD_EMPRESA
+      ),
+      itens AS (
+        SELECT
+          t.COD_EMPRESAESTOQUE AS COD_EMPRESA,
+          s.COD_VENDEDOR AS COD_VENDEDOR,
+          pv.NOME AS VENDEDOR,
+          COUNT(DISTINCT t.COD_TRANSACAO) AS QTD_TRANSACAO,
+          SUM(ti.QUANTIDADE) AS QTD_PRODUTOS,
+          SUM(
+            COALESCE(ti.VALORORIGINAL, 0)
+            * COALESCE(ti.QUANTIDADE, 0)
+          ) AS TOTAL_BRUTO,
+          SUM(
+            COALESCE(ti.TOTAL, 0)
+            - COALESCE(ti.VALORDESCONTO, 0)
+            - COALESCE(ti.TOTALIPI, 0)
+          ) AS TOTAL_VENDIDO,
+          SUM(
+            (COALESCE(ti.VALORORIGINAL, 0) * COALESCE(ti.QUANTIDADE, 0))
+            - (COALESCE(ti.TOTAL, 0) - COALESCE(ti.VALORDESCONTO, 0) - COALESCE(ti.TOTALIPI, 0))
+          ) AS TOTAL_DESCONTO
+        FROM
+          P
+          JOIN TRANSACAO t ON 1=1
+          JOIN tbempresa emp ON emp.COD_EMPRESA = t.COD_EMPRESAESTOQUE
+          JOIN SAIDA s
+            ON s.COD_SAIDA = t.COD_TRANSACAO
+           AND (
+             s.COD_EMPRESA = t.COD_EMPRESAESTOQUE
+             OR (t.COD_EMPRESA IS NOT NULL AND s.COD_EMPRESA = t.COD_EMPRESA)
+           )
+          JOIN PESSOA pv ON pv.COD_PESSOA = s.COD_VENDEDOR
+          JOIN TRANSACAO_ITEM ti
+            ON ti.COD_TRANSACAO = t.COD_TRANSACAO
+           AND (
+             ti.COD_EMPRESA = t.COD_EMPRESAESTOQUE
+             OR (t.COD_EMPRESA IS NOT NULL AND ti.COD_EMPRESA = t.COD_EMPRESA)
+           )
+          JOIN NATUREZAOPERACAO nat ON nat.COD_NATUREZAOPERACAO = ti.COD_NATUREZAOPERACAO
+        WHERE
+          nat.TIPO = 1
+          AND t.DATAENCERRAMENTO BETWEEN P.P_DATA_INI AND P.P_DATA_FIM
+          AND (
+            P.P_EXCLUI_CREDITOS = 0
+            OR NOT EXISTS (
+              SELECT 1
+              FROM FINFATURATRANSACAO fft
+              JOIN FINLANCAMENTO fl ON fl.COD_FATURATRANSACAO = fft.COD_FATURATRANSACAO
+              JOIN FINLANCAMENTOPARCELA flp ON flp.COD_LANCAMENTO = fl.COD_LANCAMENTO
+              JOIN FINFORMAPAGAMENTO ffp ON ffp.COD_FORMAPAGAMENTO = flp.COD_FORMAPAGAMENTO
+              WHERE fft.COD_FATURATRANSACAO = t.COD_FATURATRANSACAO
+                AND ffp.COD_FORMAPAGAMENTOTIPO = 6
+            )
+          )
+        GROUP BY
+          t.COD_EMPRESAESTOQUE,
+          s.COD_VENDEDOR,
+          pv.NOME
+      ),
+      creditos AS (
+        SELECT
+          t.COD_EMPRESAESTOQUE AS COD_EMPRESA,
+          s.COD_VENDEDOR AS COD_VENDEDOR,
+          SUM(
+            COALESCE(
+              IIF(flp.DATAPAGAMENTO IS NULL, flp.VALOR, flp.VALORPAGO),
+              0
+            )
+          ) AS TOTAL_CREDITOS
+        FROM
+          P
+          JOIN TRANSACAO t ON 1=1
+          JOIN tbempresa emp ON emp.COD_EMPRESA = t.COD_EMPRESAESTOQUE
+          JOIN NATUREZAOPERACAO nat ON nat.COD_NATUREZAOPERACAO = t.COD_NATUREZAOPERACAO
+          JOIN SAIDA s
+            ON s.COD_SAIDA = t.COD_TRANSACAO
+           AND (
+             s.COD_EMPRESA = t.COD_EMPRESAESTOQUE
+             OR (t.COD_EMPRESA IS NOT NULL AND s.COD_EMPRESA = t.COD_EMPRESA)
+           )
+          JOIN FINFATURATRANSACAO fft ON fft.COD_FATURATRANSACAO = t.COD_FATURATRANSACAO
+          JOIN FINLANCAMENTO fl ON fl.COD_FATURATRANSACAO = fft.COD_FATURATRANSACAO
+          JOIN FINLANCAMENTOPARCELA flp ON flp.COD_LANCAMENTO = fl.COD_LANCAMENTO
+          JOIN FINFORMAPAGAMENTO ffp ON ffp.COD_FORMAPAGAMENTO = flp.COD_FORMAPAGAMENTO
+        WHERE
+          nat.TIPO = 1
+          AND t.DATAEMISSAO BETWEEN P.P_DATA_INI AND P.P_DATA_FIM
+          AND ffp.COD_FORMAPAGAMENTOTIPO = 6
+          AND P.P_EXCLUI_CREDITOS = 0
+        GROUP BY
+          t.COD_EMPRESAESTOQUE,
+          s.COD_VENDEDOR
+      )
       SELECT
-        e.CODEMPRESA AS cod_empresa,
-        e.NOMEFANTASIA AS empresa,
-        e.CODEMPRESA AS empresa_cod_logico,
-        e.NOMEFANTASIA AS empresa_nome_logico,
-        v.CODVENDEDOR AS cod_vendedor,
-        v.NOME AS vendedor,
-        COUNT(DISTINCT t.IDTRANSACAO) AS qtd_transacao,
-        SUM(ti.QUANTIDADE) AS qtd_produtos,
-        SUM(ti.VALORORIGINAL) AS total_bruto,
-        SUM(ti.VALORORIGINAL - COALESCE(ti.VALORDESCONTO, 0)) AS total_vendido,
-        SUM(COALESCE(ti.VALORDESCONTO, 0)) AS total_desconto,
-        CASE 
-          WHEN SUM(ti.VALORORIGINAL) > 0 
-          THEN (SUM(COALESCE(ti.VALORDESCONTO, 0)) / SUM(ti.VALORORIGINAL)) * 100
-          ELSE 0 
-        END AS perc_desconto,
-        0 AS total_creditos,
-        SUM(ti.VALORORIGINAL - COALESCE(ti.VALORDESCONTO, 0)) AS total_vendido_sem_creditos
-      FROM TRANSACAO t
-      INNER JOIN TRANSACAO_ITEM ti ON ti.IDTRANSACAO = t.IDTRANSACAO
-      INNER JOIN NATUREZAOPERACAO no ON no.IDNATUREZAOPERACAO = t.IDNATUREZAOPERACAO
-      INNER JOIN EMPRESA e ON e.CODEMPRESA = t.CODEMPRESA
-      INNER JOIN VENDEDOR v ON v.CODVENDEDOR = t.CODVENDEDOR
-      WHERE ${whereSQL}
-      GROUP BY e.CODEMPRESA, e.NOMEFANTASIA, v.CODVENDEDOR, v.NOME
-      ORDER BY total_vendido DESC
+        emp.COD_EMPRESA,
+        emp.EMPRESA,
+        emp.EMPRESA_COD_LOGICO,
+        emp.EMPRESA_NOME_LOGICO,
+        i.COD_VENDEDOR,
+        i.VENDEDOR,
+        i.QTD_TRANSACAO,
+        i.QTD_PRODUTOS,
+        i.TOTAL_BRUTO,
+        i.TOTAL_VENDIDO,
+        i.TOTAL_DESCONTO,
+        CASE
+          WHEN i.TOTAL_BRUTO = 0 THEN 0
+          ELSE (i.TOTAL_DESCONTO / NULLIF(i.TOTAL_BRUTO, 0)) * 100
+        END AS PERC_DESCONTO,
+        COALESCE(c.TOTAL_CREDITOS, 0) AS TOTAL_CREDITOS,
+        (i.TOTAL_VENDIDO - COALESCE(c.TOTAL_CREDITOS, 0)) AS TOTAL_VENDIDO_SEM_CREDITOS
+      FROM
+        itens i
+        JOIN tbempresa emp ON emp.COD_EMPRESA = i.COD_EMPRESA
+        LEFT JOIN creditos c
+          ON c.COD_EMPRESA = i.COD_EMPRESA
+         AND c.COD_VENDEDOR = i.COD_VENDEDOR
+      ORDER BY
+        emp.EMPRESA_COD_LOGICO,
+        i.VENDEDOR
     `;
 
-    console.log('[API] GET /api/v1/vendas/resumo-empresa-vendedor', { empresa: empresa || 'ALL', dataInicio, dataFim });
+    console.log('[API] GET /api/v1/vendas/resumo-empresa-vendedor', { empresa: empresa || 'ALL', dataInicio, dataFim, excluirCreditos: pExcluiCreditos });
     const rows = await executeQuery(sql);
     return apiResponse(res, rows);
   } catch (error) {
@@ -353,10 +475,11 @@ app.get('/api/v1/vendas/resumo-empresa-vendedor', async (req, res) => {
 
 // ============================================
 // API v1 - Resumo por Forma de Pagamento
+// Query sincronizada com Railway - usa CTEs com cálculo proporcional
 // ============================================
 app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
   try {
-    const { dataInicio, dataFim, empresa } = req.query;
+    const { dataInicio, dataFim, empresa, excluirCreditos, incluirDevolucoes } = req.query;
 
     if (!dataInicio || !dataFim) {
       return res.status(400).json({ 
@@ -366,65 +489,269 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
       });
     }
 
-    let whereClauses = [
-      `t.DATAEMISSAO >= '${dataInicio}'`,
-      `t.DATAEMISSAO <= '${dataFim}'`,
-      "no.TIPO = 1",
-      getWhereEmpresasAtivas('e')
-    ];
+    // Determinar código da empresa para parâmetros
+    const codEmpresa = (!empresa || empresa === 'ALL' || empresa === 'null' || empresa === '') 
+      ? 0 // 0 = todas empresas
+      : parseInt(empresa);
+    
+    const pExcluiCreditos = excluirCreditos === '1' || excluirCreditos === 'true' ? 1 : 0;
+    const pIncluiDevolucoes = incluirDevolucoes === '1' || incluirDevolucoes === 'true' ? 1 : 0;
 
-    if (empresa && empresa !== 'ALL' && empresa !== 'null' && empresa !== '') {
-      whereClauses.push(`e.codempresa = ${parseInt(empresa)}`);
-    }
-
-    const whereSQL = whereClauses.join(' AND ');
-
-    // Query corrigida - usa subquery para calcular desconto por transação
-    // evitando duplicação causada pelo JOIN com múltiplas formas de pagamento
+    // Query com CTEs - 10 parâmetros (empresa×2, datas vendas, datas convênio, datas devolução, flags)
     const sql = `
-      SELECT
-        sub.empresa,
-        sub.empresa_cod_logico,
-        sub.empresa_nome_logico,
-        sub.vendedor,
-        sub.formapagamento,
-        COUNT(DISTINCT sub.IDTRANSACAO) AS qtd_vendas,
-        SUM(sub.valor_pago) AS totalgeral,
-        SUM(sub.total_bruto_transacao) AS total_bruto,
-        SUM(sub.total_desconto_transacao) AS total_desconto,
-        CASE 
-          WHEN SUM(sub.total_bruto_transacao) > 0 
-          THEN (SUM(sub.total_desconto_transacao) / SUM(sub.total_bruto_transacao)) * 100
-          ELSE 0 
-        END AS perc_desconto
-      FROM (
+      WITH
+      P AS (
         SELECT
-          t.IDTRANSACAO,
-          e.NOMEFANTASIA AS empresa,
-          e.CODEMPRESA AS empresa_cod_logico,
-          e.NOMEFANTASIA AS empresa_nome_logico,
-          v.NOME AS vendedor,
-          fp.DESCRICAO AS formapagamento,
-          tp.VALORPAGO AS valor_pago,
-          (SELECT SUM(ti2.VALORORIGINAL) FROM TRANSACAO_ITEM ti2 WHERE ti2.IDTRANSACAO = t.IDTRANSACAO) 
-            * (tp.VALORPAGO / NULLIF((SELECT SUM(tp2.VALORPAGO) FROM TRANSACAO_PAGAMENTO tp2 WHERE tp2.IDTRANSACAO = t.IDTRANSACAO), 0)) 
-            AS total_bruto_transacao,
-          (SELECT SUM(COALESCE(ti2.VALORDESCONTO, 0)) FROM TRANSACAO_ITEM ti2 WHERE ti2.IDTRANSACAO = t.IDTRANSACAO) 
-            * (tp.VALORPAGO / NULLIF((SELECT SUM(tp2.VALORPAGO) FROM TRANSACAO_PAGAMENTO tp2 WHERE tp2.IDTRANSACAO = t.IDTRANSACAO), 0)) 
-            AS total_desconto_transacao
-        FROM TRANSACAO t
-        INNER JOIN NATUREZAOPERACAO no ON no.IDNATUREZAOPERACAO = t.IDNATUREZAOPERACAO
-        INNER JOIN EMPRESA e ON e.CODEMPRESA = t.CODEMPRESA
-        INNER JOIN VENDEDOR v ON v.CODVENDEDOR = t.CODVENDEDOR
-        INNER JOIN TRANSACAO_PAGAMENTO tp ON tp.IDTRANSACAO = t.IDTRANSACAO
-        INNER JOIN FORMAPAGAMENTO fp ON fp.IDFORMAPAGAMENTO = tp.IDFORMAPAGAMENTO
-        WHERE ${whereSQL}
-      ) sub
-      GROUP BY sub.empresa_cod_logico, sub.empresa, sub.empresa_nome_logico, sub.vendedor, sub.formapagamento
-      ORDER BY totalgeral DESC
+          CAST(${codEmpresa} AS INTEGER) AS P_EMPRESA,
+          CAST(${codEmpresa} AS INTEGER) AS P_EMPRESA2,
+          CAST('${dataInicio}' AS DATE) AS P_DATA_VENDAS_INI,
+          CAST('${dataFim}' AS DATE) AS P_DATA_VENDAS_FIM,
+          CAST('${dataInicio}' AS DATE) AS P_DATA_CONVENIO_INI,
+          CAST('${dataFim}' AS DATE) AS P_DATA_CONVENIO_FIM,
+          CAST('${dataInicio}' AS DATE) AS P_DATA_DEVOLUCAO_INI,
+          CAST('${dataFim}' AS DATE) AS P_DATA_DEVOLUCAO_FIM,
+          CAST(${pExcluiCreditos} AS INTEGER) AS P_EXCLUI_CREDITOS,
+          CAST(${pIncluiDevolucoes} AS INTEGER) AS P_INCLUI_DEVOLUCOES
+        FROM RDB$DATABASE
+      ),
+      empresas_filtradas AS (
+        SELECT e.COD_EMPRESA
+        FROM EMPRESA e
+        JOIN P ON 1=1
+        WHERE e.COD_EMPRESA NOT IN (${EMPRESAS_EXCLUIDAS.join(',')})
+          AND (
+            P.P_EMPRESA = 0
+            OR e.COD_EMPRESA = P.P_EMPRESA
+            OR (
+              P.P_EMPRESA2 IN (13, 18)
+              AND e.COD_EMPRESA IN (13, 18)
+            )
+          )
+      ),
+      tbempresa AS (
+        SELECT
+          e.COD_EMPRESA,
+          p.NOME AS EMPRESA,
+          CASE WHEN e.COD_EMPRESA IN (13, 18) THEN 13 ELSE e.COD_EMPRESA END AS EMPRESA_COD_LOGICO,
+          CASE WHEN e.COD_EMPRESA IN (13, 18) THEN 'DINIZ SUPER' ELSE p.NOME END AS EMPRESA_NOME_LOGICO
+        FROM EMPRESA e
+        JOIN PESSOA p ON p.COD_PESSOA = e.COD_EMPRESA
+        JOIN empresas_filtradas ef ON ef.COD_EMPRESA = e.COD_EMPRESA
+      ),
+      itens_por_transacao AS (
+        SELECT
+          ti.COD_TRANSACAO,
+          ti.COD_EMPRESA,
+          SUM(COALESCE(ti.VALORORIGINAL, 0) * COALESCE(ti.QUANTIDADE, 0)) AS TOTAL_BRUTO,
+          SUM(COALESCE(ti.TOTAL, 0) - COALESCE(ti.TOTALIPI, 0)) AS TOTAL_VENDIDO
+        FROM TRANSACAO_ITEM ti
+        GROUP BY ti.COD_TRANSACAO, ti.COD_EMPRESA
+      ),
+      pagamentos_por_transacao AS (
+        SELECT
+          transacao.COD_TRANSACAO,
+          transacao.COD_EMPRESA,
+          finformapagamento.COD_FORMAPAGAMENTOTIPO AS COD_FORMAPAGAMENTOTIPO,
+          SUM(
+            COALESCE(
+              IIF(finlancamentoparcela.DATAPAGAMENTO IS NULL,
+                finlancamentoparcela.VALOR,
+                finlancamentoparcela.VALORPAGO
+              ),
+              0
+            )
+          ) AS TOTAL_PAGO_FORMA
+        FROM
+          transacao
+          JOIN finfaturatransacao ON finfaturatransacao.COD_FATURATRANSACAO = transacao.COD_FATURATRANSACAO
+          JOIN finlancamento ON finlancamento.COD_FATURATRANSACAO = finfaturatransacao.COD_FATURATRANSACAO
+          JOIN finlancamentoparcela ON finlancamentoparcela.COD_LANCAMENTO = finlancamento.COD_LANCAMENTO
+          JOIN finformapagamento ON finformapagamento.COD_FORMAPAGAMENTO = finlancamentoparcela.COD_FORMAPAGAMENTO
+        GROUP BY transacao.COD_TRANSACAO, transacao.COD_EMPRESA, finformapagamento.COD_FORMAPAGAMENTOTIPO
+      ),
+      pagamentos_totais AS (
+        SELECT
+          COD_TRANSACAO,
+          COD_EMPRESA,
+          SUM(TOTAL_PAGO_FORMA) AS TOTAL_PAGO_TRANSACAO
+        FROM pagamentos_por_transacao
+        GROUP BY COD_TRANSACAO, COD_EMPRESA
+      )
+      
+      SELECT
+        tbempresa.EMPRESA,
+        tbempresa.EMPRESA_COD_LOGICO,
+        tbempresa.EMPRESA_NOME_LOGICO,
+        vendedor.NOME AS VENDEDOR,
+        CASE finformapagamento.COD_FORMAPAGAMENTOTIPO
+          WHEN 1 THEN 'DINHEIRO'
+          WHEN 2 THEN 'CHEQUE'
+          WHEN 3 THEN
+            CASE
+              WHEN fincartaocreditotipo.CREDITO = 'T' THEN 'CARTAO CREDITO'
+              ELSE 'CARTAO DEBITO'
+            END
+          WHEN 4 THEN 'BANCO'
+          WHEN 5 THEN 'CARNE'
+          WHEN 6 THEN 'CREDITOS'
+          ELSE 'OUTROS'
+        END AS FORMAPAGAMENTO,
+        SUM(
+          COALESCE(
+            IIF(finlancamentoparcela.DATAPAGAMENTO IS NULL,
+              finlancamentoparcela.VALOR,
+              finlancamentoparcela.VALORPAGO
+            ),
+            0
+          )
+        ) AS TOTALGERAL,
+        COUNT(DISTINCT transacao.COD_TRANSACAO) AS QTD_VENDAS,
+        SUM(
+          COALESCE(itens.TOTAL_BRUTO, 0)
+          * COALESCE(pagamentos.TOTAL_PAGO_FORMA, 0)
+          / NULLIF(COALESCE(pagamentos_totais.TOTAL_PAGO_TRANSACAO, 0), 0)
+        ) AS TOTAL_BRUTO,
+        SUM(
+          (COALESCE(itens.TOTAL_BRUTO, 0) - COALESCE(itens.TOTAL_VENDIDO, 0))
+          * COALESCE(pagamentos.TOTAL_PAGO_FORMA, 0)
+          / NULLIF(COALESCE(pagamentos_totais.TOTAL_PAGO_TRANSACAO, 0), 0)
+        ) AS TOTAL_DESCONTO,
+        CASE
+          WHEN SUM(COALESCE(itens.TOTAL_BRUTO, 0)) = 0 THEN 0
+          ELSE (
+            SUM(
+              (COALESCE(itens.TOTAL_BRUTO, 0) - COALESCE(itens.TOTAL_VENDIDO, 0))
+              * COALESCE(pagamentos.TOTAL_PAGO_FORMA, 0)
+              / NULLIF(COALESCE(pagamentos_totais.TOTAL_PAGO_TRANSACAO, 0), 0)
+            )
+            / NULLIF(
+              SUM(
+                COALESCE(itens.TOTAL_BRUTO, 0)
+                * COALESCE(pagamentos.TOTAL_PAGO_FORMA, 0)
+                / NULLIF(COALESCE(pagamentos_totais.TOTAL_PAGO_TRANSACAO, 0), 0)
+              ),
+              0
+            )
+          ) * 100
+        END AS PERC_DESCONTO
+      FROM
+        P
+        JOIN transacao ON 1=1
+        JOIN naturezaoperacao ON naturezaoperacao.COD_NATUREZAOPERACAO = transacao.COD_NATUREZAOPERACAO
+        JOIN saida ON saida.COD_SAIDA = transacao.COD_TRANSACAO AND saida.COD_EMPRESA = transacao.COD_EMPRESA
+        JOIN pessoa vendedor ON vendedor.COD_PESSOA = saida.COD_VENDEDOR
+        JOIN tbempresa ON tbempresa.COD_EMPRESA = transacao.COD_EMPRESAESTOQUE
+        JOIN finfaturatransacao ON finfaturatransacao.COD_FATURATRANSACAO = transacao.COD_FATURATRANSACAO
+        JOIN finlancamento ON finlancamento.COD_FATURATRANSACAO = finfaturatransacao.COD_FATURATRANSACAO
+        JOIN finlancamentoparcela ON finlancamentoparcela.COD_LANCAMENTO = finlancamento.COD_LANCAMENTO
+        JOIN finformapagamento ON finformapagamento.COD_FORMAPAGAMENTO = finlancamentoparcela.COD_FORMAPAGAMENTO
+        JOIN pagamentos_por_transacao pagamentos
+          ON pagamentos.COD_TRANSACAO = transacao.COD_TRANSACAO
+         AND pagamentos.COD_EMPRESA = transacao.COD_EMPRESA
+         AND pagamentos.COD_FORMAPAGAMENTOTIPO = finformapagamento.COD_FORMAPAGAMENTOTIPO
+        JOIN pagamentos_totais ON pagamentos_totais.COD_TRANSACAO = transacao.COD_TRANSACAO AND pagamentos_totais.COD_EMPRESA = transacao.COD_EMPRESA
+        LEFT JOIN itens_por_transacao itens ON itens.COD_TRANSACAO = transacao.COD_TRANSACAO AND itens.COD_EMPRESA = transacao.COD_EMPRESA
+        LEFT JOIN finformapagamentocartao ON finformapagamentocartao.COD_FORMAPAGAMENTOCARTAO = finformapagamento.COD_FORMAPAGAMENTO
+        LEFT JOIN fincartaocreditotipo ON fincartaocreditotipo.COD_CARTAOCREDITOTIPO = finformapagamentocartao.COD_CARTAOCREDITOTIPO
+      WHERE
+        naturezaoperacao.TIPO = 1
+        AND transacao.DATAEMISSAO BETWEEN P.P_DATA_VENDAS_INI AND P.P_DATA_VENDAS_FIM
+        AND (P.P_EXCLUI_CREDITOS = 0 OR finformapagamento.COD_FORMAPAGAMENTOTIPO <> 6)
+      GROUP BY
+        tbempresa.EMPRESA,
+        tbempresa.EMPRESA_COD_LOGICO,
+        tbempresa.EMPRESA_NOME_LOGICO,
+        vendedor.NOME,
+        CASE finformapagamento.COD_FORMAPAGAMENTOTIPO
+          WHEN 1 THEN 'DINHEIRO'
+          WHEN 2 THEN 'CHEQUE'
+          WHEN 3 THEN
+            CASE
+              WHEN fincartaocreditotipo.CREDITO = 'T' THEN 'CARTAO CREDITO'
+              ELSE 'CARTAO DEBITO'
+            END
+          WHEN 4 THEN 'BANCO'
+          WHEN 5 THEN 'CARNE'
+          WHEN 6 THEN 'CREDITOS'
+          ELSE 'OUTROS'
+        END
+      
+      UNION ALL
+      
+      SELECT
+        tbempresa.EMPRESA,
+        tbempresa.EMPRESA_COD_LOGICO,
+        tbempresa.EMPRESA_NOME_LOGICO,
+        vendedor.NOME AS VENDEDOR,
+        'CONVENIO' AS FORMAPAGAMENTO,
+        SUM(transacaoconvenioparcela.VALOR) AS TOTALGERAL,
+        COUNT(DISTINCT transacao.COD_TRANSACAO) AS QTD_VENDAS,
+        SUM(COALESCE(itens.TOTAL_BRUTO, 0)) AS TOTAL_BRUTO,
+        SUM(COALESCE(itens.TOTAL_BRUTO, 0) - COALESCE(itens.TOTAL_VENDIDO, 0)) AS TOTAL_DESCONTO,
+        CASE
+          WHEN SUM(COALESCE(itens.TOTAL_BRUTO, 0)) = 0 THEN 0
+          ELSE (
+            SUM(COALESCE(itens.TOTAL_BRUTO, 0) - COALESCE(itens.TOTAL_VENDIDO, 0))
+            / NULLIF(SUM(COALESCE(itens.TOTAL_BRUTO, 0)), 0)
+          ) * 100
+        END AS PERC_DESCONTO
+      FROM
+        P
+        JOIN transacao ON 1=1
+        JOIN transacaoconvenioparcela
+          ON transacaoconvenioparcela.COD_TRANSACAO = transacao.COD_TRANSACAO
+         AND transacaoconvenioparcela.COD_EMPRESA = transacao.COD_EMPRESA
+        JOIN saida ON saida.COD_SAIDA = transacao.COD_TRANSACAO AND saida.COD_EMPRESA = transacao.COD_EMPRESA
+        JOIN pessoa vendedor ON vendedor.COD_PESSOA = saida.COD_VENDEDOR
+        JOIN tbempresa ON tbempresa.COD_EMPRESA = transacao.COD_EMPRESAESTOQUE
+        LEFT JOIN itens_por_transacao itens ON itens.COD_TRANSACAO = transacao.COD_TRANSACAO AND itens.COD_EMPRESA = transacao.COD_EMPRESA
+      WHERE
+        transacao.DATAEMISSAO BETWEEN P.P_DATA_CONVENIO_INI AND P.P_DATA_CONVENIO_FIM
+      GROUP BY
+        tbempresa.EMPRESA,
+        tbempresa.EMPRESA_COD_LOGICO,
+        tbempresa.EMPRESA_NOME_LOGICO,
+        vendedor.NOME
+      
+      UNION ALL
+      
+      SELECT
+        tbempresa.EMPRESA,
+        tbempresa.EMPRESA_COD_LOGICO,
+        tbempresa.EMPRESA_NOME_LOGICO,
+        vendedor.NOME AS VENDEDOR,
+        'DEVOLUCAO' AS FORMAPAGAMENTO,
+        SUM(transacaodevolucao.TOTAL) * -1 AS TOTALGERAL,
+        COUNT(DISTINCT transacaodevolucao.COD_TRANSACAO) AS QTD_VENDAS,
+        SUM(COALESCE(itens.TOTAL_BRUTO, 0)) * -1 AS TOTAL_BRUTO,
+        SUM(COALESCE(itens.TOTAL_BRUTO, 0) - COALESCE(itens.TOTAL_VENDIDO, 0)) * -1 AS TOTAL_DESCONTO,
+        CASE
+          WHEN SUM(COALESCE(itens.TOTAL_BRUTO, 0)) = 0 THEN 0
+          ELSE (
+            SUM(COALESCE(itens.TOTAL_BRUTO, 0) - COALESCE(itens.TOTAL_VENDIDO, 0))
+            / NULLIF(SUM(COALESCE(itens.TOTAL_BRUTO, 0)), 0)
+          ) * 100
+        END AS PERC_DESCONTO
+      FROM
+        P
+        JOIN transacao transacaodevolucao ON 1=1
+        JOIN entradanotafiscaldevolucao
+          ON transacaodevolucao.COD_TRANSACAO = entradanotafiscaldevolucao.COD_ENTRADANOTAFISCALDEVOLUCAO
+         AND transacaodevolucao.COD_EMPRESA = entradanotafiscaldevolucao.COD_EMPRESA
+        JOIN pessoa vendedor ON vendedor.COD_PESSOA = entradanotafiscaldevolucao.COD_VENDEDOR
+        JOIN tbempresa ON tbempresa.COD_EMPRESA = transacaodevolucao.COD_EMPRESAESTOQUE
+        LEFT JOIN itens_por_transacao itens ON itens.COD_TRANSACAO = transacaodevolucao.COD_TRANSACAO AND itens.COD_EMPRESA = transacaodevolucao.COD_EMPRESA
+      WHERE
+        P.P_INCLUI_DEVOLUCOES = 1
+        AND transacaodevolucao.DATAENCERRAMENTO BETWEEN P.P_DATA_DEVOLUCAO_INI AND P.P_DATA_DEVOLUCAO_FIM
+      GROUP BY
+        tbempresa.EMPRESA,
+        tbempresa.EMPRESA_COD_LOGICO,
+        tbempresa.EMPRESA_NOME_LOGICO,
+        vendedor.NOME
     `;
 
-    console.log('[API] GET /api/v1/vendas/resumo-formas-pagamento', { empresa: empresa || 'ALL', dataInicio, dataFim });
+    console.log('[API] GET /api/v1/vendas/resumo-formas-pagamento', { empresa: empresa || 'ALL', dataInicio, dataFim, excluirCreditos: pExcluiCreditos, incluirDevolucoes: pIncluiDevolucoes });
     const rows = await executeQuery(sql);
     return apiResponse(res, rows);
   } catch (error) {
