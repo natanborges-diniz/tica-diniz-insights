@@ -137,11 +137,29 @@ export function VendasDashboardLayout({
     return dadosComDesconto.filter(d => d.vendedor === vendedorValue);
   }, [dadosComDesconto, chartFilter]);
 
-  // Dados filtrados por forma de pagamento
+  // Dados filtrados por loja e/ou forma de pagamento
   const filteredDadosFormasPagamento = useMemo(() => {
+    let dados = dadosFormasPagamento;
+    
+    // Filtrar por loja (se selecionada no gráfico)
+    const lojaValue = chartFilter.getFilterValue('loja');
+    if (lojaValue) {
+      dados = dados.filter(d => d.empresa === lojaValue);
+    }
+    
+    // Filtrar por vendedor (se selecionado no gráfico)
+    const vendedorValue = chartFilter.getFilterValue('vendedor');
+    if (vendedorValue) {
+      dados = dados.filter(d => d.vendedor === vendedorValue);
+    }
+    
+    // Filtrar por forma de pagamento
     const formaValue = chartFilter.getFilterValue('formaPagamento');
-    if (!formaValue) return dadosFormasPagamento;
-    return dadosFormasPagamento.filter(d => d.formaPagamento === formaValue);
+    if (formaValue) {
+      dados = dados.filter(d => d.formaPagamento === formaValue);
+    }
+    
+    return dados;
   }, [dadosFormasPagamento, chartFilter]);
 
   // Métricas recalculadas com base nos filtros do gráfico
