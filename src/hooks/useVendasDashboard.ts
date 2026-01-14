@@ -116,6 +116,10 @@ async function converterAgregadoParaResumo(
 }
 
 // Função para calcular métricas de formas de pagamento (inclui desconto do endpoint rápido!)
+// NOTA IMPORTANTE: 
+// - "CREDITOS" são uma forma de pagamento válida (saldo do cliente usado como pagamento)
+// - "DEVOLUCAO" representa cancelamentos e deve ser excluída das vendas válidas
+// - totalVendidoSemCreditos = vendas válidas INCLUINDO créditos, EXCLUINDO devoluções
 function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
   let totalVendido = 0;
   let totalCreditos = 0;
@@ -143,7 +147,9 @@ function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
     }
   });
 
-  const totalVendidoSemCreditos = totalVendido - totalCreditos;
+  // IMPORTANTE: Créditos SÃO vendas válidas (é uma forma de pagamento)
+  // Não subtraímos créditos - apenas devoluções são excluídas
+  const totalVendidoSemCreditos = totalVendido; // Créditos já estão incluídos
   const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
   const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
 
@@ -180,14 +186,18 @@ function calcularMetricasDesconto(dados: ResumoEmpresaVendedorAPI[]) {
 }
 
 // Função para agregar dados de formas de pagamento por loja (agora inclui desconto do endpoint rápido)
+// NOTA IMPORTANTE: 
+// - "CREDITOS" são uma forma de pagamento válida (saldo do cliente usado como pagamento)
+// - "DEVOLUCAO" representa cancelamentos/devoluções e deve ser excluída das vendas válidas
+// - totalVendidoSemCreditos = vendas válidas EXCLUINDO devoluções (créditos SÃO contados como venda)
 function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
-  // Agregar formas de pagamento por empresa, incluindo desconto
+  // Agregar formas de pagamento por empresa
   const mapaFormas = new Map<number, {
     empresa: string;
     codEmpresa: number;
-    totalVendido: number;
-    totalCreditos: number;
-    totalDevolucoes: number;
+    totalVendido: number;      // Soma de TODAS as formas (exceto devoluções)
+    totalCreditos: number;     // Apenas para referência/exibição
+    totalDevolucoes: number;   // Valor absoluto das devoluções
     qtdTransacao: number;
     totalBruto: number;
     totalDesconto: number;
@@ -200,7 +210,9 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
     const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
     const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
     
-    const valorVenda = (isDevolucao || isCredito) ? 0 : d.totalGeral;
+    // Devoluções são excluídas do totalVendido
+    // Créditos SÃO contados como venda (é uma forma de pagamento válida)
+    const valorVenda = isDevolucao ? 0 : d.totalGeral;
     const valorCredito = isCredito ? d.totalGeral : 0;
     const valorDevolucao = isDevolucao ? Math.abs(d.totalGeral) : 0;
     const qtdVendas = isDevolucao ? 0 : d.qtdVendas;
@@ -209,7 +221,7 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
     const valorDesconto = isDevolucao ? 0 : (d.totalDesconto ?? 0);
     
     if (existing) {
-      existing.totalVendido += valorVenda + valorCredito;
+      existing.totalVendido += valorVenda;
       existing.totalCreditos += valorCredito;
       existing.totalDevolucoes += valorDevolucao;
       existing.qtdTransacao += qtdVendas;
@@ -219,7 +231,7 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
       mapaFormas.set(d.codEmpresa, {
         empresa: d.empresa,
         codEmpresa: d.codEmpresa,
-        totalVendido: valorVenda + valorCredito,
+        totalVendido: valorVenda,
         totalCreditos: valorCredito,
         totalDevolucoes: valorDevolucao,
         qtdTransacao: qtdVendas,
@@ -230,8 +242,11 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
   });
 
   // Converter para array e calcular percentuais
+  // IMPORTANTE: totalVendidoSemCreditos agora = totalVendido (créditos já estão incluídos, devoluções excluídas)
   return Array.from(mapaFormas.values()).map((item) => {
-    const totalVendidoSemCreditos = item.totalVendido - item.totalCreditos;
+    // Créditos são vendas válidas, então NÃO subtraímos
+    // O nome "totalVendidoSemCreditos" é mantido para compatibilidade, mas representa vendas líquidas (sem devoluções)
+    const totalVendidoSemCreditos = item.totalVendido;
     const ticketMedio = item.qtdTransacao > 0 ? totalVendidoSemCreditos / item.qtdTransacao : 0;
     const percentualDesconto = item.totalBruto > 0 ? (item.totalDesconto / item.totalBruto) * 100 : 0;
     
