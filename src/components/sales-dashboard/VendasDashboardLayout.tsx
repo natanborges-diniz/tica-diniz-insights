@@ -1,7 +1,7 @@
 // src/components/sales-dashboard/VendasDashboardLayout.tsx
 
 import { useState, useMemo } from "react";
-import { RefreshCw, AlertCircle, Building2, Users, Info } from "lucide-react";
+import { RefreshCw, AlertCircle, Building2, Users, Info, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,6 +30,13 @@ interface VendasDashboardLayoutProps {
   dadosFormasPagamento: ResumoFormaPagamento[];
   dadosComDesconto: ResumoEmpresaVendedor[];
   dataLoaded: boolean;
+  // Fonte de dados
+  fontesDados?: {
+    supabase: boolean;
+    firebird: boolean;
+    parcial?: boolean;
+    ultimaDataCache?: string;
+  };
   // Loading/Error
   loading: boolean;
   loadingFormas: boolean;
@@ -102,6 +109,7 @@ export function VendasDashboardLayout({
   dadosFormasPagamento,
   dadosComDesconto,
   dataLoaded,
+  fontesDados,
   loading,
   loadingFormas,
   loadingDesconto,
@@ -309,6 +317,20 @@ export function VendasDashboardLayout({
         onClearAll={chartFilter.clearAllFilters}
         fieldLabels={FILTER_LABELS}
       />
+
+      {/* Aviso de dados parciais (Firebird indisponível) */}
+      {fontesDados?.parcial && (
+        <Alert className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800 dark:text-amber-200">
+            <strong>Dados parciais:</strong> Servidor de dados em tempo real indisponível. 
+            Exibindo cache até {fontesDados.ultimaDataCache ? 
+              new Date(fontesDados.ultimaDataCache + 'T00:00:00').toLocaleDateString('pt-BR') : 
+              'ontem'
+            }. Os dados de hoje serão incluídos quando o servidor estiver disponível.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Erros */}
       {error && (
