@@ -47,6 +47,8 @@ export interface GetResumoEmpresaVendedorParams {
   dataFim: string;
   /** Se true, ignora cache e busca dados ao vivo */
   bypassCache?: boolean;
+  /** Se true, exclui vendas pagas com créditos (forma tipo 6) */
+  excluirCreditos?: boolean;
 }
 
 export async function getResumoEmpresaVendedor(
@@ -54,11 +56,18 @@ export async function getResumoEmpresaVendedor(
 ): Promise<ResumoEmpresaVendedor[]> {
   const options: ApiGetOptions = params.bypassCache ? { cache: false } : {};
   
-  const raw = await apiGet<ResumoEmpresaVendedorRaw>('/vendas/resumo-empresa-vendedor', {
+  const queryParams: Record<string, string | number | boolean | undefined> = {
     empresa: formatEmpresaParam(params.empresa),
     dataInicio: params.dataInicio,
     dataFim: params.dataFim,
-  }, options);
+  };
+  
+  // Adicionar parâmetro excluirCreditos se especificado
+  if (params.excluirCreditos) {
+    queryParams.excluirCreditos = true;
+  }
+  
+  const raw = await apiGet<ResumoEmpresaVendedorRaw>('/vendas/resumo-empresa-vendedor', queryParams, options);
 
   console.log('[vendasService] Raw data count:', raw.length);
   console.log('[vendasService] Raw data sample:', raw[0]);
