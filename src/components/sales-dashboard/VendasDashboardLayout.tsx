@@ -173,9 +173,11 @@ export function VendasDashboardLayout({
     let totalCreditos = 0;
     let totalDevolucoes = 0;
     let qtdTransacoes = 0;
-
-    // Agrupar por empresa para evitar duplicação de desconto
-    const empresasProcessadas = new Map<number, { bruto: number; desconto: number }>();
+    
+    // IMPORTANTE: O backend Railway agora distribui totalBruto e totalDesconto
+    // proporcionalmente por forma de pagamento. Somar diretamente sem agrupamento.
+    let totalBruto = 0;
+    let totalDesconto = 0;
 
     filteredDadosFormasPagamento.forEach((d) => {
       const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
@@ -191,30 +193,14 @@ export function VendasDashboardLayout({
         }
         qtdTransacoes += d.qtdVendas;
         
-        // Acumular bruto e desconto por empresa
-        const existing = empresasProcessadas.get(d.codEmpresa);
-        if (existing) {
-          existing.bruto += d.totalBruto || 0;
-          existing.desconto += d.totalDesconto || 0;
-        } else {
-          empresasProcessadas.set(d.codEmpresa, { 
-            bruto: d.totalBruto || 0, 
-            desconto: d.totalDesconto || 0 
-          });
-        }
+        // Somar diretamente - backend já distribui proporcionalmente por forma de pagamento
+        totalBruto += d.totalBruto || 0;
+        totalDesconto += d.totalDesconto || 0;
       }
     });
 
     const totalVendidoSemCreditos = totalVendido - totalCreditos;
     const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
-
-    // Calcular totais de desconto
-    let totalBruto = 0;
-    let totalDesconto = 0;
-    empresasProcessadas.forEach((v) => {
-      totalBruto += v.bruto;
-      totalDesconto += v.desconto;
-    });
     
     const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
     const descontoDisponivel = totalBruto > 0;

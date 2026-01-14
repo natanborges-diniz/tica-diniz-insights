@@ -128,10 +128,12 @@ function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
   let totalCreditos = 0;
   let totalDevolucoes = 0;
   let qtdTransacoes = 0;
-
-  // Agrupar por empresa para evitar duplicação de desconto
-  // (mesmo vendedor pode ter múltiplas formas de pagamento)
-  const empresasProcessadas = new Map<number, { bruto: number; desconto: number }>();
+  
+  // IMPORTANTE: O backend Railway agora distribui totalBruto e totalDesconto
+  // proporcionalmente por forma de pagamento. Portanto, devemos somar diretamente
+  // sem agrupamento por empresa (cada linha já contém a fração correta).
+  let totalBruto = 0;
+  let totalDesconto = 0;
 
   dados.forEach((d) => {
     const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
@@ -147,17 +149,9 @@ function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
       }
       qtdTransacoes += d.qtdVendas;
       
-      // Acumular bruto e desconto por empresa (dados agora corretos do backend)
-      const existing = empresasProcessadas.get(d.codEmpresa);
-      if (existing) {
-        existing.bruto += d.totalBruto || 0;
-        existing.desconto += d.totalDesconto || 0;
-      } else {
-        empresasProcessadas.set(d.codEmpresa, { 
-          bruto: d.totalBruto || 0, 
-          desconto: d.totalDesconto || 0 
-        });
-      }
+      // Somar diretamente - backend já distribui proporcionalmente por forma de pagamento
+      totalBruto += d.totalBruto || 0;
+      totalDesconto += d.totalDesconto || 0;
     }
   });
 
@@ -165,13 +159,6 @@ function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
   const totalVendidoSemCreditos = totalVendido - totalCreditos;
   const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
 
-  // Calcular totais de desconto (agora correto após correção do backend)
-  let totalBruto = 0;
-  let totalDesconto = 0;
-  empresasProcessadas.forEach((v) => {
-    totalBruto += v.bruto;
-    totalDesconto += v.desconto;
-  });
   const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
 
   return {
