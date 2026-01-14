@@ -1,5 +1,6 @@
 // src/services/agregadosService.ts
 // Service para buscar dados agregados do Supabase (cache local)
+// NOTA: Os dados são armazenados como agregados MENSAIS (último dia do mês)
 
 import { supabase } from "@/integrations/supabase/client";
 import { EmpresaParam } from "./firebirdBridge";
@@ -20,7 +21,7 @@ export interface VendasAgregadoDiario {
 // Interface agregada por forma de pagamento (compatível com ResumoFormaPagamento)
 export interface AgregadoFormaPagamento {
   codEmpresa: number;
-  empresa: string; // Será preenchido com o código, pois não temos nome na tabela
+  empresa: string;
   vendedor: string;
   formaPagamento: string;
   totalGeral: number;
@@ -37,19 +38,53 @@ export interface GetVendasAgregadoParams {
 }
 
 /**
+ * Converte uma data para o "mês de referência" no formato usado no cache
+ * Os dados são armazenados como último dia do mês
+ */
+function getMesesNoRange(dataInicio: string, dataFim: string): string[] {
+  const meses: string[] = [];
+  
+  const inicio = new Date(dataInicio + 'T00:00:00');
+  const fim = new Date(dataFim + 'T00:00:00');
+  
+  // Começar do primeiro dia do mês de início
+  let current = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+  
+  while (current <= fim) {
+    // Último dia do mês atual
+    const ultimoDia = new Date(current.getFullYear(), current.getMonth() + 1, 0);
+    const mesRef = ultimoDia.toISOString().split('T')[0];
+    meses.push(mesRef);
+    
+    // Próximo mês
+    current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
+  }
+  
+  console.log(`[agregadosService] Meses no range ${dataInicio} a ${dataFim}:`, meses);
+  return meses;
+}
+
+/**
  * Busca agregados do Supabase (cache local, super rápido!)
- * Retorna dados no mesmo formato que getResumoFormasPagamento
+ * NOTA: Os dados são mensais, então buscamos pelos meses no período
  */
 export async function getVendasAgregado(
   params: GetVendasAgregadoParams
 ): Promise<AgregadoFormaPagamento[]> {
   console.log('[agregadosService] Buscando agregados do Supabase:', params);
   
+  // Obter os meses de referência no período solicitado
+  const mesesRef = getMesesNoRange(params.dataInicio, params.dataFim);
+  
+  if (mesesRef.length === 0) {
+    console.log('[agregadosService] Nenhum mês no range');
+    return [];
+  }
+  
   let query = supabase
     .from('vendas_agregado_diario')
     .select('*')
-    .gte('data', params.dataInicio)
-    .lte('data', params.dataFim);
+    .in('data', mesesRef);
   
   // Filtrar por empresa se não for 'ALL'
   if (params.empresa !== 'ALL') {
@@ -67,13 +102,13 @@ export async function getVendasAgregado(
   }
   
   if (!data || data.length === 0) {
-    console.log('[agregadosService] Nenhum agregado encontrado');
+    console.log('[agregadosService] Nenhum agregado encontrado para os meses:', mesesRef);
     return [];
   }
   
   console.log(`[agregadosService] Encontrados ${data.length} registros brutos`);
   
-  // Agregar por empresa + vendedor + forma_pagamento (somar valores de diferentes datas)
+  // Agregar por empresa + vendedor + forma_pagamento (somar valores de diferentes meses)
   const mapaAgregados = new Map<string, {
     codEmpresa: number;
     vendedor: string;
@@ -109,7 +144,7 @@ export async function getVendasAgregado(
   // Converter para array no formato esperado
   const resultado = Array.from(mapaAgregados.values()).map((item) => ({
     codEmpresa: item.codEmpresa,
-    empresa: String(item.codEmpresa), // Será resolvido pelo hook se necessário
+    empresa: String(item.codEmpresa),
     vendedor: item.vendedor,
     formaPagamento: item.formaPagamento,
     totalGeral: item.totalVendido,
@@ -133,11 +168,14 @@ export async function temAgregadosParaPeriodo(
   dataInicio: string,
   dataFim: string
 ): Promise<boolean> {
+  const mesesRef = getMesesNoRange(dataInicio, dataFim);
+  
+  if (mesesRef.length === 0) return false;
+  
   const { count, error } = await supabase
     .from('vendas_agregado_diario')
     .select('*', { count: 'exact', head: true })
-    .gte('data', dataInicio)
-    .lte('data', dataFim);
+    .in('data', mesesRef);
   
   if (error) {
     console.error('[agregadosService] Erro ao verificar agregados:', error);
