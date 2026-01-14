@@ -379,33 +379,48 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
 
     const whereSQL = whereClauses.join(' AND ');
 
-    // Query simples - agrupa por empresa/vendedor/forma de pagamento
-    // Os campos de desconto são calculados a partir de TRANSACAO_ITEM
+    // Query corrigida - usa subquery para calcular desconto por transação
+    // evitando duplicação causada pelo JOIN com múltiplas formas de pagamento
     const sql = `
       SELECT
-        e.NOMEFANTASIA AS empresa,
-        e.CODEMPRESA AS empresa_cod_logico,
-        e.NOMEFANTASIA AS empresa_nome_logico,
-        v.NOME AS vendedor,
-        fp.DESCRICAO AS formapagamento,
-        COUNT(DISTINCT t.IDTRANSACAO) AS qtd_vendas,
-        SUM(ti.VALORORIGINAL - COALESCE(ti.VALORDESCONTO, 0)) AS totalgeral,
-        SUM(ti.VALORORIGINAL) AS total_bruto,
-        SUM(COALESCE(ti.VALORDESCONTO, 0)) AS total_desconto,
+        sub.empresa,
+        sub.empresa_cod_logico,
+        sub.empresa_nome_logico,
+        sub.vendedor,
+        sub.formapagamento,
+        COUNT(DISTINCT sub.IDTRANSACAO) AS qtd_vendas,
+        SUM(sub.valor_pago) AS totalgeral,
+        SUM(sub.total_bruto_transacao) AS total_bruto,
+        SUM(sub.total_desconto_transacao) AS total_desconto,
         CASE 
-          WHEN SUM(ti.VALORORIGINAL) > 0 
-          THEN (SUM(COALESCE(ti.VALORDESCONTO, 0)) / SUM(ti.VALORORIGINAL)) * 100
+          WHEN SUM(sub.total_bruto_transacao) > 0 
+          THEN (SUM(sub.total_desconto_transacao) / SUM(sub.total_bruto_transacao)) * 100
           ELSE 0 
         END AS perc_desconto
-      FROM TRANSACAO t
-      INNER JOIN TRANSACAO_ITEM ti ON ti.IDTRANSACAO = t.IDTRANSACAO
-      INNER JOIN NATUREZAOPERACAO no ON no.IDNATUREZAOPERACAO = t.IDNATUREZAOPERACAO
-      INNER JOIN EMPRESA e ON e.CODEMPRESA = t.CODEMPRESA
-      INNER JOIN VENDEDOR v ON v.CODVENDEDOR = t.CODVENDEDOR
-      INNER JOIN TRANSACAO_PAGAMENTO tp ON tp.IDTRANSACAO = t.IDTRANSACAO
-      INNER JOIN FORMAPAGAMENTO fp ON fp.IDFORMAPAGAMENTO = tp.IDFORMAPAGAMENTO
-      WHERE ${whereSQL}
-      GROUP BY e.CODEMPRESA, e.NOMEFANTASIA, v.CODVENDEDOR, v.NOME, fp.DESCRICAO
+      FROM (
+        SELECT
+          t.IDTRANSACAO,
+          e.NOMEFANTASIA AS empresa,
+          e.CODEMPRESA AS empresa_cod_logico,
+          e.NOMEFANTASIA AS empresa_nome_logico,
+          v.NOME AS vendedor,
+          fp.DESCRICAO AS formapagamento,
+          tp.VALORPAGO AS valor_pago,
+          (SELECT SUM(ti2.VALORORIGINAL) FROM TRANSACAO_ITEM ti2 WHERE ti2.IDTRANSACAO = t.IDTRANSACAO) 
+            * (tp.VALORPAGO / NULLIF((SELECT SUM(tp2.VALORPAGO) FROM TRANSACAO_PAGAMENTO tp2 WHERE tp2.IDTRANSACAO = t.IDTRANSACAO), 0)) 
+            AS total_bruto_transacao,
+          (SELECT SUM(COALESCE(ti2.VALORDESCONTO, 0)) FROM TRANSACAO_ITEM ti2 WHERE ti2.IDTRANSACAO = t.IDTRANSACAO) 
+            * (tp.VALORPAGO / NULLIF((SELECT SUM(tp2.VALORPAGO) FROM TRANSACAO_PAGAMENTO tp2 WHERE tp2.IDTRANSACAO = t.IDTRANSACAO), 0)) 
+            AS total_desconto_transacao
+        FROM TRANSACAO t
+        INNER JOIN NATUREZAOPERACAO no ON no.IDNATUREZAOPERACAO = t.IDNATUREZAOPERACAO
+        INNER JOIN EMPRESA e ON e.CODEMPRESA = t.CODEMPRESA
+        INNER JOIN VENDEDOR v ON v.CODVENDEDOR = t.CODVENDEDOR
+        INNER JOIN TRANSACAO_PAGAMENTO tp ON tp.IDTRANSACAO = t.IDTRANSACAO
+        INNER JOIN FORMAPAGAMENTO fp ON fp.IDFORMAPAGAMENTO = tp.IDFORMAPAGAMENTO
+        WHERE ${whereSQL}
+      ) sub
+      GROUP BY sub.empresa_cod_logico, sub.empresa, sub.empresa_nome_logico, sub.vendedor, sub.formapagamento
       ORDER BY totalgeral DESC
     `;
 
