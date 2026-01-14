@@ -503,13 +503,8 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
       P AS (
         SELECT
           CAST(${codEmpresa} AS INTEGER) AS P_EMPRESA,
-          CAST(${codEmpresa} AS INTEGER) AS P_EMPRESA2,
           CAST('${dataInicio}' AS DATE) AS P_DATA_VENDAS_INI,
           CAST('${dataFim}' AS DATE) AS P_DATA_VENDAS_FIM,
-          CAST('${dataInicio}' AS DATE) AS P_DATA_CONVENIO_INI,
-          CAST('${dataFim}' AS DATE) AS P_DATA_CONVENIO_FIM,
-          CAST('${dataInicio}' AS DATE) AS P_DATA_DEVOLUCAO_INI,
-          CAST('${dataFim}' AS DATE) AS P_DATA_DEVOLUCAO_FIM,
           CAST(${pExcluiCreditos} AS INTEGER) AS P_EXCLUI_CREDITOS,
           CAST(${pIncluiDevolucoes} AS INTEGER) AS P_INCLUI_DEVOLUCOES
         FROM RDB$DATABASE
@@ -517,16 +512,8 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
       empresas_filtradas AS (
         SELECT e.COD_EMPRESA
         FROM EMPRESA e
-        JOIN P ON 1=1
         WHERE e.COD_EMPRESA NOT IN (${EMPRESAS_EXCLUIDAS.join(',')})
-          AND (
-            P.P_EMPRESA = 0
-            OR e.COD_EMPRESA = P.P_EMPRESA
-            OR (
-              P.P_EMPRESA2 IN (13, 18)
-              AND e.COD_EMPRESA IN (13, 18)
-            )
-          )
+          ${codEmpresa === 0 ? '' : `AND (e.COD_EMPRESA = ${codEmpresa} OR (${codEmpresa} IN (13, 18) AND e.COD_EMPRESA IN (13, 18)))`}
       ),
       tbempresa AS (
         SELECT
@@ -538,6 +525,19 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
         JOIN PESSOA p ON p.COD_PESSOA = e.COD_EMPRESA
         JOIN empresas_filtradas ef ON ef.COD_EMPRESA = e.COD_EMPRESA
       ),
+      transacoes_vendas AS (
+        SELECT 
+          t.COD_TRANSACAO,
+          t.COD_EMPRESA,
+          t.COD_EMPRESAESTOQUE,
+          t.COD_FATURATRANSACAO,
+          t.DATAEMISSAO
+        FROM TRANSACAO t
+        JOIN empresas_filtradas ef ON ef.COD_EMPRESA = t.COD_EMPRESAESTOQUE
+        JOIN NATUREZAOPERACAO nat ON nat.COD_NATUREZAOPERACAO = t.COD_NATUREZAOPERACAO
+        WHERE nat.TIPO = 1
+          AND t.DATAEMISSAO BETWEEN '${dataInicio}' AND '${dataFim}'
+      ),
       itens_por_transacao AS (
         SELECT
           ti.COD_TRANSACAO,
@@ -545,29 +545,26 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
           SUM(COALESCE(ti.VALORORIGINAL, 0) * COALESCE(ti.QUANTIDADE, 0)) AS TOTAL_BRUTO,
           SUM(COALESCE(ti.TOTAL, 0) - COALESCE(ti.TOTALIPI, 0)) AS TOTAL_VENDIDO
         FROM TRANSACAO_ITEM ti
+        WHERE EXISTS (SELECT 1 FROM transacoes_vendas tv WHERE tv.COD_TRANSACAO = ti.COD_TRANSACAO AND tv.COD_EMPRESA = ti.COD_EMPRESA)
         GROUP BY ti.COD_TRANSACAO, ti.COD_EMPRESA
       ),
       pagamentos_por_transacao AS (
         SELECT
-          transacao.COD_TRANSACAO,
-          transacao.COD_EMPRESA,
-          finformapagamento.COD_FORMAPAGAMENTOTIPO AS COD_FORMAPAGAMENTOTIPO,
+          tv.COD_TRANSACAO,
+          tv.COD_EMPRESA,
+          ffp.COD_FORMAPAGAMENTOTIPO,
           SUM(
             COALESCE(
-              IIF(finlancamentoparcela.DATAPAGAMENTO IS NULL,
-                finlancamentoparcela.VALOR,
-                finlancamentoparcela.VALORPAGO
-              ),
+              IIF(flp.DATAPAGAMENTO IS NULL, flp.VALOR, flp.VALORPAGO),
               0
             )
           ) AS TOTAL_PAGO_FORMA
-        FROM
-          transacao
-          JOIN finfaturatransacao ON finfaturatransacao.COD_FATURATRANSACAO = transacao.COD_FATURATRANSACAO
-          JOIN finlancamento ON finlancamento.COD_FATURATRANSACAO = finfaturatransacao.COD_FATURATRANSACAO
-          JOIN finlancamentoparcela ON finlancamentoparcela.COD_LANCAMENTO = finlancamento.COD_LANCAMENTO
-          JOIN finformapagamento ON finformapagamento.COD_FORMAPAGAMENTO = finlancamentoparcela.COD_FORMAPAGAMENTO
-        GROUP BY transacao.COD_TRANSACAO, transacao.COD_EMPRESA, finformapagamento.COD_FORMAPAGAMENTOTIPO
+        FROM transacoes_vendas tv
+        JOIN FINFATURATRANSACAO fft ON fft.COD_FATURATRANSACAO = tv.COD_FATURATRANSACAO
+        JOIN FINLANCAMENTO fl ON fl.COD_FATURATRANSACAO = fft.COD_FATURATRANSACAO
+        JOIN FINLANCAMENTOPARCELA flp ON flp.COD_LANCAMENTO = fl.COD_LANCAMENTO
+        JOIN FINFORMAPAGAMENTO ffp ON ffp.COD_FORMAPAGAMENTO = flp.COD_FORMAPAGAMENTO
+        GROUP BY tv.COD_TRANSACAO, tv.COD_EMPRESA, ffp.COD_FORMAPAGAMENTOTIPO
       ),
       pagamentos_totais AS (
         SELECT
@@ -579,16 +576,16 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
       )
       
       SELECT
-        tbempresa.EMPRESA,
-        tbempresa.EMPRESA_COD_LOGICO,
-        tbempresa.EMPRESA_NOME_LOGICO,
+        emp.EMPRESA,
+        emp.EMPRESA_COD_LOGICO,
+        emp.EMPRESA_NOME_LOGICO,
         vendedor.NOME AS VENDEDOR,
-        CASE finformapagamento.COD_FORMAPAGAMENTOTIPO
+        CASE pag.COD_FORMAPAGAMENTOTIPO
           WHEN 1 THEN 'DINHEIRO'
           WHEN 2 THEN 'CHEQUE'
           WHEN 3 THEN
             CASE
-              WHEN fincartaocreditotipo.CREDITO = 'T' THEN 'CARTAO CREDITO'
+              WHEN fct.CREDITO = 'T' THEN 'CARTAO CREDITO'
               ELSE 'CARTAO DEBITO'
             END
           WHEN 4 THEN 'BANCO'
@@ -596,78 +593,58 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
           WHEN 6 THEN 'CREDITOS'
           ELSE 'OUTROS'
         END AS FORMAPAGAMENTO,
-        SUM(
-          COALESCE(
-            IIF(finlancamentoparcela.DATAPAGAMENTO IS NULL,
-              finlancamentoparcela.VALOR,
-              finlancamentoparcela.VALORPAGO
-            ),
-            0
-          )
-        ) AS TOTALGERAL,
-        COUNT(DISTINCT transacao.COD_TRANSACAO) AS QTD_VENDAS,
+        SUM(pag.TOTAL_PAGO_FORMA) AS TOTALGERAL,
+        COUNT(DISTINCT tv.COD_TRANSACAO) AS QTD_VENDAS,
         SUM(
           COALESCE(itens.TOTAL_BRUTO, 0)
-          * COALESCE(pagamentos.TOTAL_PAGO_FORMA, 0)
-          / NULLIF(COALESCE(pagamentos_totais.TOTAL_PAGO_TRANSACAO, 0), 0)
+          * pag.TOTAL_PAGO_FORMA
+          / NULLIF(pt.TOTAL_PAGO_TRANSACAO, 0)
         ) AS TOTAL_BRUTO,
         SUM(
           (COALESCE(itens.TOTAL_BRUTO, 0) - COALESCE(itens.TOTAL_VENDIDO, 0))
-          * COALESCE(pagamentos.TOTAL_PAGO_FORMA, 0)
-          / NULLIF(COALESCE(pagamentos_totais.TOTAL_PAGO_TRANSACAO, 0), 0)
+          * pag.TOTAL_PAGO_FORMA
+          / NULLIF(pt.TOTAL_PAGO_TRANSACAO, 0)
         ) AS TOTAL_DESCONTO,
         CASE
           WHEN SUM(COALESCE(itens.TOTAL_BRUTO, 0)) = 0 THEN 0
           ELSE (
             SUM(
               (COALESCE(itens.TOTAL_BRUTO, 0) - COALESCE(itens.TOTAL_VENDIDO, 0))
-              * COALESCE(pagamentos.TOTAL_PAGO_FORMA, 0)
-              / NULLIF(COALESCE(pagamentos_totais.TOTAL_PAGO_TRANSACAO, 0), 0)
+              * pag.TOTAL_PAGO_FORMA
+              / NULLIF(pt.TOTAL_PAGO_TRANSACAO, 0)
             )
             / NULLIF(
               SUM(
                 COALESCE(itens.TOTAL_BRUTO, 0)
-                * COALESCE(pagamentos.TOTAL_PAGO_FORMA, 0)
-                / NULLIF(COALESCE(pagamentos_totais.TOTAL_PAGO_TRANSACAO, 0), 0)
+                * pag.TOTAL_PAGO_FORMA
+                / NULLIF(pt.TOTAL_PAGO_TRANSACAO, 0)
               ),
               0
             )
           ) * 100
         END AS PERC_DESCONTO
-      FROM
-        P
-        JOIN transacao ON 1=1
-        JOIN naturezaoperacao ON naturezaoperacao.COD_NATUREZAOPERACAO = transacao.COD_NATUREZAOPERACAO
-        JOIN saida ON saida.COD_SAIDA = transacao.COD_TRANSACAO AND saida.COD_EMPRESA = transacao.COD_EMPRESA
-        JOIN pessoa vendedor ON vendedor.COD_PESSOA = saida.COD_VENDEDOR
-        JOIN tbempresa ON tbempresa.COD_EMPRESA = transacao.COD_EMPRESAESTOQUE
-        JOIN finfaturatransacao ON finfaturatransacao.COD_FATURATRANSACAO = transacao.COD_FATURATRANSACAO
-        JOIN finlancamento ON finlancamento.COD_FATURATRANSACAO = finfaturatransacao.COD_FATURATRANSACAO
-        JOIN finlancamentoparcela ON finlancamentoparcela.COD_LANCAMENTO = finlancamento.COD_LANCAMENTO
-        JOIN finformapagamento ON finformapagamento.COD_FORMAPAGAMENTO = finlancamentoparcela.COD_FORMAPAGAMENTO
-        JOIN pagamentos_por_transacao pagamentos
-          ON pagamentos.COD_TRANSACAO = transacao.COD_TRANSACAO
-         AND pagamentos.COD_EMPRESA = transacao.COD_EMPRESA
-         AND pagamentos.COD_FORMAPAGAMENTOTIPO = finformapagamento.COD_FORMAPAGAMENTOTIPO
-        JOIN pagamentos_totais ON pagamentos_totais.COD_TRANSACAO = transacao.COD_TRANSACAO AND pagamentos_totais.COD_EMPRESA = transacao.COD_EMPRESA
-        LEFT JOIN itens_por_transacao itens ON itens.COD_TRANSACAO = transacao.COD_TRANSACAO AND itens.COD_EMPRESA = transacao.COD_EMPRESA
-        LEFT JOIN finformapagamentocartao ON finformapagamentocartao.COD_FORMAPAGAMENTOCARTAO = finformapagamento.COD_FORMAPAGAMENTO
-        LEFT JOIN fincartaocreditotipo ON fincartaocreditotipo.COD_CARTAOCREDITOTIPO = finformapagamentocartao.COD_CARTAOCREDITOTIPO
-      WHERE
-        naturezaoperacao.TIPO = 1
-        AND transacao.DATAEMISSAO BETWEEN P.P_DATA_VENDAS_INI AND P.P_DATA_VENDAS_FIM
-        AND (P.P_EXCLUI_CREDITOS = 0 OR finformapagamento.COD_FORMAPAGAMENTOTIPO <> 6)
+      FROM transacoes_vendas tv
+      JOIN tbempresa emp ON emp.COD_EMPRESA = tv.COD_EMPRESAESTOQUE
+      JOIN SAIDA s ON s.COD_SAIDA = tv.COD_TRANSACAO AND s.COD_EMPRESA = tv.COD_EMPRESA
+      JOIN PESSOA vendedor ON vendedor.COD_PESSOA = s.COD_VENDEDOR
+      JOIN pagamentos_por_transacao pag ON pag.COD_TRANSACAO = tv.COD_TRANSACAO AND pag.COD_EMPRESA = tv.COD_EMPRESA
+      JOIN pagamentos_totais pt ON pt.COD_TRANSACAO = tv.COD_TRANSACAO AND pt.COD_EMPRESA = tv.COD_EMPRESA
+      LEFT JOIN itens_por_transacao itens ON itens.COD_TRANSACAO = tv.COD_TRANSACAO AND itens.COD_EMPRESA = tv.COD_EMPRESA
+      LEFT JOIN FINFORMAPAGAMENTO ffp ON ffp.COD_FORMAPAGAMENTOTIPO = pag.COD_FORMAPAGAMENTOTIPO
+      LEFT JOIN FINFORMAPAGAMENTOCARTAO ffc ON ffc.COD_FORMAPAGAMENTOCARTAO = ffp.COD_FORMAPAGAMENTO
+      LEFT JOIN FINCARTAOCREDITOTIPO fct ON fct.COD_CARTAOCREDITOTIPO = ffc.COD_CARTAOCREDITOTIPO
+      WHERE (${pExcluiCreditos} = 0 OR pag.COD_FORMAPAGAMENTOTIPO <> 6)
       GROUP BY
-        tbempresa.EMPRESA,
-        tbempresa.EMPRESA_COD_LOGICO,
-        tbempresa.EMPRESA_NOME_LOGICO,
+        emp.EMPRESA,
+        emp.EMPRESA_COD_LOGICO,
+        emp.EMPRESA_NOME_LOGICO,
         vendedor.NOME,
-        CASE finformapagamento.COD_FORMAPAGAMENTOTIPO
+        CASE pag.COD_FORMAPAGAMENTOTIPO
           WHEN 1 THEN 'DINHEIRO'
           WHEN 2 THEN 'CHEQUE'
           WHEN 3 THEN
             CASE
-              WHEN fincartaocreditotipo.CREDITO = 'T' THEN 'CARTAO CREDITO'
+              WHEN fct.CREDITO = 'T' THEN 'CARTAO CREDITO'
               ELSE 'CARTAO DEBITO'
             END
           WHEN 4 THEN 'BANCO'
@@ -679,13 +656,13 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
       UNION ALL
       
       SELECT
-        tbempresa.EMPRESA,
-        tbempresa.EMPRESA_COD_LOGICO,
-        tbempresa.EMPRESA_NOME_LOGICO,
+        emp.EMPRESA,
+        emp.EMPRESA_COD_LOGICO,
+        emp.EMPRESA_NOME_LOGICO,
         vendedor.NOME AS VENDEDOR,
         'CONVENIO' AS FORMAPAGAMENTO,
-        SUM(transacaoconvenioparcela.VALOR) AS TOTALGERAL,
-        COUNT(DISTINCT transacao.COD_TRANSACAO) AS QTD_VENDAS,
+        SUM(tcp.VALOR) AS TOTALGERAL,
+        COUNT(DISTINCT t.COD_TRANSACAO) AS QTD_VENDAS,
         SUM(COALESCE(itens.TOTAL_BRUTO, 0)) AS TOTAL_BRUTO,
         SUM(COALESCE(itens.TOTAL_BRUTO, 0) - COALESCE(itens.TOTAL_VENDIDO, 0)) AS TOTAL_DESCONTO,
         CASE
@@ -695,34 +672,30 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
             / NULLIF(SUM(COALESCE(itens.TOTAL_BRUTO, 0)), 0)
           ) * 100
         END AS PERC_DESCONTO
-      FROM
-        P
-        JOIN transacao ON 1=1
-        JOIN transacaoconvenioparcela
-          ON transacaoconvenioparcela.COD_TRANSACAO = transacao.COD_TRANSACAO
-         AND transacaoconvenioparcela.COD_EMPRESA = transacao.COD_EMPRESA
-        JOIN saida ON saida.COD_SAIDA = transacao.COD_TRANSACAO AND saida.COD_EMPRESA = transacao.COD_EMPRESA
-        JOIN pessoa vendedor ON vendedor.COD_PESSOA = saida.COD_VENDEDOR
-        JOIN tbempresa ON tbempresa.COD_EMPRESA = transacao.COD_EMPRESAESTOQUE
-        LEFT JOIN itens_por_transacao itens ON itens.COD_TRANSACAO = transacao.COD_TRANSACAO AND itens.COD_EMPRESA = transacao.COD_EMPRESA
-      WHERE
-        transacao.DATAEMISSAO BETWEEN P.P_DATA_CONVENIO_INI AND P.P_DATA_CONVENIO_FIM
+      FROM TRANSACAO t
+      JOIN empresas_filtradas ef ON ef.COD_EMPRESA = t.COD_EMPRESAESTOQUE
+      JOIN tbempresa emp ON emp.COD_EMPRESA = t.COD_EMPRESAESTOQUE
+      JOIN TRANSACAOCONVENIOPARCELA tcp ON tcp.COD_TRANSACAO = t.COD_TRANSACAO AND tcp.COD_EMPRESA = t.COD_EMPRESA
+      JOIN SAIDA s ON s.COD_SAIDA = t.COD_TRANSACAO AND s.COD_EMPRESA = t.COD_EMPRESA
+      JOIN PESSOA vendedor ON vendedor.COD_PESSOA = s.COD_VENDEDOR
+      LEFT JOIN itens_por_transacao itens ON itens.COD_TRANSACAO = t.COD_TRANSACAO AND itens.COD_EMPRESA = t.COD_EMPRESA
+      WHERE t.DATAEMISSAO BETWEEN '${dataInicio}' AND '${dataFim}'
       GROUP BY
-        tbempresa.EMPRESA,
-        tbempresa.EMPRESA_COD_LOGICO,
-        tbempresa.EMPRESA_NOME_LOGICO,
+        emp.EMPRESA,
+        emp.EMPRESA_COD_LOGICO,
+        emp.EMPRESA_NOME_LOGICO,
         vendedor.NOME
       
       UNION ALL
       
       SELECT
-        tbempresa.EMPRESA,
-        tbempresa.EMPRESA_COD_LOGICO,
-        tbempresa.EMPRESA_NOME_LOGICO,
+        emp.EMPRESA,
+        emp.EMPRESA_COD_LOGICO,
+        emp.EMPRESA_NOME_LOGICO,
         vendedor.NOME AS VENDEDOR,
         'DEVOLUCAO' AS FORMAPAGAMENTO,
-        SUM(transacaodevolucao.TOTAL) * -1 AS TOTALGERAL,
-        COUNT(DISTINCT transacaodevolucao.COD_TRANSACAO) AS QTD_VENDAS,
+        SUM(td.TOTAL) * -1 AS TOTALGERAL,
+        COUNT(DISTINCT td.COD_TRANSACAO) AS QTD_VENDAS,
         SUM(COALESCE(itens.TOTAL_BRUTO, 0)) * -1 AS TOTAL_BRUTO,
         SUM(COALESCE(itens.TOTAL_BRUTO, 0) - COALESCE(itens.TOTAL_VENDIDO, 0)) * -1 AS TOTAL_DESCONTO,
         CASE
@@ -732,22 +705,18 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
             / NULLIF(SUM(COALESCE(itens.TOTAL_BRUTO, 0)), 0)
           ) * 100
         END AS PERC_DESCONTO
-      FROM
-        P
-        JOIN transacao transacaodevolucao ON 1=1
-        JOIN entradanotafiscaldevolucao
-          ON transacaodevolucao.COD_TRANSACAO = entradanotafiscaldevolucao.COD_ENTRADANOTAFISCALDEVOLUCAO
-         AND transacaodevolucao.COD_EMPRESA = entradanotafiscaldevolucao.COD_EMPRESA
-        JOIN pessoa vendedor ON vendedor.COD_PESSOA = entradanotafiscaldevolucao.COD_VENDEDOR
-        JOIN tbempresa ON tbempresa.COD_EMPRESA = transacaodevolucao.COD_EMPRESAESTOQUE
-        LEFT JOIN itens_por_transacao itens ON itens.COD_TRANSACAO = transacaodevolucao.COD_TRANSACAO AND itens.COD_EMPRESA = transacaodevolucao.COD_EMPRESA
-      WHERE
-        P.P_INCLUI_DEVOLUCOES = 1
-        AND transacaodevolucao.DATAENCERRAMENTO BETWEEN P.P_DATA_DEVOLUCAO_INI AND P.P_DATA_DEVOLUCAO_FIM
+      FROM TRANSACAO td
+      JOIN empresas_filtradas ef ON ef.COD_EMPRESA = td.COD_EMPRESAESTOQUE
+      JOIN tbempresa emp ON emp.COD_EMPRESA = td.COD_EMPRESAESTOQUE
+      JOIN ENTRADANOTAFISCALDEVOLUCAO enfd ON td.COD_TRANSACAO = enfd.COD_ENTRADANOTAFISCALDEVOLUCAO AND td.COD_EMPRESA = enfd.COD_EMPRESA
+      JOIN PESSOA vendedor ON vendedor.COD_PESSOA = enfd.COD_VENDEDOR
+      LEFT JOIN itens_por_transacao itens ON itens.COD_TRANSACAO = td.COD_TRANSACAO AND itens.COD_EMPRESA = td.COD_EMPRESA
+      WHERE ${pIncluiDevolucoes} = 1
+        AND td.DATAENCERRAMENTO BETWEEN '${dataInicio}' AND '${dataFim}'
       GROUP BY
-        tbempresa.EMPRESA,
-        tbempresa.EMPRESA_COD_LOGICO,
-        tbempresa.EMPRESA_NOME_LOGICO,
+        emp.EMPRESA,
+        emp.EMPRESA_COD_LOGICO,
+        emp.EMPRESA_NOME_LOGICO,
         vendedor.NOME
     `;
 
