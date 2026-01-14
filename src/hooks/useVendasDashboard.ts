@@ -515,27 +515,63 @@ export function useVendasDashboard() {
     }
   }, []);
 
-  // Métricas calculadas - agora tudo vem do endpoint resumo-formas-pagamento
-  // Após correção do backend (subquery proporcional), os dados de desconto estão corretos
+  // Métricas calculadas - ESTRATÉGIA DE FONTES SEPARADAS:
+  // - Vendas (totalVendido, qtdTransacoes, ticketMedio): do endpoint resumo-formas-pagamento
+  // - Desconto (totalBruto, totalDesconto, percentualDesconto): do endpoint resumo-empresa-vendedor
+  // 
+  // MOTIVO: O endpoint resumo-formas-pagamento tem bug de duplicação nos campos totalBruto/totalDesconto
+  // devido a JOINs múltiplos quando há várias formas de pagamento na mesma transação.
+  // O endpoint resumo-empresa-vendedor calcula corretamente por vendedor.
   const metrics = useMemo<VendasMetrics>(() => {
+    // 1. Métricas de vendas - do endpoint rápido (resumo-formas-pagamento)
     const metricasFormas = calcularMetricasFormasPagamento(dadosFormasPagamento);
     
-    // Desconto agora vem do mesmo endpoint (corrigido no backend)
-    const descontoDisponivel = metricasFormas.totalBruto > 0;
+    // 2. Métricas de desconto - do endpoint correto (resumo-empresa-vendedor)
+    // Agregar todos os vendedores para obter totais
+    let totalBrutoCorreto = 0;
+    let totalDescontoCorreto = 0;
+    
+    dadosComDesconto.forEach((d) => {
+      totalBrutoCorreto += d.totalBruto ?? 0;
+      totalDescontoCorreto += d.totalDesconto ?? 0;
+    });
+    
+    const percentualDescontoCorreto = totalBrutoCorreto > 0 
+      ? (totalDescontoCorreto / totalBrutoCorreto) * 100 
+      : 0;
+    
+    const descontoDisponivel = dadosComDesconto.length > 0 && totalBrutoCorreto > 0;
 
-    console.log('[Métricas] Unificadas (endpoint resumo-formas-pagamento):', {
+    console.log('[Métricas] Fontes separadas:', {
+      // Vendas (endpoint formas-pagamento)
       totalVendidoSemCreditos: metricasFormas.totalVendidoSemCreditos,
-      totalBruto: metricasFormas.totalBruto,
-      totalDesconto: metricasFormas.totalDesconto,
-      percentualDesconto: metricasFormas.percentualDesconto,
+      qtdTransacoes: metricasFormas.qtdTransacoes,
+      ticketMedio: metricasFormas.ticketMedio,
+      // Desconto (endpoint empresa-vendedor - CORRETO)
+      totalBrutoCorreto,
+      totalDescontoCorreto,
+      percentualDescontoCorreto,
       descontoDisponivel,
+      // Para debug - valores corrompidos do endpoint formas-pagamento
+      totalBruto_ERRADO: metricasFormas.totalBruto,
+      totalDesconto_ERRADO: metricasFormas.totalDesconto,
     });
 
     return {
-      ...metricasFormas,
+      // Vendas do endpoint formas-pagamento
+      totalVendido: metricasFormas.totalVendido,
+      totalCreditos: metricasFormas.totalCreditos,
+      totalDevolucoes: metricasFormas.totalDevolucoes,
+      totalVendidoSemCreditos: metricasFormas.totalVendidoSemCreditos,
+      qtdTransacoes: metricasFormas.qtdTransacoes,
+      ticketMedio: metricasFormas.ticketMedio,
+      // Desconto do endpoint empresa-vendedor (CORRETO!)
+      totalBruto: totalBrutoCorreto,
+      totalDesconto: totalDescontoCorreto,
+      percentualDesconto: percentualDescontoCorreto,
       descontoDisponivel,
     };
-  }, [dadosFormasPagamento]);
+  }, [dadosFormasPagamento, dadosComDesconto]);
 
   // Projeção de fechamento do período
   const projecao = useMemo<ProjecaoFechamento>(() => {
