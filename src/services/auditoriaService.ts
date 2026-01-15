@@ -309,3 +309,43 @@ export function auditoriaLightToResumo(data: AuditoriaLight[]): {
     percentualDesconto: r.totalBruto > 0 ? (r.totalDesconto / r.totalBruto) * 100 : 0,
   }));
 }
+
+/**
+ * Busca detalhes de vendas para um dia específico e empresa
+ * Usado para expandir detalhes sob demanda na tabela diária
+ */
+export async function getDetalheDia(
+  codEmpresa: number,
+  data: string,
+  signal?: AbortSignal
+): Promise<AuditoriaLight[]> {
+  console.log(`[AuditoriaService] Fetching details for ${data}, empresa ${codEmpresa}...`);
+  
+  const queryParams: Record<string, string | number | boolean | undefined> = {
+    empresa: codEmpresa,
+    dataInicio: data,
+    dataFim: data,
+    pageSize: 500, // Um dia não deve ter mais de 500 registros
+  };
+
+  const raw = await apiGet<AuditoriaLightRaw>(
+    '/vendas/auditoria-formas-pagamento-light', 
+    queryParams,
+    { signal, timeoutMs: 30000 } // 30s timeout para um dia
+  );
+
+  const resultado = raw.map((r) => ({
+    codEmpresa: r.cod_empresa ?? 0,
+    empresa: (r.empresa ?? '').trim(),
+    vendedor: (r.vendedor ?? '').trim(),
+    formaPagamento: (r.forma_pagamento ?? '').trim(),
+    totalBruto: r.total_bruto ?? 0,
+    totalDesconto: r.total_desconto ?? 0,
+    totalLiquido: r.total_liquido ?? 0,
+    qtdVendas: r.qtd_vendas ?? 0,
+  }));
+
+  console.log(`[AuditoriaService] Day details for ${data}: ${resultado.length} records`);
+
+  return resultado;
+}

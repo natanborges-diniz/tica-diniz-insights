@@ -1,15 +1,17 @@
 // src/components/sales-dashboard/VendasDashboardLayout.tsx
 
 import { useState, useMemo } from "react";
-import { RefreshCw, AlertCircle, Building2, Users, Info } from "lucide-react";
+import { RefreshCw, AlertCircle, Building2, Users, Info, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { VendasFiltersState, ViewMode, ResumoLoja, VendasMetrics, ProjecaoFechamento, ProgressoPaginacao } from "@/hooks/useVendasDashboard";
+import { UseVendasDiariasResult } from "@/hooks/useVendasDiarias";
 import { ResumoEmpresaVendedor, ResumoFormaPagamento } from "@/services/vendasService";
 import { useChartFilter } from "@/hooks/useChartFilter";
 import { ActiveFilterBadges } from "@/components/ui/active-filter-badges";
@@ -22,6 +24,7 @@ import { StoreChart } from "./StoreChart";
 import { StoreTable } from "./StoreTable";
 import { PaymentMethodsChart } from "./PaymentMethodsChart";
 import { PaymentMethodsTable } from "./PaymentMethodsTable";
+import { VendasDiariasTable } from "./VendasDiariasTable";
 
 
 interface VendasDashboardLayoutProps {
@@ -55,6 +58,8 @@ interface VendasDashboardLayoutProps {
   // Ações
   reload: () => void;
   forceRefresh?: () => void;
+  // Vendas diárias (tabela expansível)
+  vendasDiarias?: UseVendasDiariasResult;
 }
 
 function LoadingSkeleton({ progressoPaginacao }: { progressoPaginacao?: ProgressoPaginacao | null }) {
@@ -157,10 +162,12 @@ export function VendasDashboardLayout({
   progressoPaginacao,
   reload,
   forceRefresh,
+  vendasDiarias,
 }: VendasDashboardLayoutProps) {
   const isLoading = loading;
   const showEmptyState = !dataLoaded && !loading;
   const [usarVendasSemCreditos, setUsarVendasSemCreditos] = useState(true);
+  const [viewTab, setViewTab] = useState<"resumo" | "diario">("resumo");
 
   // Hook para filtros interativos dos gráficos
   const chartFilter = useChartFilter<string>();
@@ -407,63 +414,100 @@ export function VendasDashboardLayout({
             usarVendasSemCreditos={usarVendasSemCreditos} 
           />
 
-          {/* Gráfico e Tabela - Condicional por modo */}
-          {filters.viewMode === "loja" ? (
-            <>
-              <StoreChart 
-                dados={dadosPorLoja} 
-                isLoading={loading} 
-                usarVendasSemCreditos={usarVendasSemCreditos}
-                selectedLoja={chartFilter.getFilterValue('loja')}
-                onLojaClick={handleLojaClick}
-                projecao={projecao}
-              />
-              <StoreTable 
-                dados={filteredDadosPorLoja} 
-                isLoading={loading} 
-                usarVendasSemCreditos={usarVendasSemCreditos} 
-              />
-            </>
-          ) : (
-            <>
+          {/* Tabs para alternar entre visão resumo e diária */}
+          <Tabs value={viewTab} onValueChange={(v) => setViewTab(v as "resumo" | "diario")} className="w-full">
+            <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger value="resumo" className="gap-2">
+                <Building2 className="h-4 w-4" />
+                Visão Geral
+              </TabsTrigger>
+              <TabsTrigger value="diario" className="gap-2">
+                <Calendar className="h-4 w-4" />
+                Por Dia (Auditoria)
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="resumo" className="space-y-6 mt-6">
+              {/* Gráfico e Tabela - Condicional por modo */}
+              {filters.viewMode === "loja" ? (
+                <>
+                  <StoreChart 
+                    dados={dadosPorLoja} 
+                    isLoading={loading} 
+                    usarVendasSemCreditos={usarVendasSemCreditos}
+                    selectedLoja={chartFilter.getFilterValue('loja')}
+                    onLojaClick={handleLojaClick}
+                    projecao={projecao}
+                  />
+                  <StoreTable 
+                    dados={filteredDadosPorLoja} 
+                    isLoading={loading} 
+                    usarVendasSemCreditos={usarVendasSemCreditos} 
+                  />
+                </>
+              ) : (
+                <>
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <SellerChart 
+                      dados={dadosComDesconto} 
+                      isLoading={loading} 
+                      usarVendasSemCreditos={usarVendasSemCreditos}
+                      selectedVendedor={chartFilter.getFilterValue('vendedor')}
+                      onVendedorClick={handleVendedorClick}
+                      projecao={projecao}
+                    />
+                    <DescontoChart
+                      dados={filteredDadosVendedor} 
+                      isLoading={loadingDesconto} 
+                      erro={erroDesconto} 
+                    />
+                  </div>
+                  <SalesTable 
+                    dados={filteredDadosVendedor} 
+                    isLoading={loading} 
+                    loadingDesconto={loadingDesconto}
+                    limiteDesconto={15} 
+                    usarVendasSemCreditos={usarVendasSemCreditos} 
+                  />
+                </>
+              )}
+
+              {/* Seção Formas de Pagamento */}
               <div className="grid gap-6 lg:grid-cols-2">
-                <SellerChart 
-                  dados={dadosComDesconto} 
-                  isLoading={loading} 
-                  usarVendasSemCreditos={usarVendasSemCreditos}
-                  selectedVendedor={chartFilter.getFilterValue('vendedor')}
-                  onVendedorClick={handleVendedorClick}
-                  projecao={projecao}
+                <PaymentMethodsChart 
+                  dados={dadosFormasPagamento} 
+                  isLoading={loading}
+                  selectedFormaPagamento={chartFilter.getFilterValue('formaPagamento')}
+                  onFormaPagamentoClick={handleFormaPagamentoClick}
                 />
-                <DescontoChart
-                  dados={filteredDadosVendedor} 
-                  isLoading={loadingDesconto} 
-                  erro={erroDesconto} 
+                <PaymentMethodsTable 
+                  dados={filteredDadosFormasPagamento} 
+                  isLoading={loading} 
                 />
               </div>
-              <SalesTable 
-                dados={filteredDadosVendedor} 
-                isLoading={loading} 
-                loadingDesconto={loadingDesconto}
-                limiteDesconto={15} 
-                usarVendasSemCreditos={usarVendasSemCreditos} 
-              />
-            </>
-          )}
+            </TabsContent>
 
-          {/* Seção Formas de Pagamento */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            <PaymentMethodsChart 
-              dados={dadosFormasPagamento} 
-              isLoading={loading}
-              selectedFormaPagamento={chartFilter.getFilterValue('formaPagamento')}
-              onFormaPagamentoClick={handleFormaPagamentoClick}
-            />
-            <PaymentMethodsTable 
-              dados={filteredDadosFormasPagamento} 
-              isLoading={loading} 
-            />
-          </div>
+            <TabsContent value="diario" className="mt-6">
+              {vendasDiarias ? (
+                <VendasDiariasTable
+                  resumosDiarios={vendasDiarias.resumosDiarios}
+                  loading={vendasDiarias.loading}
+                  error={vendasDiarias.error}
+                  onExpandir={vendasDiarias.expandirDia}
+                  onRecolher={vendasDiarias.recolherDia}
+                  isExpanded={vendasDiarias.isExpanded}
+                  getDetalhes={vendasDiarias.getDetalhes}
+                  onReload={vendasDiarias.carregarResumos}
+                />
+              ) : (
+                <Card>
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    Dados diários não disponíveis.
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          </Tabs>
         </>
       )}
     </div>
