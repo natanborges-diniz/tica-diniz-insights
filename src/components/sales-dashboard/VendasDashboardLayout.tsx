@@ -35,14 +35,12 @@ interface VendasDashboardLayoutProps {
     supabase: boolean;
     firebird: boolean;
     parcial?: boolean;
-    ultimaDataCache?: string;
+    mensagem?: string;
   };
   // Loading/Error
   loading: boolean;
-  loadingFormas: boolean;
   loadingDesconto?: boolean;
   error: string | null;
-  errorFormas: string | null;
   erroDesconto?: string | null;
   // Filtros
   filters: VendasFiltersState;
@@ -111,10 +109,8 @@ export function VendasDashboardLayout({
   dataLoaded,
   fontesDados,
   loading,
-  loadingFormas,
   loadingDesconto,
   error,
-  errorFormas,
   erroDesconto,
   filters,
   setFilters,
@@ -122,7 +118,7 @@ export function VendasDashboardLayout({
   projecao,
   reload,
 }: VendasDashboardLayoutProps) {
-  const isLoading = loading || loadingFormas;
+  const isLoading = loading;
   const showEmptyState = !dataLoaded && !loading;
   const [usarVendasSemCreditos, setUsarVendasSemCreditos] = useState(true);
 
@@ -323,11 +319,9 @@ export function VendasDashboardLayout({
         <Alert className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
           <AlertTriangle className="h-4 w-4 text-amber-600" />
           <AlertDescription className="text-amber-800 dark:text-amber-200">
-            <strong>Dados parciais:</strong> Servidor de dados em tempo real indisponível. 
-            Exibindo cache até {fontesDados.ultimaDataCache ? 
-              new Date(fontesDados.ultimaDataCache + 'T00:00:00').toLocaleDateString('pt-BR') : 
-              'ontem'
-            }. Os dados de hoje serão incluídos quando o servidor estiver disponível.
+            <strong>Dados do cache:</strong> {fontesDados.mensagem || 
+              'Servidor de dados em tempo real indisponível. Exibindo dados do cache.'
+            }
           </AlertDescription>
         </Alert>
       )}
@@ -415,23 +409,16 @@ export function VendasDashboardLayout({
           )}
 
           {/* Seção Formas de Pagamento */}
-          {errorFormas && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{errorFormas}</AlertDescription>
-            </Alert>
-          )}
-
           <div className="grid gap-6 lg:grid-cols-2">
             <PaymentMethodsChart 
               dados={dadosFormasPagamento} 
-              isLoading={loadingFormas}
+              isLoading={loading}
               selectedFormaPagamento={chartFilter.getFilterValue('formaPagamento')}
               onFormaPagamentoClick={handleFormaPagamentoClick}
             />
             <PaymentMethodsTable 
               dados={filteredDadosFormasPagamento} 
-              isLoading={loadingFormas} 
+              isLoading={loading} 
             />
           </div>
         </>
