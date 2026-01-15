@@ -20,6 +20,7 @@ export default function SalesDashboard() {
     projecao,
     alertaPeriodo,
     reload,
+    forceRefresh,
   } = useVendasDashboard();
 
   return (
@@ -39,6 +40,7 @@ export default function SalesDashboard() {
       projecao={projecao}
       alertaPeriodo={alertaPeriodo}
       reload={reload}
+      forceRefresh={forceRefresh}
     />
   );
 }

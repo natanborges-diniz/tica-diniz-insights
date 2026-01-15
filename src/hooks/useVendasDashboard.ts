@@ -299,10 +299,14 @@ export function useVendasDashboard() {
     }
   }, []);
 
+  // Flag para forçar busca no Firebird (bypass cache)
+  const [forceFirebird, setForceFirebird] = useState(false);
+
   const fetchData = useCallback(async (
     empresa: EmpresaParam, 
     dataInicio: string, 
-    dataFim: string
+    dataFim: string,
+    forcarFirebird = false
   ) => {
     // Cancelar requisição anterior se existir
     if (abortControllerRef.current) {
@@ -310,7 +314,7 @@ export function useVendasDashboard() {
     }
     abortControllerRef.current = new AbortController();
     
-    // OTIMIZAÇÃO 3: Verificar limite de dias
+    // Verificar limite de dias
     const diasNoPeriodo = diffInDays(dataInicio, dataFim) + 1;
     
     if (diasNoPeriodo > CONFIG.LIMITE_DIAS_MAXIMO) {
@@ -324,54 +328,28 @@ export function useVendasDashboard() {
       setAlertaPeriodo(null);
     }
     
-    // OTIMIZAÇÃO 2: Loading progressivo - mostrar placeholders imediatamente
+    // Loading progressivo
     setLoading(true);
     setError(null);
     setLoadingDesconto(true);
     setErroDesconto(null);
     setFontesDados({ supabase: false, firebird: false });
     
-    console.log('[useVendasDashboard] Buscando dados:', { empresa, dataInicio, dataFim, diasNoPeriodo });
+    console.log('[useVendasDashboard] Buscando dados:', { empresa, dataInicio, dataFim, diasNoPeriodo, forcarFirebird });
     
-    // ESTRATÉGIA OTIMIZADA:
-    // 1. Usar cache do backend (não enviar cache=0)
-    // 2. Retry automático em caso de timeout
-    // 3. Fallback para cache Supabase local
+    // ========================================
+    // ESTRATÉGIA CACHE-FIRST
+    // ========================================
+    // 1. SEMPRE verificar cache Supabase primeiro (resposta instantânea)
+    // 2. SE cache vazio OU usuário forçar → tentar Firebird
+    // 3. Mostrar indicador visual da fonte
     
-    try {
-      // Passo 1: Tentar Firebird COM CACHE DO BACKEND (otimização #1)
-      console.log('[useVendasDashboard] Tentando Firebird com cache do backend...');
-      const startTime = performance.now();
-      
-      // OTIMIZAÇÃO 1: Não enviar bypassCache (usar cache do backend)
-      // OTIMIZAÇÃO 5: Usar fetchComRetry para retry automático
-      const dadosFirebird = await fetchComRetry(() => 
-        getResumoFormasPagamento({
-          empresa,
-          dataInicio,
-          dataFim,
-          bypassCache: false, // OTIMIZAÇÃO 1: Usar cache do backend!
-          excluirCreditos: true,
-          incluirDevolucoes: false,
-        })
-      );
-      
-      const tempoMs = Math.round(performance.now() - startTime);
-      console.log(`[useVendasDashboard] Firebird OK: ${dadosFirebird.length} registros em ${tempoMs}ms`);
-      
-      setDadosFormasPagamento(dadosFirebird);
-      setFontesDados({ supabase: false, firebird: true });
-      setDataLoaded(true);
-      setLoading(false);
-      setLoadingDesconto(false);
-      
-    } catch (firebirdError) {
-      console.warn('[useVendasDashboard] Firebird falhou após retry:', firebirdError);
-      
-      // Passo 2: Fallback para cache Supabase local
+    const startTime = performance.now();
+    
+    // PASSO 1: Verificar cache Supabase PRIMEIRO (< 100ms)
+    if (!forcarFirebird) {
       try {
-        console.log('[useVendasDashboard] Tentando cache Supabase local...');
-        const startTime = performance.now();
+        console.log('[useVendasDashboard] CACHE-FIRST: Verificando cache Supabase...');
         
         const dadosAgregados = await getVendasAgregado({
           empresa,
@@ -380,10 +358,10 @@ export function useVendasDashboard() {
         });
         
         const tempoMs = Math.round(performance.now() - startTime);
-        console.log(`[useVendasDashboard] Supabase: ${dadosAgregados.length} registros em ${tempoMs}ms`);
+        console.log(`[useVendasDashboard] Cache: ${dadosAgregados.length} registros em ${tempoMs}ms`);
         
         if (dadosAgregados.length > 0) {
-          // Verificar cobertura do cache
+          // Cache encontrado! Usar imediatamente
           const diasNoCache = await contarDiasNoCache(dataInicio, dataFim);
           const cobertura = Math.round((diasNoCache / diasNoPeriodo) * 100);
           
@@ -404,26 +382,89 @@ export function useVendasDashboard() {
           setDataLoaded(true);
           setLoading(false);
           setLoadingDesconto(false);
-        } else {
-          // Passo 3: Sem dados disponíveis
-          console.warn('[useVendasDashboard] Cache vazio');
-          setDadosFormasPagamento([]);
-          setFontesDados({ supabase: false, firebird: false, parcial: true });
-          setError('Servidor indisponível e cache vazio para este período. Tente novamente em alguns minutos.');
-          setDataLoaded(true);
-          setLoading(false);
-          setLoadingDesconto(false);
+          
+          console.log(`[useVendasDashboard] ✓ Dados do cache carregados em ${tempoMs}ms (${cobertura}% cobertura)`);
+          return; // SUCESSO - não precisa ir ao Firebird!
         }
         
+        // Cache vazio - continua para o Firebird
+        console.log('[useVendasDashboard] Cache vazio para este período, tentando Firebird...');
+        
       } catch (cacheError) {
-        console.error('[useVendasDashboard] Cache também falhou:', cacheError);
+        console.warn('[useVendasDashboard] Erro ao verificar cache:', cacheError);
+        // Continua para o Firebird
+      }
+    } else {
+      console.log('[useVendasDashboard] Forçando busca no Firebird (bypass cache)...');
+    }
+    
+    // PASSO 2: Tentar Firebird (apenas se cache vazio ou forçado)
+    try {
+      console.log('[useVendasDashboard] Tentando Firebird...');
+      const firebirdStartTime = performance.now();
+      
+      const dadosFirebird = await fetchComRetry(() => 
+        getResumoFormasPagamento({
+          empresa,
+          dataInicio,
+          dataFim,
+          bypassCache: false,
+          excluirCreditos: true,
+          incluirDevolucoes: false,
+        })
+      );
+      
+      const tempoMs = Math.round(performance.now() - firebirdStartTime);
+      console.log(`[useVendasDashboard] Firebird OK: ${dadosFirebird.length} registros em ${tempoMs}ms`);
+      
+      setDadosFormasPagamento(dadosFirebird);
+      setFontesDados({ supabase: false, firebird: true });
+      setDataLoaded(true);
+      setLoading(false);
+      setLoadingDesconto(false);
+      
+    } catch (firebirdError) {
+      console.error('[useVendasDashboard] Firebird falhou:', firebirdError);
+      
+      // PASSO 3: Firebird falhou - última tentativa no cache
+      try {
+        const dadosAgregados = await getVendasAgregado({
+          empresa,
+          dataInicio,
+          dataFim,
+        });
+        
+        if (dadosAgregados.length > 0) {
+          const diasNoCache = await contarDiasNoCache(dataInicio, dataFim);
+          const cobertura = Math.round((diasNoCache / diasNoPeriodo) * 100);
+          
+          const dadosConvertidos = await converterAgregadoParaResumo(dadosAgregados);
+          setDadosFormasPagamento(dadosConvertidos);
+          setFontesDados({ 
+            supabase: true, 
+            firebird: false, 
+            parcial: cobertura < 100,
+            mensagem: cobertura < 100 
+              ? `Servidor offline. Cache parcial: ${diasNoCache}/${diasNoPeriodo} dias (${cobertura}%)`
+              : 'Servidor offline. Usando cache local.'
+          });
+          setDataLoaded(true);
+        } else {
+          setDadosFormasPagamento([]);
+          setFontesDados({ supabase: false, firebird: false, parcial: true });
+          setError('Servidor indisponível e sem cache para este período. Dados disponíveis até Novembro/2025.');
+        }
+        
+      } catch (finalError) {
+        console.error('[useVendasDashboard] Todas as fontes falharam:', finalError);
         setDadosFormasPagamento([]);
         setFontesDados({ supabase: false, firebird: false, parcial: true });
         setError('Erro ao carregar dados. Tente novamente.');
-        setDataLoaded(true);
-        setLoading(false);
-        setLoadingDesconto(false);
       }
+      
+      setDataLoaded(true);
+      setLoading(false);
+      setLoadingDesconto(false);
     }
   }, [fetchComRetry]);
 
@@ -494,8 +535,16 @@ export function useVendasDashboard() {
     return agruparPorLoja(dadosFormasPagamento);
   }, [dadosFormasPagamento]);
 
+  // Reload normal (usa cache-first)
   const reload = useCallback(() => {
-    fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
+    setForceFirebird(false);
+    fetchData(filters.empresa, filters.dataInicio, filters.dataFim, false);
+  }, [filters, fetchData]);
+
+  // Reload forçando Firebird (bypass cache)
+  const forceRefresh = useCallback(() => {
+    setForceFirebird(true);
+    fetchData(filters.empresa, filters.dataInicio, filters.dataFim, true);
   }, [filters, fetchData]);
 
   return {
@@ -514,5 +563,6 @@ export function useVendasDashboard() {
     fontesDados,
     alertaPeriodo,
     reload,
+    forceRefresh,
   };
 }
