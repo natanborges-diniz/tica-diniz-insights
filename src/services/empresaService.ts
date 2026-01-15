@@ -26,9 +26,25 @@ export interface Empresa {
 // ============================================
 
 export async function getEmpresas(): Promise<Empresa[]> {
+  // PRIMEIRO: Buscar do Supabase (instantâneo, sem dependência de API externa)
+  const { data, error } = await supabase
+    .from('empresa')
+    .select('cod_empresa, nome_fantasia')
+    .order('cod_empresa');
+  
+  if (!error && data && data.length > 0) {
+    return data
+      .filter(e => !EMPRESAS_INATIVAS_SUPABASE.includes(e.cod_empresa))
+      .map(e => ({
+        codEmpresa: e.cod_empresa,
+        nome: e.nome_fantasia || `Loja ${e.cod_empresa}`,
+      }));
+  }
+  
+  // FALLBACK: Se Supabase falhar, tentar Firebird Bridge com timeout reduzido
+  console.warn('Supabase falhou, tentando Firebird Bridge:', error);
   try {
-    // Tenta buscar do firebird-bridge primeiro (já vem filtrado pelo backend)
-    const raw = await apiGet<EmpresaRaw>('/empresas');
+    const raw = await apiGet<EmpresaRaw>('/empresas', undefined, { timeoutMs: 10000 });
     
     if (raw && raw.length > 0) {
       return raw
@@ -39,24 +55,8 @@ export async function getEmpresas(): Promise<Empresa[]> {
         }));
     }
   } catch (err) {
-    console.warn('Firebird bridge indisponível, usando fallback Supabase:', err);
+    console.error('Ambas as fontes falharam para buscar empresas:', err);
   }
   
-  // Fallback: buscar do Supabase (apenas filtra Loja 10)
-  const { data, error } = await supabase
-    .from('empresa')
-    .select('cod_empresa, nome_fantasia')
-    .order('cod_empresa');
-  
-  if (error) {
-    console.error('Erro ao buscar empresas do Supabase:', error);
-    return [];
-  }
-  
-  return (data || [])
-    .filter(e => !EMPRESAS_INATIVAS_SUPABASE.includes(e.cod_empresa))
-    .map(e => ({
-      codEmpresa: e.cod_empresa,
-      nome: e.nome_fantasia || `Loja ${e.cod_empresa}`,
-    }));
+  return [];
 }
