@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-import { VendasFiltersState, ViewMode, ResumoLoja, VendasMetrics, ProjecaoFechamento } from "@/hooks/useVendasDashboard";
+import { VendasFiltersState, ViewMode, ResumoLoja, VendasMetrics, ProjecaoFechamento, ProgressoPaginacao } from "@/hooks/useVendasDashboard";
 import { ResumoEmpresaVendedor, ResumoFormaPagamento } from "@/services/vendasService";
 import { useChartFilter } from "@/hooks/useChartFilter";
 import { ActiveFilterBadges } from "@/components/ui/active-filter-badges";
@@ -50,14 +50,48 @@ interface VendasDashboardLayoutProps {
   projecao: ProjecaoFechamento;
   // Alertas
   alertaPeriodo?: string | null;
+  // Progresso da paginação
+  progressoPaginacao?: ProgressoPaginacao | null;
   // Ações
   reload: () => void;
   forceRefresh?: () => void;
 }
 
-function LoadingSkeleton() {
+function LoadingSkeleton({ progressoPaginacao }: { progressoPaginacao?: ProgressoPaginacao | null }) {
+  const progressoPercent = progressoPaginacao 
+    ? Math.round((progressoPaginacao.paginaAtual / progressoPaginacao.totalEstimado) * 100) 
+    : 0;
+
   return (
     <div className="space-y-6">
+      {/* Indicador de progresso da paginação */}
+      {progressoPaginacao && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="py-4">
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+                <span className="text-sm font-medium text-foreground">
+                  Carregando página {progressoPaginacao.paginaAtual} de {progressoPaginacao.totalEstimado}...
+                </span>
+              </div>
+              <div className="w-full max-w-md">
+                <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                  <span>{progressoPaginacao.registrosCarregados} registros</span>
+                  <span>{progressoPercent}%</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-primary transition-all duration-300 ease-out"
+                    style={{ width: `${progressoPercent}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
       {/* KPI Cards skeleton */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[1, 2, 3, 4].map((i) => (
@@ -120,6 +154,7 @@ export function VendasDashboardLayout({
   metrics,
   projecao,
   alertaPeriodo,
+  progressoPaginacao,
   reload,
   forceRefresh,
 }: VendasDashboardLayoutProps) {
@@ -361,7 +396,7 @@ export function VendasDashboardLayout({
       )}
 
       {loading ? (
-        <LoadingSkeleton />
+        <LoadingSkeleton progressoPaginacao={progressoPaginacao} />
       ) : dataLoaded && (
         <>
           {/* KPIs */}
