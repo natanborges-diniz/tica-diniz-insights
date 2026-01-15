@@ -1,5 +1,6 @@
 // supabase/functions/sync-agregados-mensal/index.ts
 // Sincroniza agregados MENSAIS de vendas da API Firebird para o Supabase
+// USA MICRO-BATCHES DE 5 DIAS para evitar timeouts
 // DADOS SÃO ARMAZENADOS NO ÚLTIMO DIA DE CADA MÊS
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -10,6 +11,15 @@ const corsHeaders = {
 };
 
 const FIREBIRD_API_BASE_URL = Deno.env.get('FIREBIRD_API_BASE_URL') || 'https://firebird-bridge-production.up.railway.app';
+
+// Configurações de micro-batches
+const CONFIG = {
+  DIAS_POR_BATCH: 5,           // Buscar 5 dias por vez
+  TIMEOUT_BATCH: 30000,        // 30 segundos por batch
+  RETRIES_POR_BATCH: 2,        // 2 tentativas por batch
+  PAUSA_ENTRE_BATCHES: 1000,   // 1 segundo entre batches
+  PAUSA_ENTRE_MESES: 3000,     // 3 segundos entre meses
+};
 
 interface ResumoFormaPagamento {
   empresa: string;
@@ -24,7 +34,7 @@ interface ResumoFormaPagamento {
 }
 
 interface AgregadoMensal {
-  data: string; // Último dia do mês
+  data: string;
   cod_empresa: number;
   vendedor: string;
   forma_pagamento: string;
@@ -36,155 +46,220 @@ interface AgregadoMensal {
 }
 
 /**
+ * Formata data como YYYY-MM-DD
+ */
+function formatDate(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
+/**
+ * Adiciona dias a uma data
+ */
+function addDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+/**
  * Retorna o primeiro dia do mês
  */
-function getPrimeiroDiaMes(ano: number, mes: number): string {
-  const d = new Date(ano, mes, 1);
-  return d.toISOString().split('T')[0];
+function getPrimeiroDiaMes(ano: number, mes: number): Date {
+  return new Date(ano, mes, 1);
 }
 
 /**
  * Retorna o último dia do mês
  */
-function getUltimoDiaMes(ano: number, mes: number): string {
-  const d = new Date(ano, mes + 1, 0);
-  return d.toISOString().split('T')[0];
+function getUltimoDiaMes(ano: number, mes: number): Date {
+  return new Date(ano, mes + 1, 0);
 }
 
 /**
- * Fazer requisição GET à API Railway
+ * Fazer requisição GET à API Railway com retry
  */
-async function firebirdGet(path: string, params: Record<string, any> = {}, timeoutMs = 90000) {
-  const url = new URL(path, FIREBIRD_API_BASE_URL);
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      url.searchParams.set(key, String(value));
+async function firebirdGetComRetry(
+  path: string, 
+  params: Record<string, any> = {}, 
+  timeoutMs: number = CONFIG.TIMEOUT_BATCH,
+  retries: number = CONFIG.RETRIES_POR_BATCH
+): Promise<any> {
+  let lastError: Error | null = null;
+  
+  for (let tentativa = 0; tentativa <= retries; tentativa++) {
+    try {
+      const url = new URL(path, FIREBIRD_API_BASE_URL);
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          url.searchParams.set(key, String(value));
+        }
+      });
+
+      if (tentativa > 0) {
+        console.log(`[firebirdGet] Tentativa ${tentativa + 1}/${retries + 1}: ${url.toString()}`);
+      } else {
+        console.log('[firebirdGet] URL:', url.toString());
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const res = await fetch(url.toString(), {
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const body = await res.text();
+        console.error('[firebirdGet] Erro:', res.status, body.slice(0, 300));
+        throw new Error(`Erro Firebird: ${res.status}`);
+      }
+
+      return await res.json();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      
+      if (lastError.name === 'AbortError') {
+        lastError = new Error(`Timeout após ${timeoutMs / 1000}s`);
+      }
+      
+      if (tentativa < retries) {
+        // Espera antes do retry (exponencial)
+        const delay = 1000 * (tentativa + 1);
+        console.log(`[firebirdGet] Aguardando ${delay}ms antes do retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
-  });
-
-  console.log('[firebirdGet] URL:', url.toString());
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const res = await fetch(url.toString(), {
-      headers: { 'Accept': 'application/json' },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      const body = await res.text();
-      console.error('[firebirdGet] Erro:', res.status, body.slice(0, 300));
-      throw new Error(`Erro Firebird: ${res.status}`);
-    }
-
-    return res.json();
-  } catch (err) {
-    clearTimeout(timeoutId);
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error(`Timeout após ${timeoutMs / 1000}s`);
-    }
-    throw err;
   }
+  
+  throw lastError;
 }
 
 /**
- * Sincronizar um mês específico
+ * Sincronizar um mês usando micro-batches de 5 dias
  */
-async function syncMes(
+async function syncMesPorBatches(
   supabase: any,
   ano: number,
   mes: number
-): Promise<{ registros: number; erro?: string }> {
-  const dataInicio = getPrimeiroDiaMes(ano, mes);
-  const dataFim = getUltimoDiaMes(ano, mes);
+): Promise<{ registros: number; batchesOk: number; batchesFalha: number; erro?: string }> {
+  const primeiroDia = getPrimeiroDiaMes(ano, mes);
+  const ultimoDia = getUltimoDiaMes(ano, mes);
+  const dataArmazenamento = formatDate(ultimoDia);
   
-  console.log(`[syncMes] Buscando ${dataInicio} a ${dataFim}...`);
+  console.log(`[syncMesPorBatches] Iniciando ${mes + 1}/${ano}: ${formatDate(primeiroDia)} a ${dataArmazenamento}`);
   
-  try {
-    const response = await firebirdGet('/api/v1/vendas/resumo-formas-pagamento', {
-      dataInicio,
-      dataFim,
-      cache: 0,
-    }, 90000); // 90 segundos de timeout para mês inteiro
+  // Coletar todos os dados do mês em batches
+  const todosOsDados: ResumoFormaPagamento[] = [];
+  let batchesOk = 0;
+  let batchesFalha = 0;
+  let diaAtual = primeiroDia;
+  
+  while (diaAtual <= ultimoDia) {
+    const fimBatch = new Date(Math.min(
+      addDays(diaAtual, CONFIG.DIAS_POR_BATCH - 1).getTime(),
+      ultimoDia.getTime()
+    ));
     
-    const dados: ResumoFormaPagamento[] = Array.isArray(response) 
-      ? response 
-      : (response?.data && Array.isArray(response.data) ? response.data : []);
+    const dataInicio = formatDate(diaAtual);
+    const dataFim = formatDate(fimBatch);
     
-    console.log(`[syncMes] ${dataInicio} a ${dataFim}: ${dados.length} registros do Firebird`);
+    console.log(`[batch] ${dataInicio} a ${dataFim}...`);
     
-    if (dados.length === 0) {
-      return { registros: 0 };
-    }
-    
-    const agora = new Date().toISOString();
-    
-    // Agrupar por empresa + vendedor + forma_pagamento
-    const mapaAgregados = new Map<string, AgregadoMensal>();
-    
-    dados.forEach((d) => {
-      const vendedor = (d.vendedor || '').trim();
-      const formaPagamento = d.formapagamento || '';
-      const key = `${d.empresa_cod_logico}|${vendedor}|${formaPagamento}`;
-      
-      const existing = mapaAgregados.get(key);
-      if (existing) {
-        existing.total_vendido += d.totalgeral || 0;
-        existing.total_bruto += d.total_bruto || 0;
-        existing.total_desconto += d.total_desconto || 0;
-        existing.qtd_vendas += d.qtd_vendas || 0;
-      } else {
-        mapaAgregados.set(key, {
-          data: dataFim, // Armazena no ÚLTIMO dia do mês
-          cod_empresa: d.empresa_cod_logico,
-          vendedor,
-          forma_pagamento: formaPagamento,
-          total_vendido: d.totalgeral || 0,
-          total_bruto: d.total_bruto || 0,
-          total_desconto: d.total_desconto || 0,
-          qtd_vendas: d.qtd_vendas || 0,
-          atualizado_em: agora,
-        });
-      }
-    });
-    
-    const agregados = Array.from(mapaAgregados.values());
-    console.log(`[syncMes] ${dataFim}: ${agregados.length} agregados únicos`);
-    
-    // Primeiro remove dados antigos deste mês
-    const { error: deleteError } = await supabase
-      .from('vendas_agregado_diario')
-      .delete()
-      .eq('data', dataFim);
-    
-    if (deleteError) {
-      console.warn('[syncMes] Aviso ao deletar dados antigos:', deleteError.message);
-    }
-    
-    // Upsert no Supabase
-    const { error } = await supabase
-      .from('vendas_agregado_diario')
-      .upsert(agregados, {
-        onConflict: 'data,cod_empresa,vendedor,forma_pagamento',
-        ignoreDuplicates: false,
+    try {
+      const response = await firebirdGetComRetry('/api/v1/vendas/resumo-formas-pagamento', {
+        dataInicio,
+        dataFim,
+        // cache: true - NÃO enviar cache=0, usar cache do backend por padrão
       });
-    
-    if (error) {
-      console.error(`[syncMes] Erro upsert:`, error);
-      throw error;
+      
+      const dados: ResumoFormaPagamento[] = Array.isArray(response) 
+        ? response 
+        : (response?.data && Array.isArray(response.data) ? response.data : []);
+      
+      console.log(`[batch] ${dataInicio} a ${dataFim}: ${dados.length} registros`);
+      todosOsDados.push(...dados);
+      batchesOk++;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[batch] Erro ${dataInicio} a ${dataFim}: ${message}`);
+      batchesFalha++;
+      // Continua para o próximo batch mesmo com erro
     }
     
-    console.log(`[syncMes] ${dataFim}: ${agregados.length} registros salvos`);
-    return { registros: agregados.length };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[syncMes] Erro ${dataFim}:`, message);
-    return { registros: 0, erro: message };
+    // Pausa entre batches
+    await new Promise(resolve => setTimeout(resolve, CONFIG.PAUSA_ENTRE_BATCHES));
+    
+    // Avança para próximo batch
+    diaAtual = addDays(fimBatch, 1);
   }
+  
+  console.log(`[syncMesPorBatches] ${mes + 1}/${ano}: ${todosOsDados.length} registros coletados (${batchesOk} OK, ${batchesFalha} falhas)`);
+  
+  if (todosOsDados.length === 0) {
+    return { registros: 0, batchesOk, batchesFalha, erro: batchesFalha > 0 ? 'Alguns batches falharam' : undefined };
+  }
+  
+  // Agregar por empresa + vendedor + forma_pagamento
+  const agora = new Date().toISOString();
+  const mapaAgregados = new Map<string, AgregadoMensal>();
+  
+  todosOsDados.forEach((d) => {
+    const vendedor = (d.vendedor || '').trim();
+    const formaPagamento = d.formapagamento || '';
+    const key = `${d.empresa_cod_logico}|${vendedor}|${formaPagamento}`;
+    
+    const existing = mapaAgregados.get(key);
+    if (existing) {
+      existing.total_vendido += d.totalgeral || 0;
+      existing.total_bruto += d.total_bruto || 0;
+      existing.total_desconto += d.total_desconto || 0;
+      existing.qtd_vendas += d.qtd_vendas || 0;
+    } else {
+      mapaAgregados.set(key, {
+        data: dataArmazenamento,
+        cod_empresa: d.empresa_cod_logico,
+        vendedor,
+        forma_pagamento: formaPagamento,
+        total_vendido: d.totalgeral || 0,
+        total_bruto: d.total_bruto || 0,
+        total_desconto: d.total_desconto || 0,
+        qtd_vendas: d.qtd_vendas || 0,
+        atualizado_em: agora,
+      });
+    }
+  });
+  
+  const agregados = Array.from(mapaAgregados.values());
+  console.log(`[syncMesPorBatches] ${dataArmazenamento}: ${agregados.length} agregados únicos`);
+  
+  // Remove dados antigos deste mês
+  const { error: deleteError } = await supabase
+    .from('vendas_agregado_diario')
+    .delete()
+    .eq('data', dataArmazenamento);
+  
+  if (deleteError) {
+    console.warn('[syncMesPorBatches] Aviso ao deletar:', deleteError.message);
+  }
+  
+  // Upsert no Supabase
+  const { error } = await supabase
+    .from('vendas_agregado_diario')
+    .upsert(agregados, {
+      onConflict: 'data,cod_empresa,vendedor,forma_pagamento',
+      ignoreDuplicates: false,
+    });
+  
+  if (error) {
+    console.error(`[syncMesPorBatches] Erro upsert:`, error);
+    throw error;
+  }
+  
+  console.log(`[syncMesPorBatches] ${dataArmazenamento}: ${agregados.length} registros salvos`);
+  return { registros: agregados.length, batchesOk, batchesFalha };
 }
 
 /**
@@ -207,18 +282,21 @@ async function processarMesesBackground(
   
   while (ano < anoFim || (ano === anoFim && mes <= mesFim)) {
     try {
-      const result = await syncMes(supabase, ano, mes);
+      const result = await syncMesPorBatches(supabase, ano, mes);
       totalRegistros += result.registros;
-      if (result.erro) erros++;
+      if (result.batchesFalha > 0) erros++;
       
-      // Pausa de 2s entre meses para não sobrecarregar
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log(`[background] ${mes + 1}/${ano}: ${result.registros} registros (${result.batchesOk} batches OK, ${result.batchesFalha} falhas)`);
     } catch (err) {
-      console.error(`[background] Erro ${mes + 1}/${ano}:`, err);
+      console.error(`[background] Erro fatal ${mes + 1}/${ano}:`, err);
       erros++;
     }
     
     mesesProcessados++;
+    
+    // Pausa entre meses
+    await new Promise(resolve => setTimeout(resolve, CONFIG.PAUSA_ENTRE_MESES));
+    
     mes++;
     if (mes > 11) {
       mes = 0;
@@ -227,7 +305,7 @@ async function processarMesesBackground(
   }
   
   // Atualizar controle ETL
-  const ultimaData = getUltimoDiaMes(anoFim, mesFim);
+  const ultimaData = formatDate(getUltimoDiaMes(anoFim, mesFim));
   try {
     await supabase.from('etl_controle').upsert({
       entidade: 'vendas_agregado_mensal',
@@ -257,7 +335,7 @@ Deno.serve(async (req) => {
     
     // Para um único mês
     const ano = parseInt(url.searchParams.get('ano') || String(anoAtual), 10);
-    const mes = parseInt(url.searchParams.get('mes') || String(mesAtual + 1), 10) - 1; // mes é 0-indexed
+    const mes = parseInt(url.searchParams.get('mes') || String(mesAtual + 1), 10) - 1;
     
     // Para histórico
     const anoInicio = parseInt(url.searchParams.get('anoInicio') || String(anoAtual), 10);
@@ -265,7 +343,7 @@ Deno.serve(async (req) => {
     const anoFim = parseInt(url.searchParams.get('anoFim') || String(anoAtual), 10);
     const mesFim = parseInt(url.searchParams.get('mesFim') || String(mesAtual + 1), 10) - 1;
     
-    console.log(`[sync-agregados-mensal] Início`);
+    console.log(`[sync-agregados-mensal] Início - Modo micro-batches (${CONFIG.DIAS_POR_BATCH} dias por batch)`);
     console.log(`[sync-agregados-mensal] Histórico: ${modoHistorico}`);
     
     // Criar cliente Supabase
@@ -283,26 +361,32 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: true,
-          modo: 'historico_background',
+          modo: 'historico_background_microbatches',
           periodo: `${mesInicio + 1}/${anoInicio} a ${mesFim + 1}/${anoFim}`,
-          message: 'Sincronização mensal iniciada em background.',
+          config: {
+            diasPorBatch: CONFIG.DIAS_POR_BATCH,
+            timeoutBatch: CONFIG.TIMEOUT_BATCH,
+            retriesPorBatch: CONFIG.RETRIES_POR_BATCH,
+          },
+          message: 'Sincronização com micro-batches iniciada em background.',
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     } else {
       console.log(`[sync-agregados-mensal] Mês único: ${mes + 1}/${ano}`);
       
-      // Modo síncrono para um único mês
-      const result = await syncMes(supabase, ano, mes);
+      const result = await syncMesPorBatches(supabase, ano, mes);
       
       return new Response(
         JSON.stringify({
-          success: !result.erro,
-          modo: 'normal',
+          success: result.batchesFalha === 0,
+          modo: 'normal_microbatches',
           mes: mes + 1,
           ano,
-          dataArmazenada: getUltimoDiaMes(ano, mes),
+          dataArmazenada: formatDate(getUltimoDiaMes(ano, mes)),
           registros: result.registros,
+          batchesOk: result.batchesOk,
+          batchesFalha: result.batchesFalha,
           erro: result.erro,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
