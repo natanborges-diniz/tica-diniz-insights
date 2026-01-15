@@ -16,10 +16,17 @@ import {
   ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
 import { getVendasAgregado, AgregadoFormaPagamento, contarDiasNoCache, isPeriodoFechado, separarPeriodo } from "@/services/agregadosService";
-import { getAuditoriaLightCompleta, auditoriaLightToResumo, ProgressoPaginacao } from "@/services/auditoriaService";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
+
+// Tipo para progresso (mantido para compatibilidade com UI)
+export interface ProgressoPaginacao {
+  paginaAtual: number;
+  totalEstimado: number;
+  registrosCarregados: number;
+  concluido: boolean;
+}
 
 export type ViewMode = "loja" | "vendedor";
 
@@ -80,7 +87,6 @@ export interface ResumoLoja {
 
 export type { ResumoEmpresaVendedorAPI as ResumoEmpresaVendedor };
 export type { ResumoFormaPagamento };
-export type { ProgressoPaginacao };
 
 // Cache de nomes de empresas
 let empresasCache: Map<number, string> | null = null;
@@ -442,138 +448,72 @@ export function useVendasDashboard() {
           return;
         }
         
-        console.log('[useVendasDashboard] Cache vazio para período aberto, tentando Firebird...');
+        // Cache vazio para período aberto - avisar usuário para sincronizar
+        console.log('[useVendasDashboard] Cache vazio para período aberto - sincronização necessária');
+        setDadosFormasPagamento([]);
+        setFontesDados({ 
+          supabase: false, 
+          firebird: false, 
+          parcial: true,
+          mensagem: 'Cache vazio para este período. Execute sincronização.'
+        });
+        setError('Dados não disponíveis no cache. Execute a sincronização do período.');
+        setDataLoaded(true);
+        setLoading(false);
+        setLoadingDesconto(false);
+        return;
         
       } catch (cacheError) {
-        console.warn('[useVendasDashboard] Erro ao verificar cache:', cacheError);
-        // Continua para o Firebird
-      }
-    } else {
-      console.log('[useVendasDashboard] Forçando busca no Firebird (bypass cache)...');
-    }
-    
-    // PASSO 2: Tentar endpoint light paginado (mais leve, evita timeout)
-    try {
-      console.log('[useVendasDashboard] Tentando auditoria-formas-pagamento-light paginado:', {
-        empresa,
-        dataInicio,
-        dataFim,
-      });
-      const firebirdStartTime = performance.now();
-      
-      // Usar endpoint light com paginação para período aberto
-      // Passar o signal para permitir cancelamento
-      const dadosAuditoria = await getAuditoriaLightCompleta(
-        {
-          empresa,
-          dataInicio,
-          dataFim,
-          excluirCreditos: true,
-        },
-        20,
-        (progresso) => {
-          setProgressoPaginacao(progresso);
-        },
-        abortControllerRef.current?.signal
-      );
-      
-      const tempoMs = Math.round(performance.now() - firebirdStartTime);
-      console.log(`[useVendasDashboard] Auditoria Light OK: ${dadosAuditoria.length} registros em ${tempoMs}ms`);
-      
-      // Converter para formato ResumoFormaPagamento
-      const dadosConvertidos = auditoriaLightToResumo(dadosAuditoria);
-      
-      setDadosFormasPagamento(dadosConvertidos);
-      setFontesDados({ 
-        supabase: false, 
-        firebird: true,
-        mensagem: `Auditoria light paginada: ${dadosAuditoria.length} registros`
-      });
-      setProgressoPaginacao(null); // Limpar progresso ao concluir
-      setDataLoaded(true);
-      setLoading(false);
-      setLoadingDesconto(false);
-      
-    } catch (auditoriaError) {
-      // Se foi cancelado, não tentar fallback
-      if (auditoriaError instanceof Error && auditoriaError.message.includes('cancelada')) {
-        console.log('[useVendasDashboard] Requisição cancelada, não tentando fallback');
-        setProgressoPaginacao(null);
+        console.error('[useVendasDashboard] Erro ao verificar cache:', cacheError);
+        setDadosFormasPagamento([]);
+        setFontesDados({ supabase: false, firebird: false, parcial: true });
+        setError('Erro ao consultar cache. Tente novamente.');
+        setDataLoaded(true);
+        setLoading(false);
+        setLoadingDesconto(false);
         return;
       }
-      
-      console.warn('[useVendasDashboard] Auditoria light falhou, tentando resumo...', auditoriaError);
-      setProgressoPaginacao(null); // Limpar progresso ao falhar
-      
-      // PASSO 2B: Fallback para endpoint resumo tradicional
+    } else {
+      // forcarFirebird = true, mas não vamos mais chamar Firebird direto
+      // Apenas recarrega do cache
+      console.log('[useVendasDashboard] Force refresh solicitado - recarregando cache...');
       try {
-        console.log('[useVendasDashboard] Fallback resumo-formas-pagamento:', {
+        const dadosAgregados = await getVendasAgregado({
           empresa,
           dataInicio,
           dataFim,
         });
-        console.log('[useVendasDashboard] Fallback: Tentando resumo-formas-pagamento...');
-        const firebirdStartTime = performance.now();
         
-        const dadosFirebird = await fetchComRetry(() => 
-          getResumoFormasPagamento({
-            empresa,
-            dataInicio,
-            dataFim,
-            bypassCache: false,
-            excluirCreditos: true,
-            incluirDevolucoes: false,
-          })
-        );
+        if (dadosAgregados.length > 0) {
+          const diasNoCache = await contarDiasNoCache(dataInicio, dataFim);
+          const cobertura = Math.round((diasNoCache / diasNoPeriodo) * 100);
+          
+          const dadosConvertidos = await converterAgregadoParaResumo(dadosAgregados);
+          setDadosFormasPagamento(dadosConvertidos);
+          setFontesDados({ 
+            supabase: true, 
+            firebird: false,
+            parcial: cobertura < 100,
+            mensagem: `Cache: ${diasNoCache}/${diasNoPeriodo} dias (${cobertura}%)`
+          });
+        } else {
+          setDadosFormasPagamento([]);
+          setFontesDados({ 
+            supabase: false, 
+            firebird: false, 
+            parcial: true,
+            mensagem: 'Cache vazio. Execute sincronização.'
+          });
+          setError('Cache vazio para este período. Execute a sincronização.');
+        }
         
-        const tempoMs = Math.round(performance.now() - firebirdStartTime);
-        console.log(`[useVendasDashboard] Resumo OK: ${dadosFirebird.length} registros em ${tempoMs}ms`);
-        
-        setDadosFormasPagamento(dadosFirebird);
-        setFontesDados({ supabase: false, firebird: true });
         setDataLoaded(true);
         setLoading(false);
         setLoadingDesconto(false);
         
-      } catch (firebirdError) {
-        console.error('[useVendasDashboard] Firebird falhou:', firebirdError);
-        
-        // PASSO 3: Firebird falhou - última tentativa no cache
-        try {
-          const dadosAgregados = await getVendasAgregado({
-            empresa,
-            dataInicio,
-            dataFim,
-          });
-          
-          if (dadosAgregados.length > 0) {
-            const diasNoCache = await contarDiasNoCache(dataInicio, dataFim);
-            const cobertura = Math.round((diasNoCache / diasNoPeriodo) * 100);
-            
-            const dadosConvertidos = await converterAgregadoParaResumo(dadosAgregados);
-            setDadosFormasPagamento(dadosConvertidos);
-            setFontesDados({ 
-              supabase: true, 
-              firebird: false, 
-              parcial: cobertura < 100,
-              mensagem: cobertura < 100 
-                ? `Servidor offline. Cache parcial: ${diasNoCache}/${diasNoPeriodo} dias (${cobertura}%)`
-                : 'Servidor offline. Usando cache local.'
-            });
-            setDataLoaded(true);
-          } else {
-            setDadosFormasPagamento([]);
-            setFontesDados({ supabase: false, firebird: false, parcial: true });
-            setError('Servidor indisponível e sem cache para este período.');
-          }
-          
-        } catch (finalError) {
-          console.error('[useVendasDashboard] Todas as fontes falharam:', finalError);
-          setDadosFormasPagamento([]);
-          setFontesDados({ supabase: false, firebird: false, parcial: true });
-          setError('Erro ao carregar dados. Tente novamente.');
-        }
-        
+      } catch (error) {
+        console.error('[useVendasDashboard] Erro ao recarregar cache:', error);
+        setError('Erro ao consultar cache.');
         setDataLoaded(true);
         setLoading(false);
         setLoadingDesconto(false);
