@@ -1,6 +1,6 @@
 // supabase/functions/sync-agregados-diarios/index.ts
 // Sincroniza agregados DIÁRIOS de vendas da API Firebird para o Supabase
-// VERSÃO SIMPLIFICADA: Um dia por vez, sem complexidade
+// VERSÃO OTIMIZADA: Usa endpoint /api/v1/vendas/resumo-empresa-vendedor (mais rápido)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -11,16 +11,14 @@ const corsHeaders = {
 
 const FIREBIRD_API_BASE_URL = Deno.env.get('FIREBIRD_API_BASE_URL') || 'https://firebird-bridge-production.up.railway.app';
 
-interface ResumoFormaPagamento {
+interface ResumoEmpresaVendedor {
   empresa: string;
   empresa_cod_logico: number;
   vendedor: string;
-  formapagamento: string;
-  totalgeral: number;
-  qtd_vendas: number;
+  qtd_transacao: number;
   total_bruto: number;
+  total_vendido: number;
   total_desconto: number;
-  perc_desconto: number;
 }
 
 interface AgregadoDiario {
@@ -45,8 +43,8 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
-// Fazer requisição GET à API Railway
-async function firebirdGet(path: string, params: Record<string, any> = {}, timeoutMs = 60000) {
+// Fazer requisição GET à API Railway com timeout adequado
+async function firebirdGet(path: string, params: Record<string, any> = {}, timeoutMs = 30000) {
   const url = new URL(path, FIREBIRD_API_BASE_URL);
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
@@ -83,7 +81,7 @@ async function firebirdGet(path: string, params: Record<string, any> = {}, timeo
   }
 }
 
-// Sincronizar um dia específico
+// Sincronizar um dia específico usando endpoint resumo-empresa-vendedor (mais leve)
 async function syncDia(
   supabase: any,
   data: string
@@ -91,15 +89,16 @@ async function syncDia(
   console.log(`[syncDia] Buscando ${data}...`);
   
   try {
-    const response = await firebirdGet('/api/v1/vendas/resumo-formas-pagamento', {
+    // Usar endpoint resumo-empresa-vendedor - mais leve que resumo-formas-pagamento
+    const response = await firebirdGet('/api/v1/vendas/resumo-empresa-vendedor', {
       dataInicio: data,
       dataFim: data,
-      cache: 0,
-    }, 60000);
+    }, 30000); // Timeout de 30s
     
-    const dados: ResumoFormaPagamento[] = Array.isArray(response) 
-      ? response 
-      : (response?.data && Array.isArray(response.data) ? response.data : []);
+    // O endpoint retorna { ok: true, data: [...] }
+    const dados: ResumoEmpresaVendedor[] = response?.data && Array.isArray(response.data) 
+      ? response.data 
+      : (Array.isArray(response) ? response : []);
     
     console.log(`[syncDia] ${data}: ${dados.length} registros do Firebird`);
     
@@ -109,37 +108,20 @@ async function syncDia(
     
     const agora = new Date().toISOString();
     
-    // Agrupar por empresa + vendedor + forma_pagamento
-    const mapaAgregados = new Map<string, AgregadoDiario>();
+    // Converter para formato do cache (sem forma de pagamento detalhada)
+    const agregados: AgregadoDiario[] = dados.map((d) => ({
+      data,
+      cod_empresa: d.empresa_cod_logico,
+      vendedor: (d.vendedor || '').trim() || 'DESCONHECIDO',
+      forma_pagamento: 'CONSOLIDADO', // Este endpoint não tem forma de pagamento
+      total_vendido: d.total_vendido || 0,
+      total_bruto: d.total_bruto || 0,
+      total_desconto: d.total_desconto || 0,
+      qtd_vendas: d.qtd_transacao || 0,
+      atualizado_em: agora,
+    }));
     
-    dados.forEach((d) => {
-      const vendedor = (d.vendedor || '').trim();
-      const formaPagamento = d.formapagamento || '';
-      const key = `${d.empresa_cod_logico}|${vendedor}|${formaPagamento}`;
-      
-      const existing = mapaAgregados.get(key);
-      if (existing) {
-        existing.total_vendido += d.totalgeral || 0;
-        existing.total_bruto += d.total_bruto || 0;
-        existing.total_desconto += d.total_desconto || 0;
-        existing.qtd_vendas += d.qtd_vendas || 0;
-      } else {
-        mapaAgregados.set(key, {
-          data,
-          cod_empresa: d.empresa_cod_logico,
-          vendedor,
-          forma_pagamento: formaPagamento,
-          total_vendido: d.totalgeral || 0,
-          total_bruto: d.total_bruto || 0,
-          total_desconto: d.total_desconto || 0,
-          qtd_vendas: d.qtd_vendas || 0,
-          atualizado_em: agora,
-        });
-      }
-    });
-    
-    const agregados = Array.from(mapaAgregados.values());
-    console.log(`[syncDia] ${data}: ${agregados.length} agregados únicos`);
+    console.log(`[syncDia] ${data}: ${agregados.length} agregados para salvar`);
     
     // Upsert no Supabase
     const { error } = await supabase
@@ -186,8 +168,8 @@ async function processarDiasBackground(
       totalRegistros += result.registros;
       if (result.erro) erros++;
       
-      // Pausa entre requisições
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Pausa entre requisições para não sobrecarregar API
+      await new Promise(resolve => setTimeout(resolve, 500));
     } catch (err) {
       console.error(`[background] Erro ${dataStr}:`, err);
       erros++;
