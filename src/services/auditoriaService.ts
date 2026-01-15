@@ -67,7 +67,7 @@ export interface AuditoriaLight {
 }
 
 // ============================================
-// INTERFACES - PAGINAÇÃO
+// INTERFACES - PAGINAÇÃO E PROGRESSO
 // ============================================
 
 export interface PaginatedResponse<T> {
@@ -78,6 +78,12 @@ export interface PaginatedResponse<T> {
     hasMore: boolean;
     total?: number;
   };
+}
+
+export interface ProgressoPaginacao {
+  paginaAtual: number;
+  totalEstimado: number;
+  registrosCarregados: number;
 }
 
 export interface AuditoriaParams {
@@ -202,10 +208,12 @@ export async function getAuditoriaLight(
 /**
  * Busca todas as páginas de auditoria light (agregado)
  * Útil para períodos abertos quando cache é insuficiente
+ * @param onProgress Callback para reportar progresso da paginação
  */
 export async function getAuditoriaLightCompleta(
   params: Omit<AuditoriaParams, 'page' | 'pageSize'>,
-  maxPages = 20
+  maxPages = 20,
+  onProgress?: (progresso: ProgressoPaginacao) => void
 ): Promise<AuditoriaLight[]> {
   const allData: AuditoriaLight[] = [];
   let page = 1;
@@ -216,6 +224,13 @@ export async function getAuditoriaLightCompleta(
   console.log(`[AuditoriaService] Fetching complete light audit...`);
 
   while (hasMore && page <= maxPages) {
+    // Reportar progresso antes de cada página
+    onProgress?.({
+      paginaAtual: page,
+      totalEstimado: maxPages,
+      registrosCarregados: allData.length,
+    });
+
     const response = await getAuditoriaLight({
       ...params,
       page,
@@ -224,6 +239,16 @@ export async function getAuditoriaLightCompleta(
 
     allData.push(...response.data);
     hasMore = response.pagination.hasMore;
+    
+    // Atualizar estimativa se terminou
+    if (!hasMore) {
+      onProgress?.({
+        paginaAtual: page,
+        totalEstimado: page,
+        registrosCarregados: allData.length,
+      });
+    }
+    
     page++;
   }
 

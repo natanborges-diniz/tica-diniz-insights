@@ -19,6 +19,7 @@ export default function SalesDashboard() {
     metrics,
     projecao,
     alertaPeriodo,
+    progressoPaginacao,
     reload,
     forceRefresh,
   } = useVendasDashboard();
@@ -39,6 +40,7 @@ export default function SalesDashboard() {
       metrics={metrics}
       projecao={projecao}
       alertaPeriodo={alertaPeriodo}
+      progressoPaginacao={progressoPaginacao}
       reload={reload}
       forceRefresh={forceRefresh}
     />

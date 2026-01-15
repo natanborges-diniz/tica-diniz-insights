@@ -16,7 +16,7 @@ import {
   ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
 import { getVendasAgregado, AgregadoFormaPagamento, contarDiasNoCache, isPeriodoFechado, separarPeriodo } from "@/services/agregadosService";
-import { getAuditoriaLightCompleta, auditoriaLightToResumo } from "@/services/auditoriaService";
+import { getAuditoriaLightCompleta, auditoriaLightToResumo, ProgressoPaginacao } from "@/services/auditoriaService";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
@@ -80,6 +80,7 @@ export interface ResumoLoja {
 
 export type { ResumoEmpresaVendedorAPI as ResumoEmpresaVendedor };
 export type { ResumoFormaPagamento };
+export type { ProgressoPaginacao };
 
 // Cache de nomes de empresas
 let empresasCache: Map<number, string> | null = null;
@@ -271,6 +272,9 @@ export function useVendasDashboard() {
   
   // Alerta para períodos longos
   const [alertaPeriodo, setAlertaPeriodo] = useState<string | null>(null);
+  
+  // Progresso da paginação
+  const [progressoPaginacao, setProgressoPaginacao] = useState<ProgressoPaginacao | null>(null);
 
   // Ref para controlar requisições em andamento
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -333,6 +337,7 @@ export function useVendasDashboard() {
     setLoading(true);
     setError(null);
     setLoadingDesconto(true);
+    setProgressoPaginacao(null); // Limpar progresso anterior
     setErroDesconto(null);
     setFontesDados({ supabase: false, firebird: false });
     
@@ -453,12 +458,18 @@ export function useVendasDashboard() {
       const firebirdStartTime = performance.now();
       
       // Usar endpoint light com paginação para período aberto
-      const dadosAuditoria = await getAuditoriaLightCompleta({
-        empresa,
-        dataInicio,
-        dataFim,
-        excluirCreditos: true,
-      });
+      const dadosAuditoria = await getAuditoriaLightCompleta(
+        {
+          empresa,
+          dataInicio,
+          dataFim,
+          excluirCreditos: true,
+        },
+        20,
+        (progresso) => {
+          setProgressoPaginacao(progresso);
+        }
+      );
       
       const tempoMs = Math.round(performance.now() - firebirdStartTime);
       console.log(`[useVendasDashboard] Auditoria Light OK: ${dadosAuditoria.length} registros em ${tempoMs}ms`);
@@ -472,6 +483,7 @@ export function useVendasDashboard() {
         firebird: true,
         mensagem: `Auditoria light paginada: ${dadosAuditoria.length} registros`
       });
+      setProgressoPaginacao(null); // Limpar progresso ao concluir
       setDataLoaded(true);
       setLoading(false);
       setLoadingDesconto(false);
@@ -644,6 +656,7 @@ export function useVendasDashboard() {
     dadosPorLoja,
     fontesDados,
     alertaPeriodo,
+    progressoPaginacao,
     reload,
     forceRefresh,
   };
