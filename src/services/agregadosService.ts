@@ -1,11 +1,15 @@
 // src/services/agregadosService.ts
 // Service para buscar dados agregados do Supabase (cache local)
 // COMPATÍVEL COM DADOS MENSAIS E DIÁRIOS
+// COM POLÍTICA DE DADOS FECHADOS
 
 import { supabase } from "@/integrations/supabase/client";
 import { EmpresaParam } from "./firebirdBridge";
 
-// Interface agregada por forma de pagamento
+// ============================================
+// TIPOS E INTERFACES
+// ============================================
+
 export interface AgregadoFormaPagamento {
   codEmpresa: number;
   empresa: string;
@@ -23,6 +27,31 @@ export interface GetVendasAgregadoParams {
   dataInicio: string;
   dataFim: string;
 }
+
+// Interface para diagnóstico de cache
+export interface CacheDiagnostico {
+  cacheHit: boolean;
+  fonte: 'cache_mensal' | 'cache_diario' | 'firebird' | 'nenhum';
+  periodoFechado: boolean;
+  mesesFechados: string[];
+  mesAberto: string | null;
+  cobertura: number;
+  registros: number;
+  tempoMs: number;
+  mensagem: string;
+}
+
+export interface InfoCache {
+  tipo: 'diario' | 'mensal' | 'vazio';
+  ultimaData: string | null;
+  totalRegistros: number;
+  mesesDisponiveis: string[];
+  mesesFaltando: string[];
+}
+
+// ============================================
+// FUNÇÕES AUXILIARES
+// ============================================
 
 /**
  * Verifica se uma data é o último dia do mês (indica dados mensais)
@@ -42,9 +71,80 @@ function getUltimoDiaMes(ano: number, mes: number): string {
 }
 
 /**
+ * Verifica se um período contém APENAS meses fechados (anteriores ao mês atual)
+ * Meses fechados = meses completos do passado (não o mês atual)
+ */
+export function isPeriodoFechado(dataInicio: string, dataFim: string): boolean {
+  const hoje = new Date();
+  const mesAtual = hoje.getMonth();
+  const anoAtual = hoje.getFullYear();
+  
+  const fim = new Date(dataFim + 'T12:00:00');
+  const mesFim = fim.getMonth();
+  const anoFim = fim.getFullYear();
+  
+  // Se o dataFim é anterior ao mês atual, o período é fechado
+  if (anoFim < anoAtual) return true;
+  if (anoFim === anoAtual && mesFim < mesAtual) return true;
+  
+  return false;
+}
+
+/**
+ * Separa um período em meses fechados e mês aberto
+ */
+export function separarPeriodo(dataInicio: string, dataFim: string): {
+  mesesFechados: string[];  // Últimos dias de cada mês fechado
+  mesAberto: { inicio: string; fim: string } | null;
+  todosFechados: boolean;
+} {
+  const hoje = new Date();
+  const mesAtual = hoje.getMonth();
+  const anoAtual = hoje.getFullYear();
+  
+  const inicio = new Date(dataInicio + 'T12:00:00');
+  const fim = new Date(dataFim + 'T12:00:00');
+  
+  const mesesFechados: string[] = [];
+  let mesAberto: { inicio: string; fim: string } | null = null;
+  
+  let ano = inicio.getFullYear();
+  let mes = inicio.getMonth();
+  
+  while (ano < fim.getFullYear() || (ano === fim.getFullYear() && mes <= fim.getMonth())) {
+    const isMesAtual = ano === anoAtual && mes === mesAtual;
+    const ultimoDia = getUltimoDiaMes(ano, mes);
+    
+    if (isMesAtual || (ano === anoAtual && mes > mesAtual) || ano > anoAtual) {
+      // Mês atual ou futuro = aberto
+      if (!mesAberto) {
+        const primeiroDia = new Date(ano, mes, 1).toISOString().split('T')[0];
+        mesAberto = {
+          inicio: dataInicio > primeiroDia ? dataInicio : primeiroDia,
+          fim: dataFim < ultimoDia ? dataFim : ultimoDia,
+        };
+      }
+    } else {
+      // Mês passado = fechado
+      mesesFechados.push(ultimoDia);
+    }
+    
+    mes++;
+    if (mes > 11) {
+      mes = 0;
+      ano++;
+    }
+  }
+  
+  return {
+    mesesFechados,
+    mesAberto,
+    todosFechados: mesAberto === null,
+  };
+}
+
+/**
  * Expande o range de datas para incluir meses completos
- * Isso permite que dados mensais (armazenados no último dia de cada mês)
- * sejam encontrados quando o usuário busca qualquer período dentro do mês
  */
 function expandirRangeParaMensal(dataInicio: string, dataFim: string): {
   dataInicio: string;
@@ -54,15 +154,11 @@ function expandirRangeParaMensal(dataInicio: string, dataFim: string): {
   const inicio = new Date(dataInicio + 'T12:00:00');
   const fim = new Date(dataFim + 'T12:00:00');
   
-  // Encontrar o primeiro dia do mês de início
   const mesInicioAno = inicio.getFullYear();
   const mesInicioMes = inicio.getMonth();
-  
-  // Encontrar o último dia do mês de fim
   const mesFimAno = fim.getFullYear();
   const mesFimMes = fim.getMonth();
   
-  // Lista de últimos dias de cada mês no range
   const mesesAbrangidos: string[] = [];
   let ano = mesInicioAno;
   let mes = mesInicioMes;
@@ -76,8 +172,6 @@ function expandirRangeParaMensal(dataInicio: string, dataFim: string): {
     }
   }
   
-  // Para busca no banco, usamos o primeiro dia do primeiro mês
-  // até o último dia do último mês
   const primeiroMes = new Date(mesInicioAno, mesInicioMes, 1);
   const ultimoMes = new Date(mesFimAno, mesFimMes + 1, 0);
   
@@ -88,19 +182,27 @@ function expandirRangeParaMensal(dataInicio: string, dataFim: string): {
   };
 }
 
+// ============================================
+// FUNÇÕES PRINCIPAIS
+// ============================================
+
 /**
  * Busca agregados do Supabase por range de datas
- * COMPATÍVEL COM DADOS MENSAIS E DIÁRIOS
- * 
- * Estratégia:
- * 1. Primeiro busca dados diários no range exato
- * 2. Se não encontrar, expande para range mensal e busca dados mensais
- * 3. Se encontrar dados mensais, retorna esses dados
+ * COM DIAGNÓSTICO DE CACHE HIT/MISS
  */
 export async function getVendasAgregado(
   params: GetVendasAgregadoParams
 ): Promise<AgregadoFormaPagamento[]> {
+  const startTime = performance.now();
   console.log('[agregadosService] Buscando agregados:', params);
+  
+  // Verificar se período é fechado (pode usar cache 100%)
+  const periodoInfo = separarPeriodo(params.dataInicio, params.dataFim);
+  console.log('[agregadosService] Análise do período:', {
+    mesesFechados: periodoInfo.mesesFechados.length,
+    temMesAberto: !!periodoInfo.mesAberto,
+    todosFechados: periodoInfo.todosFechados,
+  });
   
   // Primeiro tenta buscar dados no range exato (dados diários)
   let query = supabase
@@ -109,7 +211,6 @@ export async function getVendasAgregado(
     .gte('data', params.dataInicio)
     .lte('data', params.dataFim);
   
-  // Filtrar por empresa se não for 'ALL'
   if (params.empresa !== 'ALL') {
     const codEmpresa = typeof params.empresa === 'string' 
       ? parseInt(params.empresa, 10) 
@@ -126,18 +227,16 @@ export async function getVendasAgregado(
   
   // Se encontrou dados diários, usa esses
   if (data && data.length > 0) {
-    console.log(`[agregadosService] Encontrados ${data.length} registros diários`);
+    const tempoMs = Math.round(performance.now() - startTime);
+    console.log(`[agregadosService] ✓ CACHE HIT (diário): ${data.length} registros em ${tempoMs}ms`);
     return processarDados(data);
   }
   
   // Se não encontrou dados diários, tenta buscar dados mensais
-  console.log('[agregadosService] Nenhum dado diário, buscando dados mensais...');
+  console.log('[agregadosService] Cache diário vazio, buscando mensal...');
   
   const rangeMensal = expandirRangeParaMensal(params.dataInicio, params.dataFim);
-  console.log(`[agregadosService] Range mensal expandido: ${rangeMensal.dataInicio} a ${rangeMensal.dataFim}`);
-  console.log(`[agregadosService] Meses abrangidos (últimos dias): ${rangeMensal.mesesAbrangidos.join(', ')}`);
   
-  // Buscar dados nos últimos dias de cada mês (onde ficam os dados mensais)
   let queryMensal = supabase
     .from('vendas_agregado_diario')
     .select('*')
@@ -158,19 +257,69 @@ export async function getVendasAgregado(
   }
   
   if (!dataMensal || dataMensal.length === 0) {
-    console.log('[agregadosService] Nenhum agregado mensal encontrado para o período');
+    const tempoMs = Math.round(performance.now() - startTime);
+    console.log(`[agregadosService] ✗ CACHE MISS: Nenhum dado encontrado (${tempoMs}ms)`);
     return [];
   }
   
-  console.log(`[agregadosService] Encontrados ${dataMensal.length} registros mensais`);
+  const tempoMs = Math.round(performance.now() - startTime);
+  console.log(`[agregadosService] ✓ CACHE HIT (mensal): ${dataMensal.length} registros em ${tempoMs}ms`);
   return processarDados(dataMensal);
+}
+
+/**
+ * Busca agregados COM DIAGNÓSTICO COMPLETO
+ * Retorna dados + informações sobre fonte e cobertura
+ */
+export async function getVendasAgregadoComDiagnostico(
+  params: GetVendasAgregadoParams
+): Promise<{ dados: AgregadoFormaPagamento[]; diagnostico: CacheDiagnostico }> {
+  const startTime = performance.now();
+  const periodoInfo = separarPeriodo(params.dataInicio, params.dataFim);
+  
+  let diagnostico: CacheDiagnostico = {
+    cacheHit: false,
+    fonte: 'nenhum',
+    periodoFechado: periodoInfo.todosFechados,
+    mesesFechados: periodoInfo.mesesFechados,
+    mesAberto: periodoInfo.mesAberto ? `${periodoInfo.mesAberto.inicio} a ${periodoInfo.mesAberto.fim}` : null,
+    cobertura: 0,
+    registros: 0,
+    tempoMs: 0,
+    mensagem: '',
+  };
+  
+  // Buscar dados
+  const dados = await getVendasAgregado(params);
+  
+  diagnostico.tempoMs = Math.round(performance.now() - startTime);
+  diagnostico.registros = dados.length;
+  
+  if (dados.length > 0) {
+    diagnostico.cacheHit = true;
+    diagnostico.fonte = periodoInfo.todosFechados ? 'cache_mensal' : 'cache_diario';
+    
+    // Calcular cobertura
+    const diasNoCache = await contarDiasNoCache(params.dataInicio, params.dataFim);
+    const totalDias = Math.ceil(
+      (new Date(params.dataFim).getTime() - new Date(params.dataInicio).getTime()) / (1000 * 60 * 60 * 24)
+    ) + 1;
+    diagnostico.cobertura = Math.round((diasNoCache / totalDias) * 100);
+    
+    diagnostico.mensagem = diagnostico.periodoFechado
+      ? `Período fechado: ${dados.length} registros do cache (${diagnostico.tempoMs}ms)`
+      : `Cache parcial: ${diagnostico.cobertura}% cobertura (${diagnostico.tempoMs}ms)`;
+  } else {
+    diagnostico.mensagem = `Cache vazio para período (${diagnostico.tempoMs}ms)`;
+  }
+  
+  return { dados, diagnostico };
 }
 
 /**
  * Processa os dados brutos do banco em formato agregado
  */
 function processarDados(data: any[]): AgregadoFormaPagamento[] {
-  // Agregar por empresa + vendedor + forma_pagamento (somar valores de diferentes dias/meses)
   const mapaAgregados = new Map<string, {
     codEmpresa: number;
     vendedor: string;
@@ -203,8 +352,7 @@ function processarDados(data: any[]): AgregadoFormaPagamento[] {
     }
   });
   
-  // Converter para array no formato esperado
-  const resultado = Array.from(mapaAgregados.values()).map((item) => ({
+  return Array.from(mapaAgregados.values()).map((item) => ({
     codEmpresa: item.codEmpresa,
     empresa: String(item.codEmpresa),
     vendedor: item.vendedor,
@@ -217,10 +365,6 @@ function processarDados(data: any[]): AgregadoFormaPagamento[] {
       ? (item.totalDesconto / item.totalBruto) * 100 
       : 0,
   }));
-  
-  console.log(`[agregadosService] Retornando ${resultado.length} registros agregados`);
-  
-  return resultado;
 }
 
 /**
@@ -230,7 +374,6 @@ export async function temAgregadosParaPeriodo(
   dataInicio: string,
   dataFim: string
 ): Promise<boolean> {
-  // Primeiro verifica diários
   const { count: countDiario, error: erroDiario } = await supabase
     .from('vendas_agregado_diario')
     .select('*', { count: 'exact', head: true })
@@ -241,7 +384,6 @@ export async function temAgregadosParaPeriodo(
     return true;
   }
   
-  // Se não tem diários, verifica mensais
   const rangeMensal = expandirRangeParaMensal(dataInicio, dataFim);
   const { count: countMensal, error: erroMensal } = await supabase
     .from('vendas_agregado_diario')
@@ -280,7 +422,6 @@ export async function contarDiasNoCache(
   dataInicio: string,
   dataFim: string
 ): Promise<number> {
-  // Primeiro conta dados diários
   const { data: dataDiaria, error: erroDiario } = await supabase
     .from('vendas_agregado_diario')
     .select('data')
@@ -292,7 +433,6 @@ export async function contarDiasNoCache(
     return datasUnicas.size;
   }
   
-  // Se não tem diários, conta mensais
   const rangeMensal = expandirRangeParaMensal(dataInicio, dataFim);
   const { data: dataMensal, error: erroMensal } = await supabase
     .from('vendas_agregado_diario')
@@ -303,35 +443,81 @@ export async function contarDiasNoCache(
     return 0;
   }
   
-  // Para dados mensais, cada registro representa um mês inteiro
   const mesesUnicos = new Set(dataMensal.map(d => d.data));
   return mesesUnicos.size;
 }
 
 /**
- * Retorna informações sobre o tipo de dados disponíveis no cache
+ * Retorna informações detalhadas sobre o cache
  */
-export async function getInfoCache(): Promise<{
-  tipo: 'diario' | 'mensal' | 'vazio';
-  ultimaData: string | null;
-  totalRegistros: number;
-}> {
+export async function getInfoCache(): Promise<InfoCache> {
   const { data, error, count } = await supabase
     .from('vendas_agregado_diario')
     .select('data', { count: 'exact' })
     .order('data', { ascending: false })
-    .limit(10);
+    .limit(100);
   
   if (error || !data || data.length === 0) {
-    return { tipo: 'vazio', ultimaData: null, totalRegistros: 0 };
+    return { 
+      tipo: 'vazio', 
+      ultimaData: null, 
+      totalRegistros: 0,
+      mesesDisponiveis: [],
+      mesesFaltando: [],
+    };
   }
   
-  // Verificar se os dados são mensais (todas as datas são últimos dias de mês)
-  const todasMensais = data.every(d => isUltimoDiaMes(d.data));
+  // Verificar meses disponíveis
+  const datasUnicas = [...new Set(data.map(d => d.data))];
+  const todasMensais = datasUnicas.every(d => isUltimoDiaMes(d));
+  
+  // Calcular meses faltando (últimos 12 meses)
+  const hoje = new Date();
+  const mesesEsperados: string[] = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    mesesEsperados.push(getUltimoDiaMes(d.getFullYear(), d.getMonth()));
+  }
+  
+  const mesesDisponiveis = datasUnicas.filter(d => isUltimoDiaMes(d));
+  const mesesFaltando = mesesEsperados.filter(m => !mesesDisponiveis.includes(m));
   
   return {
     tipo: todasMensais ? 'mensal' : 'diario',
     ultimaData: data[0].data,
     totalRegistros: count ?? 0,
+    mesesDisponiveis,
+    mesesFaltando,
   };
+}
+
+/**
+ * Diagnóstico completo do cache para debug
+ */
+export async function diagnosticarCache(): Promise<{
+  status: 'ok' | 'parcial' | 'vazio';
+  resumo: string;
+  detalhes: InfoCache;
+  recomendacoes: string[];
+}> {
+  const info = await getInfoCache();
+  
+  let status: 'ok' | 'parcial' | 'vazio' = 'vazio';
+  let resumo = '';
+  const recomendacoes: string[] = [];
+  
+  if (info.tipo === 'vazio') {
+    status = 'vazio';
+    resumo = 'Nenhum dado no cache. Sincronização necessária.';
+    recomendacoes.push('Execute a sincronização para popular o cache');
+  } else if (info.mesesFaltando.length === 0) {
+    status = 'ok';
+    resumo = `Cache completo: ${info.totalRegistros} registros, última atualização ${info.ultimaData}`;
+  } else {
+    status = 'parcial';
+    resumo = `Cache parcial: ${info.mesesDisponiveis.length} meses disponíveis, ${info.mesesFaltando.length} faltando`;
+    recomendacoes.push(`Sincronizar meses faltando: ${info.mesesFaltando.slice(0, 3).join(', ')}...`);
+  }
+  
+  return { status, resumo, detalhes: info, recomendacoes };
 }

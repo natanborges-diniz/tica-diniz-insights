@@ -15,7 +15,7 @@ import {
   ResumoFormaPagamento,
   ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
-import { getVendasAgregado, AgregadoFormaPagamento, contarDiasNoCache } from "@/services/agregadosService";
+import { getVendasAgregado, AgregadoFormaPagamento, contarDiasNoCache, isPeriodoFechado, separarPeriodo } from "@/services/agregadosService";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
@@ -338,13 +338,24 @@ export function useVendasDashboard() {
     console.log('[useVendasDashboard] Buscando dados:', { empresa, dataInicio, dataFim, diasNoPeriodo, forcarFirebird });
     
     // ========================================
-    // ESTRATÉGIA CACHE-FIRST
+    // ESTRATÉGIA CACHE-FIRST COM DADOS FECHADOS
     // ========================================
-    // 1. SEMPRE verificar cache Supabase primeiro (resposta instantânea)
-    // 2. SE cache vazio OU usuário forçar → tentar Firebird
-    // 3. Mostrar indicador visual da fonte
+    // 1. Verificar se período é FECHADO (meses anteriores ao atual)
+    //    - Se fechado → usar APENAS cache (não chamar Firebird)
+    // 2. Se período ABERTO (inclui mês atual) → tentar cache, depois Firebird
+    // 3. Mostrar indicador visual da fonte (cache hit/miss)
     
     const startTime = performance.now();
+    
+    // Verificar política de dados fechados
+    const periodoFechado = isPeriodoFechado(dataInicio, dataFim);
+    const periodoInfo = separarPeriodo(dataInicio, dataFim);
+    
+    console.log('[useVendasDashboard] Análise do período:', {
+      periodoFechado,
+      mesesFechados: periodoInfo.mesesFechados.length,
+      temMesAberto: !!periodoInfo.mesAberto,
+    });
     
     // PASSO 1: Verificar cache Supabase PRIMEIRO (< 100ms)
     if (!forcarFirebird) {
@@ -368,27 +379,64 @@ export function useVendasDashboard() {
           const dadosConvertidos = await converterAgregadoParaResumo(dadosAgregados);
           setDadosFormasPagamento(dadosConvertidos);
           
+          // Logs de diagnóstico cache hit/miss
+          const cacheInfo = periodoFechado 
+            ? `✓ CACHE HIT (período fechado): ${dadosAgregados.length} registros`
+            : `✓ CACHE HIT (parcial): ${cobertura}% cobertura`;
+          console.log(`[useVendasDashboard] ${cacheInfo}`);
+          
           if (cobertura < 100) {
             setFontesDados({ 
               supabase: true, 
               firebird: false, 
               parcial: true,
-              mensagem: `Cache parcial: ${diasNoCache}/${diasNoPeriodo} dias (${cobertura}%)`
+              mensagem: periodoFechado 
+                ? `Dados históricos (cache): ${diasNoCache} dias`
+                : `Cache parcial: ${diasNoCache}/${diasNoPeriodo} dias (${cobertura}%)`
             });
           } else {
-            setFontesDados({ supabase: true, firebird: false });
+            setFontesDados({ 
+              supabase: true, 
+              firebird: false,
+              mensagem: periodoFechado ? 'Período fechado (cache)' : 'Cache completo'
+            });
           }
           
           setDataLoaded(true);
           setLoading(false);
           setLoadingDesconto(false);
           
+          // Se período é fechado, NÃO tenta Firebird
+          if (periodoFechado) {
+            console.log('[useVendasDashboard] Período fechado - usando apenas cache');
+            return;
+          }
+          
           console.log(`[useVendasDashboard] ✓ Dados do cache carregados em ${tempoMs}ms (${cobertura}% cobertura)`);
           return; // SUCESSO - não precisa ir ao Firebird!
         }
         
-        // Cache vazio - continua para o Firebird
-        console.log('[useVendasDashboard] Cache vazio para este período, tentando Firebird...');
+        // Cache vazio
+        console.log('[useVendasDashboard] ✗ CACHE MISS: Nenhum dado encontrado');
+        
+        // Se período é fechado mas cache vazio, avisar usuário
+        if (periodoFechado) {
+          console.log('[useVendasDashboard] Período fechado sem cache - sincronização necessária');
+          setDadosFormasPagamento([]);
+          setFontesDados({ 
+            supabase: false, 
+            firebird: false, 
+            parcial: true,
+            mensagem: 'Período histórico sem dados. Sincronização necessária.'
+          });
+          setError('Dados históricos não disponíveis no cache. Execute a sincronização.');
+          setDataLoaded(true);
+          setLoading(false);
+          setLoadingDesconto(false);
+          return;
+        }
+        
+        console.log('[useVendasDashboard] Cache vazio para período aberto, tentando Firebird...');
         
       } catch (cacheError) {
         console.warn('[useVendasDashboard] Erro ao verificar cache:', cacheError);
