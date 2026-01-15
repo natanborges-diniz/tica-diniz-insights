@@ -1,7 +1,7 @@
 // src/components/sales-dashboard/VendasDashboardLayout.tsx
 
 import { useState, useMemo } from "react";
-import { RefreshCw, AlertCircle, Building2, Users, Info, AlertTriangle } from "lucide-react";
+import { RefreshCw, AlertCircle, Building2, Users, Info, AlertTriangle, Database, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -52,6 +52,7 @@ interface VendasDashboardLayoutProps {
   alertaPeriodo?: string | null;
   // Ações
   reload: () => void;
+  forceRefresh?: () => void;
 }
 
 function LoadingSkeleton() {
@@ -120,6 +121,7 @@ export function VendasDashboardLayout({
   projecao,
   alertaPeriodo,
   reload,
+  forceRefresh,
 }: VendasDashboardLayoutProps) {
   const isLoading = loading;
   const showEmptyState = !dataLoaded && !loading;
@@ -257,10 +259,24 @@ export function VendasDashboardLayout({
           <h1 className="text-2xl font-bold text-foreground">Dashboard de Vendas</h1>
           <p className="text-sm text-muted-foreground">Análise de vendas por loja e vendedor</p>
         </div>
-        <Button variant="outline" size="sm" onClick={reload} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-          Atualizar
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={reload} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
+          {forceRefresh && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={forceRefresh} 
+              disabled={isLoading}
+              title="Força busca no servidor, ignorando o cache"
+            >
+              <Wifi className="h-4 w-4 mr-2" />
+              Tempo Real
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filtros */}
@@ -322,15 +338,22 @@ export function VendasDashboardLayout({
       {dataLoaded && !loading && fontesDados && (
         <div className="flex items-center gap-2 text-sm">
           {fontesDados.firebird && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Dados em tempo real
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 font-medium">
+              <Wifi className="w-3.5 h-3.5" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Tempo real
             </span>
           )}
           {fontesDados.supabase && !fontesDados.parcial && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
-              <span className="w-2 h-2 rounded-full bg-blue-500" />
-              Cache completo
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 font-medium">
+              <Database className="w-3.5 h-3.5" />
+              Cache local
+            </span>
+          )}
+          {fontesDados.supabase && fontesDados.parcial && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 font-medium">
+              <Database className="w-3.5 h-3.5" />
+              Cache parcial
             </span>
           )}
         </div>
