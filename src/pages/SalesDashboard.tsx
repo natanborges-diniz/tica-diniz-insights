@@ -18,6 +18,7 @@ export default function SalesDashboard() {
     setFilters,
     metrics,
     projecao,
+    alertaPeriodo,
     reload,
   } = useVendasDashboard();
 
@@ -36,6 +37,7 @@ export default function SalesDashboard() {
       setFilters={setFilters}
       metrics={metrics}
       projecao={projecao}
+      alertaPeriodo={alertaPeriodo}
       reload={reload}
     />
   );

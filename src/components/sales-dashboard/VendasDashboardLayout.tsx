@@ -48,6 +48,8 @@ interface VendasDashboardLayoutProps {
   // Métricas
   metrics: VendasMetrics;
   projecao: ProjecaoFechamento;
+  // Alertas
+  alertaPeriodo?: string | null;
   // Ações
   reload: () => void;
 }
@@ -116,6 +118,7 @@ export function VendasDashboardLayout({
   setFilters,
   metrics,
   projecao,
+  alertaPeriodo,
   reload,
 }: VendasDashboardLayoutProps) {
   const isLoading = loading;
@@ -270,6 +273,7 @@ export function VendasDashboardLayout({
         onEmpresaChange={(v) => setFilters((p) => ({ ...p, empresa: v === "ALL" ? "ALL" : Number(v) }))}
         onRefresh={reload}
         isLoading={isLoading}
+        alertaPeriodo={alertaPeriodo}
       />
 
       {/* Toggle de Visão e Toggle de Créditos */}

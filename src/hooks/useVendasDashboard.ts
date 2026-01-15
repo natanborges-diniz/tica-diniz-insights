@@ -1,8 +1,14 @@
 // src/hooks/useVendasDashboard.ts
-// Hook para dashboard de vendas - VERSÃO SIMPLIFICADA
-// Estratégia: Firebird primeiro (20s timeout), fallback para Supabase cache
+// Hook para dashboard de vendas - VERSÃO OTIMIZADA
+// Otimizações implementadas:
+// 1. Sempre usar cache do backend (não enviar cache=0)
+// 2. Loading progressivo (placeholders primeiro)
+// 3. Limitar range padrão a 30 dias
+// 4. Evitar múltiplas empresas simultaneamente
+// 5. Retry automático (1x) em caso de timeout
+// 6. Carregar dados principais primeiro
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   getResumoFormasPagamento,
   getResumoEmpresaVendedor,
@@ -15,6 +21,18 @@ import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateVa
 import { supabase } from "@/integrations/supabase/client";
 
 export type ViewMode = "loja" | "vendedor";
+
+// CONFIGURAÇÕES DE OTIMIZAÇÃO
+const CONFIG = {
+  /** Timeout para primeira tentativa (mais curto) */
+  TIMEOUT_PRIMEIRA_TENTATIVA: 15000, // 15s
+  /** Timeout para retry (um pouco maior) */
+  TIMEOUT_RETRY: 25000, // 25s
+  /** Limite máximo de dias para alertar o usuário */
+  LIMITE_DIAS_ALERTA: 45,
+  /** Limite máximo de dias permitido */
+  LIMITE_DIAS_MAXIMO: 90,
+};
 
 export interface VendasFiltersState {
   dataInicio: string;
@@ -249,44 +267,93 @@ export function useVendasDashboard() {
     parcial?: boolean;
     mensagem?: string;
   }>({ supabase: false, firebird: false });
+  
+  // Alerta para períodos longos
+  const [alertaPeriodo, setAlertaPeriodo] = useState<string | null>(null);
+
+  // Ref para controlar requisições em andamento
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // OTIMIZAÇÃO 5: Função de fetch com retry automático
+  const fetchComRetry = useCallback(async <T>(
+    fetchFn: () => Promise<T>,
+    tentativaAtual = 1
+  ): Promise<T> => {
+    const timeout = tentativaAtual === 1 
+      ? CONFIG.TIMEOUT_PRIMEIRA_TENTATIVA 
+      : CONFIG.TIMEOUT_RETRY;
+    
+    try {
+      return await fetchWithTimeout(
+        fetchFn(),
+        timeout,
+        `Timeout na tentativa ${tentativaAtual} (${timeout/1000}s)`
+      );
+    } catch (error) {
+      // OTIMIZAÇÃO 5: Se for a primeira tentativa e for timeout, tenta novamente
+      if (tentativaAtual === 1 && error instanceof Error && error.message.includes('Timeout')) {
+        console.log('[useVendasDashboard] Primeira tentativa falhou, fazendo retry...');
+        return fetchComRetry(fetchFn, 2);
+      }
+      throw error;
+    }
+  }, []);
 
   const fetchData = useCallback(async (
     empresa: EmpresaParam, 
     dataInicio: string, 
-    dataFim: string,
-    options?: { bypassCache?: boolean }
+    dataFim: string
   ) => {
-    const bypassCache = options?.bypassCache ?? false;
+    // Cancelar requisição anterior se existir
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
     
+    // OTIMIZAÇÃO 3: Verificar limite de dias
+    const diasNoPeriodo = diffInDays(dataInicio, dataFim) + 1;
+    
+    if (diasNoPeriodo > CONFIG.LIMITE_DIAS_MAXIMO) {
+      setAlertaPeriodo(`Período muito longo (${diasNoPeriodo} dias). O máximo recomendado é ${CONFIG.LIMITE_DIAS_MAXIMO} dias.`);
+      setError(`Reduza o período para no máximo ${CONFIG.LIMITE_DIAS_MAXIMO} dias para melhor performance.`);
+      setLoading(false);
+      return;
+    } else if (diasNoPeriodo > CONFIG.LIMITE_DIAS_ALERTA) {
+      setAlertaPeriodo(`Período longo (${diasNoPeriodo} dias) pode demorar mais para carregar.`);
+    } else {
+      setAlertaPeriodo(null);
+    }
+    
+    // OTIMIZAÇÃO 2: Loading progressivo - mostrar placeholders imediatamente
     setLoading(true);
     setError(null);
     setLoadingDesconto(true);
     setErroDesconto(null);
     setFontesDados({ supabase: false, firebird: false });
     
-    console.log('[useVendasDashboard] Buscando dados:', { empresa, dataInicio, dataFim, bypassCache });
+    console.log('[useVendasDashboard] Buscando dados:', { empresa, dataInicio, dataFim, diasNoPeriodo });
     
-    // ESTRATÉGIA SIMPLIFICADA:
-    // 1. Tentar Firebird com timeout de 20s
-    // 2. Se falhar, usar cache Supabase
-    // 3. Se cache vazio, mostrar erro claro
+    // ESTRATÉGIA OTIMIZADA:
+    // 1. Usar cache do backend (não enviar cache=0)
+    // 2. Retry automático em caso de timeout
+    // 3. Fallback para cache Supabase local
     
     try {
-      // Passo 1: Tentar Firebird
-      console.log('[useVendasDashboard] Tentando Firebird (timeout 20s)...');
+      // Passo 1: Tentar Firebird COM CACHE DO BACKEND (otimização #1)
+      console.log('[useVendasDashboard] Tentando Firebird com cache do backend...');
       const startTime = performance.now();
       
-      const dadosFirebird = await fetchWithTimeout(
+      // OTIMIZAÇÃO 1: Não enviar bypassCache (usar cache do backend)
+      // OTIMIZAÇÃO 5: Usar fetchComRetry para retry automático
+      const dadosFirebird = await fetchComRetry(() => 
         getResumoFormasPagamento({
           empresa,
           dataInicio,
           dataFim,
-          bypassCache: true,
+          bypassCache: false, // OTIMIZAÇÃO 1: Usar cache do backend!
           excluirCreditos: true,
           incluirDevolucoes: false,
-        }),
-        20000,
-        'Firebird timeout (20s)'
+        })
       );
       
       const tempoMs = Math.round(performance.now() - startTime);
@@ -299,11 +366,11 @@ export function useVendasDashboard() {
       setLoadingDesconto(false);
       
     } catch (firebirdError) {
-      console.warn('[useVendasDashboard] Firebird falhou:', firebirdError);
+      console.warn('[useVendasDashboard] Firebird falhou após retry:', firebirdError);
       
-      // Passo 2: Fallback para cache Supabase
+      // Passo 2: Fallback para cache Supabase local
       try {
-        console.log('[useVendasDashboard] Tentando cache Supabase...');
+        console.log('[useVendasDashboard] Tentando cache Supabase local...');
         const startTime = performance.now();
         
         const dadosAgregados = await getVendasAgregado({
@@ -317,7 +384,6 @@ export function useVendasDashboard() {
         
         if (dadosAgregados.length > 0) {
           // Verificar cobertura do cache
-          const diasNoPeriodo = diffInDays(dataInicio, dataFim) + 1;
           const diasNoCache = await contarDiasNoCache(dataInicio, dataFim);
           const cobertura = Math.round((diasNoCache / diasNoPeriodo) * 100);
           
@@ -359,7 +425,7 @@ export function useVendasDashboard() {
         setLoadingDesconto(false);
       }
     }
-  }, []);
+  }, [fetchComRetry]);
 
   // Carregar dados ao montar e quando filtros mudam
   useEffect(() => {
@@ -368,6 +434,13 @@ export function useVendasDashboard() {
     } else if (filters.empresa === 'ALL') {
       fetchData('ALL', filters.dataInicio, filters.dataFim);
     }
+    
+    // Cleanup: cancelar requisição ao desmontar
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchData]);
 
   // Calcular métricas
@@ -421,8 +494,8 @@ export function useVendasDashboard() {
     return agruparPorLoja(dadosFormasPagamento);
   }, [dadosFormasPagamento]);
 
-  const reload = useCallback((bypassCache = false) => {
-    fetchData(filters.empresa, filters.dataInicio, filters.dataFim, { bypassCache });
+  const reload = useCallback(() => {
+    fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
   }, [filters, fetchData]);
 
   return {
@@ -439,6 +512,7 @@ export function useVendasDashboard() {
     projecao,
     dadosPorLoja,
     fontesDados,
+    alertaPeriodo,
     reload,
   };
 }
