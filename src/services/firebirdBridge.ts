@@ -54,6 +54,10 @@ export interface ApiGetOptions {
   cache?: boolean;
   /** TTL do cache em milissegundos (ex: 30000 = 30s) */
   cacheTtlMs?: number;
+  /** AbortSignal para cancelar a requisição */
+  signal?: AbortSignal;
+  /** Timeout customizado em ms (padrão: 90000) */
+  timeoutMs?: number;
 }
 
 // ============================================
@@ -83,9 +87,17 @@ export async function apiGet<T>(
     url.searchParams.append('cacheTtlMs', String(options.cacheTtlMs));
   }
 
-  // Timeout de 90 segundos para permitir consultas consolidadas pesadas
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 90000);
+  // Se já tem um signal externo, usar ele; senão criar um interno com timeout
+  const externalSignal = options?.signal;
+  const timeoutMs = options?.timeoutMs ?? 90000;
+  
+  // Criar controller interno para timeout
+  const internalController = new AbortController();
+  const timeoutId = setTimeout(() => internalController.abort(), timeoutMs);
+  
+  // Combinar signals: aborta se qualquer um dos dois abortar
+  const abortHandler = () => internalController.abort();
+  externalSignal?.addEventListener('abort', abortHandler);
 
   try {
     console.log(`[FirebirdBridge] Fetching: ${url.toString()}`);
@@ -93,7 +105,7 @@ export async function apiGet<T>(
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
+      signal: internalController.signal,
     });
 
     clearTimeout(timeoutId);
@@ -142,9 +154,15 @@ export async function apiGet<T>(
     return [];
   } catch (error) {
     clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', abortHandler);
 
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
+        // Verificar se foi cancelado externamente ou por timeout
+        if (externalSignal?.aborted) {
+          console.log(`[FirebirdBridge] Request cancelled: ${path}`);
+          throw new Error('Requisição cancelada');
+        }
         console.error(`[FirebirdBridge] Timeout: ${path}`);
         throw new Error('Timeout: O servidor não respondeu em tempo hábil');
       }
