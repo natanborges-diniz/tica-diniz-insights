@@ -1,7 +1,6 @@
 // supabase/functions/sync-agregados-diarios/index.ts
-// Sincroniza agregados diários de vendas da API Firebird para o Supabase
-// Suporta carga histórica em lotes e sincronização incremental
-// OTIMIZADO: Processa um dia por vez para evitar timeouts
+// Sincroniza agregados DIÁRIOS de vendas da API Firebird para o Supabase
+// VERSÃO SIMPLIFICADA: Um dia por vez, sem complexidade
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -10,7 +9,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// URL base da API Railway (sem autenticação)
 const FIREBIRD_API_BASE_URL = Deno.env.get('FIREBIRD_API_BASE_URL') || 'https://firebird-bridge-production.up.railway.app';
 
 interface ResumoFormaPagamento {
@@ -37,19 +35,17 @@ interface AgregadoDiario {
   atualizado_em: string;
 }
 
-// Formatar data para YYYY-MM-DD
 function formatDate(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
-// Adicionar dias a uma data
 function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
 }
 
-// Fazer requisição GET à API Railway com timeout
+// Fazer requisição GET à API Railway
 async function firebirdGet(path: string, params: Record<string, any> = {}, timeoutMs = 60000) {
   const url = new URL(path, FIREBIRD_API_BASE_URL);
   Object.entries(params).forEach(([key, value]) => {
@@ -58,7 +54,7 @@ async function firebirdGet(path: string, params: Record<string, any> = {}, timeo
     }
   });
 
-  console.log('Firebird GET:', url.toString());
+  console.log('[firebirdGet] URL:', url.toString());
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -70,19 +66,18 @@ async function firebirdGet(path: string, params: Record<string, any> = {}, timeo
     });
 
     clearTimeout(timeoutId);
-    console.log('Response Status:', res.status);
 
     if (!res.ok) {
       const body = await res.text();
-      console.error('Erro Firebird GET:', url.toString(), res.status, body.slice(0, 500));
-      throw new Error(`Erro Firebird GET ${path}: ${res.status} - ${body.slice(0, 200)}`);
+      console.error('[firebirdGet] Erro:', res.status, body.slice(0, 300));
+      throw new Error(`Erro Firebird: ${res.status}`);
     }
 
     return res.json();
   } catch (err) {
     clearTimeout(timeoutId);
     if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error(`Timeout após ${timeoutMs / 1000}s: ${url.toString()}`);
+      throw new Error(`Timeout após ${timeoutMs / 1000}s`);
     }
     throw err;
   }
@@ -93,10 +88,9 @@ async function syncDia(
   supabase: any,
   data: string
 ): Promise<{ registros: number; erro?: string }> {
-  console.log(`[sync] Buscando dia ${data}...`);
+  console.log(`[syncDia] Buscando ${data}...`);
   
   try {
-    // Buscar dados da API Firebird para um único dia (timeout de 60s)
     const response = await firebirdGet('/api/v1/vendas/resumo-formas-pagamento', {
       dataInicio: data,
       dataFim: data,
@@ -107,16 +101,15 @@ async function syncDia(
       ? response 
       : (response?.data && Array.isArray(response.data) ? response.data : []);
     
-    console.log(`[sync] Recebidos ${dados.length} registros do Firebird para ${data}`);
+    console.log(`[syncDia] ${data}: ${dados.length} registros do Firebird`);
     
     if (dados.length === 0) {
-      console.log(`[sync] Nenhum dado para ${data}`);
       return { registros: 0 };
     }
     
     const agora = new Date().toISOString();
     
-    // Agrupar por empresa + vendedor + forma de pagamento
+    // Agrupar por empresa + vendedor + forma_pagamento
     const mapaAgregados = new Map<string, AgregadoDiario>();
     
     dados.forEach((d) => {
@@ -146,7 +139,7 @@ async function syncDia(
     });
     
     const agregados = Array.from(mapaAgregados.values());
-    console.log(`[sync] ${dados.length} registros agrupados em ${agregados.length} únicos`);
+    console.log(`[syncDia] ${data}: ${agregados.length} agregados únicos`);
     
     // Upsert no Supabase
     const { error } = await supabase
@@ -157,15 +150,15 @@ async function syncDia(
       });
     
     if (error) {
-      console.error(`[sync] Erro ao inserir:`, error);
+      console.error(`[syncDia] Erro upsert:`, error);
       throw error;
     }
     
-    console.log(`[sync] Inseridos ${agregados.length} registros para ${data}`);
+    console.log(`[syncDia] ${data}: ${agregados.length} registros salvos`);
     return { registros: agregados.length };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[sync] Erro no dia ${data}:`, message);
+    console.error(`[syncDia] Erro ${data}:`, message);
     return { registros: 0, erro: message };
   }
 }
@@ -177,10 +170,10 @@ async function processarDiasBackground(
   dataFim: string,
   maxDias: number
 ): Promise<void> {
-  console.log(`[background] Iniciando processamento de ${dataInicio} a ${dataFim}`);
+  console.log(`[background] Processando ${dataInicio} a ${dataFim} (max ${maxDias} dias)`);
   
-  let currentDate = new Date(dataInicio + 'T00:00:00');
-  const endDate = new Date(dataFim + 'T00:00:00');
+  let currentDate = new Date(dataInicio + 'T12:00:00');
+  const endDate = new Date(dataFim + 'T12:00:00');
   let diasProcessados = 0;
   let totalRegistros = 0;
   let erros = 0;
@@ -193,10 +186,10 @@ async function processarDiasBackground(
       totalRegistros += result.registros;
       if (result.erro) erros++;
       
-      // Pequena pausa entre requisições para não sobrecarregar o Firebird
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Pausa entre requisições
+      await new Promise(resolve => setTimeout(resolve, 300));
     } catch (err) {
-      console.error(`[background] Erro processando ${dataStr}:`, err);
+      console.error(`[background] Erro ${dataStr}:`, err);
       erros++;
     }
     
@@ -213,14 +206,13 @@ async function processarDiasBackground(
       atualizado_em: new Date().toISOString(),
     }, { onConflict: 'entidade' });
   } catch (err) {
-    console.error('[background] Erro ao atualizar etl_controle:', err);
+    console.error('[background] Erro etl_controle:', err);
   }
   
   console.log(`[background] Concluído: ${diasProcessados} dias, ${totalRegistros} registros, ${erros} erros`);
 }
 
 Deno.serve(async (req) => {
-  // CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -228,31 +220,16 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const modoHistorico = url.searchParams.get('historico') === 'true';
-    const mesInicio = url.searchParams.get('mesInicio'); // YYYY-MM
-    const mesFim = url.searchParams.get('mesFim'); // YYYY-MM
-    const maxDias = parseInt(url.searchParams.get('maxDias') || '30', 10);
+    const maxDias = parseInt(url.searchParams.get('maxDias') || '62', 10);
     
-    // Default: hoje
+    // Parâmetros de data
     const hoje = formatDate(new Date());
+    const dataInicio = url.searchParams.get('dataInicio') || hoje;
+    const dataFim = url.searchParams.get('dataFim') || hoje;
     
-    let dataInicio: string;
-    let dataFim: string;
-    
-    if (modoHistorico && mesInicio && mesFim) {
-      // Modo histórico com meses
-      dataInicio = `${mesInicio}-01`;
-      const [ano, mes] = mesFim.split('-').map(Number);
-      const ultimoDia = new Date(ano, mes, 0).getDate();
-      dataFim = `${mesFim}-${String(ultimoDia).padStart(2, '0')}`;
-    } else {
-      dataInicio = url.searchParams.get('dataInicio') || hoje;
-      dataFim = url.searchParams.get('dataFim') || hoje;
-    }
-    
-    console.log(`[sync-agregados-diarios] Iniciando sync`);
+    console.log(`[sync-agregados-diarios] Início`);
     console.log(`[sync-agregados-diarios] Período: ${dataInicio} a ${dataFim}`);
-    console.log(`[sync-agregados-diarios] Max dias: ${maxDias}`);
-    console.log(`[sync-agregados-diarios] Modo histórico: ${modoHistorico}`);
+    console.log(`[sync-agregados-diarios] Histórico: ${modoHistorico}, Max dias: ${maxDias}`);
     
     // Criar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -260,8 +237,8 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     if (modoHistorico) {
-      // Processar em background para não dar timeout
-      // @ts-ignore - EdgeRuntime.waitUntil is available in Deno Deploy
+      // Processar em background
+      // @ts-ignore
       EdgeRuntime.waitUntil(processarDiasBackground(supabase, dataInicio, dataFim, maxDias));
       
       return new Response(
@@ -270,7 +247,7 @@ Deno.serve(async (req) => {
           modo: 'historico_background',
           periodo: `${dataInicio} a ${dataFim}`,
           maxDias,
-          message: `Sincronização iniciada em background. Processando até ${maxDias} dias.`,
+          message: `Sincronização iniciada em background para ${maxDias} dias.`,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

@@ -11,10 +11,8 @@ export default function SalesDashboard() {
     dataLoaded,
     fontesDados,
     loading,
-    loadingFormas,
     loadingDesconto,
     error,
-    errorFormas,
     erroDesconto,
     filters,
     setFilters,
@@ -31,10 +29,8 @@ export default function SalesDashboard() {
       dataLoaded={dataLoaded}
       fontesDados={fontesDados}
       loading={loading}
-      loadingFormas={loadingFormas}
       loadingDesconto={loadingDesconto}
       error={error}
-      errorFormas={errorFormas}
       erroDesconto={erroDesconto}
       filters={filters}
       setFilters={setFilters}

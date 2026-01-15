@@ -1,7 +1,6 @@
 // src/hooks/useVendasDashboard.ts
-// Hook para dashboard de vendas - ESTRATÉGIA HÍBRIDA
-// Dados históricos: Supabase (instantâneo, ~50ms)
-// Dados do dia atual: Firebird (tempo real)
+// Hook para dashboard de vendas - VERSÃO SIMPLIFICADA
+// Estratégia: Firebird primeiro (20s timeout), fallback para Supabase cache
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import {
@@ -10,7 +9,7 @@ import {
   ResumoFormaPagamento,
   ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
-import { getVendasAgregado, AgregadoFormaPagamento } from "@/services/agregadosService";
+import { getVendasAgregado, AgregadoFormaPagamento, contarDiasNoCache } from "@/services/agregadosService";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,25 +23,21 @@ export interface VendasFiltersState {
   empresa: EmpresaParam;
 }
 
-// Interface para métricas globais
 export interface VendasMetrics {
-  // Vendas (do endpoint rápido)
   totalVendido: number;
   totalCreditos: number;
   totalDevolucoes: number;
   totalVendidoSemCreditos: number;
   qtdTransacoes: number;
   ticketMedio: number;
-  // Desconto (do endpoint lento - pode estar indisponível)
   totalBruto: number;
   totalDesconto: number;
   percentualDesconto: number;
   descontoDisponivel: boolean;
 }
 
-// Interface para projeção de fechamento
 export interface ProjecaoFechamento {
-  temProjecao: boolean; // true se há datas futuras no período
+  temProjecao: boolean;
   diasTotais: number;
   diasDecorridos: number;
   diasRestantes: number;
@@ -51,7 +46,6 @@ export interface ProjecaoFechamento {
   percentualPeriodo: number;
 }
 
-// Interface agregada por loja
 export interface ResumoLoja {
   empresa: string;
   totalVendido: number;
@@ -60,32 +54,26 @@ export interface ResumoLoja {
   totalVendidoSemCreditos: number;
   qtdTransacao: number;
   ticketMedio: number;
-  // Desconto (opcional, pode não estar disponível)
   totalBruto: number;
   totalDesconto: number;
   percentualDesconto: number;
 }
 
-// Re-export da interface do service para usar nos componentes
 export type { ResumoEmpresaVendedorAPI as ResumoEmpresaVendedor };
 export type { ResumoFormaPagamento };
 
-// Cache de nomes de empresas (com TTL de 5 minutos)
+// Cache de nomes de empresas
 let empresasCache: Map<number, string> | null = null;
 let empresasCacheTime: number = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+const CACHE_TTL = 5 * 60 * 1000;
 
 async function getEmpresasMap(): Promise<Map<number, string>> {
   const now = Date.now();
-  
-  // Usar cache se ainda válido
   if (empresasCache && (now - empresasCacheTime) < CACHE_TTL) {
     return empresasCache;
   }
   
-  const { data } = await supabase
-    .from('empresa')
-    .select('cod_empresa, nome_fantasia');
+  const { data } = await supabase.from('empresa').select('cod_empresa, nome_fantasia');
   
   empresasCache = new Map();
   data?.forEach((e) => {
@@ -96,7 +84,6 @@ async function getEmpresasMap(): Promise<Map<number, string>> {
   return empresasCache;
 }
 
-// Converte AgregadoFormaPagamento para ResumoFormaPagamento
 async function converterAgregadoParaResumo(
   agregados: AgregadoFormaPagamento[]
 ): Promise<ResumoFormaPagamento[]> {
@@ -115,23 +102,11 @@ async function converterAgregadoParaResumo(
   }));
 }
 
-// Função para calcular métricas de formas de pagamento
-// NOTA IMPORTANTE: 
-// - "CREDITOS" são uma forma de pagamento válida (saldo do cliente usado como pagamento)
-// - "DEVOLUCAO" representa cancelamentos e deve ser excluída das vendas válidas
-// - totalVendido = vendas COM créditos (inclui créditos, exclui devoluções)
-// - totalVendidoSemCreditos = vendas SEM créditos (para toggle no dashboard)
-// Os campos total_bruto e total_desconto agora estão corretos após correção do backend
-// (usando subquery para cálculo proporcional por forma de pagamento)
 function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
   let totalVendido = 0;
   let totalCreditos = 0;
   let totalDevolucoes = 0;
   let qtdTransacoes = 0;
-  
-  // IMPORTANTE: O backend Railway agora distribui totalBruto e totalDesconto
-  // proporcionalmente por forma de pagamento. Portanto, devemos somar diretamente
-  // sem agrupamento por empresa (cada linha já contém a fração correta).
   let totalBruto = 0;
   let totalDesconto = 0;
 
@@ -148,17 +123,13 @@ function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
         totalCreditos += d.totalGeral;
       }
       qtdTransacoes += d.qtdVendas;
-      
-      // Somar diretamente - backend já distribui proporcionalmente por forma de pagamento
       totalBruto += d.totalBruto || 0;
       totalDesconto += d.totalDesconto || 0;
     }
   });
 
-  // totalVendidoSemCreditos = vendas excluindo créditos (para toggle "vendas sem créditos")
   const totalVendidoSemCreditos = totalVendido - totalCreditos;
   const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
-
   const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
 
   return {
@@ -174,23 +145,13 @@ function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
   };
 }
 
-// NOTA: A função calcularMetricasDesconto foi removida.
-// Após correção do backend (subquery proporcional), os dados de desconto
-// agora vêm corretamente do endpoint resumo-formas-pagamento.
-
-// Função para agregar dados de formas de pagamento por loja (agora inclui desconto do endpoint rápido)
-// NOTA IMPORTANTE: 
-// - "CREDITOS" são uma forma de pagamento válida (saldo do cliente usado como pagamento)
-// - "DEVOLUCAO" representa cancelamentos/devoluções e deve ser excluída das vendas válidas
-// - totalVendidoSemCreditos = vendas válidas EXCLUINDO devoluções (créditos SÃO contados como venda)
 function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
-  // Agregar formas de pagamento por empresa
   const mapaFormas = new Map<number, {
     empresa: string;
     codEmpresa: number;
-    totalVendido: number;      // Soma de TODAS as formas (exceto devoluções)
-    totalCreditos: number;     // Apenas para referência/exibição
-    totalDevolucoes: number;   // Valor absoluto das devoluções
+    totalVendido: number;
+    totalCreditos: number;
+    totalDevolucoes: number;
     qtdTransacao: number;
     totalBruto: number;
     totalDesconto: number;
@@ -203,13 +164,10 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
     const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
     const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
     
-    // Devoluções são excluídas do totalVendido
-    // Créditos SÃO contados como venda (é uma forma de pagamento válida)
     const valorVenda = isDevolucao ? 0 : d.totalGeral;
     const valorCredito = isCredito ? d.totalGeral : 0;
     const valorDevolucao = isDevolucao ? Math.abs(d.totalGeral) : 0;
     const qtdVendas = isDevolucao ? 0 : d.qtdVendas;
-    // Desconto não conta para devoluções
     const valorBruto = isDevolucao ? 0 : (d.totalBruto ?? 0);
     const valorDesconto = isDevolucao ? 0 : (d.totalDesconto ?? 0);
     
@@ -234,10 +192,7 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
     }
   });
 
-  // Converter para array e calcular percentuais
-  // totalVendidoSemCreditos = vendas excluindo créditos (para toggle "vendas sem créditos")
   return Array.from(mapaFormas.values()).map((item) => {
-    // Créditos são vendas válidas, mas o toggle permite mostrar COM ou SEM
     const totalVendidoSemCreditos = item.totalVendido - item.totalCreditos;
     const ticketMedio = item.qtdTransacao > 0 ? totalVendidoSemCreditos / item.qtdTransacao : 0;
     const percentualDesconto = item.totalBruto > 0 ? (item.totalDesconto / item.totalBruto) * 100 : 0;
@@ -257,44 +212,21 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
   });
 }
 
-// Combina dados do Supabase (histórico) + Firebird (dia atual)
-function combinarDados(
-  dadosSupabase: ResumoFormaPagamento[],
-  dadosFirebird: ResumoFormaPagamento[]
-): ResumoFormaPagamento[] {
-  // Usar mapa para agregar por empresa + vendedor + forma de pagamento
-  const mapa = new Map<string, ResumoFormaPagamento>();
-  
-  // Adicionar dados do Supabase primeiro
-  dadosSupabase.forEach((d) => {
-    const key = `${d.codEmpresa}|${d.vendedor}|${d.formaPagamento}`;
-    mapa.set(key, { ...d });
-  });
-  
-  // Somar dados do Firebird (dia atual)
-  dadosFirebird.forEach((d) => {
-    const key = `${d.codEmpresa}|${d.vendedor}|${d.formaPagamento}`;
-    const existing = mapa.get(key);
-    
-    if (existing) {
-      existing.totalGeral += d.totalGeral;
-      existing.qtdVendas += d.qtdVendas;
-      existing.totalBruto = (existing.totalBruto ?? 0) + (d.totalBruto ?? 0);
-      existing.totalDesconto = (existing.totalDesconto ?? 0) + (d.totalDesconto ?? 0);
-      // Recalcular percentual
-      existing.percentualDesconto = existing.totalBruto && existing.totalBruto > 0
-        ? ((existing.totalDesconto ?? 0) / existing.totalBruto) * 100
-        : 0;
-    } else {
-      mapa.set(key, { ...d });
-    }
-  });
-  
-  return Array.from(mapa.values());
+// Timeout wrapper para fetch
+async function fetchWithTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)
+    )
+  ]);
 }
 
 export function useVendasDashboard() {
-  // Período comercial: dia 21 do mês anterior ao dia 20 do mês atual
   const defaultPeriodo = getPeriodoComercial();
 
   const [filters, setFilters] = useState<VendasFiltersState>({
@@ -315,11 +247,8 @@ export function useVendasDashboard() {
     supabase: boolean; 
     firebird: boolean;
     parcial?: boolean;
-    ultimaDataCache?: string;
-  }>({ 
-    supabase: false, 
-    firebird: false 
-  });
+    mensagem?: string;
+  }>({ supabase: false, firebird: false });
 
   const fetchData = useCallback(async (
     empresa: EmpresaParam, 
@@ -335,37 +264,47 @@ export function useVendasDashboard() {
     setErroDesconto(null);
     setFontesDados({ supabase: false, firebird: false });
     
-    const hoje = formatLocalDate(new Date());
+    console.log('[useVendasDashboard] Buscando dados:', { empresa, dataInicio, dataFim, bypassCache });
     
-    // ESTRATÉGIA HÍBRIDA (reativada):
-    // - Dados no Supabase estão com granularidade DIÁRIA (9.423 registros até 12/01/2026)
-    // - Para período 100% histórico (até ontem): usar Supabase (instantâneo, ~50ms)
-    // - Para período que inclui hoje: Supabase (histórico) + Firebird (hoje)
-    // - Se bypassCache=true: forçar Firebird
-    
-    const ontem = new Date();
-    ontem.setDate(ontem.getDate() - 1);
-    const ontemStr = formatLocalDate(ontem);
-    const periodoHistorico = dataFim < hoje;
-    
-    console.log('[useVendasDashboard] Estratégia:', {
-      dataInicio,
-      dataFim,
-      hoje,
-      ontemStr,
-      periodoHistorico,
-      bypassCache,
-    });
+    // ESTRATÉGIA SIMPLIFICADA:
+    // 1. Tentar Firebird com timeout de 20s
+    // 2. Se falhar, usar cache Supabase
+    // 3. Se cache vazio, mostrar erro claro
     
     try {
-      // NOTA: O cache Supabase atualmente só tem dados do último dia de cada mês
-      // (não é diário ainda). Por isso, vamos usar Firebird para períodos recentes
-      // e só usar Supabase para períodos 100% históricos COM dados suficientes.
+      // Passo 1: Tentar Firebird
+      console.log('[useVendasDashboard] Tentando Firebird (timeout 20s)...');
+      const startTime = performance.now();
       
-      // Estratégia 1: Período 100% histórico e cache habilitado -> tentar Supabase
-      if (!bypassCache && periodoHistorico) {
-        console.log('[useVendasDashboard] Tentando Supabase (período 100% histórico)');
-        const startSupabase = performance.now();
+      const dadosFirebird = await fetchWithTimeout(
+        getResumoFormasPagamento({
+          empresa,
+          dataInicio,
+          dataFim,
+          bypassCache: true,
+          excluirCreditos: true,
+          incluirDevolucoes: false,
+        }),
+        20000,
+        'Firebird timeout (20s)'
+      );
+      
+      const tempoMs = Math.round(performance.now() - startTime);
+      console.log(`[useVendasDashboard] Firebird OK: ${dadosFirebird.length} registros em ${tempoMs}ms`);
+      
+      setDadosFormasPagamento(dadosFirebird);
+      setFontesDados({ supabase: false, firebird: true });
+      setDataLoaded(true);
+      setLoading(false);
+      setLoadingDesconto(false);
+      
+    } catch (firebirdError) {
+      console.warn('[useVendasDashboard] Firebird falhou:', firebirdError);
+      
+      // Passo 2: Fallback para cache Supabase
+      try {
+        console.log('[useVendasDashboard] Tentando cache Supabase...');
+        const startTime = performance.now();
         
         const dadosAgregados = await getVendasAgregado({
           empresa,
@@ -373,236 +312,98 @@ export function useVendasDashboard() {
           dataFim,
         });
         
-        const tempoSupabase = Math.round(performance.now() - startSupabase);
-        console.log(`[useVendasDashboard] Supabase: ${dadosAgregados.length} registros em ${tempoSupabase}ms`);
+        const tempoMs = Math.round(performance.now() - startTime);
+        console.log(`[useVendasDashboard] Supabase: ${dadosAgregados.length} registros em ${tempoMs}ms`);
         
-        // Verificar se Supabase tem dados suficientes (mínimo 10 registros agregados)
-        if (dadosAgregados.length >= 10) {
+        if (dadosAgregados.length > 0) {
+          // Verificar cobertura do cache
+          const diasNoPeriodo = diffInDays(dataInicio, dataFim) + 1;
+          const diasNoCache = await contarDiasNoCache(dataInicio, dataFim);
+          const cobertura = Math.round((diasNoCache / diasNoPeriodo) * 100);
+          
           const dadosConvertidos = await converterAgregadoParaResumo(dadosAgregados);
           setDadosFormasPagamento(dadosConvertidos);
-          setFontesDados({ supabase: true, firebird: false });
-          setDataLoaded(true);
-          setLoading(false);
-        } else {
-          // Supabase não tem dados suficientes, usar Firebird
-          console.log('[useVendasDashboard] Supabase com poucos dados, usando Firebird');
-          throw new Error('Supabase sem dados suficientes para o período');
-        }
-      }
-      // Estratégia 2: Período inclui hoje -> Tentar Firebird, fallback para Supabase
-      // Agora que o backend foi corrigido, podemos confiar no cache do Supabase novamente
-      // NOTA: Aumentado timeout para 30s pois o backend está lento
-      else if (!bypassCache && dataFim >= hoje) {
-        console.log('[useVendasDashboard] Tentando Firebird com timeout de 30s');
-        
-        try {
-          const startFirebird = performance.now();
-          const dadosFirebird = await Promise.race([
-            getResumoFormasPagamento({
-              empresa,
-              dataInicio,
-              dataFim,
-              bypassCache: true,
-              excluirCreditos: true,
-              incluirDevolucoes: false,
-            }),
-            new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Firebird timeout (30s)')), 30000)
-            )
-          ]) as ResumoFormaPagamento[];
           
-          const tempoFirebird = Math.round(performance.now() - startFirebird);
-          console.log(`[useVendasDashboard] Firebird: ${dadosFirebird.length} registros em ${tempoFirebird}ms`);
-          
-          setDadosFormasPagamento(dadosFirebird);
-          setFontesDados({ supabase: false, firebird: true });
-          setDataLoaded(true);
-          setLoading(false);
-        } catch (e) {
-          console.warn('[useVendasDashboard] Firebird indisponível, tentando Supabase como fallback:', e);
-          
-          // FALLBACK: Tentar Supabase (cache até ontem)
-          try {
-            const dadosAgregados = await getVendasAgregado({
-              empresa,
-              dataInicio,
-              dataFim: ontemStr, // Cache só tem dados até ontem
+          if (cobertura < 100) {
+            setFontesDados({ 
+              supabase: true, 
+              firebird: false, 
+              parcial: true,
+              mensagem: `Cache parcial: ${diasNoCache}/${diasNoPeriodo} dias (${cobertura}%)`
             });
-            
-            if (dadosAgregados.length > 0) {
-              console.log(`[useVendasDashboard] Supabase fallback: ${dadosAgregados.length} registros (até ${ontemStr})`);
-              const dadosConvertidos = await converterAgregadoParaResumo(dadosAgregados);
-              setDadosFormasPagamento(dadosConvertidos);
-              setFontesDados({ 
-                supabase: true, 
-                firebird: false, 
-                parcial: true,
-                ultimaDataCache: ontemStr 
-              });
-              setDataLoaded(true);
-              setLoading(false);
-            } else {
-              // Supabase também vazio
-              console.warn('[useVendasDashboard] Supabase fallback vazio');
-              setFontesDados({ supabase: false, firebird: false, parcial: true });
-              setError('Servidor indisponível e cache vazio. Tente novamente em alguns minutos.');
-              setDadosFormasPagamento([]);
-              setDataLoaded(true);
-              setLoading(false);
-            }
-          } catch (errSupabase) {
-            console.error('[useVendasDashboard] Supabase fallback também falhou:', errSupabase);
-            setFontesDados({ supabase: false, firebird: false, parcial: true });
-            setError('Servidor indisponível. Tente novamente em alguns minutos.');
-            setDadosFormasPagamento([]);
-            setDataLoaded(true);
-            setLoading(false);
+          } else {
+            setFontesDados({ supabase: true, firebird: false });
           }
+          
+          setDataLoaded(true);
+          setLoading(false);
+          setLoadingDesconto(false);
+        } else {
+          // Passo 3: Sem dados disponíveis
+          console.warn('[useVendasDashboard] Cache vazio');
+          setDadosFormasPagamento([]);
+          setFontesDados({ supabase: false, firebird: false, parcial: true });
+          setError('Servidor indisponível e cache vazio para este período. Tente novamente em alguns minutos.');
+          setDataLoaded(true);
+          setLoading(false);
+          setLoadingDesconto(false);
         }
-      }
-      // Estratégia 3: Bypass cache ou período apenas hoje -> Firebird direto
-      else {
-        console.log('[useVendasDashboard] Usando Firebird direto');
-        const startFirebird = performance.now();
         
-        const dadosFirebird = await getResumoFormasPagamento({
-          empresa,
-          dataInicio,
-          dataFim,
-          bypassCache: true,
-          excluirCreditos: true,
-          incluirDevolucoes: false,
-        });
-        
-        const tempoFirebird = Math.round(performance.now() - startFirebird);
-        console.log(`[useVendasDashboard] Firebird: ${dadosFirebird.length} registros em ${tempoFirebird}ms`);
-        
-        setDadosFormasPagamento(dadosFirebird);
-        setFontesDados({ supabase: false, firebird: true });
+      } catch (cacheError) {
+        console.error('[useVendasDashboard] Cache também falhou:', cacheError);
+        setDadosFormasPagamento([]);
+        setFontesDados({ supabase: false, firebird: false, parcial: true });
+        setError('Erro ao carregar dados. Tente novamente.');
         setDataLoaded(true);
         setLoading(false);
+        setLoadingDesconto(false);
       }
-      
-    } catch (err) {
-      // Fallback para Firebird em caso de erro do Supabase
-      console.warn('[useVendasDashboard] Erro na estratégia híbrida, tentando Firebird:', err);
-      
-      try {
-        const dadosFirebird = await getResumoFormasPagamento({
-          empresa,
-          dataInicio,
-          dataFim,
-          bypassCache: true,
-          excluirCreditos: true,
-          incluirDevolucoes: false,
-        });
-        
-        setDadosFormasPagamento(dadosFirebird);
-        setFontesDados({ supabase: false, firebird: true });
-        setDataLoaded(true);
-      } catch (errFirebird) {
-        const message = errFirebird instanceof Error ? errFirebird.message : "Erro ao buscar dados de vendas";
-        console.error('[useVendasDashboard] Erro Firebird:', message);
-        setError(message);
-        setDadosFormasPagamento([]);
-      }
-    } finally {
-      setLoading(false);
-    }
-
-    // Buscar dados de desconto separadamente (endpoint lento, pode dar timeout)
-    try {
-      console.log('[useVendasDashboard] Buscando dados de desconto...', bypassCache ? '(sem cache)' : '(cache)');
-      const resultDesconto = await getResumoEmpresaVendedor({ 
-        empresa, 
-        dataInicio, 
-        dataFim,
-        bypassCache,
-      });
-      console.log('[useVendasDashboard] Desconto recebido:', resultDesconto.length, 'registros');
-      
-      if (resultDesconto.length > 0) {
-        const amostra = resultDesconto[0];
-        console.log('[useVendasDashboard] Amostra:', {
-          vendedor: amostra.vendedor,
-          totalBruto: amostra.totalBruto,
-          totalDesconto: amostra.totalDesconto,
-          percentualDesconto: amostra.percentualDesconto,
-        });
-      }
-      
-      setDadosComDesconto(resultDesconto);
-      setErroDesconto(null);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Erro ao buscar dados de desconto";
-      console.warn('[useVendasDashboard] Erro desconto:', message);
-      setErroDesconto('Dados de desconto indisponíveis. Tente filtrar por loja.');
-      setDadosComDesconto([]);
-    } finally {
-      setLoadingDesconto(false);
     }
   }, []);
 
-  // Métricas calculadas - Backend corrigido, tudo vem do endpoint resumo-formas-pagamento
-  const metrics = useMemo<VendasMetrics>(() => {
-    const metricasFormas = calcularMetricasFormasPagamento(dadosFormasPagamento);
-    const descontoDisponivel = metricasFormas.totalBruto > 0;
+  // Carregar dados ao montar e quando filtros mudam
+  useEffect(() => {
+    if (filters.empresa && filters.empresa !== 'ALL') {
+      fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
+    } else if (filters.empresa === 'ALL') {
+      fetchData('ALL', filters.dataInicio, filters.dataFim);
+    }
+  }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchData]);
 
-    console.log('[Métricas] Unificadas (backend corrigido):', {
-      totalVendidoSemCreditos: metricasFormas.totalVendidoSemCreditos,
-      totalBruto: metricasFormas.totalBruto,
-      totalDesconto: metricasFormas.totalDesconto,
-      percentualDesconto: metricasFormas.percentualDesconto,
-      descontoDisponivel,
-    });
-
+  // Calcular métricas
+  const metrics = useMemo((): VendasMetrics => {
+    const calculated = calcularMetricasFormasPagamento(dadosFormasPagamento);
     return {
-      ...metricasFormas,
-      descontoDisponivel,
+      ...calculated,
+      descontoDisponivel: calculated.totalBruto > 0,
     };
   }, [dadosFormasPagamento]);
 
-  // Projeção de fechamento do período
-  const projecao = useMemo<ProjecaoFechamento>(() => {
+  // Calcular projeção
+  const projecao = useMemo((): ProjecaoFechamento => {
     const hoje = new Date();
-    const hojeStr = formatLocalDate(hoje);
-    const dataInicio = new Date(filters.dataInicio + 'T00:00:00');
-    const dataFim = new Date(filters.dataFim + 'T00:00:00');
+    const dataFimDate = new Date(filters.dataFim + 'T23:59:59');
+    const dataInicioDate = new Date(filters.dataInicio + 'T00:00:00');
     
-    // Calcular dias totais do período
     const diasTotais = diffInDays(filters.dataInicio, filters.dataFim) + 1;
     
-    // Verificar se há datas futuras no período
-    const temProjecao = hojeStr < filters.dataFim;
-    
-    if (!temProjecao) {
-      // Período já encerrado - sem projeção
+    if (dataFimDate <= hoje) {
       return {
         temProjecao: false,
         diasTotais,
         diasDecorridos: diasTotais,
         diasRestantes: 0,
-        mediaDiaria: 0,
-        projecaoFechamento: 0,
+        mediaDiaria: diasTotais > 0 ? metrics.totalVendidoSemCreditos / diasTotais : 0,
+        projecaoFechamento: metrics.totalVendidoSemCreditos,
         percentualPeriodo: 100,
       };
     }
     
-    // Calcular dias decorridos (desde início até hoje ou início do período)
-    let diasDecorridos = 0;
-    if (hojeStr >= filters.dataInicio) {
-      diasDecorridos = diffInDays(filters.dataInicio, hojeStr) + 1;
-    }
-    
+    const diasDecorridos = Math.max(0, diffInDays(filters.dataInicio, formatLocalDate(hoje)) + 1);
     const diasRestantes = diasTotais - diasDecorridos;
-    const percentualPeriodo = diasTotais > 0 ? (diasDecorridos / diasTotais) * 100 : 0;
-    
-    // Média diária baseada no faturamento atual
-    const totalAtual = metrics.totalVendidoSemCreditos;
-    const mediaDiaria = diasDecorridos > 0 ? totalAtual / diasDecorridos : 0;
-    
-    // Projeção para o fechamento do período
+    const mediaDiaria = diasDecorridos > 0 ? metrics.totalVendidoSemCreditos / diasDecorridos : 0;
     const projecaoFechamento = mediaDiaria * diasTotais;
+    const percentualPeriodo = diasTotais > 0 ? (diasDecorridos / diasTotais) * 100 : 0;
     
     return {
       temProjecao: true,
@@ -615,42 +416,29 @@ export function useVendasDashboard() {
     };
   }, [filters.dataInicio, filters.dataFim, metrics.totalVendidoSemCreditos]);
 
-  // Dados agregados por loja (agora usa apenas endpoint rápido)
-  const dadosPorLoja = useMemo(
-    () => agruparPorLoja(dadosFormasPagamento),
-    [dadosFormasPagamento]
-  );
+  // Agrupar por loja
+  const dadosPorLoja = useMemo((): ResumoLoja[] => {
+    return agruparPorLoja(dadosFormasPagamento);
+  }, [dadosFormasPagamento]);
 
-  // Reload - usa estratégia híbrida automaticamente
-  // (Supabase para histórico, Firebird para hoje)
-  const reload = useCallback(() => {
-    fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
-  }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchData]);
-
-  // Auto-load on mount
-  useEffect(() => {
-    reload();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const reload = useCallback((bypassCache = false) => {
+    fetchData(filters.empresa, filters.dataInicio, filters.dataFim, { bypassCache });
+  }, [filters, fetchData]);
 
   return {
-    // Dados brutos
-    dadosFormasPagamento,
-    dadosComDesconto, // Dados com desconto do endpoint lento
-    dadosPorLoja,
-    dataLoaded,
-    fontesDados, // Indica quais fontes foram usadas (supabase/firebird)
-    // Loading/Error
-    loading,
-    loadingFormas: loading,
-    loadingDesconto,
-    error,
-    errorFormas: error,
-    erroDesconto,
-    // Filtros e ações
     filters,
     setFilters,
+    dadosFormasPagamento,
+    dadosComDesconto,
+    loading,
+    loadingDesconto,
+    error,
+    erroDesconto,
+    dataLoaded,
     metrics,
     projecao,
+    dadosPorLoja,
+    fontesDados,
     reload,
   };
 }

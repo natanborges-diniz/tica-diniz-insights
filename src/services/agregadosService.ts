@@ -1,24 +1,11 @@
 // src/services/agregadosService.ts
 // Service para buscar dados agregados do Supabase (cache local)
-// NOTA: Os dados são armazenados como agregados MENSAIS (último dia do mês)
+// VERSÃO SIMPLIFICADA: Dados são armazenados como DIÁRIOS
 
 import { supabase } from "@/integrations/supabase/client";
 import { EmpresaParam } from "./firebirdBridge";
 
-// Interface para agregado diário do Supabase
-export interface VendasAgregadoDiario {
-  data: string;
-  cod_empresa: number;
-  vendedor: string;
-  forma_pagamento: string;
-  total_vendido: number;
-  total_bruto: number;
-  total_desconto: number;
-  qtd_vendas: number;
-  atualizado_em: string;
-}
-
-// Interface agregada por forma de pagamento (compatível com ResumoFormaPagamento)
+// Interface agregada por forma de pagamento
 export interface AgregadoFormaPagamento {
   codEmpresa: number;
   empresa: string;
@@ -38,72 +25,19 @@ export interface GetVendasAgregadoParams {
 }
 
 /**
- * Busca TODAS as datas de referência no cache que correspondem ao período solicitado
- * Os dados podem estar como último dia do mês OU como datas específicas (ex: 2026-01-12)
- */
-async function getDatasNoCache(dataInicio: string, dataFim: string): Promise<string[]> {
-  // Buscar todas as datas únicas no cache
-  const { data, error } = await supabase
-    .from('vendas_agregado_diario')
-    .select('data')
-    .order('data', { ascending: true });
-  
-  if (error || !data) {
-    console.error('[agregadosService] Erro ao buscar datas do cache:', error);
-    return [];
-  }
-  
-  // Datas únicas
-  const datasUnicas = [...new Set(data.map(d => d.data))];
-  
-  // Filtrar datas que correspondem ao período
-  const inicio = new Date(dataInicio + 'T00:00:00');
-  const fim = new Date(dataFim + 'T23:59:59');
-  
-  const datasNoRange = datasUnicas.filter(dataStr => {
-    const dataCache = new Date(dataStr + 'T12:00:00');
-    
-    // Se é último dia do mês (dados mensais), verificar se o mês se sobrepõe ao período
-    const ultimoDiaMes = new Date(dataCache.getFullYear(), dataCache.getMonth() + 1, 0);
-    const primeiroDiaMes = new Date(dataCache.getFullYear(), dataCache.getMonth(), 1);
-    
-    // Verificar se é uma data de "último dia do mês"
-    const isUltimoDiaMes = dataCache.getDate() === ultimoDiaMes.getDate();
-    
-    if (isUltimoDiaMes) {
-      // Dados mensais: incluir se qualquer dia do mês se sobrepõe ao período
-      return primeiroDiaMes <= fim && ultimoDiaMes >= inicio;
-    } else {
-      // Dados diários: incluir se a data está dentro do período
-      return dataCache >= inicio && dataCache <= fim;
-    }
-  });
-  
-  console.log(`[agregadosService] Datas no cache para ${dataInicio} a ${dataFim}:`, datasNoRange);
-  return datasNoRange;
-}
-
-/**
- * Busca agregados do Supabase (cache local, super rápido!)
- * NOTA: Os dados são mensais, então buscamos pelos meses no período
+ * Busca agregados do Supabase por range de datas
+ * LÓGICA SIMPLES: WHERE data BETWEEN dataInicio AND dataFim
  */
 export async function getVendasAgregado(
   params: GetVendasAgregadoParams
 ): Promise<AgregadoFormaPagamento[]> {
-  console.log('[agregadosService] Buscando agregados do Supabase:', params);
-  
-  // Obter as datas de referência no período solicitado
-  const datasRef = await getDatasNoCache(params.dataInicio, params.dataFim);
-  
-  if (datasRef.length === 0) {
-    console.log('[agregadosService] Nenhuma data no range');
-    return [];
-  }
+  console.log('[agregadosService] Buscando agregados:', params);
   
   let query = supabase
     .from('vendas_agregado_diario')
     .select('*')
-    .in('data', datasRef);
+    .gte('data', params.dataInicio)
+    .lte('data', params.dataFim);
   
   // Filtrar por empresa se não for 'ALL'
   if (params.empresa !== 'ALL') {
@@ -121,13 +55,13 @@ export async function getVendasAgregado(
   }
   
   if (!data || data.length === 0) {
-    console.log('[agregadosService] Nenhum agregado encontrado para as datas:', datasRef);
+    console.log('[agregadosService] Nenhum agregado encontrado para o período');
     return [];
   }
   
   console.log(`[agregadosService] Encontrados ${data.length} registros brutos`);
   
-  // Agregar por empresa + vendedor + forma_pagamento (somar valores de diferentes meses)
+  // Agregar por empresa + vendedor + forma_pagamento (somar valores de diferentes dias)
   const mapaAgregados = new Map<string, {
     codEmpresa: number;
     vendedor: string;
@@ -181,17 +115,24 @@ export async function getVendasAgregado(
 }
 
 /**
- * Verifica se existem agregados para um período
+ * Verifica se existem dados para um período
  */
 export async function temAgregadosParaPeriodo(
   dataInicio: string,
   dataFim: string
 ): Promise<boolean> {
-  const datasRef = await getDatasNoCache(dataInicio, dataFim);
+  const { count, error } = await supabase
+    .from('vendas_agregado_diario')
+    .select('*', { count: 'exact', head: true })
+    .gte('data', dataInicio)
+    .lte('data', dataFim);
   
-  if (datasRef.length === 0) return false;
+  if (error) {
+    console.error('[agregadosService] Erro ao verificar agregados:', error);
+    return false;
+  }
   
-  return datasRef.length > 0;
+  return (count ?? 0) > 0;
 }
 
 /**
@@ -209,4 +150,26 @@ export async function getUltimaDataSincronizada(): Promise<string | null> {
   }
   
   return data[0].data;
+}
+
+/**
+ * Conta quantos dias estão no cache para um período
+ */
+export async function contarDiasNoCache(
+  dataInicio: string,
+  dataFim: string
+): Promise<number> {
+  const { data, error } = await supabase
+    .from('vendas_agregado_diario')
+    .select('data')
+    .gte('data', dataInicio)
+    .lte('data', dataFim);
+  
+  if (error || !data) {
+    return 0;
+  }
+  
+  // Contar datas únicas
+  const datasUnicas = new Set(data.map(d => d.data));
+  return datasUnicas.size;
 }
