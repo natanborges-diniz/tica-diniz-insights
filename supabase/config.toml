@@ -24,5 +24,8 @@ verify_jwt = false
 [functions.sync-agregados-diarios]
 verify_jwt = false
 
+[functions.sync-agregados-mensal]
+verify_jwt = false
+
 [functions.ai-diretrizes]
 verify_jwt = false
