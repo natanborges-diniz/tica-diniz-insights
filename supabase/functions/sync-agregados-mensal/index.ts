@@ -1,6 +1,6 @@
 // supabase/functions/sync-agregados-mensal/index.ts
 // Sincroniza agregados MENSAIS de vendas da API Firebird para o Supabase
-// USA MICRO-BATCHES DE 5 DIAS para evitar timeouts
+// USA MICRO-BATCHES DE 1 DIA para evitar timeouts (ultra granular)
 // DADOS SÃO ARMAZENADOS NO ÚLTIMO DIA DE CADA MÊS
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -12,13 +12,13 @@ const corsHeaders = {
 
 const FIREBIRD_API_BASE_URL = Deno.env.get('FIREBIRD_API_BASE_URL') || 'https://firebird-bridge-production.up.railway.app';
 
-// Configurações de micro-batches
+// Configurações de micro-batches (1 dia por vez para máxima resiliência)
 const CONFIG = {
-  DIAS_POR_BATCH: 5,           // Buscar 5 dias por vez
-  TIMEOUT_BATCH: 30000,        // 30 segundos por batch
-  RETRIES_POR_BATCH: 2,        // 2 tentativas por batch
-  PAUSA_ENTRE_BATCHES: 1000,   // 1 segundo entre batches
-  PAUSA_ENTRE_MESES: 3000,     // 3 segundos entre meses
+  DIAS_POR_BATCH: 1,           // 1 DIA POR VEZ - ultra granular
+  TIMEOUT_BATCH: 15000,        // 15 segundos por dia (mais curto)
+  RETRIES_POR_BATCH: 3,        // 3 tentativas por dia
+  PAUSA_ENTRE_BATCHES: 300,    // 300ms entre dias (mais rápido)
+  PAUSA_ENTRE_MESES: 1000,     // 1 segundo entre meses
 };
 
 interface ResumoFormaPagamento {
@@ -138,68 +138,69 @@ async function firebirdGetComRetry(
 }
 
 /**
- * Sincronizar um mês usando micro-batches de 5 dias
+ * Sincronizar um mês usando micro-batches de 1 dia (ultra granular)
  */
 async function syncMesPorBatches(
   supabase: any,
   ano: number,
   mes: number
-): Promise<{ registros: number; batchesOk: number; batchesFalha: number; erro?: string }> {
+): Promise<{ registros: number; batchesOk: number; batchesFalha: number; diasProcessados: string[]; diasFalha: string[]; erro?: string }> {
   const primeiroDia = getPrimeiroDiaMes(ano, mes);
   const ultimoDia = getUltimoDiaMes(ano, mes);
   const dataArmazenamento = formatDate(ultimoDia);
   
-  console.log(`[syncMesPorBatches] Iniciando ${mes + 1}/${ano}: ${formatDate(primeiroDia)} a ${dataArmazenamento}`);
+  console.log(`[syncMesPorBatches] Iniciando ${mes + 1}/${ano}: ${formatDate(primeiroDia)} a ${dataArmazenamento} (1 dia por vez)`);
   
-  // Coletar todos os dados do mês em batches
+  // Coletar todos os dados do mês, 1 dia por vez
   const todosOsDados: ResumoFormaPagamento[] = [];
   let batchesOk = 0;
   let batchesFalha = 0;
+  const diasProcessados: string[] = [];
+  const diasFalha: string[] = [];
   let diaAtual = primeiroDia;
   
   while (diaAtual <= ultimoDia) {
-    const fimBatch = new Date(Math.min(
-      addDays(diaAtual, CONFIG.DIAS_POR_BATCH - 1).getTime(),
-      ultimoDia.getTime()
-    ));
-    
-    const dataInicio = formatDate(diaAtual);
-    const dataFim = formatDate(fimBatch);
-    
-    console.log(`[batch] ${dataInicio} a ${dataFim}...`);
+    const dataStr = formatDate(diaAtual);
     
     try {
+      // Buscar apenas 1 dia por vez
       const response = await firebirdGetComRetry('/api/v1/vendas/resumo-formas-pagamento', {
-        dataInicio,
-        dataFim,
-        // cache: true - NÃO enviar cache=0, usar cache do backend por padrão
+        dataInicio: dataStr,
+        dataFim: dataStr,
       });
       
       const dados: ResumoFormaPagamento[] = Array.isArray(response) 
         ? response 
         : (response?.data && Array.isArray(response.data) ? response.data : []);
       
-      console.log(`[batch] ${dataInicio} a ${dataFim}: ${dados.length} registros`);
-      todosOsDados.push(...dados);
+      if (dados.length > 0) {
+        console.log(`[dia] ${dataStr}: ${dados.length} registros ✓`);
+        todosOsDados.push(...dados);
+        diasProcessados.push(dataStr);
+      } else {
+        console.log(`[dia] ${dataStr}: vazio (pode ser domingo/feriado)`);
+        diasProcessados.push(dataStr);
+      }
       batchesOk++;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`[batch] Erro ${dataInicio} a ${dataFim}: ${message}`);
+      console.error(`[dia] ${dataStr}: FALHOU - ${message}`);
       batchesFalha++;
-      // Continua para o próximo batch mesmo com erro
+      diasFalha.push(dataStr);
+      // Continua para o próximo dia mesmo com erro
     }
     
-    // Pausa entre batches
+    // Pausa entre dias (curta)
     await new Promise(resolve => setTimeout(resolve, CONFIG.PAUSA_ENTRE_BATCHES));
     
-    // Avança para próximo batch
-    diaAtual = addDays(fimBatch, 1);
+    // Avança para próximo dia
+    diaAtual = addDays(diaAtual, 1);
   }
   
-  console.log(`[syncMesPorBatches] ${mes + 1}/${ano}: ${todosOsDados.length} registros coletados (${batchesOk} OK, ${batchesFalha} falhas)`);
+  console.log(`[syncMesPorBatches] ${mes + 1}/${ano}: ${todosOsDados.length} registros coletados (${batchesOk} dias OK, ${batchesFalha} dias falha)`);
   
   if (todosOsDados.length === 0) {
-    return { registros: 0, batchesOk, batchesFalha, erro: batchesFalha > 0 ? 'Alguns batches falharam' : undefined };
+    return { registros: 0, batchesOk, batchesFalha, diasProcessados, diasFalha, erro: batchesFalha > 0 ? 'Alguns dias falharam' : undefined };
   }
   
   // Agregar por empresa + vendedor + forma_pagamento
@@ -259,7 +260,7 @@ async function syncMesPorBatches(
   }
   
   console.log(`[syncMesPorBatches] ${dataArmazenamento}: ${agregados.length} registros salvos`);
-  return { registros: agregados.length, batchesOk, batchesFalha };
+  return { registros: agregados.length, batchesOk, batchesFalha, diasProcessados, diasFalha };
 }
 
 /**
@@ -343,7 +344,7 @@ Deno.serve(async (req) => {
     const anoFim = parseInt(url.searchParams.get('anoFim') || String(anoAtual), 10);
     const mesFim = parseInt(url.searchParams.get('mesFim') || String(mesAtual + 1), 10) - 1;
     
-    console.log(`[sync-agregados-mensal] Início - Modo micro-batches (${CONFIG.DIAS_POR_BATCH} dias por batch)`);
+    console.log(`[sync-agregados-mensal] Início - Modo ultra-granular (1 dia por vez, timeout ${CONFIG.TIMEOUT_BATCH}ms)`);
     console.log(`[sync-agregados-mensal] Histórico: ${modoHistorico}`);
     
     // Criar cliente Supabase
