@@ -205,12 +205,13 @@ export async function getAuditoriaLight(
  */
 export async function getAuditoriaLightCompleta(
   params: Omit<AuditoriaParams, 'page' | 'pageSize'>,
-  maxPages = 10
+  maxPages = 20
 ): Promise<AuditoriaLight[]> {
   const allData: AuditoriaLight[] = [];
   let page = 1;
   let hasMore = true;
-  const pageSize = 500;
+  // Reduzido de 500 para 200 para evitar timeout
+  const pageSize = 200;
 
   console.log(`[AuditoriaService] Fetching complete light audit...`);
 

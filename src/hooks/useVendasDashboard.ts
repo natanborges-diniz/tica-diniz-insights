@@ -25,10 +25,10 @@ export type ViewMode = "loja" | "vendedor";
 
 // CONFIGURAÇÕES DE OTIMIZAÇÃO
 const CONFIG = {
-  /** Timeout para primeira tentativa (mais curto) */
-  TIMEOUT_PRIMEIRA_TENTATIVA: 15000, // 15s
+  /** Timeout para primeira tentativa (aumentado para auditoria paginada) */
+  TIMEOUT_PRIMEIRA_TENTATIVA: 45000, // 45s
   /** Timeout para retry (um pouco maior) */
-  TIMEOUT_RETRY: 25000, // 25s
+  TIMEOUT_RETRY: 60000, // 60s
   /** Limite máximo de dias para alertar o usuário */
   LIMITE_DIAS_ALERTA: 45,
   /** Limite máximo de dias permitido */
