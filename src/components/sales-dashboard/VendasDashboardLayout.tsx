@@ -314,14 +314,44 @@ export function VendasDashboardLayout({
         fieldLabels={FILTER_LABELS}
       />
 
+      {/* Indicador de fonte de dados */}
+      {dataLoaded && !loading && fontesDados && (
+        <div className="flex items-center gap-2 text-sm">
+          {fontesDados.firebird && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Dados em tempo real
+            </span>
+          )}
+          {fontesDados.supabase && !fontesDados.parcial && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+              <span className="w-2 h-2 rounded-full bg-blue-500" />
+              Cache completo
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Aviso de dados parciais (Firebird indisponível) */}
       {fontesDados?.parcial && (
         <Alert className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
           <AlertTriangle className="h-4 w-4 text-amber-600" />
-          <AlertDescription className="text-amber-800 dark:text-amber-200">
-            <strong>Dados do cache:</strong> {fontesDados.mensagem || 
-              'Servidor de dados em tempo real indisponível. Exibindo dados do cache.'
-            }
+          <AlertDescription className="flex items-center justify-between">
+            <div className="text-amber-800 dark:text-amber-200">
+              <strong>Dados do cache:</strong> {fontesDados.mensagem || 
+                'Servidor de dados em tempo real indisponível. Exibindo dados do cache quando disponíveis.'
+              }
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={reload} 
+              disabled={isLoading}
+              className="ml-4 shrink-0"
+            >
+              <RefreshCw className={`h-3 w-3 mr-1 ${isLoading ? "animate-spin" : ""}`} />
+              Tentar novamente
+            </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -330,7 +360,19 @@ export function VendasDashboardLayout({
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="flex items-center justify-between">
+            <span>{error}</span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={reload} 
+              disabled={isLoading}
+              className="ml-4 shrink-0"
+            >
+              <RefreshCw className={`h-3 w-3 mr-1 ${isLoading ? "animate-spin" : ""}`} />
+              Tentar novamente
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 
