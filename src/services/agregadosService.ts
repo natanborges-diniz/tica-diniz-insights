@@ -38,30 +38,49 @@ export interface GetVendasAgregadoParams {
 }
 
 /**
- * Converte uma data para o "mês de referência" no formato usado no cache
- * Os dados são armazenados como último dia do mês
+ * Busca TODAS as datas de referência no cache que correspondem ao período solicitado
+ * Os dados podem estar como último dia do mês OU como datas específicas (ex: 2026-01-12)
  */
-function getMesesNoRange(dataInicio: string, dataFim: string): string[] {
-  const meses: string[] = [];
+async function getDatasNoCache(dataInicio: string, dataFim: string): Promise<string[]> {
+  // Buscar todas as datas únicas no cache
+  const { data, error } = await supabase
+    .from('vendas_agregado_diario')
+    .select('data')
+    .order('data', { ascending: true });
   
-  const inicio = new Date(dataInicio + 'T00:00:00');
-  const fim = new Date(dataFim + 'T00:00:00');
-  
-  // Começar do primeiro dia do mês de início
-  let current = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
-  
-  while (current <= fim) {
-    // Último dia do mês atual
-    const ultimoDia = new Date(current.getFullYear(), current.getMonth() + 1, 0);
-    const mesRef = ultimoDia.toISOString().split('T')[0];
-    meses.push(mesRef);
-    
-    // Próximo mês
-    current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
+  if (error || !data) {
+    console.error('[agregadosService] Erro ao buscar datas do cache:', error);
+    return [];
   }
   
-  console.log(`[agregadosService] Meses no range ${dataInicio} a ${dataFim}:`, meses);
-  return meses;
+  // Datas únicas
+  const datasUnicas = [...new Set(data.map(d => d.data))];
+  
+  // Filtrar datas que correspondem ao período
+  const inicio = new Date(dataInicio + 'T00:00:00');
+  const fim = new Date(dataFim + 'T23:59:59');
+  
+  const datasNoRange = datasUnicas.filter(dataStr => {
+    const dataCache = new Date(dataStr + 'T12:00:00');
+    
+    // Se é último dia do mês (dados mensais), verificar se o mês se sobrepõe ao período
+    const ultimoDiaMes = new Date(dataCache.getFullYear(), dataCache.getMonth() + 1, 0);
+    const primeiroDiaMes = new Date(dataCache.getFullYear(), dataCache.getMonth(), 1);
+    
+    // Verificar se é uma data de "último dia do mês"
+    const isUltimoDiaMes = dataCache.getDate() === ultimoDiaMes.getDate();
+    
+    if (isUltimoDiaMes) {
+      // Dados mensais: incluir se qualquer dia do mês se sobrepõe ao período
+      return primeiroDiaMes <= fim && ultimoDiaMes >= inicio;
+    } else {
+      // Dados diários: incluir se a data está dentro do período
+      return dataCache >= inicio && dataCache <= fim;
+    }
+  });
+  
+  console.log(`[agregadosService] Datas no cache para ${dataInicio} a ${dataFim}:`, datasNoRange);
+  return datasNoRange;
 }
 
 /**
@@ -73,18 +92,18 @@ export async function getVendasAgregado(
 ): Promise<AgregadoFormaPagamento[]> {
   console.log('[agregadosService] Buscando agregados do Supabase:', params);
   
-  // Obter os meses de referência no período solicitado
-  const mesesRef = getMesesNoRange(params.dataInicio, params.dataFim);
+  // Obter as datas de referência no período solicitado
+  const datasRef = await getDatasNoCache(params.dataInicio, params.dataFim);
   
-  if (mesesRef.length === 0) {
-    console.log('[agregadosService] Nenhum mês no range');
+  if (datasRef.length === 0) {
+    console.log('[agregadosService] Nenhuma data no range');
     return [];
   }
   
   let query = supabase
     .from('vendas_agregado_diario')
     .select('*')
-    .in('data', mesesRef);
+    .in('data', datasRef);
   
   // Filtrar por empresa se não for 'ALL'
   if (params.empresa !== 'ALL') {
@@ -102,7 +121,7 @@ export async function getVendasAgregado(
   }
   
   if (!data || data.length === 0) {
-    console.log('[agregadosService] Nenhum agregado encontrado para os meses:', mesesRef);
+    console.log('[agregadosService] Nenhum agregado encontrado para as datas:', datasRef);
     return [];
   }
   
@@ -168,21 +187,11 @@ export async function temAgregadosParaPeriodo(
   dataInicio: string,
   dataFim: string
 ): Promise<boolean> {
-  const mesesRef = getMesesNoRange(dataInicio, dataFim);
+  const datasRef = await getDatasNoCache(dataInicio, dataFim);
   
-  if (mesesRef.length === 0) return false;
+  if (datasRef.length === 0) return false;
   
-  const { count, error } = await supabase
-    .from('vendas_agregado_diario')
-    .select('*', { count: 'exact', head: true })
-    .in('data', mesesRef);
-  
-  if (error) {
-    console.error('[agregadosService] Erro ao verificar agregados:', error);
-    return false;
-  }
-  
-  return (count ?? 0) > 0;
+  return datasRef.length > 0;
 }
 
 /**
