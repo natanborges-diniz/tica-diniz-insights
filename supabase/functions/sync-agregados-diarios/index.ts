@@ -1,6 +1,7 @@
 // supabase/functions/sync-agregados-diarios/index.ts
 // Sincroniza agregados DIÁRIOS de vendas da API Firebird para o Supabase
 // VERSÃO OTIMIZADA: Usa endpoint /api/v1/vendas/resumo-diario-simples (leve e direto)
+// Deploy v2 - 2025-01-15 - Forçando rebuild
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
