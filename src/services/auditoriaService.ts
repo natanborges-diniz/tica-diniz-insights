@@ -161,7 +161,8 @@ export async function getAuditoriaFull(
  * Recomendado para: validação rápida, comparação com cache, período aberto
  */
 export async function getAuditoriaLight(
-  params: AuditoriaParams
+  params: AuditoriaParams,
+  signal?: AbortSignal
 ): Promise<PaginatedResponse<AuditoriaLight>> {
   const { page = 1, pageSize = 500 } = params;
   
@@ -177,9 +178,17 @@ export async function getAuditoriaLight(
     queryParams.excluirCreditos = 1;
   }
 
-  console.log(`[AuditoriaService] Fetching light audit page ${page}...`);
+  console.log(`[AuditoriaService] Fetching light audit page ${page}:`, { 
+    empresa: queryParams.empresa, 
+    dataInicio: queryParams.dataInicio, 
+    dataFim: queryParams.dataFim 
+  });
   
-  const raw = await apiGet<AuditoriaLightRaw>('/vendas/auditoria-formas-pagamento-light', queryParams);
+  const raw = await apiGet<AuditoriaLightRaw>(
+    '/vendas/auditoria-formas-pagamento-light', 
+    queryParams,
+    { signal, timeoutMs: 60000 } // 60s timeout por página
+  );
 
   const data = raw.map((r) => ({
     codEmpresa: r.cod_empresa ?? 0,
@@ -209,21 +218,33 @@ export async function getAuditoriaLight(
  * Busca todas as páginas de auditoria light (agregado)
  * Útil para períodos abertos quando cache é insuficiente
  * @param onProgress Callback para reportar progresso da paginação
+ * @param signal AbortSignal para cancelar a busca
  */
 export async function getAuditoriaLightCompleta(
   params: Omit<AuditoriaParams, 'page' | 'pageSize'>,
   maxPages = 20,
-  onProgress?: (progresso: ProgressoPaginacao) => void
+  onProgress?: (progresso: ProgressoPaginacao) => void,
+  signal?: AbortSignal
 ): Promise<AuditoriaLight[]> {
   const allData: AuditoriaLight[] = [];
   let page = 1;
   let hasMore = true;
-  // Reduzido de 500 para 200 para evitar timeout
-  const pageSize = 200;
+  // Reduzido para 100 para evitar timeout em lojas com muitos dados
+  const pageSize = 100;
 
-  console.log(`[AuditoriaService] Fetching complete light audit...`);
+  console.log(`[AuditoriaService] Fetching complete light audit:`, {
+    empresa: params.empresa,
+    dataInicio: params.dataInicio,
+    dataFim: params.dataFim,
+  });
 
   while (hasMore && page <= maxPages) {
+    // Verificar se foi cancelado antes de cada página
+    if (signal?.aborted) {
+      console.log('[AuditoriaService] Busca cancelada pelo usuário');
+      throw new Error('Requisição cancelada');
+    }
+    
     // Reportar progresso antes de cada página
     onProgress?.({
       paginaAtual: page,
@@ -235,7 +256,7 @@ export async function getAuditoriaLightCompleta(
       ...params,
       page,
       pageSize,
-    });
+    }, signal);
 
     allData.push(...response.data);
     hasMore = response.pagination.hasMore;

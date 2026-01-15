@@ -26,9 +26,9 @@ export type ViewMode = "loja" | "vendedor";
 // CONFIGURAÇÕES DE OTIMIZAÇÃO
 const CONFIG = {
   /** Timeout para primeira tentativa (aumentado para auditoria paginada) */
-  TIMEOUT_PRIMEIRA_TENTATIVA: 45000, // 45s
+  TIMEOUT_PRIMEIRA_TENTATIVA: 60000, // 60s
   /** Timeout para retry (um pouco maior) */
-  TIMEOUT_RETRY: 60000, // 60s
+  TIMEOUT_RETRY: 90000, // 90s
   /** Limite máximo de dias para alertar o usuário */
   LIMITE_DIAS_ALERTA: 45,
   /** Limite máximo de dias permitido */
@@ -454,10 +454,15 @@ export function useVendasDashboard() {
     
     // PASSO 2: Tentar endpoint light paginado (mais leve, evita timeout)
     try {
-      console.log('[useVendasDashboard] Tentando auditoria-formas-pagamento-light paginado...');
+      console.log('[useVendasDashboard] Tentando auditoria-formas-pagamento-light paginado:', {
+        empresa,
+        dataInicio,
+        dataFim,
+      });
       const firebirdStartTime = performance.now();
       
       // Usar endpoint light com paginação para período aberto
+      // Passar o signal para permitir cancelamento
       const dadosAuditoria = await getAuditoriaLightCompleta(
         {
           empresa,
@@ -468,7 +473,8 @@ export function useVendasDashboard() {
         20,
         (progresso) => {
           setProgressoPaginacao(progresso);
-        }
+        },
+        abortControllerRef.current?.signal
       );
       
       const tempoMs = Math.round(performance.now() - firebirdStartTime);
@@ -489,10 +495,23 @@ export function useVendasDashboard() {
       setLoadingDesconto(false);
       
     } catch (auditoriaError) {
+      // Se foi cancelado, não tentar fallback
+      if (auditoriaError instanceof Error && auditoriaError.message.includes('cancelada')) {
+        console.log('[useVendasDashboard] Requisição cancelada, não tentando fallback');
+        setProgressoPaginacao(null);
+        return;
+      }
+      
       console.warn('[useVendasDashboard] Auditoria light falhou, tentando resumo...', auditoriaError);
+      setProgressoPaginacao(null); // Limpar progresso ao falhar
       
       // PASSO 2B: Fallback para endpoint resumo tradicional
       try {
+        console.log('[useVendasDashboard] Fallback resumo-formas-pagamento:', {
+          empresa,
+          dataInicio,
+          dataFim,
+        });
         console.log('[useVendasDashboard] Fallback: Tentando resumo-formas-pagamento...');
         const firebirdStartTime = performance.now();
         
