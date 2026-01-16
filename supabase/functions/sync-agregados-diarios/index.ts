@@ -1,7 +1,7 @@
 // supabase/functions/sync-agregados-diarios/index.ts
 // Sincroniza agregados DIÁRIOS de vendas da API Firebird para o Supabase
 // VERSÃO OTIMIZADA: Usa endpoint /api/v1/vendas/resumo-diario-simples (leve e direto)
-// Deploy v2 - 2025-01-15 - Forçando rebuild
+// Deploy v3 - 2026-01-16 - Incluindo créditos e devoluções
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -95,11 +95,11 @@ async function syncPeriodo(
   console.log(`[syncPeriodo] Buscando ${dataInicio} a ${dataFim}${empresa ? ` (empresa ${empresa})` : ''}...`);
   
   try {
-    // Usar novo endpoint leve
+    // Usar novo endpoint leve - INCLUIR créditos e devoluções para cálculos corretos
     const params: Record<string, any> = {
       dataInicio,
       dataFim,
-      excluirCreditos: 1, // Excluir créditos por padrão
+      excluirCreditos: 0, // Explicitamente INCLUIR créditos e devoluções
     };
     
     if (empresa && empresa !== 'ALL') {
