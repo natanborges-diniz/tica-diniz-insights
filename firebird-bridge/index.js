@@ -729,6 +729,140 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
 });
 
 // ============================================
+// API v1 - Resumo Diário Simples (para sincronização de cache)
+// Query CORRIGIDA: Usa COD_TRANSACAO + COD_EMPRESA como chave única
+// ============================================
+app.get('/api/v1/vendas/resumo-diario-simples', async (req, res) => {
+  try {
+    const { dataInicio, dataFim, empresa, excluirCreditos } = req.query;
+
+    if (!dataInicio || !dataFim) {
+      return res.status(400).json({ 
+        ok: false, 
+        data: null,
+        error: { code: 'INVALID_PARAMS', message: 'Parâmetros obrigatórios: dataInicio, dataFim' }
+      });
+    }
+
+    const codEmpresa = (!empresa || empresa === 'ALL' || empresa === 'null' || empresa === '') 
+      ? 0 
+      : parseInt(empresa);
+    
+    const pExcluiCreditos = excluirCreditos === '1' || excluirCreditos === 'true' ? 1 : 0;
+
+    // Query CORRIGIDA - agrupa por transação primeiro para evitar multiplicação
+    const sql = `
+      WITH
+      empresas_filtradas AS (
+        SELECT e.COD_EMPRESA
+        FROM EMPRESA e
+        WHERE e.COD_EMPRESA NOT IN (${EMPRESAS_EXCLUIDAS.join(',')})
+          ${codEmpresa === 0 ? '' : `AND (e.COD_EMPRESA = ${codEmpresa} OR (${codEmpresa} IN (13, 18) AND e.COD_EMPRESA IN (13, 18)))`}
+      ),
+      transacoes AS (
+        SELECT 
+          t.COD_TRANSACAO,
+          t.COD_EMPRESA,
+          CAST(t.DATAEMISSAO AS DATE) AS DATA_VENDA,
+          CASE WHEN t.COD_EMPRESAESTOQUE IN (13, 18) THEN 13 ELSE t.COD_EMPRESAESTOQUE END AS COD_EMPRESA_LOGICO,
+          t.COD_FATURATRANSACAO
+        FROM TRANSACAO t
+        JOIN empresas_filtradas ef ON ef.COD_EMPRESA = t.COD_EMPRESAESTOQUE
+        JOIN NATUREZAOPERACAO nat ON nat.COD_NATUREZAOPERACAO = t.COD_NATUREZAOPERACAO
+        WHERE nat.TIPO = 1
+          AND t.DATAEMISSAO >= '${dataInicio}'
+          AND t.DATAEMISSAO <= '${dataFim}'
+      ),
+      itens_por_transacao AS (
+        SELECT
+          ti.COD_TRANSACAO,
+          ti.COD_EMPRESA,
+          SUM(COALESCE(ti.VALORORIGINAL, 0) * COALESCE(ti.QUANTIDADE, 0)) AS TOTAL_BRUTO,
+          SUM(COALESCE(ti.TOTAL, 0) - COALESCE(ti.TOTALIPI, 0)) AS TOTAL_VENDIDO
+        FROM TRANSACAO_ITEM ti
+        WHERE EXISTS (SELECT 1 FROM transacoes t WHERE t.COD_TRANSACAO = ti.COD_TRANSACAO AND t.COD_EMPRESA = ti.COD_EMPRESA)
+        GROUP BY ti.COD_TRANSACAO, ti.COD_EMPRESA
+      ),
+      vendedores AS (
+        SELECT 
+          s.COD_SAIDA AS COD_TRANSACAO,
+          s.COD_EMPRESA,
+          p.NOME AS VENDEDOR
+        FROM SAIDA s
+        JOIN PESSOA p ON p.COD_PESSOA = s.COD_VENDEDOR
+        WHERE EXISTS (SELECT 1 FROM transacoes t WHERE t.COD_TRANSACAO = s.COD_SAIDA AND t.COD_EMPRESA = s.COD_EMPRESA)
+      ),
+      pagamentos AS (
+        SELECT
+          t.COD_TRANSACAO,
+          t.COD_EMPRESA,
+          ffp.COD_FORMAPAGAMENTOTIPO,
+          SUM(COALESCE(IIF(flp.DATAPAGAMENTO IS NULL, flp.VALOR, flp.VALORPAGO), 0)) AS TOTAL_PAGO
+        FROM transacoes t
+        JOIN FINFATURATRANSACAO fft ON fft.COD_FATURATRANSACAO = t.COD_FATURATRANSACAO
+        JOIN FINLANCAMENTO fl ON fl.COD_FATURATRANSACAO = fft.COD_FATURATRANSACAO
+        JOIN FINLANCAMENTOPARCELA flp ON flp.COD_LANCAMENTO = fl.COD_LANCAMENTO
+        JOIN FINFORMAPAGAMENTO ffp ON ffp.COD_FORMAPAGAMENTO = flp.COD_FORMAPAGAMENTO
+        GROUP BY t.COD_TRANSACAO, t.COD_EMPRESA, ffp.COD_FORMAPAGAMENTOTIPO
+      ),
+      pagamentos_totais AS (
+        SELECT COD_TRANSACAO, COD_EMPRESA, SUM(TOTAL_PAGO) AS TOTAL_TRANSACAO
+        FROM pagamentos
+        GROUP BY COD_TRANSACAO, COD_EMPRESA
+      )
+      SELECT
+        t.DATA_VENDA,
+        t.COD_EMPRESA_LOGICO AS COD_EMPRESA,
+        v.VENDEDOR,
+        CASE p.COD_FORMAPAGAMENTOTIPO
+          WHEN 1 THEN 'DINHEIRO'
+          WHEN 2 THEN 'CHEQUE'
+          WHEN 3 THEN 
+            CASE WHEN fct.CREDITO = 'T' THEN 'CARTAO CREDITO' ELSE 'CARTAO DEBITO' END
+          WHEN 4 THEN 'BANCO'
+          WHEN 5 THEN 'CARNE'
+          WHEN 6 THEN 'CREDITOS'
+          ELSE 'OUTROS'
+        END AS FORMAPAGAMENTO,
+        COUNT(DISTINCT t.COD_TRANSACAO || '-' || t.COD_EMPRESA) AS QTD_VENDAS,
+        SUM(COALESCE(i.TOTAL_BRUTO, 0) * p.TOTAL_PAGO / NULLIF(pt.TOTAL_TRANSACAO, 0)) AS TOTAL_BRUTO,
+        SUM(COALESCE(i.TOTAL_VENDIDO, 0) * p.TOTAL_PAGO / NULLIF(pt.TOTAL_TRANSACAO, 0)) AS TOTAL_VENDIDO,
+        SUM((COALESCE(i.TOTAL_BRUTO, 0) - COALESCE(i.TOTAL_VENDIDO, 0)) * p.TOTAL_PAGO / NULLIF(pt.TOTAL_TRANSACAO, 0)) AS TOTAL_DESCONTO
+      FROM transacoes t
+      JOIN vendedores v ON v.COD_TRANSACAO = t.COD_TRANSACAO AND v.COD_EMPRESA = t.COD_EMPRESA
+      JOIN itens_por_transacao i ON i.COD_TRANSACAO = t.COD_TRANSACAO AND i.COD_EMPRESA = t.COD_EMPRESA
+      JOIN pagamentos p ON p.COD_TRANSACAO = t.COD_TRANSACAO AND p.COD_EMPRESA = t.COD_EMPRESA
+      JOIN pagamentos_totais pt ON pt.COD_TRANSACAO = t.COD_TRANSACAO AND pt.COD_EMPRESA = t.COD_EMPRESA
+      LEFT JOIN FINFORMAPAGAMENTO ffp ON ffp.COD_FORMAPAGAMENTOTIPO = p.COD_FORMAPAGAMENTOTIPO
+      LEFT JOIN FINFORMAPAGAMENTOCARTAO ffc ON ffc.COD_FORMAPAGAMENTOCARTAO = ffp.COD_FORMAPAGAMENTO
+      LEFT JOIN FINCARTAOCREDITOTIPO fct ON fct.COD_CARTAOCREDITOTIPO = ffc.COD_CARTAOCREDITOTIPO
+      WHERE (${pExcluiCreditos} = 0 OR p.COD_FORMAPAGAMENTOTIPO <> 6)
+      GROUP BY
+        t.DATA_VENDA,
+        t.COD_EMPRESA_LOGICO,
+        v.VENDEDOR,
+        CASE p.COD_FORMAPAGAMENTOTIPO
+          WHEN 1 THEN 'DINHEIRO'
+          WHEN 2 THEN 'CHEQUE'
+          WHEN 3 THEN 
+            CASE WHEN fct.CREDITO = 'T' THEN 'CARTAO CREDITO' ELSE 'CARTAO DEBITO' END
+          WHEN 4 THEN 'BANCO'
+          WHEN 5 THEN 'CARNE'
+          WHEN 6 THEN 'CREDITOS'
+          ELSE 'OUTROS'
+        END
+      ORDER BY t.DATA_VENDA, t.COD_EMPRESA_LOGICO, v.VENDEDOR
+    `;
+
+    console.log('[API] GET /api/v1/vendas/resumo-diario-simples', { empresa: empresa || 'ALL', dataInicio, dataFim, excluirCreditos: pExcluiCreditos });
+    const rows = await executeQuery(sql);
+    return apiResponse(res, rows);
+  } catch (error) {
+    return apiResponse(res, null, error);
+  }
+});
+
+// ============================================
 // ENDPOINTS LEGADOS (mantidos para compatibilidade)
 // ============================================
 
