@@ -1,7 +1,7 @@
 // supabase/functions/sync-agregados-diarios/index.ts
 // Sincroniza agregados DIÁRIOS de vendas da API Firebird para o Supabase
-// VERSÃO CORRIGIDA: Usa endpoint /api/v1/vendas/resumo-formas-pagamento (com rateio correto)
-// Deploy v4 - 2026-01-16 - Usando endpoint correto que rateia valores por forma pagamento
+// VERSÃO CORRIGIDA: Usa endpoint /api/v1/vendas/resumo-diario-simples (com query corrigida)
+// Deploy v5 - 2026-01-16 - Aguardando deploy do endpoint corrigido no Railway
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -12,18 +12,16 @@ const corsHeaders = {
 
 const FIREBIRD_API_BASE_URL = Deno.env.get('FIREBIRD_API_BASE_URL') || 'https://firebird-bridge-production.up.railway.app';
 
-// Interface do endpoint resumo-formas-pagamento (correto, com rateio proporcional)
-interface ResumoFormaPagamento {
-  EMPRESA: string;
-  EMPRESA_COD_LOGICO: number;
-  EMPRESA_NOME_LOGICO: string;
+// Interface do endpoint resumo-diario-simples CORRIGIDO
+interface ResumoDiarioSimples {
+  DATA_VENDA: string;
+  COD_EMPRESA: number;
   VENDEDOR: string;
   FORMAPAGAMENTO: string;
-  TOTALGERAL: number;
   QTD_VENDAS: number;
   TOTAL_BRUTO: number;
+  TOTAL_VENDIDO: number;
   TOTAL_DESCONTO: number;
-  PERC_DESCONTO: number;
 }
 
 interface AgregadoDiario {
@@ -86,35 +84,35 @@ async function firebirdGet(path: string, params: Record<string, any> = {}, timeo
   }
 }
 
-// Sincronizar UM DIA usando endpoint resumo-formas-pagamento (correto, com rateio)
-async function syncDia(
+// Sincronizar período usando endpoint resumo-diario-simples CORRIGIDO
+async function syncPeriodo(
   supabase: any,
-  data: string,
+  dataInicio: string,
+  dataFim: string,
   empresa?: string
 ): Promise<{ registros: number; erro?: string }> {
-  console.log(`[syncDia] Buscando ${data}${empresa ? ` (empresa ${empresa})` : ''}...`);
+  console.log(`[syncPeriodo] Buscando ${dataInicio} a ${dataFim}${empresa ? ` (empresa ${empresa})` : ''}...`);
   
   try {
-    // Usar endpoint correto - resumo-formas-pagamento (com rateio proporcional)
+    // Usar endpoint resumo-diario-simples CORRIGIDO
     const params: Record<string, any> = {
-      dataInicio: data,
-      dataFim: data,
-      excluirCreditos: 0, // INCLUIR créditos
-      incluirDevolucoes: 1, // INCLUIR devoluções
+      dataInicio,
+      dataFim,
+      excluirCreditos: 0, // INCLUIR créditos e devoluções
     };
     
     if (empresa && empresa !== 'ALL') {
       params.empresa = empresa;
     }
     
-    const response = await firebirdGet('/api/v1/vendas/resumo-formas-pagamento', params, 60000);
+    const response = await firebirdGet('/api/v1/vendas/resumo-diario-simples', params, 120000);
     
     // O endpoint retorna { ok: true, data: [...] }
-    const dados: ResumoFormaPagamento[] = response?.data && Array.isArray(response.data) 
+    const dados: ResumoDiarioSimples[] = response?.data && Array.isArray(response.data) 
       ? response.data 
       : (Array.isArray(response) ? response : []);
     
-    console.log(`[syncDia] ${data}: ${dados.length} registros do Firebird`);
+    console.log(`[syncPeriodo] ${dataInicio} a ${dataFim}: ${dados.length} registros do Firebird`);
     
     if (dados.length === 0) {
       return { registros: 0 };
@@ -122,29 +120,30 @@ async function syncDia(
     
     const agora = new Date().toISOString();
     
-    // Converter para formato do cache - usando EMPRESA_COD_LOGICO como cod_empresa
+    // Converter para formato do cache
     const agregados: AgregadoDiario[] = dados.map((d) => ({
-      data: data, // A data é o parâmetro passado
-      cod_empresa: d.EMPRESA_COD_LOGICO,
+      data: d.DATA_VENDA,
+      cod_empresa: d.COD_EMPRESA,
       vendedor: (d.VENDEDOR || '').trim() || 'DESCONHECIDO',
       forma_pagamento: (d.FORMAPAGAMENTO || '').trim() || 'OUTROS',
-      total_vendido: d.TOTALGERAL || 0,
+      total_vendido: d.TOTAL_VENDIDO || 0,
       total_bruto: d.TOTAL_BRUTO || 0,
       total_desconto: d.TOTAL_DESCONTO || 0,
       qtd_vendas: d.QTD_VENDAS || 0,
       atualizado_em: agora,
     }));
     
-    console.log(`[syncDia] ${agregados.length} agregados para salvar`);
+    console.log(`[syncPeriodo] ${agregados.length} agregados para salvar`);
     
-    // Deletar dados existentes para este dia (para evitar duplicações)
+    // Deletar dados existentes para o período (evitar duplicações)
     const { error: deleteError } = await supabase
       .from('vendas_agregado_diario')
       .delete()
-      .eq('data', data);
+      .gte('data', dataInicio)
+      .lte('data', dataFim);
     
     if (deleteError) {
-      console.warn(`[syncDia] Aviso ao deletar dados antigos: ${deleteError.message}`);
+      console.warn(`[syncPeriodo] Aviso ao deletar dados antigos: ${deleteError.message}`);
     }
     
     // Inserir novos dados em lotes de 500
@@ -159,61 +158,23 @@ async function syncDia(
         .insert(batch);
       
       if (error) {
-        console.error(`[syncDia] Erro insert batch ${i}:`, error);
+        console.error(`[syncPeriodo] Erro insert batch ${i}:`, error);
         throw error;
       }
       
       totalSalvos += batch.length;
+      console.log(`[syncPeriodo] Batch ${i / batchSize + 1}: ${batch.length} salvos (total: ${totalSalvos})`);
     }
     
-    console.log(`[syncDia] ${totalSalvos} registros salvos com sucesso`);
+    console.log(`[syncPeriodo] ${totalSalvos} registros salvos com sucesso`);
     return { registros: totalSalvos };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[syncDia] Erro:`, message);
+    console.error(`[syncPeriodo] Erro:`, message);
     return { registros: 0, erro: message };
   }
 }
 
-// Sincronizar período chamando syncDia para cada dia
-async function syncPeriodo(
-  supabase: any,
-  dataInicio: string,
-  dataFim: string,
-  empresa?: string
-): Promise<{ registros: number; erro?: string }> {
-  console.log(`[syncPeriodo] Sincronizando ${dataInicio} a ${dataFim}...`);
-  
-  let totalRegistros = 0;
-  let ultimoErro: string | undefined;
-  
-  // Gerar lista de datas
-  const datas: string[] = [];
-  let current = new Date(dataInicio + 'T12:00:00');
-  const end = new Date(dataFim + 'T12:00:00');
-  
-  while (current <= end) {
-    datas.push(formatDate(current));
-    current = addDays(current, 1);
-  }
-  
-  console.log(`[syncPeriodo] ${datas.length} dias para sincronizar`);
-  
-  // Processar cada dia sequencialmente (para não sobrecarregar a API)
-  for (const data of datas) {
-    const resultado = await syncDia(supabase, data, empresa);
-    totalRegistros += resultado.registros;
-    if (resultado.erro) {
-      ultimoErro = resultado.erro;
-    }
-    
-    // Pequeno delay entre dias para não sobrecarregar
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  
-  console.log(`[syncPeriodo] Total: ${totalRegistros} registros em ${datas.length} dias`);
-  return { registros: totalRegistros, erro: ultimoErro };
-}
 
 // Processar em blocos semanais em background (para períodos longos)
 async function processarSemanasBackground(
