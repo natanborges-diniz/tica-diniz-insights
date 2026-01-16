@@ -101,9 +101,8 @@ async function syncPeriodo(
       excluirCreditos: 0, // INCLUIR créditos e devoluções
     };
     
-    if (empresa && empresa !== 'ALL') {
-      params.empresa = empresa;
-    }
+    // SEMPRE enviar empresa - o backend Railway precisa deste parâmetro
+    params.empresa = empresa || 'ALL';
     
     const response = await firebirdGet('/api/v1/vendas/resumo-diario-simples', params, 120000);
     
@@ -180,7 +179,8 @@ async function syncPeriodo(
 async function processarSemanasBackground(
   supabase: any,
   dataInicio: string,
-  dataFim: string
+  dataFim: string,
+  empresa?: string
 ): Promise<void> {
   console.log(`[background] Processando ${dataInicio} a ${dataFim} em blocos semanais`);
   
@@ -202,7 +202,7 @@ async function processarSemanasBackground(
     
     try {
       console.log(`[background] Bloco ${blocos + 1}: ${inicioStr} a ${fimStr}`);
-      const result = await syncPeriodo(supabase, inicioStr, fimStr);
+      const result = await syncPeriodo(supabase, inicioStr, fimStr, empresa);
       totalRegistros += result.registros;
       if (result.erro) erros++;
       
@@ -258,7 +258,7 @@ Deno.serve(async (req) => {
     if (modoHistorico) {
       // Processar em background para períodos longos
       // @ts-ignore
-      EdgeRuntime.waitUntil(processarSemanasBackground(supabase, dataInicio, dataFim));
+      EdgeRuntime.waitUntil(processarSemanasBackground(supabase, dataInicio, dataFim, empresa || 'ALL'));
       
       return new Response(
         JSON.stringify({
