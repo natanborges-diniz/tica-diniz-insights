@@ -1,7 +1,7 @@
 // supabase/functions/sync-agregados-diarios/index.ts
 // Sincroniza agregados DIÁRIOS de vendas da API Firebird para o Supabase
-// VERSÃO CORRIGIDA: Usa endpoint /api/v1/vendas/resumo-diario-simples (com query corrigida)
-// Deploy v5 - 2026-01-16 - Aguardando deploy do endpoint corrigido no Railway
+// VERSÃO v6 - Sincronização por empresa individual (ALL não funciona no Railway)
+// Deploy v6 - 2026-01-16
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -12,7 +12,10 @@ const corsHeaders = {
 
 const FIREBIRD_API_BASE_URL = Deno.env.get('FIREBIRD_API_BASE_URL') || 'https://firebird-bridge-production.up.railway.app';
 
-// Interface do endpoint resumo-diario-simples CORRIGIDO
+// Empresas ativas no sistema (excluindo 3, 5, 7, 8, 10, 11, 12 que são inativas/lixo)
+const EMPRESAS_ATIVAS = [1, 2, 4, 6, 9, 13, 14, 15, 16, 17];
+
+// Interface do endpoint resumo-diario-simples
 interface ResumoDiarioSimples {
   DATA_VENDA: string;
   COD_EMPRESA: number;
@@ -84,25 +87,24 @@ async function firebirdGet(path: string, params: Record<string, any> = {}, timeo
   }
 }
 
-// Sincronizar período usando endpoint resumo-diario-simples CORRIGIDO
+// Sincronizar período para UMA empresa específica
 async function syncPeriodo(
   supabase: any,
   dataInicio: string,
   dataFim: string,
-  empresa?: string
+  empresa: number | string
 ): Promise<{ registros: number; erro?: string }> {
-  console.log(`[syncPeriodo] Buscando ${dataInicio} a ${dataFim}${empresa ? ` (empresa ${empresa})` : ''}...`);
+  const empresaStr = String(empresa);
+  console.log(`[syncPeriodo] Buscando ${dataInicio} a ${dataFim} (empresa ${empresaStr})...`);
   
   try {
-    // Usar endpoint resumo-diario-simples CORRIGIDO
+    // Empresa específica é OBRIGATÓRIA (ALL não funciona no Railway)
     const params: Record<string, any> = {
       dataInicio,
       dataFim,
-      excluirCreditos: 0, // INCLUIR créditos e devoluções
+      excluirCreditos: 0,
+      empresa: empresaStr,
     };
-    
-    // SEMPRE enviar empresa - o backend Railway precisa deste parâmetro
-    params.empresa = empresa || 'ALL';
     
     const response = await firebirdGet('/api/v1/vendas/resumo-diario-simples', params, 120000);
     
@@ -111,7 +113,7 @@ async function syncPeriodo(
       ? response.data 
       : (Array.isArray(response) ? response : []);
     
-    console.log(`[syncPeriodo] ${dataInicio} a ${dataFim}: ${dados.length} registros do Firebird`);
+    console.log(`[syncPeriodo] Empresa ${empresaStr}, ${dataInicio} a ${dataFim}: ${dados.length} registros`);
     
     if (dados.length === 0) {
       return { registros: 0 };
@@ -134,10 +136,11 @@ async function syncPeriodo(
     
     console.log(`[syncPeriodo] ${agregados.length} agregados para salvar`);
     
-    // Deletar dados existentes para o período (evitar duplicações)
+    // Deletar dados existentes para o período E empresa (evitar duplicações)
     const { error: deleteError } = await supabase
       .from('vendas_agregado_diario')
       .delete()
+      .eq('cod_empresa', Number(empresaStr))
       .gte('data', dataInicio)
       .lte('data', dataFim);
     
@@ -165,56 +168,71 @@ async function syncPeriodo(
       console.log(`[syncPeriodo] Batch ${i / batchSize + 1}: ${batch.length} salvos (total: ${totalSalvos})`);
     }
     
-    console.log(`[syncPeriodo] ${totalSalvos} registros salvos com sucesso`);
+    console.log(`[syncPeriodo] Empresa ${empresaStr}: ${totalSalvos} registros salvos`);
     return { registros: totalSalvos };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[syncPeriodo] Erro:`, message);
+    console.error(`[syncPeriodo] Erro empresa ${empresaStr}:`, message);
     return { registros: 0, erro: message };
   }
 }
 
 
-// Processar em blocos semanais em background (para períodos longos)
-async function processarSemanasBackground(
+// Processar TODAS as empresas ativas em background (para períodos longos)
+async function processarTodasEmpresasBackground(
   supabase: any,
   dataInicio: string,
-  dataFim: string,
-  empresa?: string
+  dataFim: string
 ): Promise<void> {
-  console.log(`[background] Processando ${dataInicio} a ${dataFim} em blocos semanais`);
+  console.log(`[background] Processando ${dataInicio} a ${dataFim} para ${EMPRESAS_ATIVAS.length} empresas ativas`);
+  console.log(`[background] Empresas: ${EMPRESAS_ATIVAS.join(', ')}`);
   
-  let currentStart = new Date(dataInicio + 'T12:00:00');
-  const endDate = new Date(dataFim + 'T12:00:00');
   let totalRegistros = 0;
-  let blocos = 0;
-  let erros = 0;
+  let totalBlocos = 0;
+  let totalErros = 0;
   
-  while (currentStart <= endDate) {
-    // Calcular fim da semana (ou dataFim se for menor)
-    let currentEnd = addDays(currentStart, 6);
-    if (currentEnd > endDate) {
-      currentEnd = endDate;
-    }
+  // Iterar por cada empresa ativa
+  for (const empresa of EMPRESAS_ATIVAS) {
+    console.log(`[background] ========== Empresa ${empresa} ==========`);
     
-    const inicioStr = formatDate(currentStart);
-    const fimStr = formatDate(currentEnd);
+    let currentStart = new Date(dataInicio + 'T12:00:00');
+    const endDate = new Date(dataFim + 'T12:00:00');
+    let empresaRegistros = 0;
+    let empresaBlocos = 0;
     
-    try {
-      console.log(`[background] Bloco ${blocos + 1}: ${inicioStr} a ${fimStr}`);
-      const result = await syncPeriodo(supabase, inicioStr, fimStr, empresa);
-      totalRegistros += result.registros;
-      if (result.erro) erros++;
+    // Processar em blocos semanais para esta empresa
+    while (currentStart <= endDate) {
+      let currentEnd = addDays(currentStart, 6);
+      if (currentEnd > endDate) {
+        currentEnd = endDate;
+      }
       
-      // Pausa entre blocos
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    } catch (err) {
-      console.error(`[background] Erro bloco ${inicioStr}:`, err);
-      erros++;
+      const inicioStr = formatDate(currentStart);
+      const fimStr = formatDate(currentEnd);
+      
+      try {
+        console.log(`[background] Empresa ${empresa}, Bloco ${empresaBlocos + 1}: ${inicioStr} a ${fimStr}`);
+        const result = await syncPeriodo(supabase, inicioStr, fimStr, empresa);
+        empresaRegistros += result.registros;
+        totalRegistros += result.registros;
+        if (result.erro) totalErros++;
+        
+        // Pausa entre blocos para não sobrecarregar
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (err) {
+        console.error(`[background] Erro empresa ${empresa}, bloco ${inicioStr}:`, err);
+        totalErros++;
+      }
+      
+      empresaBlocos++;
+      totalBlocos++;
+      currentStart = addDays(currentEnd, 1);
     }
     
-    blocos++;
-    currentStart = addDays(currentEnd, 1);
+    console.log(`[background] Empresa ${empresa} concluída: ${empresaBlocos} blocos, ${empresaRegistros} registros`);
+    
+    // Pausa maior entre empresas
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
   
   // Atualizar controle ETL
@@ -228,7 +246,8 @@ async function processarSemanasBackground(
     console.error('[background] Erro etl_controle:', err);
   }
   
-  console.log(`[background] Concluído: ${blocos} blocos, ${totalRegistros} registros, ${erros} erros`);
+  console.log(`[background] ========== CONCLUÍDO ==========`);
+  console.log(`[background] ${EMPRESAS_ATIVAS.length} empresas, ${totalBlocos} blocos, ${totalRegistros} registros, ${totalErros} erros`);
 }
 
 Deno.serve(async (req) => {
@@ -246,9 +265,9 @@ Deno.serve(async (req) => {
     const dataInicio = url.searchParams.get('dataInicio') || hoje;
     const dataFim = url.searchParams.get('dataFim') || hoje;
     
-    console.log(`[sync-agregados-diarios] Início`);
+    console.log(`[sync-agregados-diarios] Início v6`);
     console.log(`[sync-agregados-diarios] Período: ${dataInicio} a ${dataFim}`);
-    console.log(`[sync-agregados-diarios] Histórico: ${modoHistorico}, Empresa: ${empresa || 'TODAS'}`);
+    console.log(`[sync-agregados-diarios] Histórico: ${modoHistorico}, Empresa: ${empresa || 'TODAS (${EMPRESAS_ATIVAS.length})'}`);
     
     // Criar cliente Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -256,21 +275,33 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     if (modoHistorico) {
-      // Processar em background para períodos longos
+      // Modo histórico: processa TODAS as empresas ativas em background
       // @ts-ignore
-      EdgeRuntime.waitUntil(processarSemanasBackground(supabase, dataInicio, dataFim, empresa || 'ALL'));
+      EdgeRuntime.waitUntil(processarTodasEmpresasBackground(supabase, dataInicio, dataFim));
       
       return new Response(
         JSON.stringify({
           success: true,
           modo: 'historico_background',
           periodo: `${dataInicio} a ${dataFim}`,
-          message: `Sincronização iniciada em background. Processando em blocos semanais.`,
+          empresas: EMPRESAS_ATIVAS,
+          message: `Sincronização iniciada em background para ${EMPRESAS_ATIVAS.length} empresas.`,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     } else {
-      // Modo síncrono - busca período inteiro de uma vez
+      // Modo normal: requer empresa específica
+      if (!empresa) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Parâmetro empresa é obrigatório no modo normal. Use historico=true para sincronizar todas.',
+            empresas_disponiveis: EMPRESAS_ATIVAS,
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       const result = await syncPeriodo(supabase, dataInicio, dataFim, empresa);
       
       return new Response(
@@ -278,7 +309,7 @@ Deno.serve(async (req) => {
           success: !result.erro,
           modo: 'normal',
           periodo: `${dataInicio} a ${dataFim}`,
-          empresa: empresa || 'TODAS',
+          empresa: empresa,
           registros: result.registros,
           erro: result.erro,
         }),
