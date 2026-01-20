@@ -25,8 +25,14 @@ const firebaseConfig = {
 // Empresas que não devem aparecer nos filtros (lixo ou sem operação)
 const EMPRESAS_EXCLUIDAS = [3, 5, 7, 8, 10, 11, 12];
 
-// Empresas que devem ser unificadas (18 -> 13 = DINIZ SUPER)
+// Empresas que devem ser unificadas (18 -> 13 = DINIZ SUPER SHOPPING)
 const EMPRESAS_UNIFICADAS = { 18: 13 };
+
+// Mapeamento de nomes corrigidos (sobrescreve nome vindo do Firebird)
+const EMPRESAS_NOMES_CORRIGIDOS = {
+  6: 'DINIZ UNIÃO',
+  13: 'DINIZ SUPER SHOPPING'
+};
 
 // Helper para obter cláusula WHERE de empresas ativas
 function getWhereEmpresasAtivas(alias = 'e') {
@@ -100,16 +106,18 @@ app.get('/api/v1/empresas', async (req, res) => {
     console.log('[API] GET /api/v1/empresas');
     const rows = await executeQuery(sql);
     
-    // Aplicar unificação de empresas (18 -> 13)
+    // Aplicar unificação de empresas (18 -> 13) e nomes corrigidos
     const empresasMap = new Map();
     for (const row of rows) {
       const codLogico = EMPRESAS_UNIFICADAS[row.COD_EMPRESA] || row.COD_EMPRESA;
       if (!empresasMap.has(codLogico)) {
+        // Usar nome corrigido se existir, senão usar nome do Firebird
+        const nomeCorrigido = EMPRESAS_NOMES_CORRIGIDOS[codLogico] || row.EMPRESA_NOME;
         empresasMap.set(codLogico, {
           cod_empresa: codLogico,
-          empresa_nome: row.EMPRESA_NOME,
+          empresa_nome: nomeCorrigido,
           empresa_cod_logico: codLogico,
-          empresa_nome_logico: row.EMPRESA_NOME_LOGICO
+          empresa_nome_logico: nomeCorrigido
         });
       }
     }
