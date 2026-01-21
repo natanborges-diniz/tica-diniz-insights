@@ -4,8 +4,9 @@
 import { apiGet } from './firebirdBridge';
 import { supabase } from '@/integrations/supabase/client';
 
-// Empresas inativas ou "lixo" que não devem aparecer nos filtros
-const EMPRESAS_INATIVAS_SUPABASE = [3, 5, 7, 8, 10, 11, 12];
+// Empresas ativas que DEVEM aparecer nos filtros (whitelist)
+// Apenas: 1, 2, 4, 6, 9, 13, 18
+const EMPRESAS_ATIVAS = [1, 2, 4, 6, 9, 13, 18];
 
 // ============================================
 // INTERFACES
@@ -34,7 +35,7 @@ export async function getEmpresas(): Promise<Empresa[]> {
   
   if (!error && data && data.length > 0) {
     return data
-      .filter(e => !EMPRESAS_INATIVAS_SUPABASE.includes(e.cod_empresa))
+      .filter(e => EMPRESAS_ATIVAS.includes(e.cod_empresa))
       .map(e => ({
         codEmpresa: e.cod_empresa,
         nome: e.nome_fantasia || `Loja ${e.cod_empresa}`,
@@ -48,7 +49,7 @@ export async function getEmpresas(): Promise<Empresa[]> {
     
     if (raw && raw.length > 0) {
       return raw
-        .filter(r => !EMPRESAS_INATIVAS_SUPABASE.includes(r.cod_empresa))
+        .filter(r => EMPRESAS_ATIVAS.includes(r.cod_empresa))
         .map((r) => ({
           codEmpresa: r.cod_empresa,
           nome: r.empresa_nome,
