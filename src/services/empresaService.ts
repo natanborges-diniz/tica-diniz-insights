@@ -4,8 +4,8 @@
 import { apiGet } from './firebirdBridge';
 import { supabase } from '@/integrations/supabase/client';
 
-// Apenas Loja 10 é inativa (cod_empresa = 10 no Supabase)
-const EMPRESAS_INATIVAS_SUPABASE = [10];
+// Empresas inativas ou "lixo" que não devem aparecer nos filtros
+const EMPRESAS_INATIVAS_SUPABASE = [3, 5, 7, 8, 10, 11, 12];
 
 // ============================================
 // INTERFACES
