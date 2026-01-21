@@ -13,7 +13,7 @@ const corsHeaders = {
 const FIREBIRD_API_BASE_URL = Deno.env.get('FIREBIRD_API_BASE_URL') || 'https://firebird-bridge-production.up.railway.app';
 
 // Empresas ativas no sistema (excluindo 3, 5, 7, 8, 10, 11, 12 que são inativas/lixo)
-const EMPRESAS_ATIVAS = [1, 2, 4, 6, 9, 13, 14, 15, 16, 17];
+const EMPRESAS_ATIVAS = [1, 2, 4, 6, 9, 13, 14, 15, 16, 17, 18];
 
 // Interface do endpoint resumo-diario-simples
 interface ResumoDiarioSimples {
