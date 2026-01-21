@@ -5,8 +5,8 @@ import { apiGet } from './firebirdBridge';
 import { supabase } from '@/integrations/supabase/client';
 
 // Empresas ativas que DEVEM aparecer nos filtros (whitelist)
-// Apenas: 1, 2, 4, 6, 9, 13, 18
-const EMPRESAS_ATIVAS = [1, 2, 4, 6, 9, 13, 18];
+// 1, 2, 4, 6, 9, 13, 14, 15, 16, 17, 18
+const EMPRESAS_ATIVAS = [1, 2, 4, 6, 9, 13, 14, 15, 16, 17, 18];
 
 // ============================================
 // INTERFACES
