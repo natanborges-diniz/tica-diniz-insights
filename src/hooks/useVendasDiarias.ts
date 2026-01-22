@@ -1,12 +1,9 @@
 // src/hooks/useVendasDiarias.ts
-// Hook para carregamento em 2 níveis:
-// Nível 1: Resumos diários do cache (sempre carrega)
-// Nível 2: Detalhes individuais por dia (sob demanda)
+// Hook para carregar resumos diários do cache Supabase (apenas resumo, sem detalhamento)
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { EmpresaParam } from "@/services/firebirdBridge";
-import { getDetalheDia, AuditoriaLight } from "@/services/auditoriaService";
 
 // ============================================
 // INTERFACES
@@ -30,14 +27,6 @@ export interface ResumoDiario {
   qtdVendasDia: number;
 }
 
-export interface DetalheDia {
-  data: string;
-  codEmpresa: number;
-  itens: AuditoriaLight[];
-  carregando: boolean;
-  erro: string | null;
-}
-
 export interface UseVendasDiariasParams {
   empresa: EmpresaParam;
   dataInicio: string;
@@ -45,20 +34,10 @@ export interface UseVendasDiariasParams {
 }
 
 export interface UseVendasDiariasResult {
-  // Dados
   resumosDiarios: ResumoDiario[];
-  detalhesExpandidos: Map<string, DetalheDia>;
-  
-  // Loading/Error
   loading: boolean;
   error: string | null;
-  
-  // Ações
   carregarResumos: () => Promise<void>;
-  expandirDia: (data: string, codEmpresa: number) => Promise<void>;
-  recolherDia: (data: string, codEmpresa: number) => void;
-  isExpanded: (data: string, codEmpresa: number) => boolean;
-  getDetalhes: (data: string, codEmpresa: number) => DetalheDia | undefined;
 }
 
 // Cache de nomes de empresas
@@ -82,7 +61,6 @@ async function getEmpresasMap(): Promise<Map<number, string>> {
 
 export function useVendasDiarias(params: UseVendasDiariasParams): UseVendasDiariasResult {
   const [resumosDiarios, setResumosDiarios] = useState<ResumoDiario[]>([]);
-  const [detalhesExpandidos, setDetalhesExpandidos] = useState<Map<string, DetalheDia>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -91,7 +69,7 @@ export function useVendasDiarias(params: UseVendasDiariasParams): UseVendasDiari
   // Gerar chave única para dia + empresa
   const getKey = useCallback((data: string, codEmpresa: number) => `${data}|${codEmpresa}`, []);
 
-  // NÍVEL 1: Carregar resumos diários do cache Supabase
+  // Carregar resumos diários do cache Supabase
   const carregarResumos = useCallback(async () => {
     // Cancelar requisição anterior
     if (abortControllerRef.current) {
@@ -197,97 +175,10 @@ export function useVendasDiarias(params: UseVendasDiariasParams): UseVendasDiari
     }
   }, [params.empresa, params.dataInicio, params.dataFim, getKey]);
 
-  // NÍVEL 2: Expandir e carregar detalhes de um dia específico
-  const expandirDia = useCallback(async (data: string, codEmpresa: number) => {
-    const key = getKey(data, codEmpresa);
-    
-    // Se já tem dados em cache, só marca como expandido
-    const existente = detalhesExpandidos.get(key);
-    if (existente && existente.itens.length > 0 && !existente.erro) {
-      console.log(`[useVendasDiarias] Usando cache para ${key}`);
-      return;
-    }
-    
-    console.log(`[useVendasDiarias] Expandindo ${data} para empresa ${codEmpresa}...`);
-    
-    // Marcar como carregando
-    setDetalhesExpandidos(prev => {
-      const next = new Map(prev);
-      next.set(key, {
-        data,
-        codEmpresa,
-        itens: [],
-        carregando: true,
-        erro: null,
-      });
-      return next;
-    });
-    
-    try {
-      // Buscar detalhes do dia via API
-      const itens = await getDetalheDia(codEmpresa, data);
-      
-      console.log(`[useVendasDiarias] ✓ ${itens.length} itens para ${key}`);
-      
-      setDetalhesExpandidos(prev => {
-        const next = new Map(prev);
-        next.set(key, {
-          data,
-          codEmpresa,
-          itens,
-          carregando: false,
-          erro: null,
-        });
-        return next;
-      });
-      
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro ao carregar detalhes';
-      console.error(`[useVendasDiarias] Erro ao expandir ${key}:`, message);
-      
-      setDetalhesExpandidos(prev => {
-        const next = new Map(prev);
-        next.set(key, {
-          data,
-          codEmpresa,
-          itens: [],
-          carregando: false,
-          erro: message,
-        });
-        return next;
-      });
-    }
-  }, [getKey, detalhesExpandidos]);
-
-  // Recolher dia
-  const recolherDia = useCallback((data: string, codEmpresa: number) => {
-    const key = getKey(data, codEmpresa);
-    setDetalhesExpandidos(prev => {
-      const next = new Map(prev);
-      next.delete(key);
-      return next;
-    });
-  }, [getKey]);
-
-  // Verificar se está expandido
-  const isExpanded = useCallback((data: string, codEmpresa: number) => {
-    return detalhesExpandidos.has(getKey(data, codEmpresa));
-  }, [detalhesExpandidos, getKey]);
-
-  // Obter detalhes de um dia
-  const getDetalhes = useCallback((data: string, codEmpresa: number) => {
-    return detalhesExpandidos.get(getKey(data, codEmpresa));
-  }, [detalhesExpandidos, getKey]);
-
   return {
     resumosDiarios,
-    detalhesExpandidos,
     loading,
     error,
     carregarResumos,
-    expandirDia,
-    recolherDia,
-    isExpanded,
-    getDetalhes,
   };
 }

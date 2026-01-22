@@ -493,10 +493,6 @@ export function VendasDashboardLayout({
                   resumosDiarios={vendasDiarias.resumosDiarios}
                   loading={vendasDiarias.loading}
                   error={vendasDiarias.error}
-                  onExpandir={vendasDiarias.expandirDia}
-                  onRecolher={vendasDiarias.recolherDia}
-                  isExpanded={vendasDiarias.isExpanded}
-                  getDetalhes={vendasDiarias.getDetalhes}
                   onReload={vendasDiarias.carregarResumos}
                 />
               ) : (
