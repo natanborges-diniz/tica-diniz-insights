@@ -38,6 +38,7 @@ export default function SalesDashboard() {
     if (dataLoaded) {
       vendasDiarias.carregarResumos();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.empresa, filters.dataInicio, filters.dataFim, dataLoaded]);
 
   return (
