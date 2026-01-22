@@ -337,10 +337,12 @@ export function useVendasDashboard() {
   });
 
   const [dadosFormasPagamento, setDadosFormasPagamento] = useState<ResumoFormaPagamento[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_dadosComDescontoState] = useState<ResumoEmpresaVendedorAPI[]>([]); // Mantido para estabilidade de hooks
   const [loading, setLoading] = useState(false);
-  const [loadingDesconto, setLoadingDesconto] = useState(false); // Mantido para compatibilidade UI
+  const [loadingDesconto, setLoadingDesconto] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [erroDesconto, setErroDesconto] = useState<string | null>(null); // Mantido para compatibilidade UI
+  const [erroDesconto, setErroDesconto] = useState<string | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [fontesDados, setFontesDados] = useState<{ 
     supabase: boolean; 
