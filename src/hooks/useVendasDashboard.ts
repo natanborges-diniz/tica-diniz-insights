@@ -238,6 +238,80 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
   });
 }
 
+// Agrupar por vendedor (para visão "Por Vendedor")
+function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedorAPI[] {
+  const mapaVendedores = new Map<string, {
+    vendedor: string;
+    empresa: string;
+    empresaCodLogico: number;
+    totalVendido: number;
+    totalCreditos: number;
+    totalDevolucoes: number;
+    qtdTransacao: number;
+    totalBruto: number;
+    totalDesconto: number;
+  }>();
+
+  dados.forEach((d) => {
+    const vendedorKey = `${d.vendedor || 'SEM VENDEDOR'}|${d.codEmpresa}`;
+    const existing = mapaVendedores.get(vendedorKey);
+    
+    const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
+    const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
+    const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
+    
+    const valorVenda = isDevolucao ? 0 : d.totalGeral;
+    const valorCredito = isCredito ? d.totalGeral : 0;
+    const valorDevolucao = isDevolucao ? Math.abs(d.totalGeral) : 0;
+    const qtdVendas = isDevolucao ? 0 : d.qtdVendas;
+    const valorBruto = isDevolucao ? 0 : (d.totalBruto ?? 0);
+    const valorDesconto = isDevolucao ? 0 : (d.totalDesconto ?? 0);
+    
+    if (existing) {
+      existing.totalVendido += valorVenda;
+      existing.totalCreditos += valorCredito;
+      existing.totalDevolucoes += valorDevolucao;
+      existing.qtdTransacao += qtdVendas;
+      existing.totalBruto += valorBruto;
+      existing.totalDesconto += valorDesconto;
+    } else {
+      mapaVendedores.set(vendedorKey, {
+        vendedor: d.vendedor || 'SEM VENDEDOR',
+        empresa: d.empresa,
+        empresaCodLogico: d.codEmpresa,
+        totalVendido: valorVenda,
+        totalCreditos: valorCredito,
+        totalDevolucoes: valorDevolucao,
+        qtdTransacao: qtdVendas,
+        totalBruto: valorBruto,
+        totalDesconto: valorDesconto,
+      });
+    }
+  });
+
+  return Array.from(mapaVendedores.values()).map((item) => {
+    const totalVendidoSemCreditos = item.totalVendido - item.totalCreditos;
+    const ticketMedio = item.qtdTransacao > 0 ? totalVendidoSemCreditos / item.qtdTransacao : 0;
+    const percentualDesconto = item.totalBruto > 0 ? (item.totalDesconto / item.totalBruto) * 100 : 0;
+    
+    return {
+      empresa: item.empresa,
+      empresaCodLogico: item.empresaCodLogico,
+      empresaNomeLogico: item.empresa,
+      vendedor: item.vendedor,
+      qtdTransacao: item.qtdTransacao,
+      qtdProdutos: 0, // Não disponível no cache agregado
+      totalBruto: item.totalBruto,
+      totalVendido: item.totalVendido,
+      totalDesconto: item.totalDesconto,
+      percentualDesconto,
+      totalCreditos: item.totalCreditos,
+      totalVendidoSemCreditos,
+      ticketMedio,
+    };
+  });
+}
+
 // Timeout wrapper para fetch
 async function fetchWithTimeout<T>(
   promise: Promise<T>,
@@ -263,11 +337,10 @@ export function useVendasDashboard() {
   });
 
   const [dadosFormasPagamento, setDadosFormasPagamento] = useState<ResumoFormaPagamento[]>([]);
-  const [dadosComDesconto, setDadosComDesconto] = useState<ResumoEmpresaVendedorAPI[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingDesconto, setLoadingDesconto] = useState(false);
+  const [loadingDesconto, setLoadingDesconto] = useState(false); // Mantido para compatibilidade UI
   const [error, setError] = useState<string | null>(null);
-  const [erroDesconto, setErroDesconto] = useState<string | null>(null);
+  const [erroDesconto, setErroDesconto] = useState<string | null>(null); // Mantido para compatibilidade UI
   const [dataLoaded, setDataLoaded] = useState(false);
   const [fontesDados, setFontesDados] = useState<{ 
     supabase: boolean; 
@@ -588,6 +661,11 @@ export function useVendasDashboard() {
     return agruparPorLoja(dadosFormasPagamento);
   }, [dadosFormasPagamento]);
 
+  // Agrupar por vendedor (derivado de dadosFormasPagamento)
+  const dadosComDescontoComputed = useMemo((): ResumoEmpresaVendedorAPI[] => {
+    return agruparPorVendedor(dadosFormasPagamento);
+  }, [dadosFormasPagamento]);
+
   // Reload normal (usa cache-first)
   const reload = useCallback(() => {
     setForceFirebird(false);
@@ -604,7 +682,7 @@ export function useVendasDashboard() {
     filters,
     setFilters,
     dadosFormasPagamento,
-    dadosComDesconto,
+    dadosComDesconto: dadosComDescontoComputed,
     loading,
     loadingDesconto,
     error,
