@@ -69,24 +69,33 @@ export function getDefaultPeriodoMesAtual(): { dataIni: string; dataFim: string 
 }
 
 /**
- * Retorna o período comercial: dia 21 do mês anterior até dia 20 do mês atual
- * Este é o período padrão para análises de vendas
+ * Retorna o período comercial baseado na data atual:
+ * - Se hoje <= dia 20: período = dia 21 do mês anterior até dia 20 do mês atual
+ * - Se hoje > dia 20: período = dia 21 do mês atual até dia 20 do mês seguinte
  */
 export function getPeriodoComercial(): { dataIni: string; dataFim: string } {
   const hoje = new Date();
-  const anoAtual = hoje.getFullYear();
+  const diaAtual = hoje.getDate();
   const mesAtual = hoje.getMonth(); // 0-indexed
+  const anoAtual = hoje.getFullYear();
   
-  // Data início: dia 21 do mês anterior
-  const mesAnterior = mesAtual === 0 ? 11 : mesAtual - 1;
-  const anoMesAnterior = mesAtual === 0 ? anoAtual - 1 : anoAtual;
-  const dataInicio = new Date(anoMesAnterior, mesAnterior, 21);
-  
-  // Data fim: dia 20 do mês atual
-  const dataFim = new Date(anoAtual, mesAtual, 20);
-  
-  return {
-    dataIni: formatLocalDate(dataInicio),
-    dataFim: formatLocalDate(dataFim),
-  };
+  if (diaAtual <= 20) {
+    // Período: dia 21 do mês anterior até dia 20 do mês atual
+    const mesAnterior = mesAtual === 0 ? 11 : mesAtual - 1;
+    const anoMesAnterior = mesAtual === 0 ? anoAtual - 1 : anoAtual;
+    
+    return {
+      dataIni: formatLocalDate(new Date(anoMesAnterior, mesAnterior, 21)),
+      dataFim: formatLocalDate(new Date(anoAtual, mesAtual, 20)),
+    };
+  } else {
+    // Período: dia 21 do mês atual até dia 20 do mês seguinte
+    const mesSeguinte = mesAtual === 11 ? 0 : mesAtual + 1;
+    const anoMesSeguinte = mesAtual === 11 ? anoAtual + 1 : anoAtual;
+    
+    return {
+      dataIni: formatLocalDate(new Date(anoAtual, mesAtual, 21)),
+      dataFim: formatLocalDate(new Date(anoMesSeguinte, mesSeguinte, 20)),
+    };
+  }
 }
