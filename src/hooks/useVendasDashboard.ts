@@ -7,6 +7,7 @@
 // 4. Evitar múltiplas empresas simultaneamente
 // 5. Retry automático (1x) em caso de timeout
 // 6. Carregar dados principais primeiro
+// 7. Sincronização automática do cache quando detecta gap até D-1
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
@@ -19,6 +20,11 @@ import { getVendasAgregado, AgregadoFormaPagamento, contarDiasNoCache, isPeriodo
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
+import { 
+  verificarStatusSync, 
+  sincronizarCache, 
+  SyncStatus 
+} from "@/services/syncCacheService";
 
 // Tipo para progresso (mantido para compatibilidade com UI)
 export interface ProgressoPaginacao {
@@ -363,6 +369,11 @@ export function useVendasDashboard() {
   
   // Progresso da paginação
   const [progressoPaginacao, setProgressoPaginacao] = useState<ProgressoPaginacao | null>(null);
+  
+  // Estado de sincronização do cache
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncAttemptedRef = useRef(false);
 
   // Ref para controlar requisições em andamento
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -513,33 +524,71 @@ export function useVendasDashboard() {
         // Cache vazio
         console.log('[useVendasDashboard] ✗ CACHE MISS: Nenhum dado encontrado');
         
-        // Se período é fechado mas cache vazio, avisar usuário
-        if (periodoFechado) {
-          console.log('[useVendasDashboard] Período fechado sem cache - sincronização necessária');
-          setDadosFormasPagamento([]);
+        // Tentar sincronizar automaticamente se ainda não tentou
+        if (!syncAttemptedRef.current && !isSyncing) {
+          console.log('[useVendasDashboard] Iniciando sincronização automática do cache...');
+          syncAttemptedRef.current = true;
+          setIsSyncing(true);
+          
           setFontesDados({ 
             supabase: false, 
             firebird: false, 
             parcial: true,
-            mensagem: 'Período histórico sem dados. Sincronização necessária.'
+            mensagem: 'Sincronizando dados do período...'
           });
-          setError('Dados históricos não disponíveis no cache. Execute a sincronização.');
-          setDataLoaded(true);
-          setLoading(false);
-          setLoadingDesconto(false);
-          return;
+          
+          // Executar sincronização
+          sincronizarCache((status) => {
+            setSyncStatus(status);
+          }).then(async (result) => {
+            console.log('[useVendasDashboard] Sincronização concluída:', result);
+            setIsSyncing(false);
+            
+            if (result.success && result.registrosSincronizados > 0) {
+              // Recarregar dados após sincronização bem-sucedida
+              console.log('[useVendasDashboard] Recarregando dados após sync...');
+              fetchData(empresa, dataInicio, dataFim, false);
+            } else if (result.registrosSincronizados === 0) {
+              // Sem dados para sincronizar
+              setDadosFormasPagamento([]);
+              setFontesDados({ 
+                supabase: false, 
+                firebird: false, 
+                parcial: true,
+                mensagem: 'Nenhum dado encontrado para o período.'
+              });
+              setError('Não há dados de vendas para este período.');
+              setDataLoaded(true);
+              setLoading(false);
+              setLoadingDesconto(false);
+            } else {
+              // Erro na sincronização
+              setDadosFormasPagamento([]);
+              setFontesDados({ 
+                supabase: false, 
+                firebird: false, 
+                parcial: true,
+                mensagem: `Erro na sincronização: ${result.erro}`
+              });
+              setError(`Erro ao sincronizar: ${result.erro}`);
+              setDataLoaded(true);
+              setLoading(false);
+              setLoadingDesconto(false);
+            }
+          });
+          
+          return; // Aguardar callback da sincronização
         }
         
-        // Cache vazio para período aberto - avisar usuário para sincronizar
-        console.log('[useVendasDashboard] Cache vazio para período aberto - sincronização necessária');
+        // Já tentou sincronizar e ainda sem dados
         setDadosFormasPagamento([]);
         setFontesDados({ 
           supabase: false, 
           firebird: false, 
           parcial: true,
-          mensagem: 'Cache vazio para este período. Execute sincronização.'
+          mensagem: 'Cache vazio para este período.'
         });
-        setError('Dados não disponíveis no cache. Execute a sincronização do período.');
+        setError('Dados não disponíveis no cache.');
         setDataLoaded(true);
         setLoading(false);
         setLoadingDesconto(false);
@@ -605,6 +654,9 @@ export function useVendasDashboard() {
 
   // Carregar dados ao montar e quando filtros mudam
   useEffect(() => {
+    // Reset do controle de sync ao mudar filtros
+    syncAttemptedRef.current = false;
+    
     if (filters.empresa && filters.empresa !== 'ALL') {
       fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
     } else if (filters.empresa === 'ALL') {
@@ -705,5 +757,8 @@ export function useVendasDashboard() {
     progressoPaginacao,
     reload,
     forceRefresh,
+    // Novos estados de sync
+    syncStatus,
+    isSyncing,
   };
 }
