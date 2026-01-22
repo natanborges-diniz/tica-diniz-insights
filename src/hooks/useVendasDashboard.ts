@@ -248,8 +248,9 @@ function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedo
     totalCreditos: number;
     totalDevolucoes: number;
     qtdTransacao: number;
-    totalBruto: number;
-    totalDesconto: number;
+    // Para cálculo de desconto: apenas vendas "normais" (sem créditos/devoluções)
+    totalBrutoVendasNormais: number;
+    totalDescontoVendasNormais: number;
   }>();
 
   dados.forEach((d) => {
@@ -259,21 +260,24 @@ function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedo
     const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
     const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
     const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
+    const isVendaNormal = !isDevolucao && !isCredito;
     
     const valorVenda = isDevolucao ? 0 : d.totalGeral;
     const valorCredito = isCredito ? d.totalGeral : 0;
     const valorDevolucao = isDevolucao ? Math.abs(d.totalGeral) : 0;
     const qtdVendas = isDevolucao ? 0 : d.qtdVendas;
-    const valorBruto = isDevolucao ? 0 : (d.totalBruto ?? 0);
-    const valorDesconto = isDevolucao ? 0 : (d.totalDesconto ?? 0);
+    
+    // Desconto apenas para vendas normais (cartão, dinheiro, carnê, etc.)
+    const valorBrutoNormal = isVendaNormal ? (d.totalBruto ?? 0) : 0;
+    const valorDescontoNormal = isVendaNormal ? (d.totalDesconto ?? 0) : 0;
     
     if (existing) {
       existing.totalVendido += valorVenda;
       existing.totalCreditos += valorCredito;
       existing.totalDevolucoes += valorDevolucao;
       existing.qtdTransacao += qtdVendas;
-      existing.totalBruto += valorBruto;
-      existing.totalDesconto += valorDesconto;
+      existing.totalBrutoVendasNormais += valorBrutoNormal;
+      existing.totalDescontoVendasNormais += valorDescontoNormal;
     } else {
       mapaVendedores.set(vendedorKey, {
         vendedor: d.vendedor || 'SEM VENDEDOR',
@@ -283,8 +287,8 @@ function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedo
         totalCreditos: valorCredito,
         totalDevolucoes: valorDevolucao,
         qtdTransacao: qtdVendas,
-        totalBruto: valorBruto,
-        totalDesconto: valorDesconto,
+        totalBrutoVendasNormais: valorBrutoNormal,
+        totalDescontoVendasNormais: valorDescontoNormal,
       });
     }
   });
@@ -292,7 +296,11 @@ function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedo
   return Array.from(mapaVendedores.values()).map((item) => {
     const totalVendidoSemCreditos = item.totalVendido - item.totalCreditos;
     const ticketMedio = item.qtdTransacao > 0 ? totalVendidoSemCreditos / item.qtdTransacao : 0;
-    const percentualDesconto = item.totalBruto > 0 ? (item.totalDesconto / item.totalBruto) * 100 : 0;
+    
+    // % Desconto calculado apenas sobre vendas normais (sem créditos/devoluções)
+    const percentualDesconto = item.totalBrutoVendasNormais > 0 
+      ? (item.totalDescontoVendasNormais / item.totalBrutoVendasNormais) * 100 
+      : 0;
     
     return {
       empresa: item.empresa,
@@ -300,10 +308,10 @@ function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedo
       empresaNomeLogico: item.empresa,
       vendedor: item.vendedor,
       qtdTransacao: item.qtdTransacao,
-      qtdProdutos: 0, // Não disponível no cache agregado
-      totalBruto: item.totalBruto,
+      qtdProdutos: 0,
+      totalBruto: item.totalBrutoVendasNormais,
       totalVendido: item.totalVendido,
-      totalDesconto: item.totalDesconto,
+      totalDesconto: item.totalDescontoVendasNormais,
       percentualDesconto,
       totalCreditos: item.totalCreditos,
       totalVendidoSemCreditos,
