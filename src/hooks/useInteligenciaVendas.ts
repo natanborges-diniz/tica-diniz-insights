@@ -1,8 +1,10 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { getResumoEmpresaVendedor, ResumoEmpresaVendedor } from "@/services/vendasService";
-import { getMetasPorPeriodo, MetaVenda } from "@/services/metasService";
 import { gerarDiretrizes } from "@/services/aiDiretrizesService";
 import { getEmpresas, Empresa } from "@/services/empresaService";
+import {
+  getMetasPorPeriodo,
+  MetaVenda,
+} from "@/services/metasService";
 import {
   getMetaPeriodo,
   getFeriados,
@@ -17,6 +19,8 @@ import {
 } from "@/services/calendarioService";
 import { formatLocalDate, getPeriodoComercial } from "@/utils/dateValidation";
 import { EmpresaParam } from "@/services/firebirdBridge";
+import { getVendasAgregado, AgregadoFormaPagamento } from "@/services/agregadosService";
+import { sincronizarCache } from "@/services/syncCacheService";
 
 // ========================
 // Interfaces
@@ -78,6 +82,19 @@ export interface TotaisInteligencia {
   lojasEmRisco: number;
 }
 
+// Interface interna para dados processados
+interface DadoProcessado {
+  codEmpresa: number;
+  empresa: string;
+  vendedor: string;
+  totalVendido: number;
+  totalVendidoSemCreditos: number;
+  totalDesconto: number;
+  totalBruto: number;
+  qtdTransacao: number;
+  percentualDesconto: number;
+}
+
 // ========================
 // Hook Principal
 // ========================
@@ -87,19 +104,20 @@ export function useInteligenciaVendas() {
   const anoAtual = new Date().getFullYear();
   const mesAtual = new Date().getMonth() + 1;
 
+  // NÃO seleciona empresa por padrão (evita timeout)
   const [filters, setFilters] = useState<InteligenciaFilters>({
     tipoPeriodo: 'comercial',
     ano: anoAtual,
     mes: mesAtual,
     dataInicio: defaultPeriodo.dataIni,
     dataFim: defaultPeriodo.dataFim,
-    empresa: 'ALL',
+    empresa: '', // Vazio = não carrega automaticamente
   });
 
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>('visao-geral');
 
-  // Dados brutos
-  const [dados, setDados] = useState<ResumoEmpresaVendedor[]>([]);
+  // Dados brutos (do cache Supabase)
+  const [dados, setDados] = useState<DadoProcessado[]>([]);
   const [metasLojas, setMetasLojas] = useState<MetaVenda[]>([]);
   const [metasVendedores, setMetasVendedores] = useState<MetaVenda[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -114,11 +132,15 @@ export function useInteligenciaVendas() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
 
   // IA
   const [diretrizes, setDiretrizes] = useState<string | null>(null);
   const [loadingDiretrizes, setLoadingDiretrizes] = useState(false);
   const [errorDiretrizes, setErrorDiretrizes] = useState<string | null>(null);
+
+  // Mapa de empresas para lookup
+  const [empresasMap, setEmpresasMap] = useState<Map<number, string>>(new Map());
 
   // Carregar dados iniciais (empresas, configurações)
   useEffect(() => {
@@ -132,6 +154,11 @@ export function useInteligenciaVendas() {
         setEmpresas(empresasData);
         setLojasConfig(lojasConfigData);
         setFeriados(feriadosData);
+        
+        // Criar mapa de empresas
+        const map = new Map<number, string>();
+        empresasData.forEach(e => map.set(e.codEmpresa, e.nome));
+        setEmpresasMap(map);
       } catch (err) {
         console.error("Erro ao carregar dados iniciais:", err);
       }
@@ -162,9 +189,59 @@ export function useInteligenciaVendas() {
     };
   }, [filters, periodoConfig]);
 
-  // Buscar dados
+  // Converter AgregadoFormaPagamento para DadoProcessado
+  const converterAgregados = useCallback((agregados: AgregadoFormaPagamento[]): DadoProcessado[] => {
+    // Agrupar por empresa + vendedor
+    const mapaVendedor = new Map<string, DadoProcessado>();
+    
+    agregados.forEach(a => {
+      const key = `${a.codEmpresa}|${a.vendedor}`;
+      const nomeEmpresa = empresasMap.get(a.codEmpresa) || String(a.codEmpresa);
+      
+      // Ignorar devoluções no total
+      const isDevolucao = a.formaPagamento === 'DEVOLUCAO';
+      const isCredito = a.formaPagamento === 'CREDITO';
+      
+      const existing = mapaVendedor.get(key);
+      if (existing) {
+        if (!isDevolucao) {
+          existing.totalVendido += a.totalGeral;
+          existing.totalBruto += a.totalBruto;
+          existing.totalDesconto += a.totalDesconto;
+          existing.qtdTransacao += a.qtdVendas;
+        }
+        if (!isDevolucao && !isCredito) {
+          existing.totalVendidoSemCreditos += a.totalGeral;
+        }
+      } else {
+        mapaVendedor.set(key, {
+          codEmpresa: a.codEmpresa,
+          empresa: nomeEmpresa,
+          vendedor: a.vendedor,
+          totalVendido: isDevolucao ? 0 : a.totalGeral,
+          totalVendidoSemCreditos: (isDevolucao || isCredito) ? 0 : a.totalGeral,
+          totalDesconto: isDevolucao ? 0 : a.totalDesconto,
+          totalBruto: isDevolucao ? 0 : a.totalBruto,
+          qtdTransacao: isDevolucao ? 0 : a.qtdVendas,
+          percentualDesconto: 0,
+        });
+      }
+    });
+    
+    // Calcular percentual de desconto
+    return Array.from(mapaVendedor.values()).map(d => ({
+      ...d,
+      percentualDesconto: d.totalBruto > 0 ? (d.totalDesconto / d.totalBruto) * 100 : 0,
+    }));
+  }, [empresasMap]);
+
+  // Buscar dados usando cache-first pattern
   const fetchData = useCallback(async (options?: { bypassCache?: boolean }) => {
-    const bypassCache = options?.bypassCache ?? false;
+    // Não buscar se empresa não foi selecionada
+    if (!filters.empresa) {
+      console.log('[useInteligenciaVendas] Empresa não selecionada, aguardando...');
+      return;
+    }
     
     setLoading(true);
     setError(null);
@@ -186,25 +263,57 @@ export function useInteligenciaVendas() {
         dataFimStr = formatLocalDate(dataFim);
       }
 
-      // 3. Buscar vendas e metas em paralelo
-      const [vendasData, metasLojasData, metasVendedoresData, excecoesData] = await Promise.all([
-        getResumoEmpresaVendedor({
+      console.log('[useInteligenciaVendas] Buscando dados do cache:', {
+        empresa: filters.empresa,
+        dataInicio: dataInicioStr,
+        dataFim: dataFimStr,
+      });
+
+      // 3. Buscar do cache Supabase (cache-first)
+      const [agregados, metasLojasData, metasVendedoresData, excecoesData] = await Promise.all([
+        getVendasAgregado({
           empresa: filters.empresa,
           dataInicio: dataInicioStr,
           dataFim: dataFimStr,
-          bypassCache,
         }),
         getMetasPorPeriodo('LOJA', filters.ano, filters.mes),
         getMetasPorPeriodo('VENDEDOR', filters.ano, filters.mes),
         getLojasExcecoes(undefined, dataInicioStr, dataFimStr),
       ]);
 
-      setDados(vendasData);
+      // 4. Se cache vazio, tentar sincronizar
+      if (agregados.length === 0) {
+        console.log('[useInteligenciaVendas] Cache vazio, sincronizando...');
+        setSincronizando(true);
+        
+        try {
+          await sincronizarCache();
+          
+          // Buscar novamente após sync
+          const agregadosAposSync = await getVendasAgregado({
+            empresa: filters.empresa,
+            dataInicio: dataInicioStr,
+            dataFim: dataFimStr,
+          });
+          
+          const dadosConvertidos = converterAgregados(agregadosAposSync);
+          setDados(dadosConvertidos);
+        } catch (syncErr) {
+          console.error('[useInteligenciaVendas] Erro ao sincronizar:', syncErr);
+          setDados([]);
+        } finally {
+          setSincronizando(false);
+        }
+      } else {
+        const dadosConvertidos = converterAgregados(agregados);
+        setDados(dadosConvertidos);
+      }
+
       setMetasLojas(metasLojasData);
       setMetasVendedores(metasVendedoresData);
       setExcecoes(excecoesData);
       setDataLoaded(true);
-      setDiretrizes(null); // Reset IA ao recarregar
+      setDiretrizes(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao buscar dados";
       setError(message);
@@ -212,7 +321,7 @@ export function useInteligenciaVendas() {
     } finally {
       setLoading(false);
     }
-  }, [filters, periodoConfig]);
+  }, [filters, periodoConfig, converterAgregados]);
 
   // Ranking de Lojas
   const rankingLojas = useMemo<LojaInteligencia[]>(() => {
@@ -227,7 +336,7 @@ export function useInteligenciaVendas() {
     }>();
 
     dados.forEach(d => {
-      const key = d.empresaNomeLogico || d.empresa;
+      const key = d.empresa;
       const existing = porLoja.get(key);
       if (existing) {
         existing.totalVendido += d.totalVendido || 0;
@@ -237,7 +346,7 @@ export function useInteligenciaVendas() {
         existing.qtdTransacoes += d.qtdTransacao || 0;
       } else {
         porLoja.set(key, {
-          codEmpresa: d.empresaCodLogico || 0,
+          codEmpresa: d.codEmpresa,
           empresa: key,
           totalVendido: d.totalVendido || 0,
           totalVendidoSemCreditos: d.totalVendidoSemCreditos || 0,
@@ -312,7 +421,7 @@ export function useInteligenciaVendas() {
     const mediasMap = new Map<string, { totalVendidoSemCreditos: number; qtdVendedores: number; mediaVendedor: number }>();
     
     dados.forEach(d => {
-      const key = d.empresaNomeLogico || d.empresa;
+      const key = d.empresa;
       const existing = mediasMap.get(key);
       if (existing) {
         existing.totalVendidoSemCreditos += d.totalVendidoSemCreditos || 0;
@@ -339,14 +448,14 @@ export function useInteligenciaVendas() {
       .filter(d => d.vendedor && d.vendedor.trim() !== '')
       .map(d => {
         const ticketMedio = d.qtdTransacao > 0 ? d.totalVendidoSemCreditos / d.qtdTransacao : 0;
-        const empresaKey = d.empresaNomeLogico || d.empresa;
+        const empresaKey = d.empresa;
         const mediaLoja = mediasPorLoja.get(empresaKey);
         const mediaVendedorLoja = mediaLoja?.mediaVendedor || 0;
         
         return {
           vendedor: d.vendedor,
           empresa: empresaKey,
-          codEmpresa: d.empresaCodLogico || 0,
+          codEmpresa: d.codEmpresa,
           totalVendido: d.totalVendido || 0,
           totalVendidoSemCreditos: d.totalVendidoSemCreditos || 0,
           ticketMedio,
