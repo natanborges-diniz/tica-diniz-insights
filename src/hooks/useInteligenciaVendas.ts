@@ -15,7 +15,7 @@ import {
   LojaConfiguracao,
   LojaExcecao,
 } from "@/services/calendarioService";
-import { formatLocalDate, getDefaultPeriodoMesAtual } from "@/utils/dateValidation";
+import { formatLocalDate, getPeriodoComercial } from "@/utils/dateValidation";
 import { EmpresaParam } from "@/services/firebirdBridge";
 
 // ========================
@@ -83,7 +83,7 @@ export interface TotaisInteligencia {
 // ========================
 
 export function useInteligenciaVendas() {
-  const defaultPeriodo = getDefaultPeriodoMesAtual();
+  const defaultPeriodo = getPeriodoComercial();
   const anoAtual = new Date().getFullYear();
   const mesAtual = new Date().getMonth() + 1;
 
