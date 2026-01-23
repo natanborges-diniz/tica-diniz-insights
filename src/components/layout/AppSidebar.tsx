@@ -47,7 +47,6 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       label: "Inteligência",
       items: [
         { title: "Inteligência de Vendas", url: "/vendas/inteligencia", icon: TrendingUp },
-        { title: "Central de IA", url: "/ia", icon: Brain },
       ],
     },
   ],
@@ -74,6 +73,14 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
         { title: "Parcelas a Receber", url: "/financeiro", icon: Wallet },
         { title: "DRE", url: "/financeiro/dre", icon: FileText },
         { title: "Fluxo de Caixa", url: "/financeiro/fluxo-caixa", icon: ArrowLeftRight },
+      ],
+    },
+  ],
+  ia: [
+    {
+      label: "Inteligência Artificial",
+      items: [
+        { title: "Central de IA", url: "/ia", icon: Brain },
       ],
     },
   ],
