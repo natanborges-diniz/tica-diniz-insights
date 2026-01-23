@@ -181,15 +181,7 @@ export async function sincronizarCache(
       }
       
       try {
-        // Chamar Edge Function para esta empresa
-        const { data, error } = await supabase.functions.invoke('sync-agregados-diarios', {
-          body: null,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-        
-        // Usar query params via URL manual já que invoke não suporta bem
+        // Chamar Edge Function para esta empresa via fetch (supabase.functions.invoke não suporta query params)
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-agregados-diarios?empresa=${empresa}&dataInicio=${dataInicio}&dataFim=${dataAlvo}`,
           {
