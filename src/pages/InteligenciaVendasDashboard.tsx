@@ -1,4 +1,4 @@
-import { TrendingUp, Store, Users, RefreshCw, Settings, Calendar, CalendarRange } from "lucide-react";
+import { TrendingUp, Store, Users, RefreshCw, Settings, Calendar, Building2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useInteligenciaVendas, TabAtiva } from "@/hooks/useInteligenciaVendas";
@@ -14,21 +15,6 @@ import { DiretrizesIA } from "@/components/ranking/DiretrizesIA";
 import { InteligenciaKPICards } from "@/components/inteligencia/InteligenciaKPICards";
 import { InteligenciaLojasTable } from "@/components/inteligencia/InteligenciaLojasTable";
 import { InteligenciaVendedoresTable } from "@/components/inteligencia/InteligenciaVendedoresTable";
-
-const MESES = [
-  { value: 1, label: "Janeiro" },
-  { value: 2, label: "Fevereiro" },
-  { value: 3, label: "Março" },
-  { value: 4, label: "Abril" },
-  { value: 5, label: "Maio" },
-  { value: 6, label: "Junho" },
-  { value: 7, label: "Julho" },
-  { value: 8, label: "Agosto" },
-  { value: 9, label: "Setembro" },
-  { value: 10, label: "Outubro" },
-  { value: 11, label: "Novembro" },
-  { value: 12, label: "Dezembro" },
-];
 
 function LoadingSkeleton() {
   return (
@@ -104,109 +90,25 @@ export default function InteligenciaVendasDashboard() {
         </Link>
       </div>
 
-      {/* Filters */}
+      {/* Filters - Padrão SalesFilters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-4 items-end">
-            {/* Tipo de Período */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant={filters.tipoPeriodo === 'comercial' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilters(f => ({ ...f, tipoPeriodo: 'comercial' }))}
-              >
-                <Calendar className="h-4 w-4 mr-2" />
-                Mês Comercial
-              </Button>
-              <Button
-                variant={filters.tipoPeriodo === 'personalizado' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilters(f => ({ ...f, tipoPeriodo: 'personalizado' }))}
-              >
-                <CalendarRange className="h-4 w-4 mr-2" />
-                Período Livre
-              </Button>
-            </div>
-
-            {/* Período Comercial */}
-            {filters.tipoPeriodo === 'comercial' && (
-              <>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Ano</label>
-                  <Select
-                    value={String(filters.ano)}
-                    onValueChange={(v) => setFilters(f => ({ ...f, ano: Number(v) }))}
-                  >
-                    <SelectTrigger className="w-24">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[2024, 2025, 2026].map((ano) => (
-                        <SelectItem key={ano} value={String(ano)}>
-                          {ano}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Mês</label>
-                  <Select
-                    value={String(filters.mes)}
-                    onValueChange={(v) => setFilters(f => ({ ...f, mes: Number(v) }))}
-                  >
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MESES.map((mes) => (
-                        <SelectItem key={mes.value} value={String(mes.value)}>
-                          {mes.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
-
-            {/* Período Livre */}
-            {filters.tipoPeriodo === 'personalizado' && (
-              <>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Data Início</label>
-                  <Input
-                    type="date"
-                    value={filters.dataInicio}
-                    onChange={(e) => setFilters(f => ({ ...f, dataInicio: e.target.value }))}
-                    className="w-40"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Data Fim</label>
-                  <Input
-                    type="date"
-                    value={filters.dataFim}
-                    onChange={(e) => setFilters(f => ({ ...f, dataFim: e.target.value }))}
-                    className="w-40"
-                  />
-                </div>
-              </>
-            )}
-
-            {/* Filtro de Empresa (para vendedores) */}
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Empresa</label>
+          <div className="flex flex-wrap items-end gap-4">
+            {/* Filtro de Empresa */}
+            <div className="flex flex-col gap-2">
+              <Label className="flex items-center gap-1">
+                <Building2 className="h-4 w-4" />
+                Empresa
+              </Label>
               <Select
                 value={String(filters.empresa)}
                 onValueChange={(v) => setFilters(f => ({ ...f, empresa: v === 'ALL' ? 'ALL' : v }))}
               >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Todas" />
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ALL">Todas</SelectItem>
+                  <SelectItem value="ALL">Todas as Empresas</SelectItem>
                   {empresas.map((emp) => (
                     <SelectItem key={emp.codEmpresa} value={String(emp.codEmpresa)}>
                       {emp.nome}
@@ -216,14 +118,40 @@ export default function InteligenciaVendasDashboard() {
               </Select>
             </div>
 
-            {/* Botão Carregar */}
-            <Button onClick={() => fetchData()} disabled={loading}>
-              {loading ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Carregar Dados
+            {/* Filtro de Data Início */}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="dataInicio" className="flex items-center gap-1">
+                <Calendar className="h-4 w-4" />
+                Data Início
+              </Label>
+              <Input
+                id="dataInicio"
+                type="date"
+                value={filters.dataInicio}
+                onChange={(e) => setFilters(f => ({ ...f, dataInicio: e.target.value }))}
+                className="w-[160px]"
+              />
+            </div>
+
+            {/* Filtro de Data Fim */}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="dataFim" className="flex items-center gap-1">
+                <Calendar className="h-4 w-4" />
+                Data Fim
+              </Label>
+              <Input
+                id="dataFim"
+                type="date"
+                value={filters.dataFim}
+                onChange={(e) => setFilters(f => ({ ...f, dataFim: e.target.value }))}
+                className="w-[160px]"
+              />
+            </div>
+
+            {/* Botão Atualizar */}
+            <Button onClick={() => fetchData()} disabled={loading} className="flex items-center gap-2">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Atualizar
             </Button>
           </div>
 
