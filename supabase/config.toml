@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.ai-diretrizes]
 verify_jwt = false
+
+[functions.ai-central]
+verify_jwt = false

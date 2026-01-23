@@ -13,6 +13,7 @@ import FinanceiroDreDashboard from "./pages/FinanceiroDreDashboard";
 import FluxoCaixaDashboard from "./pages/FluxoCaixaDashboard";
 import InteligenciaVendasDashboard from "./pages/InteligenciaVendasDashboard";
 import MetasConfigDashboard from "./pages/MetasConfigDashboard";
+import CentralIADashboard from "./pages/CentralIADashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +47,9 @@ const App = () => (
             
             {/* Config */}
             <Route path="/config/metas" element={<MetasConfigDashboard />} />
+            
+            {/* Central de IA */}
+            <Route path="/ia" element={<CentralIADashboard />} />
           </Route>
           
           {/* Catch-all */}
