@@ -269,7 +269,11 @@ export default function InteligenciaVendasDashboard() {
       {!dataLoaded && !loading && (
         <div className="text-center py-16 text-muted-foreground">
           <TrendingUp className="h-16 w-16 mx-auto mb-4 opacity-50" />
-          <p className="text-lg">Selecione o período e clique em "Carregar Dados"</p>
+          <p className="text-lg">
+            {!filters.empresa
+              ? "Selecione uma empresa para visualizar os dados"
+              : "Clique em \"Atualizar\" para carregar os dados"}
+          </p>
           <p className="text-sm mt-2">
             Rankings, metas e análises serão gerados com base nas vendas do período
           </p>
