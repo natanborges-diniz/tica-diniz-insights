@@ -11,9 +11,7 @@ import OsDashboard from "./pages/OsDashboard";
 import FinanceiroDashboard from "./pages/FinanceiroDashboard";
 import FinanceiroDreDashboard from "./pages/FinanceiroDreDashboard";
 import FluxoCaixaDashboard from "./pages/FluxoCaixaDashboard";
-import RankingLojasDashboard from "./pages/RankingLojasDashboard";
-import RankingVendedoresDashboard from "./pages/RankingVendedoresDashboard";
-import MetasAcompanhamentoDashboard from "./pages/MetasAcompanhamentoDashboard";
+import InteligenciaVendasDashboard from "./pages/InteligenciaVendasDashboard";
 import MetasConfigDashboard from "./pages/MetasConfigDashboard";
 import NotFound from "./pages/NotFound";
 
@@ -33,9 +31,7 @@ const App = () => (
             {/* Vendas */}
             <Route path="/vendas" element={<SalesDashboard />} />
             <Route path="/vendas-familia" element={<SalesFamilyDashboard />} />
-            <Route path="/vendas/metas" element={<MetasAcompanhamentoDashboard />} />
-            <Route path="/ranking-lojas" element={<RankingLojasDashboard />} />
-            <Route path="/ranking-vendedores" element={<RankingVendedoresDashboard />} />
+            <Route path="/vendas/inteligencia" element={<InteligenciaVendasDashboard />} />
             
             {/* Estoque */}
             <Route path="/estoque" element={<StockDashboard />} />
