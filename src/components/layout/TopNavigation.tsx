@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { BarChart3, Package, ClipboardList, Wallet, Settings, Database } from "lucide-react";
+import { BarChart3, Package, ClipboardList, Wallet, Settings, Database, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ModuleKey } from "./AppLayout";
 
@@ -9,10 +9,11 @@ interface TopNavigationProps {
 }
 
 const modules: { key: ModuleKey; label: string; icon: React.ElementType; defaultPath: string }[] = [
-  { key: "vendas", label: "Vendas", icon: BarChart3, defaultPath: "/vendas/metas" },
+  { key: "vendas", label: "Vendas", icon: BarChart3, defaultPath: "/vendas" },
   { key: "estoque", label: "Estoque", icon: Package, defaultPath: "/estoque" },
   { key: "monitor", label: "Monitor", icon: ClipboardList, defaultPath: "/os" },
   { key: "financeiro", label: "Financeiro", icon: Wallet, defaultPath: "/financeiro" },
+  { key: "ia", label: "Central IA", icon: Brain, defaultPath: "/ia" },
   { key: "config", label: "Configurações", icon: Settings, defaultPath: "/config/metas" },
 ];
 
