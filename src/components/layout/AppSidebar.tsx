@@ -1,8 +1,8 @@
 import { useLocation } from "react-router-dom";
 import { 
-  TrendingUp, Store, Trophy, BarChart3, Layers, 
+  TrendingUp, BarChart3, Layers, 
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
-  Target, Calendar, Users
+  Target, Users
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -46,9 +46,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
     {
       label: "Inteligência",
       items: [
-        { title: "Acompanhamento de Metas", url: "/vendas/metas", icon: TrendingUp },
-        { title: "Ranking de Lojas", url: "/ranking-lojas", icon: Store },
-        { title: "Ranking de Vendedores", url: "/ranking-vendedores", icon: Trophy },
+        { title: "Inteligência de Vendas", url: "/vendas/inteligencia", icon: TrendingUp },
       ],
     },
   ],
