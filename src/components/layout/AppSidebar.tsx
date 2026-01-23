@@ -2,7 +2,7 @@ import { useLocation } from "react-router-dom";
 import { 
   TrendingUp, BarChart3, Layers, 
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
-  Target, Users
+  Target, Users, Brain
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -47,6 +47,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       label: "Inteligência",
       items: [
         { title: "Inteligência de Vendas", url: "/vendas/inteligencia", icon: TrendingUp },
+        { title: "Central de IA", url: "/ia", icon: Brain },
       ],
     },
   ],
