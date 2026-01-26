@@ -130,39 +130,40 @@ export function useOtb() {
     
     // Log tipos únicos disponíveis para debug
     const tiposUnicos = [...new Set(dadosBrutos.map(s => s.tipo))];
-    console.log('[useOtb] Tipos disponíveis:', tiposUnicos);
+    console.log('[useOtb] Tipos disponíveis (primeiros 10):', tiposUnicos.slice(0, 10));
 
-    const filtrados = dadosBrutos.filter(sku => {
-      if (filters.tipoFiltro === 'TODOS') return true;
-      
-      const tipoNorm = (sku.tipo || '').toUpperCase().trim();
-      
-      // Lógica baseada nos tipos reais do ERP:
-      // AR = Armações, LG = Lentes de Grau, GC = Grau de Contato, etc.
-      switch (filters.tipoFiltro) {
-        case 'ARMACOES':
-          // AR no início ou contém ARMAC/ARMAÇÃO
-          return tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || 
-                 tipoNorm.includes('ARMAC') || tipoNorm.includes('ARMAÇÃO');
-        case 'LENTES':
-          // LG (lentes de grau) ou GC (grau de contato) ou contém LENT
-          return tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || 
-                 tipoNorm === 'LG' || tipoNorm === 'GC' ||
-                 tipoNorm.includes('LENT');
-        case 'ACESSORIOS':
-          // AC ou contém ACESS
-          return tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || 
-                 tipoNorm.includes('ACESS') || tipoNorm.includes('ACC');
-        case 'OUTROS':
-          // Tudo que não é armação, lente ou acessório
-          const isArmacao = tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || tipoNorm.includes('ARMAC');
-          const isLente = tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || tipoNorm === 'LG' || tipoNorm === 'GC' || tipoNorm.includes('LENT');
-          const isAcessorio = tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || tipoNorm.includes('ACESS');
-          return !isArmacao && !isLente && !isAcessorio;
-        default:
-          return true;
-      }
-    });
+    // Se filtro é TODOS, retorna todos os itens sem filtragem
+    const filtrados = filters.tipoFiltro === 'TODOS' 
+      ? dadosBrutos 
+      : dadosBrutos.filter(sku => {
+          const tipoNorm = (sku.tipo || '').toUpperCase().trim();
+          
+          // Lógica baseada nos tipos reais do ERP:
+          // AR = Armações, LG = Lentes de Grau, GC = Grau de Contato, etc.
+          switch (filters.tipoFiltro) {
+            case 'ARMACOES':
+              // AR no início ou contém ARMAC/ARMAÇÃO
+              return tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || 
+                     tipoNorm.includes('ARMAC') || tipoNorm.includes('ARMAÇÃO');
+            case 'LENTES':
+              // LG (lentes de grau) ou GC (grau de contato) ou contém LENT
+              return tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || 
+                     tipoNorm === 'LG' || tipoNorm === 'GC' ||
+                     tipoNorm.includes('LENT');
+            case 'ACESSORIOS':
+              // AC ou contém ACESS
+              return tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || 
+                     tipoNorm.includes('ACESS') || tipoNorm.includes('ACC');
+            case 'OUTROS':
+              // Tudo que não é armação, lente ou acessório
+              const isArmacao = tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || tipoNorm.includes('ARMAC');
+              const isLente = tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || tipoNorm === 'LG' || tipoNorm === 'GC' || tipoNorm.includes('LENT');
+              const isAcessorio = tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || tipoNorm.includes('ACESS');
+              return !isArmacao && !isLente && !isAcessorio;
+            default:
+              return true;
+          }
+        });
 
     console.log('[useOtb] Após filtro:', filtrados.length, 'SKUs');
 
@@ -309,6 +310,9 @@ export function useOtb() {
     setLoading(true);
     setError(null);
     
+    // Resetar filtro de tipo para TODOS ao carregar novos dados
+    setFilters(prev => ({ ...prev, tipoFiltro: 'TODOS' }));
+    
     try {
       console.log('[useOtb] Carregando dados de SKU...');
       
@@ -322,8 +326,8 @@ export function useOtb() {
       setDadosBrutos(dados);
       
       toast({
-        title: "Dados carregados",
-        description: `${dados.length} SKUs analisados`,
+        title: "Módulo OTB Pronto",
+        description: `${dados.length} SKUs analisados - mostrando todos`,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao carregar dados';
