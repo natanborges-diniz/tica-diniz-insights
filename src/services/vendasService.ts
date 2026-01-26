@@ -237,3 +237,101 @@ export async function getAnaliseFamiliaVendedor(
     totalVendido: r.total_vendido ?? 0,
   }));
 }
+
+// ============================================
+// INTERFACES - ANÁLISE SKU (OTB)
+// ============================================
+
+interface AnaliseSkuRaw {
+  cod_sku: number;
+  descricao_item: string;
+  marca: string;
+  fornecedor: string;
+  tipo: string;
+  estoque_atual: number;
+  data_ultima_venda: string | null;
+  dias_desde_ultima_venda: number;
+  data_ultimo_custo: string | null;
+  preco_custo: number;
+  preco_venda_final: number;
+  qtd_produtos: number;
+  total_vendido: number;
+}
+
+export interface AnaliseSku {
+  codSku: number;
+  descricaoItem: string;
+  marca: string;
+  fornecedor: string;
+  tipo: string;
+  estoqueAtual: number;
+  dataUltimaVenda: string | null;
+  diasDesdeUltimaVenda: number;
+  dataUltimoCusto: string | null;
+  precoCusto: number;
+  precoVendaFinal: number;
+  qtdProdutos: number;
+  totalVendido: number;
+  // Calculados
+  margemBruta: number;
+  giroEstoque: number;
+}
+
+export interface GetAnaliseSkuParams {
+  empresa: EmpresaParam;
+  dataInicio: string;
+  dataFim: string;
+  /** Se true, ignora cache e busca dados ao vivo */
+  bypassCache?: boolean;
+}
+
+/**
+ * Busca análise por SKU para OTB e Central de IA
+ * Retorna dados de vendas, estoque e custos por produto
+ */
+export async function getAnaliseSku(
+  params: GetAnaliseSkuParams
+): Promise<AnaliseSku[]> {
+  const options: ApiGetOptions = params.bypassCache ? { cache: false } : {};
+  
+  const raw = await apiGet<AnaliseSkuRaw>('/vendas/analise-sku', {
+    empresa: formatEmpresaParam(params.empresa),
+    dataInicio: params.dataInicio,
+    dataFim: params.dataFim,
+  }, options);
+
+  return raw.map((r) => {
+    const precoCusto = r.preco_custo ?? 0;
+    const precoVenda = r.preco_venda_final ?? 0;
+    const estoqueAtual = r.estoque_atual ?? 0;
+    const qtdProdutos = r.qtd_produtos ?? 0;
+    
+    // Margem bruta = (preço venda - custo) / preço venda * 100
+    const margemBruta = precoVenda > 0 
+      ? ((precoVenda - precoCusto) / precoVenda) * 100 
+      : 0;
+    
+    // Giro = qtd vendida / estoque atual (se estoque > 0)
+    const giroEstoque = estoqueAtual > 0 
+      ? qtdProdutos / estoqueAtual 
+      : qtdProdutos > 0 ? 999 : 0; // 999 indica sem estoque mas com vendas
+
+    return {
+      codSku: r.cod_sku ?? 0,
+      descricaoItem: (r.descricao_item ?? '').trim(),
+      marca: (r.marca ?? 'SEM MARCA').trim(),
+      fornecedor: (r.fornecedor ?? 'SEM FORNECEDOR').trim(),
+      tipo: (r.tipo ?? 'OUTROS').trim(),
+      estoqueAtual,
+      dataUltimaVenda: r.data_ultima_venda,
+      diasDesdeUltimaVenda: r.dias_desde_ultima_venda ?? 999,
+      dataUltimoCusto: r.data_ultimo_custo,
+      precoCusto,
+      precoVendaFinal: precoVenda,
+      qtdProdutos,
+      totalVendido: r.total_vendido ?? 0,
+      margemBruta,
+      giroEstoque,
+    };
+  });
+}

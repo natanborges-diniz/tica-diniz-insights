@@ -68,6 +68,22 @@ interface DadosCentralIA {
     }>;
   };
   
+  // Dados de Fornecedores/Marcas (análise SKU)
+  fornecedoresMarcas?: Array<{
+    fornecedor: string;
+    marca: string;
+    tipo: string;
+    qtdSkus: number;
+    estoqueTotal: number;
+    qtdVendidos: number;
+    totalVendido: number;
+    margemMediaBruta: number;
+    diasMedioDesdeVenda: number;
+    skusSemGiro: number;
+    skusGiroRapido: number;
+    recomendacaoCompra: 'PRIORIZAR' | 'MANTER' | 'EVITAR';
+  }>;
+  
   // Metas cadastradas
   metas?: any;
 }
@@ -205,6 +221,56 @@ const buildUserPrompt = (dados: DadosCentralIA) => {
     }
   }
   
+  // Análise de Fornecedores/Marcas (novo endpoint analise-sku)
+  if (dados.fornecedoresMarcas && dados.fornecedoresMarcas.length > 0) {
+    prompt += `## 🏭 ANÁLISE DE FORNECEDORES E MARCAS\n`;
+    prompt += `> Dados baseados em vendas do período com análise de giro e margem\n\n`;
+    
+    // Separar por recomendação
+    const priorizar = dados.fornecedoresMarcas.filter(f => f.recomendacaoCompra === 'PRIORIZAR');
+    const manter = dados.fornecedoresMarcas.filter(f => f.recomendacaoCompra === 'MANTER');
+    const evitar = dados.fornecedoresMarcas.filter(f => f.recomendacaoCompra === 'EVITAR');
+    
+    if (priorizar.length > 0) {
+      prompt += `### ✅ PRIORIZAR COMPRAS (${priorizar.length} combinações)\n`;
+      prompt += `| Fornecedor | Marca | Tipo | SKUs | Vendido | Margem | Giro Rápido |\n`;
+      prompt += `|------------|-------|------|------|---------|--------|-------------|\n`;
+      priorizar.slice(0, 10).forEach(f => {
+        const percGiroRapido = f.qtdSkus > 0 ? ((f.skusGiroRapido / f.qtdSkus) * 100).toFixed(0) : '0';
+        prompt += `| ${f.fornecedor} | ${f.marca} | ${f.tipo} | ${f.qtdSkus} | R$ ${f.totalVendido.toLocaleString('pt-BR')} | ${f.margemMediaBruta.toFixed(0)}% | ${percGiroRapido}% |\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    if (evitar.length > 0) {
+      prompt += `### ❌ EVITAR/REDUZIR COMPRAS (${evitar.length} combinações)\n`;
+      prompt += `| Fornecedor | Marca | Tipo | SKUs | Estoque | Dias s/ Venda | Sem Giro |\n`;
+      prompt += `|------------|-------|------|------|---------|---------------|----------|\n`;
+      evitar.slice(0, 10).forEach(f => {
+        const percSemGiro = f.qtdSkus > 0 ? ((f.skusSemGiro / f.qtdSkus) * 100).toFixed(0) : '0';
+        prompt += `| ${f.fornecedor} | ${f.marca} | ${f.tipo} | ${f.qtdSkus} | ${f.estoqueTotal} | ${f.diasMedioDesdeVenda.toFixed(0)} | ${percSemGiro}% |\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    if (manter.length > 0) {
+      prompt += `### ➡️ MANTER PADRÃO (${manter.length} combinações)\n`;
+      prompt += `Top 5 por faturamento:\n`;
+      prompt += `| Fornecedor | Marca | Vendido | Margem |\n`;
+      prompt += `|------------|-------|---------|--------|\n`;
+      manter.slice(0, 5).forEach(f => {
+        prompt += `| ${f.fornecedor} | ${f.marca} | R$ ${f.totalVendido.toLocaleString('pt-BR')} | ${f.margemMediaBruta.toFixed(0)}% |\n`;
+      });
+      prompt += `\n`;
+    }
+    
+    // Resumo
+    const totalVendidoGeral = dados.fornecedoresMarcas.reduce((acc, f) => acc + f.totalVendido, 0);
+    const totalSkus = dados.fornecedoresMarcas.reduce((acc, f) => acc + f.qtdSkus, 0);
+    prompt += `**Resumo OTB:** ${totalSkus} SKUs analisados, R$ ${totalVendidoGeral.toLocaleString('pt-BR')} em vendas. `;
+    prompt += `${priorizar.length} para priorizar, ${evitar.length} para evitar.\n\n`;
+  }
+  
   // Metas
   if (dados.metas) {
     prompt += `## 🎯 METAS CADASTRADAS\n`;
@@ -213,7 +279,7 @@ const buildUserPrompt = (dados: DadosCentralIA) => {
   
   prompt += `---\n\n`;
   prompt += `Com base nesses dados, forneça sua análise completa com diretrizes estratégicas e táticas.`;
-  prompt += `\n\nFoco especial em: Orientação de compra de armações (quais fornecedores priorizar e quais evitar baseado no giro), políticas de desconto, e oportunidades de cross-selling entre famílias.`;
+  prompt += `\n\nFoco especial em: **Orientação de compra de armações** (quais fornecedores/marcas priorizar baseado em giro e margem), políticas de desconto, e oportunidades de cross-selling entre famílias.`;
   
   return prompt;
 };
