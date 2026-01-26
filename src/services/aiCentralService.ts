@@ -3,7 +3,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { EmpresaParam, formatEmpresaParam } from "./firebirdBridge";
-import { getResumoFormasPagamento } from "./vendasService";
+import { getResumoFormasPagamento, getAnaliseSku } from "./vendasService";
 import { getVendasAgregado } from "./agregadosService";
 import { getAnaliseEstoqueAcao } from "./estoqueService";
 import { getAnaliseFamiliaVendedor } from "./vendasService";
@@ -63,6 +63,22 @@ export interface DadosEstoqueConsolidado {
   }>;
 }
 
+// Interface para análise de SKU por marca/fornecedor
+export interface DadosFornecedorMarcaConsolidado {
+  fornecedor: string;
+  marca: string;
+  tipo: string;
+  qtdSkus: number;
+  estoqueTotal: number;
+  qtdVendidos: number;
+  totalVendido: number;
+  margemMediaBruta: number;
+  diasMedioDesdeVenda: number;
+  skusSemGiro: number; // sem venda no período
+  skusGiroRapido: number; // giro > 1
+  recomendacaoCompra: 'PRIORIZAR' | 'MANTER' | 'EVITAR';
+}
+
 export interface DadosCentralIA {
   periodo: string;
   empresa?: string;
@@ -70,6 +86,7 @@ export interface DadosCentralIA {
   formasPagamento?: DadosFormaPagamentoConsolidado[];
   familias?: DadosFamiliaConsolidado[];
   estoque?: DadosEstoqueConsolidado;
+  fornecedoresMarcas?: DadosFornecedorMarcaConsolidado[];
   metas?: any;
 }
 
@@ -78,6 +95,7 @@ export interface ColetarDadosParams {
   dataInicio: string;
   dataFim: string;
   incluirEstoque?: boolean;
+  incluirAnaliseSku?: boolean;
 }
 
 // ============================================
@@ -393,6 +411,111 @@ async function coletarDadosEstoque(
   }
 }
 
+/**
+ * Coleta e consolida dados de SKU por fornecedor/marca
+ */
+async function coletarDadosFornecedoresMarcas(
+  empresa: EmpresaParam,
+  dataInicio: string,
+  dataFim: string
+): Promise<DadosFornecedorMarcaConsolidado[]> {
+  try {
+    const dados = await getAnaliseSku({ empresa, dataInicio, dataFim });
+
+    if (!dados || dados.length === 0) {
+      console.log('[aiCentralService] Sem dados de SKU');
+      return [];
+    }
+
+    // Agrupar por fornecedor + marca + tipo
+    const agrupado = new Map<string, {
+      fornecedor: string;
+      marca: string;
+      tipo: string;
+      qtdSkus: number;
+      estoqueTotal: number;
+      qtdVendidos: number;
+      totalVendido: number;
+      somaMargens: number;
+      somaDias: number;
+      skusSemGiro: number;
+      skusGiroRapido: number;
+    }>();
+
+    dados.forEach(sku => {
+      const key = `${sku.fornecedor}|${sku.marca}|${sku.tipo}`;
+      const existente = agrupado.get(key);
+      
+      const semGiro = sku.qtdProdutos === 0 || sku.diasDesdeUltimaVenda > 180;
+      const giroRapido = sku.giroEstoque > 1;
+
+      if (existente) {
+        existente.qtdSkus++;
+        existente.estoqueTotal += sku.estoqueAtual;
+        existente.qtdVendidos += sku.qtdProdutos;
+        existente.totalVendido += sku.totalVendido;
+        existente.somaMargens += sku.margemBruta;
+        existente.somaDias += sku.diasDesdeUltimaVenda;
+        if (semGiro) existente.skusSemGiro++;
+        if (giroRapido) existente.skusGiroRapido++;
+      } else {
+        agrupado.set(key, {
+          fornecedor: sku.fornecedor,
+          marca: sku.marca,
+          tipo: sku.tipo,
+          qtdSkus: 1,
+          estoqueTotal: sku.estoqueAtual,
+          qtdVendidos: sku.qtdProdutos,
+          totalVendido: sku.totalVendido,
+          somaMargens: sku.margemBruta,
+          somaDias: sku.diasDesdeUltimaVenda,
+          skusSemGiro: semGiro ? 1 : 0,
+          skusGiroRapido: giroRapido ? 1 : 0,
+        });
+      }
+    });
+
+    // Converter e calcular métricas finais
+    const resultado = Array.from(agrupado.values()).map(g => {
+      const margemMediaBruta = g.qtdSkus > 0 ? g.somaMargens / g.qtdSkus : 0;
+      const diasMedioDesdeVenda = g.qtdSkus > 0 ? g.somaDias / g.qtdSkus : 999;
+      const percSemGiro = g.qtdSkus > 0 ? (g.skusSemGiro / g.qtdSkus) * 100 : 100;
+      const percGiroRapido = g.qtdSkus > 0 ? (g.skusGiroRapido / g.qtdSkus) * 100 : 0;
+
+      // Determinar recomendação de compra
+      let recomendacaoCompra: 'PRIORIZAR' | 'MANTER' | 'EVITAR';
+      if (percGiroRapido >= 30 && margemMediaBruta >= 40 && percSemGiro < 30) {
+        recomendacaoCompra = 'PRIORIZAR';
+      } else if (percSemGiro >= 50 || diasMedioDesdeVenda > 120) {
+        recomendacaoCompra = 'EVITAR';
+      } else {
+        recomendacaoCompra = 'MANTER';
+      }
+
+      return {
+        fornecedor: g.fornecedor,
+        marca: g.marca,
+        tipo: g.tipo,
+        qtdSkus: g.qtdSkus,
+        estoqueTotal: g.estoqueTotal,
+        qtdVendidos: g.qtdVendidos,
+        totalVendido: g.totalVendido,
+        margemMediaBruta,
+        diasMedioDesdeVenda,
+        skusSemGiro: g.skusSemGiro,
+        skusGiroRapido: g.skusGiroRapido,
+        recomendacaoCompra,
+      };
+    });
+
+    // Ordenar por total vendido (maiores primeiro)
+    return resultado.sort((a, b) => b.totalVendido - a.totalVendido);
+  } catch (err) {
+    console.error('[aiCentralService] Erro ao coletar dados de SKU:', err);
+    return [];
+  }
+}
+
 // ============================================
 // FUNÇÃO PRINCIPAL
 // ============================================
@@ -403,16 +526,17 @@ async function coletarDadosEstoque(
 export async function coletarDadosCentralIA(
   params: ColetarDadosParams
 ): Promise<DadosCentralIA> {
-  const { empresa, dataInicio, dataFim, incluirEstoque = true } = params;
+  const { empresa, dataInicio, dataFim, incluirEstoque = true, incluirAnaliseSku = true } = params;
   
   console.log('[aiCentralService] Coletando dados para:', { empresa, dataInicio, dataFim });
 
   // Executar coletas em paralelo
-  const [vendas, formasPagamento, familias, estoque] = await Promise.all([
+  const [vendas, formasPagamento, familias, estoque, fornecedoresMarcas] = await Promise.all([
     coletarDadosVendas(empresa, dataInicio, dataFim),
     coletarDadosFormasPagamento(empresa, dataInicio, dataFim),
     coletarDadosFamilias(empresa, dataInicio, dataFim),
     incluirEstoque ? coletarDadosEstoque(empresa) : Promise.resolve(null),
+    incluirAnaliseSku ? coletarDadosFornecedoresMarcas(empresa, dataInicio, dataFim) : Promise.resolve([]),
   ]);
 
   const periodo = `${dataInicio} a ${dataFim}`;
@@ -425,6 +549,7 @@ export async function coletarDadosCentralIA(
     formasPagamento: formasPagamento.length > 0 ? formasPagamento : undefined,
     familias: familias.length > 0 ? familias : undefined,
     estoque: estoque || undefined,
+    fornecedoresMarcas: fornecedoresMarcas.length > 0 ? fornecedoresMarcas : undefined,
   };
 }
 

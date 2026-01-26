@@ -17,6 +17,7 @@ export interface CentralIAFilters {
   dataInicio: string;
   dataFim: string;
   incluirEstoque: boolean;
+  incluirAnaliseSku: boolean;
 }
 
 export interface CentralIAState {
@@ -38,6 +39,7 @@ export function useCentralIA() {
     dataInicio: periodoDefault.dataIni,
     dataFim: periodoDefault.dataFim,
     incluirEstoque: true,
+    incluirAnaliseSku: true,
   });
 
   const [state, setState] = useState<CentralIAState>({
@@ -62,6 +64,7 @@ export function useCentralIA() {
         dataInicio: filters.dataInicio,
         dataFim: filters.dataFim,
         incluirEstoque: filters.incluirEstoque,
+        incluirAnaliseSku: filters.incluirAnaliseSku,
       });
       
       console.log('[useCentralIA] Dados coletados:', {

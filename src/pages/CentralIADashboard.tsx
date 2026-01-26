@@ -25,7 +25,9 @@ import {
   TrendingUp,
   Layers,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Factory,
+  ShoppingCart
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -138,6 +140,23 @@ export default function CentralIADashboard() {
                   />
                   <span className="text-sm text-muted-foreground">
                     {filters.incluirEstoque ? 'Sim' : 'Não'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Incluir Análise SKU */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Factory className="h-4 w-4 text-muted-foreground" />
+                  Análise Fornecedores
+                </Label>
+                <div className="flex items-center gap-2 h-10">
+                  <Switch
+                    checked={filters.incluirAnaliseSku}
+                    onCheckedChange={(checked) => setFilters(prev => ({ ...prev, incluirAnaliseSku: checked }))}
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {filters.incluirAnaliseSku ? 'Sim' : 'Não'}
                   </span>
                 </div>
               </div>
@@ -266,7 +285,57 @@ export default function CentralIADashboard() {
                     )}
                   </div>
                 </div>
+
+                {/* Fornecedores/Marcas */}
+                <div className="flex items-center gap-2">
+                  {dadosColetados.fornecedoresMarcas && dadosColetados.fornecedoresMarcas.length > 0 ? (
+                    <CheckCircle2 className="h-5 w-5 text-primary" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-muted-foreground" />
+                  )}
+                  <div>
+                    <p className="font-medium flex items-center gap-1">
+                      <Factory className="h-4 w-4" />
+                      Fornecedores
+                    </p>
+                    {dadosColetados.fornecedoresMarcas && dadosColetados.fornecedoresMarcas.length > 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        {dadosColetados.fornecedoresMarcas.length} combinações
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
+
+              {/* Resumo de Fornecedores */}
+              {dadosColetados.fornecedoresMarcas && dadosColetados.fornecedoresMarcas.length > 0 && (
+                <div className="mt-4 pt-4 border-t">
+                  <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <ShoppingCart className="h-4 w-4" />
+                    Recomendação de Compras
+                  </p>
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <p className="text-xl font-bold text-primary">
+                        {dadosColetados.fornecedoresMarcas.filter(f => f.recomendacaoCompra === 'PRIORIZAR').length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Priorizar</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-muted">
+                      <p className="text-xl font-bold">
+                        {dadosColetados.fornecedoresMarcas.filter(f => f.recomendacaoCompra === 'MANTER').length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Manter</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-destructive/10">
+                      <p className="text-xl font-bold text-destructive">
+                        {dadosColetados.fornecedoresMarcas.filter(f => f.recomendacaoCompra === 'EVITAR').length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Evitar</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Resumo rápido */}
               {dadosColetados.vendas && (
