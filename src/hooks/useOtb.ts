@@ -121,65 +121,92 @@ export function useOtb() {
    * Processa dados brutos e calcula OTB para cada SKU
    */
   const itensOtb = useMemo((): OtbItem[] => {
-    if (!dadosBrutos || dadosBrutos.length === 0) return [];
+    if (!dadosBrutos || dadosBrutos.length === 0) {
+      console.log('[useOtb] Nenhum dado bruto disponível');
+      return [];
+    }
 
-    return dadosBrutos
-      .filter(sku => {
-        if (filters.tipoFiltro === 'TODOS') return true;
-        const tipoNorm = sku.tipo.toUpperCase();
-        if (filters.tipoFiltro === 'ARMACOES') return tipoNorm.includes('ARMAC');
-        if (filters.tipoFiltro === 'LENTES') return tipoNorm.includes('LENT');
-        if (filters.tipoFiltro === 'ACESSORIOS') return tipoNorm.includes('ACESS');
-        return !tipoNorm.includes('ARMAC') && !tipoNorm.includes('LENT') && !tipoNorm.includes('ACESS');
-      })
-      .map(sku => {
-        // Cálculo da venda diária média
-        const vendaDiaria = diasPeriodo > 0 ? sku.qtdProdutos / diasPeriodo : 0;
-        
-        // Projeção de vendas para o período de cobertura
-        const vendasProjetadas = vendaDiaria * filters.coberturaDias;
-        
-        // OTB = Vendas Projetadas - Estoque Atual
-        const otb = Math.max(0, Math.ceil(vendasProjetadas - sku.estoqueAtual));
-        
-        // Valor do OTB em reais
-        const otbValor = otb * sku.precoCusto;
-        
-        // Classificação baseada na situação
-        let classificacao: OtbItem['classificacao'];
-        const diasEstoque = vendaDiaria > 0 ? sku.estoqueAtual / vendaDiaria : 999;
-        
-        if (diasEstoque < 15 && sku.qtdProdutos > 0) {
-          classificacao = 'COMPRAR_URGENTE';
-        } else if (otb > 0) {
-          classificacao = 'COMPRAR';
-        } else if (diasEstoque > filters.coberturaDias * 2) {
-          classificacao = 'EXCESSO';
-        } else {
-          classificacao = 'ESTOQUE_OK';
-        }
+    console.log('[useOtb] Processando', dadosBrutos.length, 'SKUs. Filtro tipo:', filters.tipoFiltro);
+    
+    // Log tipos únicos disponíveis para debug
+    const tiposUnicos = [...new Set(dadosBrutos.map(s => s.tipo))];
+    console.log('[useOtb] Tipos disponíveis:', tiposUnicos);
 
-        return {
-          codSku: sku.codSku,
-          descricaoItem: sku.descricaoItem,
-          marca: sku.marca,
-          fornecedor: sku.fornecedor,
-          tipo: sku.tipo,
-          estoqueAtual: sku.estoqueAtual,
-          qtdVendidos: sku.qtdProdutos,
-          totalVendido: sku.totalVendido,
-          diasDesdeUltimaVenda: sku.diasDesdeUltimaVenda,
-          precoCusto: sku.precoCusto,
-          precoVendaFinal: sku.precoVendaFinal,
-          margemBruta: sku.margemBruta,
-          vendaDiaria,
-          vendasProjetadas,
-          otb,
-          otbValor,
-          classificacao,
-          giroEstoque: sku.giroEstoque,
-        };
-      });
+    const filtrados = dadosBrutos.filter(sku => {
+      if (filters.tipoFiltro === 'TODOS') return true;
+      
+      const tipoNorm = (sku.tipo || '').toUpperCase().trim();
+      
+      // Lógica de filtragem mais flexível
+      switch (filters.tipoFiltro) {
+        case 'ARMACOES':
+          return tipoNorm.includes('ARMAC') || tipoNorm.includes('ARMAÇÃO') || tipoNorm === 'AR';
+        case 'LENTES':
+          return tipoNorm.includes('LENT') || tipoNorm === 'LC';
+        case 'ACESSORIOS':
+          return tipoNorm.includes('ACESS') || tipoNorm.includes('ACC');
+        case 'OUTROS':
+          return !tipoNorm.includes('ARMAC') && 
+                 !tipoNorm.includes('ARMAÇÃO') &&
+                 !tipoNorm.includes('LENT') && 
+                 !tipoNorm.includes('ACESS') &&
+                 tipoNorm !== 'AR' &&
+                 tipoNorm !== 'LC';
+        default:
+          return true;
+      }
+    });
+
+    console.log('[useOtb] Após filtro:', filtrados.length, 'SKUs');
+
+    return filtrados.map(sku => {
+      // Cálculo da venda diária média
+      const vendaDiaria = diasPeriodo > 0 ? sku.qtdProdutos / diasPeriodo : 0;
+      
+      // Projeção de vendas para o período de cobertura
+      const vendasProjetadas = vendaDiaria * filters.coberturaDias;
+      
+      // OTB = Vendas Projetadas - Estoque Atual
+      const otb = Math.max(0, Math.ceil(vendasProjetadas - sku.estoqueAtual));
+      
+      // Valor do OTB em reais
+      const otbValor = otb * sku.precoCusto;
+      
+      // Classificação baseada na situação
+      let classificacao: OtbItem['classificacao'];
+      const diasEstoque = vendaDiaria > 0 ? sku.estoqueAtual / vendaDiaria : 999;
+      
+      if (diasEstoque < 15 && sku.qtdProdutos > 0) {
+        classificacao = 'COMPRAR_URGENTE';
+      } else if (otb > 0) {
+        classificacao = 'COMPRAR';
+      } else if (diasEstoque > filters.coberturaDias * 2) {
+        classificacao = 'EXCESSO';
+      } else {
+        classificacao = 'ESTOQUE_OK';
+      }
+
+      return {
+        codSku: sku.codSku,
+        descricaoItem: sku.descricaoItem,
+        marca: sku.marca,
+        fornecedor: sku.fornecedor,
+        tipo: sku.tipo,
+        estoqueAtual: sku.estoqueAtual,
+        qtdVendidos: sku.qtdProdutos,
+        totalVendido: sku.totalVendido,
+        diasDesdeUltimaVenda: sku.diasDesdeUltimaVenda,
+        precoCusto: sku.precoCusto,
+        precoVendaFinal: sku.precoVendaFinal,
+        margemBruta: sku.margemBruta,
+        vendaDiaria,
+        vendasProjetadas,
+        otb,
+        otbValor,
+        classificacao,
+        giroEstoque: sku.giroEstoque,
+      };
+    });
   }, [dadosBrutos, diasPeriodo, filters.coberturaDias, filters.tipoFiltro]);
 
   /**
