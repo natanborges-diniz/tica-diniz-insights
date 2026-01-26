@@ -1015,6 +1015,124 @@ app.get('/api/empresas', async (req, res) => {
   }
 });
 
+// ============================================
+// API v1 - Análise de SKU para OTB (Open to Buy)
+// Retorna TODOS os tipos de produtos: armações, lentes, acessórios
+// ============================================
+app.get('/api/v1/vendas/analise-sku', async (req, res) => {
+  try {
+    const { dataInicio, dataFim, empresa } = req.query;
+
+    if (!dataInicio || !dataFim) {
+      return res.status(400).json({ 
+        ok: false, 
+        data: null,
+        error: { code: 'INVALID_PARAMS', message: 'Parâmetros obrigatórios: dataInicio, dataFim' }
+      });
+    }
+
+    // Filtro de empresa
+    const codEmpresa = (!empresa || empresa === 'ALL' || empresa === 'null' || empresa === '') 
+      ? 0 
+      : parseInt(empresa);
+
+    // Query completa para análise de SKU - SEM FILTRO DE TIPO
+    // Retorna armações, lentes, acessórios e todos os outros produtos
+    const sql = `
+      WITH
+      empresas_filtradas AS (
+        SELECT e.COD_EMPRESA
+        FROM EMPRESA e
+        WHERE e.COD_EMPRESA NOT IN (${EMPRESAS_EXCLUIDAS.join(',')})
+          ${codEmpresa === 0 ? '' : `AND e.COD_EMPRESA = ${codEmpresa}`}
+      ),
+      vendas_periodo AS (
+        SELECT
+          ti.COD_PRODUTO,
+          SUM(ti.QUANTIDADE) AS QTD_VENDIDA,
+          SUM(COALESCE(ti.TOTAL, 0) - COALESCE(ti.TOTALIPI, 0)) AS TOTAL_VENDIDO,
+          MAX(t.DATAEMISSAO) AS DATA_ULTIMA_VENDA
+        FROM TRANSACAO t
+        JOIN empresas_filtradas ef ON ef.COD_EMPRESA = t.COD_EMPRESAESTOQUE
+        JOIN TRANSACAO_ITEM ti ON ti.COD_TRANSACAO = t.COD_TRANSACAO 
+          AND (ti.COD_EMPRESA = t.COD_EMPRESAESTOQUE OR ti.COD_EMPRESA = t.COD_EMPRESA)
+        JOIN NATUREZAOPERACAO nat ON nat.COD_NATUREZAOPERACAO = ti.COD_NATUREZAOPERACAO
+        WHERE nat.TIPO = 1
+          AND t.DATAEMISSAO BETWEEN '${dataInicio}' AND '${dataFim}'
+        GROUP BY ti.COD_PRODUTO
+      ),
+      estoque_atual AS (
+        SELECT 
+          e.COD_PRODUTO,
+          SUM(e.QUANTIDADE) AS ESTOQUE
+        FROM ESTOQUE e
+        JOIN empresas_filtradas ef ON ef.COD_EMPRESA = e.COD_EMPRESA
+        GROUP BY e.COD_PRODUTO
+      ),
+      ultimo_custo AS (
+        SELECT DISTINCT
+          ei.COD_PRODUTO,
+          FIRST_VALUE(ei.VALORUNITARIO) OVER (PARTITION BY ei.COD_PRODUTO ORDER BY en.DATAEMISSAO DESC) AS PRECO_CUSTO,
+          FIRST_VALUE(en.DATAEMISSAO) OVER (PARTITION BY ei.COD_PRODUTO ORDER BY en.DATAEMISSAO DESC) AS DATA_CUSTO
+        FROM ENTRADA_ITEM ei
+        JOIN ENTRADA en ON en.COD_ENTRADA = ei.COD_ENTRADA AND en.COD_EMPRESA = ei.COD_EMPRESA
+        WHERE ei.VALORUNITARIO > 0
+      )
+      SELECT
+        p.COD_PRODUTO AS COD_SKU,
+        p.DESCRICAO AS DESCRICAO_ITEM,
+        COALESCE(m.DESCRICAO, 'SEM MARCA') AS MARCA,
+        COALESCE(pf.NOME, 'SEM FORNECEDOR') AS FORNECEDOR,
+        COALESCE(tp.DESCRICAO, 'OUTROS') AS TIPO,
+        COALESCE(est.ESTOQUE, 0) AS ESTOQUE_ATUAL,
+        vp.DATA_ULTIMA_VENDA,
+        CASE 
+          WHEN vp.DATA_ULTIMA_VENDA IS NULL THEN 999
+          ELSE DATEDIFF(DAY, vp.DATA_ULTIMA_VENDA, CURRENT_DATE)
+        END AS DIAS_DESDE_ULTIMA_VENDA,
+        uc.DATA_CUSTO AS DATA_ULTIMO_CUSTO,
+        COALESCE(uc.PRECO_CUSTO, 0) AS PRECO_CUSTO,
+        COALESCE(p.PRECO, 0) AS PRECO_VENDA_FINAL,
+        COALESCE(vp.QTD_VENDIDA, 0) AS QTD_PRODUTOS,
+        COALESCE(vp.TOTAL_VENDIDO, 0) AS TOTAL_VENDIDO
+      FROM PRODUTO p
+      LEFT JOIN MARCA m ON m.COD_MARCA = p.COD_MARCA
+      LEFT JOIN PESSOA pf ON pf.COD_PESSOA = p.COD_FORNECEDOR
+      LEFT JOIN PRODUTOTIPO tp ON tp.COD_PRODUTOTIPO = p.COD_PRODUTOTIPO
+      LEFT JOIN vendas_periodo vp ON vp.COD_PRODUTO = p.COD_PRODUTO
+      LEFT JOIN estoque_atual est ON est.COD_PRODUTO = p.COD_PRODUTO
+      LEFT JOIN ultimo_custo uc ON uc.COD_PRODUTO = p.COD_PRODUTO
+      WHERE p.ATIVO = 'T'
+        AND (vp.QTD_VENDIDA > 0 OR COALESCE(est.ESTOQUE, 0) > 0)
+      ORDER BY COALESCE(vp.TOTAL_VENDIDO, 0) DESC
+    `;
+
+    console.log('[API] GET /api/v1/vendas/analise-sku', { empresa: empresa || 'ALL', dataInicio, dataFim });
+    const rows = await executeQuery(sql);
+    
+    // Normalizar campos para snake_case (padrão do frontend)
+    const normalized = rows.map(row => ({
+      cod_sku: row.COD_SKU,
+      descricao_item: row.DESCRICAO_ITEM,
+      marca: row.MARCA,
+      fornecedor: row.FORNECEDOR,
+      tipo: row.TIPO,
+      estoque_atual: row.ESTOQUE_ATUAL || 0,
+      data_ultima_venda: row.DATA_ULTIMA_VENDA,
+      dias_desde_ultima_venda: row.DIAS_DESDE_ULTIMA_VENDA || 999,
+      data_ultimo_custo: row.DATA_ULTIMO_CUSTO,
+      preco_custo: parseFloat(row.PRECO_CUSTO || 0),
+      preco_venda_final: parseFloat(row.PRECO_VENDA_FINAL || 0),
+      qtd_produtos: parseInt(row.QTD_PRODUTOS || 0),
+      total_vendido: parseFloat(row.TOTAL_VENDIDO || 0)
+    }));
+    
+    return apiResponse(res, normalized);
+  } catch (error) {
+    return apiResponse(res, null, error);
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Firebird Bridge rodando na porta ${PORT}`);
