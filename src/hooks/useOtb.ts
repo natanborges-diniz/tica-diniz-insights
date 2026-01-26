@@ -120,6 +120,29 @@ export function useOtb() {
   /**
    * Processa dados brutos e calcula OTB para cada SKU
    */
+  /**
+   * Contagem de SKUs por categoria (para mostrar disponibilidade)
+   */
+  const contagemPorCategoria = useMemo(() => {
+    if (!dadosBrutos || dadosBrutos.length === 0) return { armacoes: 0, lentes: 0, acessorios: 0, outros: 0 };
+    
+    let armacoes = 0, lentes = 0, acessorios = 0, outros = 0;
+    
+    dadosBrutos.forEach(sku => {
+      const tipoNorm = (sku.tipo || '').toUpperCase().trim();
+      const isArmacao = tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || tipoNorm.includes('ARMAC') || tipoNorm.includes('ARMAÇÃO');
+      const isLente = tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || tipoNorm === 'LG' || tipoNorm === 'GC' || tipoNorm.includes('LENT');
+      const isAcessorio = tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || tipoNorm.includes('ACESS') || tipoNorm.includes('ACC');
+      
+      if (isArmacao) armacoes++;
+      else if (isLente) lentes++;
+      else if (isAcessorio) acessorios++;
+      else outros++;
+    });
+    
+    return { armacoes, lentes, acessorios, outros };
+  }, [dadosBrutos]);
+
   const itensOtb = useMemo((): OtbItem[] => {
     if (!dadosBrutos || dadosBrutos.length === 0) {
       console.log('[useOtb] Nenhum dado bruto disponível');
@@ -127,6 +150,7 @@ export function useOtb() {
     }
 
     console.log('[useOtb] Processando', dadosBrutos.length, 'SKUs. Filtro tipo:', filters.tipoFiltro);
+    console.log('[useOtb] Contagem por categoria:', contagemPorCategoria);
     
     // Log tipos únicos disponíveis para debug
     const tiposUnicos = [...new Set(dadosBrutos.map(s => s.tipo))];
@@ -364,6 +388,8 @@ export function useOtb() {
     itensAgrupados,
     metrics,
     diasPeriodo,
+    contagemPorCategoria,
+    totalSkusBrutos: dadosBrutos.length,
     
     // Ações
     carregarDados,

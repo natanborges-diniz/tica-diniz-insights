@@ -13,6 +13,13 @@ interface Empresa {
   nome: string;
 }
 
+interface ContagemCategoria {
+  armacoes: number;
+  lentes: number;
+  acessorios: number;
+  outros: number;
+}
+
 interface OtbFiltersProps {
   filters: OtbFiltersType;
   setFilters: React.Dispatch<React.SetStateAction<OtbFiltersType>>;
@@ -20,6 +27,8 @@ interface OtbFiltersProps {
   loadingEmpresas: boolean;
   loading: boolean;
   onReload: () => void;
+  contagemPorCategoria?: ContagemCategoria;
+  totalSkusBrutos?: number;
 }
 
 export function OtbFilters({
@@ -29,7 +38,14 @@ export function OtbFilters({
   loadingEmpresas,
   loading,
   onReload,
+  contagemPorCategoria,
+  totalSkusBrutos = 0,
 }: OtbFiltersProps) {
+  // Gerar labels com contagem
+  const getCategoriaLabel = (tipo: string, contagem: number) => {
+    if (totalSkusBrutos === 0) return tipo;
+    return `${tipo} (${contagem})`;
+  };
   return (
     <div className="flex flex-wrap items-end gap-4">
       {/* Empresa */}
@@ -123,15 +139,25 @@ export function OtbFilters({
             setFilters(prev => ({ ...prev, tipoFiltro: value }))
           }
         >
-          <SelectTrigger className="w-[130px]">
+          <SelectTrigger className="w-[160px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="TODOS">Todas</SelectItem>
-            <SelectItem value="LENTES">Lentes (LG/GC)</SelectItem>
-            <SelectItem value="ARMACOES">Armações (AR)</SelectItem>
-            <SelectItem value="ACESSORIOS">Acessórios (AC)</SelectItem>
-            <SelectItem value="OUTROS">Outros</SelectItem>
+            <SelectItem value="TODOS">
+              Todas ({totalSkusBrutos})
+            </SelectItem>
+            <SelectItem value="LENTES" disabled={contagemPorCategoria?.lentes === 0}>
+              {getCategoriaLabel('Lentes', contagemPorCategoria?.lentes ?? 0)}
+            </SelectItem>
+            <SelectItem value="ARMACOES" disabled={contagemPorCategoria?.armacoes === 0}>
+              {getCategoriaLabel('Armações', contagemPorCategoria?.armacoes ?? 0)}
+            </SelectItem>
+            <SelectItem value="ACESSORIOS" disabled={contagemPorCategoria?.acessorios === 0}>
+              {getCategoriaLabel('Acessórios', contagemPorCategoria?.acessorios ?? 0)}
+            </SelectItem>
+            <SelectItem value="OUTROS" disabled={contagemPorCategoria?.outros === 0}>
+              {getCategoriaLabel('Outros', contagemPorCategoria?.outros ?? 0)}
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>

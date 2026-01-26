@@ -32,6 +32,8 @@ export default function OtbDashboard() {
     itensAgrupados,
     metrics,
     diasPeriodo,
+    contagemPorCategoria,
+    totalSkusBrutos,
     carregarDados,
   } = useOtb();
 
@@ -80,6 +82,8 @@ export default function OtbDashboard() {
             loadingEmpresas={loadingEmpresas}
             loading={loading}
             onReload={carregarDados}
+            contagemPorCategoria={contagemPorCategoria}
+            totalSkusBrutos={totalSkusBrutos}
           />
         </CardContent>
       </Card>
