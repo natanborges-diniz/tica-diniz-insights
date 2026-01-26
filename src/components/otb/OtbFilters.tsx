@@ -128,9 +128,9 @@ export function OtbFilters({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="TODOS">Todas</SelectItem>
-            <SelectItem value="ARMACOES">Armações</SelectItem>
-            <SelectItem value="LENTES">Lentes</SelectItem>
-            <SelectItem value="ACESSORIOS">Acessórios</SelectItem>
+            <SelectItem value="LENTES">Lentes (LG/GC)</SelectItem>
+            <SelectItem value="ARMACOES">Armações (AR)</SelectItem>
+            <SelectItem value="ACESSORIOS">Acessórios (AC)</SelectItem>
             <SelectItem value="OUTROS">Outros</SelectItem>
           </SelectContent>
         </Select>
