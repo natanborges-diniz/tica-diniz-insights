@@ -100,7 +100,7 @@ export function useOtb() {
     dataInicio,
     dataFim,
     coberturaDias: 60, // 60 dias de cobertura padrão
-    tipoFiltro: 'TODOS',
+    tipoFiltro: 'TODOS', // Começa com TODOS para mostrar todos os dados
   });
 
   const [loading, setLoading] = useState(false);
@@ -137,21 +137,28 @@ export function useOtb() {
       
       const tipoNorm = (sku.tipo || '').toUpperCase().trim();
       
-      // Lógica de filtragem mais flexível
+      // Lógica baseada nos tipos reais do ERP:
+      // AR = Armações, LG = Lentes de Grau, GC = Grau de Contato, etc.
       switch (filters.tipoFiltro) {
         case 'ARMACOES':
-          return tipoNorm.includes('ARMAC') || tipoNorm.includes('ARMAÇÃO') || tipoNorm === 'AR';
+          // AR no início ou contém ARMAC/ARMAÇÃO
+          return tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || 
+                 tipoNorm.includes('ARMAC') || tipoNorm.includes('ARMAÇÃO');
         case 'LENTES':
-          return tipoNorm.includes('LENT') || tipoNorm === 'LC';
+          // LG (lentes de grau) ou GC (grau de contato) ou contém LENT
+          return tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || 
+                 tipoNorm === 'LG' || tipoNorm === 'GC' ||
+                 tipoNorm.includes('LENT');
         case 'ACESSORIOS':
-          return tipoNorm.includes('ACESS') || tipoNorm.includes('ACC');
+          // AC ou contém ACESS
+          return tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || 
+                 tipoNorm.includes('ACESS') || tipoNorm.includes('ACC');
         case 'OUTROS':
-          return !tipoNorm.includes('ARMAC') && 
-                 !tipoNorm.includes('ARMAÇÃO') &&
-                 !tipoNorm.includes('LENT') && 
-                 !tipoNorm.includes('ACESS') &&
-                 tipoNorm !== 'AR' &&
-                 tipoNorm !== 'LC';
+          // Tudo que não é armação, lente ou acessório
+          const isArmacao = tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || tipoNorm.includes('ARMAC');
+          const isLente = tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || tipoNorm === 'LG' || tipoNorm === 'GC' || tipoNorm.includes('LENT');
+          const isAcessorio = tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || tipoNorm.includes('ACESS');
+          return !isArmacao && !isLente && !isAcessorio;
         default:
           return true;
       }
