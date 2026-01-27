@@ -5,7 +5,6 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { useEmpresas } from "./useEmpresas";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getAnaliseSku, AnaliseSku } from "@/services/vendasService";
-import { getPeriodoComercial } from "@/utils/dateValidation";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 // ============================================
@@ -31,6 +30,9 @@ export interface OtbItem {
   // Estoque atual
   estoqueAtual: number;
   
+  // Estoque mínimo configurado (se houver)
+  estoqueMinimo: number;
+  
   // Vendas no período
   qtdVendidos: number;
   totalVendido: number;
@@ -44,7 +46,7 @@ export interface OtbItem {
   // Cálculos OTB
   vendaDiaria: number; // média de vendas por dia
   vendasProjetadas: number; // vendas projetadas para o período de cobertura
-  otb: number; // Open to Buy = Vendas Projetadas - Estoque Atual
+  otb: number; // Open to Buy = MAX(Vendas Projetadas, Mínimo) - Estoque Atual
   otbValor: number; // OTB em valor (OTB * preço custo)
   
   // Cobertura atual em dias
@@ -89,6 +91,13 @@ export interface OtbMetrics {
   diasPeriodo: number;
 }
 
+interface EstoqueMinimoConfig {
+  cod_empresa: number;
+  categoria: string;
+  curva_abc: string;
+  quantidade_minima: number;
+}
+
 // ============================================
 // HOOK
 // ============================================
@@ -119,6 +128,7 @@ export function useOtb() {
   const [dadosBrutos, setDadosBrutos] = useState<AnaliseSku[]>([]);
   const [agrupamento, setAgrupamento] = useState<'fornecedor' | 'marca'>('fornecedor');
   const [mapeamentoFornecedor, setMapeamentoFornecedor] = useState<Map<string, string>>(new Map());
+  const [configMinimos, setConfigMinimos] = useState<EstoqueMinimoConfig[]>([]);
 
   // Carregar mapeamentos marca→fornecedor do Supabase
   useEffect(() => {
@@ -144,6 +154,27 @@ export function useOtb() {
     };
     
     carregarMapeamentos();
+  }, []);
+
+  // Carregar configurações de mínimo por loja
+  useEffect(() => {
+    const carregarMinimos = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('estoque_minimo_loja')
+          .select('cod_empresa, categoria, curva_abc, quantidade_minima');
+        
+        if (error) throw error;
+        if (data) {
+          setConfigMinimos(data);
+          console.log('[useOtb] Mínimos por loja carregados:', data.length);
+        }
+      } catch (err) {
+        console.error('[useOtb] Erro ao carregar mínimos:', err);
+      }
+    };
+    
+    carregarMinimos();
   }, []);
 
   /**
@@ -264,11 +295,45 @@ export function useOtb() {
       // Cobertura atual = quantos dias o estoque atual dura
       const coberturaAtual = vendaDiaria > 0 ? sku.estoqueAtual / vendaDiaria : 999;
       
+      // Curva ABC do SKU
+      const curvaABC = curvaMap.get(sku.codSku) || 'C';
+      
+      // Buscar mínimo configurado para esta loja/categoria/curva
+      const tipoNorm = (sku.tipo || '').toUpperCase().trim();
+      const categoria = tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || tipoNorm.includes('ARMAC') ? 'ARMACOES'
+        : tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || tipoNorm === 'LG' || tipoNorm === 'GC' || tipoNorm.includes('LENT') ? 'LENTES'
+        : tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || tipoNorm.includes('ACESS') ? 'ACESSORIOS'
+        : 'OUTROS';
+      
+      // Encontrar configuração de mínimo (prioridade: categoria específica > TODOS)
+      let estoqueMinimo = 0;
+      if (filters.empresa !== 'ALL') {
+        const codEmpresa = typeof filters.empresa === 'number' ? filters.empresa : parseInt(filters.empresa);
+        
+        // Buscar mínimo específico para categoria + curva
+        const configEspecifica = configMinimos.find(c => 
+          c.cod_empresa === codEmpresa && 
+          c.categoria === categoria && 
+          c.curva_abc === curvaABC
+        );
+        
+        // Buscar mínimo genérico (TODOS + curva)
+        const configGenerica = configMinimos.find(c => 
+          c.cod_empresa === codEmpresa && 
+          c.categoria === 'TODOS' && 
+          c.curva_abc === curvaABC
+        );
+        
+        estoqueMinimo = configEspecifica?.quantidade_minima || configGenerica?.quantidade_minima || 0;
+      }
+      
       // Projeção de vendas para o período de cobertura
       const vendasProjetadas = vendaDiaria * filters.coberturaDias;
       
-      // OTB = Vendas Projetadas - Estoque Atual
-      const otb = Math.max(0, Math.ceil(vendasProjetadas - sku.estoqueAtual));
+      // OTB = MAX(Vendas Projetadas, Mínimo) - Estoque Atual
+      // Isso garante que sempre teremos pelo menos o mínimo configurado
+      const necessidadeTotal = Math.max(vendasProjetadas, estoqueMinimo);
+      const otb = Math.max(0, Math.ceil(necessidadeTotal - sku.estoqueAtual));
       
       // Valor do OTB em reais
       const otbValor = otb * sku.precoCusto;
@@ -287,9 +352,6 @@ export function useOtb() {
         classificacao = 'ESTOQUE_OK';
       }
       
-      // Curva ABC do SKU
-      const curvaABC = curvaMap.get(sku.codSku) || 'C';
-      
       // Aplicar fallback de fornecedor usando mapeamento marca→fornecedor
       let fornecedorFinal = sku.fornecedor;
       if (!fornecedorFinal || fornecedorFinal === 'SEM FORNECEDOR' || fornecedorFinal === 'N/D') {
@@ -307,6 +369,7 @@ export function useOtb() {
         fornecedor: fornecedorFinal,
         tipo: sku.tipo,
         estoqueAtual: sku.estoqueAtual,
+        estoqueMinimo,
         qtdVendidos: sku.qtdProdutos,
         totalVendido: sku.totalVendido,
         diasDesdeUltimaVenda: sku.diasDesdeUltimaVenda,
@@ -323,7 +386,7 @@ export function useOtb() {
         giroEstoque: sku.giroEstoque,
       };
     });
-  }, [dadosBrutos, diasPeriodo, filters.coberturaDias, filters.tipoFiltro, mapeamentoFornecedor]);
+  }, [dadosBrutos, diasPeriodo, filters.coberturaDias, filters.tipoFiltro, filters.empresa, mapeamentoFornecedor, configMinimos]);
 
   /**
    * Agrupa itens por fornecedor ou marca
