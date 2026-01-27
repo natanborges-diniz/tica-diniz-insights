@@ -75,6 +75,22 @@ export function OtbSugestaoCoberturaIA({
   const [resultado, setResultado] = useState<ResultadoIA | null>(null);
   const [configMinimos, setConfigMinimos] = useState<ConfigMinimo[]>([]);
   const [loadingMinimos, setLoadingMinimos] = useState(false);
+  const [ultimoFiltroHash, setUltimoFiltroHash] = useState<string>('');
+
+  // Hash para detectar mudanças nos itens (baseado em quantidade e categorias)
+  const filtroHash = useMemo(() => {
+    if (itens.length === 0) return '';
+    const categorias = [...new Set(itens.map(i => i.tipo.split(' ')[0]))].sort().join(',');
+    return `${itens.length}-${categorias}`;
+  }, [itens]);
+
+  // Limpar resultado da IA quando os filtros mudam
+  useEffect(() => {
+    if (filtroHash !== ultimoFiltroHash && filtroHash !== '') {
+      setResultado(null);
+      setUltimoFiltroHash(filtroHash);
+    }
+  }, [filtroHash, ultimoFiltroHash]);
 
   // Carregar configurações de mínimo da loja atual
   useEffect(() => {

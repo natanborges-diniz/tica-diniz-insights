@@ -1,7 +1,7 @@
 // src/pages/OtbDashboard.tsx
 // Página dedicada do módulo OTB (Open to Buy)
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useOtb } from "@/hooks/useOtb";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,7 +17,6 @@ import { OtbSugestaoCoberturaIA } from "@/components/otb/OtbSugestaoCoberturaIA"
 import { OtbFornecedorMarcaConfig } from "@/components/otb/OtbFornecedorMarcaConfig";
 import { OtbPainelAcoes } from "@/components/otb/OtbPainelAcoes";
 import { OtbResumoVisual } from "@/components/otb/OtbResumoVisual";
-import { OtbEstoqueMinimoConfig } from "@/components/otb/OtbEstoqueMinimoConfig";
 import { 
   ShoppingCart, 
   AlertCircle, 
@@ -59,50 +58,66 @@ export default function OtbDashboard() {
     ? itensOtb.filter(item => item.curvaABC === curvaFiltro)
     : itensOtb;
 
+  // Métricas recalculadas para itens filtrados
+  const metricsFiltradas = useMemo(() => {
+    if (itensFiltrados.length === 0) return metrics;
+    
+    return {
+      totalSkus: itensFiltrados.length,
+      totalEstoque: itensFiltrados.reduce((acc, i) => acc + i.estoqueAtual, 0),
+      totalVendido: itensFiltrados.reduce((acc, i) => acc + i.totalVendido, 0),
+      totalOtb: itensFiltrados.reduce((acc, i) => acc + i.otb, 0),
+      totalOtbValor: itensFiltrados.reduce((acc, i) => acc + i.otbValor, 0),
+      skusComprarUrgente: itensFiltrados.filter(i => i.classificacao === 'COMPRAR_URGENTE').length,
+      skusComprar: itensFiltrados.filter(i => i.classificacao === 'COMPRAR').length,
+      skusEstoqueOk: itensFiltrados.filter(i => i.classificacao === 'ESTOQUE_OK').length,
+      skusExcesso: itensFiltrados.filter(i => i.classificacao === 'EXCESSO').length,
+      diasPeriodo: metrics.diasPeriodo,
+    };
+  }, [itensFiltrados, metrics]);
+
   // Reagrupar os itens filtrados
-  const itensAgrupadosFiltrados = curvaFiltro
-    ? (() => {
-        const agrupado = new Map<string, typeof itensAgrupados[0]>();
-        itensFiltrados.forEach(item => {
-          const chave = agrupamento === 'fornecedor' 
-            ? item.fornecedor 
-            : `${item.fornecedor}|${item.marca}`;
-          
-          const existente = agrupado.get(chave);
-          if (existente) {
-            existente.qtdSkus++;
-            existente.estoqueTotal += item.estoqueAtual;
-            existente.qtdVendidos += item.qtdVendidos;
-            existente.totalVendido += item.totalVendido;
-            existente.otbTotal += item.otb;
-            existente.otbValorTotal += item.otbValor;
-            if (item.classificacao === 'COMPRAR_URGENTE') existente.skusComprarUrgente++;
-            if (item.classificacao === 'COMPRAR') existente.skusComprar++;
-            if (item.classificacao === 'ESTOQUE_OK') existente.skusEstoqueOk++;
-            if (item.classificacao === 'EXCESSO') existente.skusExcesso++;
-          } else {
-            agrupado.set(chave, {
-              chave,
-              fornecedor: item.fornecedor,
-              marca: agrupamento === 'marca' ? item.marca : undefined,
-              tipo: item.tipo,
-              qtdSkus: 1,
-              estoqueTotal: item.estoqueAtual,
-              qtdVendidos: item.qtdVendidos,
-              totalVendido: item.totalVendido,
-              otbTotal: item.otb,
-              otbValorTotal: item.otbValor,
-              skusComprarUrgente: item.classificacao === 'COMPRAR_URGENTE' ? 1 : 0,
-              skusComprar: item.classificacao === 'COMPRAR' ? 1 : 0,
-              skusEstoqueOk: item.classificacao === 'ESTOQUE_OK' ? 1 : 0,
-              skusExcesso: item.classificacao === 'EXCESSO' ? 1 : 0,
-              margemMedia: item.margemBruta,
-            });
-          }
+  const itensAgrupadosFiltrados = useMemo(() => {
+    const agrupado = new Map<string, typeof itensAgrupados[0]>();
+    itensFiltrados.forEach(item => {
+      const chave = agrupamento === 'fornecedor' 
+        ? item.fornecedor 
+        : `${item.fornecedor}|${item.marca}`;
+      
+      const existente = agrupado.get(chave);
+      if (existente) {
+        existente.qtdSkus++;
+        existente.estoqueTotal += item.estoqueAtual;
+        existente.qtdVendidos += item.qtdVendidos;
+        existente.totalVendido += item.totalVendido;
+        existente.otbTotal += item.otb;
+        existente.otbValorTotal += item.otbValor;
+        if (item.classificacao === 'COMPRAR_URGENTE') existente.skusComprarUrgente++;
+        if (item.classificacao === 'COMPRAR') existente.skusComprar++;
+        if (item.classificacao === 'ESTOQUE_OK') existente.skusEstoqueOk++;
+        if (item.classificacao === 'EXCESSO') existente.skusExcesso++;
+      } else {
+        agrupado.set(chave, {
+          chave,
+          fornecedor: item.fornecedor,
+          marca: agrupamento === 'marca' ? item.marca : undefined,
+          tipo: item.tipo,
+          qtdSkus: 1,
+          estoqueTotal: item.estoqueAtual,
+          qtdVendidos: item.qtdVendidos,
+          totalVendido: item.totalVendido,
+          otbTotal: item.otb,
+          otbValorTotal: item.otbValor,
+          skusComprarUrgente: item.classificacao === 'COMPRAR_URGENTE' ? 1 : 0,
+          skusComprar: item.classificacao === 'COMPRAR' ? 1 : 0,
+          skusEstoqueOk: item.classificacao === 'ESTOQUE_OK' ? 1 : 0,
+          skusExcesso: item.classificacao === 'EXCESSO' ? 1 : 0,
+          margemMedia: item.margemBruta,
         });
-        return Array.from(agrupado.values()).sort((a, b) => b.otbValorTotal - a.otbValorTotal);
-      })()
-    : itensAgrupados;
+      }
+    });
+    return Array.from(agrupado.values()).sort((a, b) => b.otbValorTotal - a.otbValorTotal);
+  }, [itensFiltrados, agrupamento]);
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -114,13 +129,12 @@ export default function OtbDashboard() {
             <div>
               <h1 className="text-3xl font-bold">Open to Buy (OTB)</h1>
               <p className="text-muted-foreground">
-                Inteligência de compras para manter seu estoque saudável e oxigenado
+                Avaliação mensal de compras - manter estoque saudável e oxigenado
               </p>
             </div>
           </div>
           {empresas.length > 0 && (
             <div className="flex items-center gap-2">
-              <OtbEstoqueMinimoConfig empresas={empresas} />
               <OtbFornecedorMarcaConfig marcasSemFornecedor={marcasSemFornecedor} />
             </div>
           )}
@@ -172,10 +186,10 @@ export default function OtbDashboard() {
       {/* Conteúdo Principal */}
       {!loading && itensOtb.length > 0 && (
         <>
-          {/* Resumo Visual - Sempre visível */}
+          {/* Resumo Visual - Usando itens filtrados */}
           <OtbResumoVisual 
             metrics={metrics} 
-            itens={itensOtb} 
+            itens={itensFiltrados} 
             coberturaDias={filters.coberturaDias} 
           />
 
@@ -192,15 +206,14 @@ export default function OtbDashboard() {
               </TabsTrigger>
             </TabsList>
 
-            {/* Tab: Painel de Ações */}
+            {/* Tab: Painel de Ações - usa métricas filtradas */}
             <TabsContent value="acoes" className="mt-4">
               <OtbPainelAcoes 
-                itens={itensOtb} 
-                metrics={metrics}
+                itens={itensFiltrados} 
+                metrics={metricsFiltradas}
                 coberturaDias={filters.coberturaDias}
                 onFiltrarCategoria={(cat) => {
                   setTabAtiva('detalhes');
-                  // Poderia adicionar filtro por classificação aqui
                 }}
               />
             </TabsContent>
@@ -221,27 +234,27 @@ export default function OtbDashboard() {
                 </AlertDescription>
               </Alert>
 
-              {/* KPIs Detalhados */}
-              <OtbKPICards metrics={metrics} coberturaDias={filters.coberturaDias} />
+              {/* KPIs Detalhados - usa métricas filtradas */}
+              <OtbKPICards metrics={metricsFiltradas} coberturaDias={filters.coberturaDias} />
 
               {/* Grid: Curva ABC + Cobertura */}
               <div className="grid md:grid-cols-2 gap-6">
                 <OtbCurvaABCChart 
-                  itens={itensOtb} 
+                  itens={itensFiltrados} 
                   selectedCurva={curvaFiltro}
                   onCurvaClick={setCurvaFiltro}
                 />
                 <OtbCoberturaCard 
-                  itens={itensOtb} 
+                  itens={itensFiltrados} 
                   coberturaMeta={filters.coberturaDias} 
                 />
               </div>
 
-              {/* Sugestão de Cobertura via IA com comparativo de mínimos */}
+              {/* Sugestão de Cobertura via IA com comparativo de mínimos - usa itens filtrados */}
               <OtbSugestaoCoberturaIA 
-                itens={itensOtb}
+                itens={itensFiltrados}
                 coberturaAtual={filters.coberturaDias}
-                codEmpresa={typeof filters.empresa === 'number' ? filters.empresa : undefined}
+                codEmpresa={typeof filters.empresa === 'number' ? filters.empresa : parseInt(filters.empresa as string) || undefined}
                 onSugestaoCoberturaChange={(dias) => setFilters(prev => ({ ...prev, coberturaDias: dias }))}
               />
 
