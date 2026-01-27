@@ -13,15 +13,19 @@ import { OtbKPICards } from "@/components/otb/OtbKPICards";
 import { OtbTable } from "@/components/otb/OtbTable";
 import { OtbCurvaABCChart } from "@/components/otb/OtbCurvaABCChart";
 import { OtbCoberturaCard } from "@/components/otb/OtbCoberturaCard";
-import { OtbMinimoLojaConfig, type MinimoLojaConfig } from "@/components/otb/OtbMinimoLojaConfig";
 import { OtbSugestaoCoberturaIA } from "@/components/otb/OtbSugestaoCoberturaIA";
 import { OtbFornecedorMarcaConfig } from "@/components/otb/OtbFornecedorMarcaConfig";
+import { OtbPainelAcoes } from "@/components/otb/OtbPainelAcoes";
+import { OtbResumoVisual } from "@/components/otb/OtbResumoVisual";
+import { OtbEstoqueMinimoConfig } from "@/components/otb/OtbEstoqueMinimoConfig";
 import { 
   ShoppingCart, 
   AlertCircle, 
   Factory, 
   Tag,
-  Info
+  Info,
+  LayoutDashboard,
+  ListTodo
 } from "lucide-react";
 
 export default function OtbDashboard() {
@@ -47,8 +51,8 @@ export default function OtbDashboard() {
   // Estado para filtro por curva ABC
   const [curvaFiltro, setCurvaFiltro] = useState<'A' | 'B' | 'C' | null>(null);
   
-  // Estado para configurações de mínimo por loja
-  const [minimosLoja, setMinimosLoja] = useState<MinimoLojaConfig[]>([]);
+  // Estado para tab ativa (visão geral vs detalhes)
+  const [tabAtiva, setTabAtiva] = useState<'acoes' | 'detalhes'>('acoes');
 
   // Filtrar itens por curva se selecionada
   const itensFiltrados = curvaFiltro 
@@ -110,41 +114,23 @@ export default function OtbDashboard() {
             <div>
               <h1 className="text-3xl font-bold">Open to Buy (OTB)</h1>
               <p className="text-muted-foreground">
-                Cálculo de necessidades de compra por categoria e fornecedor
+                Inteligência de compras para manter seu estoque saudável e oxigenado
               </p>
             </div>
           </div>
           {empresas.length > 0 && (
             <div className="flex items-center gap-2">
+              <OtbEstoqueMinimoConfig empresas={empresas} />
               <OtbFornecedorMarcaConfig marcasSemFornecedor={marcasSemFornecedor} />
-              <OtbMinimoLojaConfig 
-                empresas={empresas}
-                configuracoes={minimosLoja}
-                onSave={setMinimosLoja}
-              />
             </div>
           )}
         </div>
       </div>
 
-      {/* Fórmula explicativa */}
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertDescription className="flex items-center gap-2 flex-wrap">
-          <strong>Fórmula OTB:</strong>
-          <code className="bg-muted px-2 py-0.5 rounded text-sm">
-            OTB = (Venda Diária Média × Cobertura em Dias) - Estoque Atual
-          </code>
-          <span className="text-muted-foreground text-sm ml-2">
-            Período base: {diasPeriodo} dias | Cobertura: {filters.coberturaDias} dias
-          </span>
-        </AlertDescription>
-      </Alert>
-
       {/* Filtros */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Parâmetros de Cálculo</CardTitle>
+          <CardTitle className="text-lg">Parâmetros de Análise</CardTitle>
           <CardDescription>
             Defina o período base para análise de vendas e a cobertura desejada
           </CardDescription>
@@ -174,8 +160,8 @@ export default function OtbDashboard() {
       {/* Loading */}
       {loading && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-            {[...Array(6)].map((_, i) => (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
               <Skeleton key={i} className="h-24" />
             ))}
           </div>
@@ -183,106 +169,157 @@ export default function OtbDashboard() {
         </div>
       )}
 
-      {/* Conteúdo */}
+      {/* Conteúdo Principal */}
       {!loading && itensOtb.length > 0 && (
         <>
-          {/* KPIs */}
-          <OtbKPICards metrics={metrics} coberturaDias={filters.coberturaDias} />
-
-          {/* Grid: Curva ABC + Cobertura */}
-          <div className="grid md:grid-cols-2 gap-6">
-            <OtbCurvaABCChart 
-              itens={itensOtb} 
-              selectedCurva={curvaFiltro}
-              onCurvaClick={setCurvaFiltro}
-            />
-            <OtbCoberturaCard 
-              itens={itensOtb} 
-              coberturaMeta={filters.coberturaDias} 
-            />
-          </div>
-
-          {/* Sugestão de Cobertura via IA */}
-          <OtbSugestaoCoberturaIA 
-            itens={itensOtb}
-            coberturaAtual={filters.coberturaDias}
-            onSugestaoCoberturaChange={(dias) => setFilters(prev => ({ ...prev, coberturaDias: dias }))}
+          {/* Resumo Visual - Sempre visível */}
+          <OtbResumoVisual 
+            metrics={metrics} 
+            itens={itensOtb} 
+            coberturaDias={filters.coberturaDias} 
           />
 
-          {/* Filtro ativo por curva */}
-          {curvaFiltro && (
-            <Alert className="bg-primary/5 border-primary/20">
-              <Info className="h-4 w-4 text-primary" />
-              <AlertDescription className="flex items-center justify-between">
-                <span>
-                  Mostrando apenas itens da <strong>Curva {curvaFiltro}</strong> 
-                  ({itensFiltrados.length} SKUs de {itensOtb.length})
-                </span>
-                <button 
-                  onClick={() => setCurvaFiltro(null)}
-                  className="text-primary hover:underline text-sm"
-                >
-                  Limpar filtro
-                </button>
-              </AlertDescription>
-            </Alert>
-          )}
+          {/* Tabs: Ações vs Detalhes */}
+          <Tabs value={tabAtiva} onValueChange={(v) => setTabAtiva(v as 'acoes' | 'detalhes')}>
+            <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger value="acoes" className="gap-2">
+                <ListTodo className="h-4 w-4" />
+                O que Fazer?
+              </TabsTrigger>
+              <TabsTrigger value="detalhes" className="gap-2">
+                <LayoutDashboard className="h-4 w-4" />
+                Análise Detalhada
+              </TabsTrigger>
+            </TabsList>
 
-          {/* Tabela com Tabs de Agrupamento */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg">Análise por Fornecedor/Marca</CardTitle>
-                  <CardDescription>
-                    Clique em uma linha para ver os SKUs detalhados
-                  </CardDescription>
-                </div>
-                <Tabs 
-                  value={agrupamento} 
-                  onValueChange={(v) => setAgrupamento(v as 'fornecedor' | 'marca')}
-                >
-                  <TabsList>
-                    <TabsTrigger value="fornecedor" className="gap-2">
-                      <Factory className="h-4 w-4" />
-                      Por Fornecedor
-                    </TabsTrigger>
-                    <TabsTrigger value="marca" className="gap-2">
-                      <Tag className="h-4 w-4" />
-                      Por Marca
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <OtbTable
-                itensAgrupados={itensAgrupadosFiltrados}
-                itensOtb={itensFiltrados}
-                agrupamento={agrupamento}
+            {/* Tab: Painel de Ações */}
+            <TabsContent value="acoes" className="mt-4">
+              <OtbPainelAcoes 
+                itens={itensOtb} 
+                metrics={metrics}
+                coberturaDias={filters.coberturaDias}
+                onFiltrarCategoria={(cat) => {
+                  setTabAtiva('detalhes');
+                  // Poderia adicionar filtro por classificação aqui
+                }}
               />
-            </CardContent>
-          </Card>
+            </TabsContent>
 
-          {/* Legenda */}
-          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <Badge variant="destructive">Urgente</Badge>
-              <span>Estoque &lt; 15 dias de venda</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge className="bg-warning text-warning-foreground">Comprar</Badge>
-              <span>OTB positivo (precisa repor)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">OK</Badge>
-              <span>Estoque suficiente para cobertura</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">Excesso</Badge>
-              <span>Estoque &gt; 2x a cobertura desejada</span>
-            </div>
-          </div>
+            {/* Tab: Análise Detalhada */}
+            <TabsContent value="detalhes" className="mt-4 space-y-6">
+              {/* Fórmula explicativa */}
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription className="flex items-center gap-2 flex-wrap">
+                  <strong>Fórmula OTB:</strong>
+                  <code className="bg-muted px-2 py-0.5 rounded text-sm">
+                    OTB = MAX(Venda Diária × Cobertura, Mínimo Loja) - Estoque Atual
+                  </code>
+                  <span className="text-muted-foreground text-sm ml-2">
+                    Período: {diasPeriodo} dias | Meta: {filters.coberturaDias} dias
+                  </span>
+                </AlertDescription>
+              </Alert>
+
+              {/* KPIs Detalhados */}
+              <OtbKPICards metrics={metrics} coberturaDias={filters.coberturaDias} />
+
+              {/* Grid: Curva ABC + Cobertura */}
+              <div className="grid md:grid-cols-2 gap-6">
+                <OtbCurvaABCChart 
+                  itens={itensOtb} 
+                  selectedCurva={curvaFiltro}
+                  onCurvaClick={setCurvaFiltro}
+                />
+                <OtbCoberturaCard 
+                  itens={itensOtb} 
+                  coberturaMeta={filters.coberturaDias} 
+                />
+              </div>
+
+              {/* Sugestão de Cobertura via IA */}
+              <OtbSugestaoCoberturaIA 
+                itens={itensOtb}
+                coberturaAtual={filters.coberturaDias}
+                onSugestaoCoberturaChange={(dias) => setFilters(prev => ({ ...prev, coberturaDias: dias }))}
+              />
+
+              {/* Filtro ativo por curva */}
+              {curvaFiltro && (
+                <Alert className="bg-primary/5 border-primary/20">
+                  <Info className="h-4 w-4 text-primary" />
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>
+                      Mostrando apenas itens da <strong>Curva {curvaFiltro}</strong> 
+                      ({itensFiltrados.length} SKUs de {itensOtb.length})
+                    </span>
+                    <button 
+                      onClick={() => setCurvaFiltro(null)}
+                      className="text-primary hover:underline text-sm"
+                    >
+                      Limpar filtro
+                    </button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Tabela com Tabs de Agrupamento */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg">Análise por Fornecedor/Marca</CardTitle>
+                      <CardDescription>
+                        Clique em uma linha para ver os SKUs detalhados
+                      </CardDescription>
+                    </div>
+                    <Tabs 
+                      value={agrupamento} 
+                      onValueChange={(v) => setAgrupamento(v as 'fornecedor' | 'marca')}
+                    >
+                      <TabsList>
+                        <TabsTrigger value="fornecedor" className="gap-2">
+                          <Factory className="h-4 w-4" />
+                          Por Fornecedor
+                        </TabsTrigger>
+                        <TabsTrigger value="marca" className="gap-2">
+                          <Tag className="h-4 w-4" />
+                          Por Marca
+                        </TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <OtbTable
+                    itensAgrupados={itensAgrupadosFiltrados}
+                    itensOtb={itensFiltrados}
+                    agrupamento={agrupamento}
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Legenda */}
+              <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Badge variant="destructive">Urgente</Badge>
+                  <span>Estoque &lt; 15 dias de venda</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-warning text-warning-foreground">Comprar</Badge>
+                  <span>OTB positivo (precisa repor)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">OK</Badge>
+                  <span>Estoque suficiente para cobertura</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">Excesso</Badge>
+                  <span>Estoque &gt; 2x a cobertura desejada</span>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
         </>
       )}
 
@@ -294,8 +331,8 @@ export default function OtbDashboard() {
               <ShoppingCart className="h-16 w-16 mx-auto mb-4 opacity-30" />
               <p className="text-lg font-medium">Módulo OTB Pronto</p>
               <p className="text-sm mt-2 max-w-md mx-auto">
-                Configure os parâmetros acima e clique em "Calcular OTB" para analisar
-                as necessidades de compra baseadas nas vendas do período.
+                Selecione uma empresa e clique em "Calcular OTB" para analisar
+                as necessidades de compra e manter seu estoque saudável.
               </p>
             </div>
           </CardContent>

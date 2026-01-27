@@ -83,6 +83,36 @@ export type Database = {
         }
         Relationships: []
       }
+      estoque_minimo_loja: {
+        Row: {
+          categoria: string
+          cod_empresa: number
+          created_at: string
+          curva_abc: string
+          id: string
+          quantidade_minima: number
+          updated_at: string
+        }
+        Insert: {
+          categoria?: string
+          cod_empresa: number
+          created_at?: string
+          curva_abc?: string
+          id?: string
+          quantidade_minima?: number
+          updated_at?: string
+        }
+        Update: {
+          categoria?: string
+          cod_empresa?: number
+          created_at?: string
+          curva_abc?: string
+          id?: string
+          quantidade_minima?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       etl_controle: {
         Row: {
           atualizado_em: string | null
