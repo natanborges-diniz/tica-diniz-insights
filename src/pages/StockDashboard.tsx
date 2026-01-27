@@ -1,8 +1,9 @@
 // src/pages/StockDashboard.tsx
 // Dashboard unificado de Estoque + OTB (Open to Buy)
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useOtb } from "@/hooks/useOtb";
+import { useEstoqueCompleto } from "@/hooks/useEstoqueCompleto";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -21,60 +22,82 @@ import { OtbResumoVisual } from "@/components/otb/OtbResumoVisual";
 import { StockKPICards } from "@/components/stock-dashboard/StockKPICards";
 import { StockActionChart } from "@/components/stock-dashboard/StockActionChart";
 import { StockTable } from "@/components/stock-dashboard/StockTable";
+import { StockFilters } from "@/components/stock-dashboard/StockFilters";
 import { 
   Package, 
   AlertCircle, 
   Factory, 
   Tag,
   Info,
-  LayoutDashboard,
-  ListTodo,
   Search,
   ShoppingCart,
-  BoxIcon
+  BoxIcon,
+  ListTodo,
+  RefreshCw
 } from "lucide-react";
 
 export default function StockDashboard() {
+  // Hook OTB (análise de vendas + estoque para planejamento de compras)
   const {
     empresas,
     loadingEmpresas,
-    filters,
-    setFilters,
+    filters: otbFilters,
+    setFilters: setOtbFilters,
     agrupamento,
     setAgrupamento,
-    loading,
-    error,
+    loading: loadingOtb,
+    error: errorOtb,
     itensOtb,
     itensAgrupados,
-    metrics,
+    metrics: otbMetrics,
     diasPeriodo,
     contagemPorCategoria,
     totalSkusBrutos,
-    carregarDados,
+    carregarDados: carregarOtb,
     marcasSemFornecedor,
   } = useOtb();
 
-  // Estado para filtro por curva ABC
+  // Hook Estoque Completo (dados reais de estoque físico)
+  const {
+    dados: dadosEstoque,
+    dadosFiltrados: dadosEstoqueFiltrados,
+    loading: loadingEstoque,
+    error: errorEstoque,
+    filters: estoqueFilters,
+    setFilters: setEstoqueFilters,
+    metrics: estoqueMetrics,
+    carregarDados: carregarEstoque,
+    listaFornecedores,
+    listaMarcas,
+    listaAcoes,
+  } = useEstoqueCompleto();
+
+  // Estado para filtro por curva ABC (apenas na aba OTB)
   const [curvaFiltro, setCurvaFiltro] = useState<'A' | 'B' | 'C' | null>(null);
   
   // Estado para tab ativa principal
-  const [tabPrincipal, setTabPrincipal] = useState<'acoes' | 'estoque' | 'analise'>('acoes');
+  const [tabPrincipal, setTabPrincipal] = useState<'acoes' | 'estoque' | 'analise'>('estoque');
 
-  // Busca textual
-  const [buscaTexto, setBuscaTexto] = useState("");
+  // Busca textual para OTB
+  const [buscaTextoOtb, setBuscaTextoOtb] = useState("");
 
-  // Filtrar itens por curva se selecionada e por busca
-  const itensFiltrados = useMemo(() => {
+  // Carregar estoque quando empresa mudar
+  useEffect(() => {
+    if (otbFilters.empresa !== null && otbFilters.empresa !== 'ALL') {
+      carregarEstoque(otbFilters.empresa);
+    }
+  }, [otbFilters.empresa, carregarEstoque]);
+
+  // Filtrar itens OTB por curva e busca
+  const itensFiltradosOtb = useMemo(() => {
     let resultado = itensOtb;
     
-    // Filtrar por curva
     if (curvaFiltro) {
       resultado = resultado.filter(item => item.curvaABC === curvaFiltro);
     }
     
-    // Filtrar por busca textual
-    if (buscaTexto.trim()) {
-      const termo = buscaTexto.toLowerCase();
+    if (buscaTextoOtb.trim()) {
+      const termo = buscaTextoOtb.toLowerCase();
       resultado = resultado.filter(item => 
         item.descricaoItem?.toLowerCase().includes(termo) ||
         item.marca?.toLowerCase().includes(termo) ||
@@ -84,30 +107,30 @@ export default function StockDashboard() {
     }
     
     return resultado;
-  }, [itensOtb, curvaFiltro, buscaTexto]);
+  }, [itensOtb, curvaFiltro, buscaTextoOtb]);
 
-  // Métricas recalculadas para itens filtrados
+  // Métricas recalculadas para itens OTB filtrados
   const metricsFiltradas = useMemo(() => {
-    if (itensFiltrados.length === 0) return metrics;
+    if (itensFiltradosOtb.length === 0) return otbMetrics;
     
     return {
-      totalSkus: itensFiltrados.length,
-      totalEstoque: itensFiltrados.reduce((acc, i) => acc + i.estoqueAtual, 0),
-      totalVendido: itensFiltrados.reduce((acc, i) => acc + i.totalVendido, 0),
-      totalOtb: itensFiltrados.reduce((acc, i) => acc + i.otb, 0),
-      totalOtbValor: itensFiltrados.reduce((acc, i) => acc + i.otbValor, 0),
-      skusComprarUrgente: itensFiltrados.filter(i => i.classificacao === 'COMPRAR_URGENTE').length,
-      skusComprar: itensFiltrados.filter(i => i.classificacao === 'COMPRAR').length,
-      skusEstoqueOk: itensFiltrados.filter(i => i.classificacao === 'ESTOQUE_OK').length,
-      skusExcesso: itensFiltrados.filter(i => i.classificacao === 'EXCESSO').length,
-      diasPeriodo: metrics.diasPeriodo,
+      totalSkus: itensFiltradosOtb.length,
+      totalEstoque: itensFiltradosOtb.reduce((acc, i) => acc + i.estoqueAtual, 0),
+      totalVendido: itensFiltradosOtb.reduce((acc, i) => acc + i.totalVendido, 0),
+      totalOtb: itensFiltradosOtb.reduce((acc, i) => acc + i.otb, 0),
+      totalOtbValor: itensFiltradosOtb.reduce((acc, i) => acc + i.otbValor, 0),
+      skusComprarUrgente: itensFiltradosOtb.filter(i => i.classificacao === 'COMPRAR_URGENTE').length,
+      skusComprar: itensFiltradosOtb.filter(i => i.classificacao === 'COMPRAR').length,
+      skusEstoqueOk: itensFiltradosOtb.filter(i => i.classificacao === 'ESTOQUE_OK').length,
+      skusExcesso: itensFiltradosOtb.filter(i => i.classificacao === 'EXCESSO').length,
+      diasPeriodo: otbMetrics.diasPeriodo,
     };
-  }, [itensFiltrados, metrics]);
+  }, [itensFiltradosOtb, otbMetrics]);
 
-  // Reagrupar os itens filtrados
+  // Reagrupar itens OTB filtrados
   const itensAgrupadosFiltrados = useMemo(() => {
     const agrupado = new Map<string, typeof itensAgrupados[0]>();
-    itensFiltrados.forEach(item => {
+    itensFiltradosOtb.forEach(item => {
       const chave = agrupamento === 'fornecedor' 
         ? item.fornecedor 
         : `${item.fornecedor}|${item.marca}`;
@@ -145,50 +168,32 @@ export default function StockDashboard() {
       }
     });
     return Array.from(agrupado.values()).sort((a, b) => b.otbValorTotal - a.otbValorTotal);
-  }, [itensFiltrados, agrupamento]);
+  }, [itensFiltradosOtb, agrupamento]);
 
   // Obter código da empresa para IA
-  const codEmpresaAtual = filters.empresa !== 'ALL' 
-    ? (typeof filters.empresa === 'number' ? filters.empresa : parseInt(filters.empresa as string))
+  const codEmpresaAtual = otbFilters.empresa !== 'ALL' 
+    ? (typeof otbFilters.empresa === 'number' ? otbFilters.empresa : parseInt(otbFilters.empresa as string))
     : undefined;
 
-  // Converter itensOtb para formato compatível com StockTable
-  const dadosParaStockTable = useMemo(() => {
-    return itensFiltrados.map(item => ({
-      codEmpresa: 0,
-      empresa: '',
-      codProduto: item.codSku,
-      fornecedor: item.fornecedor,
-      marca: item.marca,
-      codigoBarra: String(item.codSku),
-      descricao: item.descricaoItem,
-      quantidadeEstoque: item.estoqueAtual,
-      diasEstoque: item.diasDesdeUltimaVenda,
-      acaoSugerida: item.classificacao === 'EXCESSO' ? 'LIQUIDAR' 
-        : item.classificacao === 'COMPRAR_URGENTE' ? 'COMPRAR URGENTE'
-        : item.classificacao === 'COMPRAR' ? 'COMPRAR'
-        : 'MANTER',
-    }));
-  }, [itensFiltrados]);
+  // Handler para mudança de empresa nos filtros OTB
+  const handleEmpresaChange = (novoFiltro: typeof otbFilters) => {
+    setOtbFilters(novoFiltro);
+    // Resetar filtros de estoque quando mudar empresa
+    if (novoFiltro.empresa !== otbFilters.empresa) {
+      setEstoqueFilters(prev => ({
+        ...prev,
+        empresa: novoFiltro.empresa,
+        fornecedor: "TODOS",
+        marca: "TODAS",
+        acao: "TODAS",
+        busca: "",
+      }));
+    }
+  };
 
-  // Dados para o gráfico de ações
-  const dadosParaActionChart = useMemo(() => {
-    return itensFiltrados.map(item => ({
-      codEmpresa: 0,
-      empresa: '',
-      codProduto: item.codSku,
-      fornecedor: item.fornecedor,
-      marca: item.marca,
-      codigoBarra: String(item.codSku),
-      descricao: item.descricaoItem,
-      quantidadeEstoque: item.estoqueAtual,
-      diasEstoque: item.diasDesdeUltimaVenda,
-      acaoSugerida: item.classificacao === 'EXCESSO' ? 'LIQUIDAR' 
-        : item.classificacao === 'COMPRAR_URGENTE' ? 'COMPRAR URGENTE'
-        : item.classificacao === 'COMPRAR' ? 'COMPRAR'
-        : 'MANTER',
-    }));
-  }, [itensFiltrados]);
+  // Loading combinado
+  const isLoading = loadingOtb || loadingEstoque;
+  const hasError = errorOtb || errorEstoque;
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -212,56 +217,43 @@ export default function StockDashboard() {
         </div>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros (compartilhados) */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">Parâmetros de Análise</CardTitle>
           <CardDescription>
-            Selecione a empresa, categoria e período base para análise
+            Selecione a empresa para visualizar estoque e análise OTB
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           <OtbFilters
-            filters={filters}
-            setFilters={setFilters}
+            filters={otbFilters}
+            setFilters={handleEmpresaChange}
             empresas={empresas}
             loadingEmpresas={loadingEmpresas}
-            loading={loading}
-            onReload={carregarDados}
+            loading={isLoading}
+            onReload={() => {
+              carregarOtb();
+              if (otbFilters.empresa !== null && otbFilters.empresa !== 'ALL') {
+                carregarEstoque(otbFilters.empresa);
+              }
+            }}
             contagemPorCategoria={contagemPorCategoria}
             totalSkusBrutos={totalSkusBrutos}
           />
-          
-          {/* Busca por SKU */}
-          {itensOtb.length > 0 && (
-            <div className="flex items-center gap-2 pt-2 border-t">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar SKU por descrição, marca, fornecedor ou código..."
-                value={buscaTexto}
-                onChange={(e) => setBuscaTexto(e.target.value)}
-                className="max-w-md"
-              />
-              {buscaTexto && (
-                <Button variant="ghost" size="sm" onClick={() => setBuscaTexto("")}>
-                  Limpar
-                </Button>
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
 
       {/* Erro */}
-      {error && (
+      {hasError && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{errorOtb || errorEstoque}</AlertDescription>
         </Alert>
       )}
 
       {/* Loading */}
-      {loading && (
+      {isLoading && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[...Array(4)].map((_, i) => (
@@ -273,24 +265,18 @@ export default function StockDashboard() {
       )}
 
       {/* Conteúdo Principal */}
-      {!loading && itensOtb.length > 0 && (
+      {!isLoading && (dadosEstoque.length > 0 || itensOtb.length > 0) && (
         <>
-          {/* Resumo Visual com KPIs principais */}
-          <OtbResumoVisual 
-            metrics={metricsFiltradas} 
-            itens={itensFiltrados}
-          />
-
-          {/* Tabs Principais: Ações | Estoque | Análise OTB */}
+          {/* Tabs Principais: Estoque | Ações | Análise OTB */}
           <Tabs value={tabPrincipal} onValueChange={(v) => setTabPrincipal(v as typeof tabPrincipal)}>
             <TabsList className="grid w-full max-w-lg grid-cols-3">
-              <TabsTrigger value="acoes" className="gap-2">
-                <ListTodo className="h-4 w-4" />
-                O que Fazer?
-              </TabsTrigger>
               <TabsTrigger value="estoque" className="gap-2">
                 <BoxIcon className="h-4 w-4" />
                 Visão Estoque
+              </TabsTrigger>
+              <TabsTrigger value="acoes" className="gap-2">
+                <ListTodo className="h-4 w-4" />
+                O que Fazer?
               </TabsTrigger>
               <TabsTrigger value="analise" className="gap-2">
                 <ShoppingCart className="h-4 w-4" />
@@ -298,158 +284,250 @@ export default function StockDashboard() {
               </TabsTrigger>
             </TabsList>
 
-            {/* Tab: Painel de Ações */}
-            <TabsContent value="acoes" className="mt-4">
-              <OtbPainelAcoes 
-                itens={itensFiltrados} 
-                metrics={metricsFiltradas}
-                onFiltrarCategoria={() => setTabPrincipal('analise')}
-              />
+            {/* Tab: Visão Estoque (dados reais do endpoint /estoque/analise-acao) */}
+            <TabsContent value="estoque" className="mt-4 space-y-6">
+              {dadosEstoque.length > 0 ? (
+                <>
+                  {/* Filtros específicos de estoque */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg">Filtros de Estoque</CardTitle>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => carregarEstoque(otbFilters.empresa)}
+                          disabled={loadingEstoque}
+                        >
+                          <RefreshCw className={`h-4 w-4 mr-2 ${loadingEstoque ? 'animate-spin' : ''}`} />
+                          Atualizar
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <StockFilters
+                        dados={dadosEstoque}
+                        fornecedorSelecionado={estoqueFilters.fornecedor}
+                        setFornecedorSelecionado={(v) => setEstoqueFilters(p => ({ ...p, fornecedor: v }))}
+                        marcaSelecionada={estoqueFilters.marca}
+                        setMarcaSelecionada={(v) => setEstoqueFilters(p => ({ ...p, marca: v }))}
+                        acaoSelecionada={estoqueFilters.acao}
+                        setAcaoSelecionada={(v) => setEstoqueFilters(p => ({ ...p, acao: v }))}
+                        buscaTexto={estoqueFilters.busca}
+                        setBuscaTexto={(v) => setEstoqueFilters(p => ({ ...p, busca: v }))}
+                      />
+                    </CardContent>
+                  </Card>
+
+                  {/* KPIs de Estoque - agora com dados reais */}
+                  <StockKPICards dados={dadosEstoqueFiltrados} />
+                  
+                  {/* Gráfico por ação */}
+                  <StockActionChart dados={dadosEstoqueFiltrados} />
+                  
+                  {/* Tabela de Estoque */}
+                  <StockTable dados={dadosEstoqueFiltrados} />
+                </>
+              ) : (
+                <Card className="border-dashed">
+                  <CardContent className="py-12">
+                    <div className="text-center text-muted-foreground">
+                      <BoxIcon className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                      <p className="text-lg font-medium">Selecione uma Empresa</p>
+                      <p className="text-sm mt-2 max-w-md mx-auto">
+                        Escolha uma empresa específica nos filtros acima para visualizar
+                        o estoque completo.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
-            {/* Tab: Visão Estoque (lista simples) */}
-            <TabsContent value="estoque" className="mt-4 space-y-6">
-              {/* KPIs de Estoque */}
-              <StockKPICards dados={dadosParaStockTable} />
-              
-              {/* Gráfico por ação */}
-              <StockActionChart dados={dadosParaActionChart} />
-              
-              {/* Tabela de Estoque */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Detalhamento do Estoque</CardTitle>
-                  <CardDescription>
-                    {itensFiltrados.length} SKUs • {metricsFiltradas.totalEstoque.toLocaleString('pt-BR')} peças em estoque
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <StockTable dados={dadosParaStockTable} />
-                </CardContent>
-              </Card>
+            {/* Tab: Painel de Ações */}
+            <TabsContent value="acoes" className="mt-4">
+              {itensOtb.length > 0 ? (
+                <>
+                  <OtbResumoVisual 
+                    metrics={metricsFiltradas} 
+                    itens={itensFiltradosOtb}
+                  />
+                  <OtbPainelAcoes 
+                    itens={itensFiltradosOtb} 
+                    metrics={metricsFiltradas}
+                    onFiltrarCategoria={() => setTabPrincipal('analise')}
+                  />
+                </>
+              ) : (
+                <Card className="border-dashed">
+                  <CardContent className="py-12">
+                    <div className="text-center text-muted-foreground">
+                      <ListTodo className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                      <p className="text-lg font-medium">Carregue os Dados</p>
+                      <p className="text-sm mt-2 max-w-md mx-auto">
+                        Selecione uma empresa e clique em "Carregar Dados" para ver
+                        as ações sugeridas para o estoque.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             {/* Tab: Análise OTB Detalhada */}
             <TabsContent value="analise" className="mt-4 space-y-6">
-              {/* Fórmula explicativa */}
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription className="flex items-center gap-2 flex-wrap">
-                  <strong>Fórmula OTB:</strong>
-                  <code className="bg-muted px-2 py-0.5 rounded text-sm">
-                    OTB = Mínimo por Loja - Estoque Atual
-                  </code>
-                  <span className="text-muted-foreground text-sm ml-2">
-                    Período base: {diasPeriodo} dias
-                  </span>
-                </AlertDescription>
-              </Alert>
-
-              {/* KPIs Detalhados */}
-              <OtbKPICards metrics={metricsFiltradas} />
-
-              {/* Grid: Curva ABC + Sugestão IA */}
-              <div className="grid md:grid-cols-2 gap-6">
-                <OtbCurvaABCChart 
-                  itens={itensFiltrados} 
-                  selectedCurva={curvaFiltro}
-                  onCurvaClick={setCurvaFiltro}
-                />
-                <OtbSugestaoCoberturaIA 
-                  itens={itensFiltrados}
-                  codEmpresa={codEmpresaAtual}
-                />
-              </div>
-
-              {/* Filtro ativo por curva */}
-              {curvaFiltro && (
-                <Alert className="bg-primary/5 border-primary/20">
-                  <Info className="h-4 w-4 text-primary" />
-                  <AlertDescription className="flex items-center justify-between">
-                    <span>
-                      Mostrando apenas itens da <strong>Curva {curvaFiltro}</strong> 
-                      ({itensFiltrados.length} SKUs de {itensOtb.length})
-                    </span>
-                    <button 
-                      onClick={() => setCurvaFiltro(null)}
-                      className="text-primary hover:underline text-sm"
-                    >
-                      Limpar filtro
-                    </button>
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {/* Tabela com Tabs de Agrupamento */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-lg">Análise por Fornecedor/Marca</CardTitle>
-                      <CardDescription>
-                        Clique em uma linha para ver os SKUs detalhados
-                      </CardDescription>
-                    </div>
-                    <Tabs 
-                      value={agrupamento} 
-                      onValueChange={(v) => setAgrupamento(v as 'fornecedor' | 'marca')}
-                    >
-                      <TabsList>
-                        <TabsTrigger value="fornecedor" className="gap-2">
-                          <Factory className="h-4 w-4" />
-                          Por Fornecedor
-                        </TabsTrigger>
-                        <TabsTrigger value="marca" className="gap-2">
-                          <Tag className="h-4 w-4" />
-                          Por Marca
-                        </TabsTrigger>
-                      </TabsList>
-                    </Tabs>
+              {itensOtb.length > 0 ? (
+                <>
+                  {/* Busca por SKU no OTB */}
+                  <div className="flex items-center gap-2">
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar SKU por descrição, marca, fornecedor ou código..."
+                      value={buscaTextoOtb}
+                      onChange={(e) => setBuscaTextoOtb(e.target.value)}
+                      className="max-w-md"
+                    />
+                    {buscaTextoOtb && (
+                      <Button variant="ghost" size="sm" onClick={() => setBuscaTextoOtb("")}>
+                        Limpar
+                      </Button>
+                    )}
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <OtbTable
-                    itensAgrupados={itensAgrupadosFiltrados}
-                    itensOtb={itensFiltrados}
-                    agrupamento={agrupamento}
-                  />
-                </CardContent>
-              </Card>
 
-              {/* Legenda */}
-              <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Badge variant="destructive">Urgente</Badge>
-                  <span>Estoque &lt; 30% do mínimo</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge className="bg-warning text-warning-foreground">Comprar</Badge>
-                  <span>Abaixo do mínimo configurado</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary">OK</Badge>
-                  <span>Estoque dentro do esperado</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline">Excesso</Badge>
-                  <span>Estoque &gt; 2x o mínimo</span>
-                </div>
-              </div>
+                  {/* Fórmula explicativa */}
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription className="flex items-center gap-2 flex-wrap">
+                      <strong>Fórmula OTB:</strong>
+                      <code className="bg-muted px-2 py-0.5 rounded text-sm">
+                        OTB = Mínimo por Loja - Estoque Atual
+                      </code>
+                      <span className="text-muted-foreground text-sm ml-2">
+                        Período base: {diasPeriodo} dias
+                      </span>
+                    </AlertDescription>
+                  </Alert>
+
+                  {/* KPIs Detalhados */}
+                  <OtbKPICards metrics={metricsFiltradas} />
+
+                  {/* Grid: Curva ABC + Sugestão IA */}
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <OtbCurvaABCChart 
+                      itens={itensFiltradosOtb} 
+                      selectedCurva={curvaFiltro}
+                      onCurvaClick={setCurvaFiltro}
+                    />
+                    <OtbSugestaoCoberturaIA 
+                      itens={itensFiltradosOtb}
+                      codEmpresa={codEmpresaAtual}
+                    />
+                  </div>
+
+                  {/* Filtro ativo por curva */}
+                  {curvaFiltro && (
+                    <Alert className="bg-primary/5 border-primary/20">
+                      <Info className="h-4 w-4 text-primary" />
+                      <AlertDescription className="flex items-center justify-between">
+                        <span>
+                          Mostrando apenas itens da <strong>Curva {curvaFiltro}</strong> 
+                          ({itensFiltradosOtb.length} SKUs de {itensOtb.length})
+                        </span>
+                        <button 
+                          onClick={() => setCurvaFiltro(null)}
+                          className="text-primary hover:underline text-sm"
+                        >
+                          Limpar filtro
+                        </button>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {/* Tabela com Tabs de Agrupamento */}
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-lg">Análise por Fornecedor/Marca</CardTitle>
+                          <CardDescription>
+                            Clique em uma linha para ver os SKUs detalhados
+                          </CardDescription>
+                        </div>
+                        <Tabs 
+                          value={agrupamento} 
+                          onValueChange={(v) => setAgrupamento(v as 'fornecedor' | 'marca')}
+                        >
+                          <TabsList>
+                            <TabsTrigger value="fornecedor" className="gap-2">
+                              <Factory className="h-4 w-4" />
+                              Por Fornecedor
+                            </TabsTrigger>
+                            <TabsTrigger value="marca" className="gap-2">
+                              <Tag className="h-4 w-4" />
+                              Por Marca
+                            </TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <OtbTable
+                        itensAgrupados={itensAgrupadosFiltrados}
+                        itensOtb={itensFiltradosOtb}
+                        agrupamento={agrupamento}
+                      />
+                    </CardContent>
+                  </Card>
+
+                  {/* Legenda */}
+                  <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="destructive">Urgente</Badge>
+                      <span>Estoque &lt; 30% do mínimo</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-warning text-warning-foreground">Comprar</Badge>
+                      <span>Abaixo do mínimo configurado</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">OK</Badge>
+                      <span>Estoque dentro do esperado</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">Excesso</Badge>
+                      <span>Estoque &gt; 2x o mínimo</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <Card className="border-dashed">
+                  <CardContent className="py-12">
+                    <div className="text-center text-muted-foreground">
+                      <ShoppingCart className="h-16 w-16 mx-auto mb-4 opacity-30" />
+                      <p className="text-lg font-medium">Análise OTB</p>
+                      <p className="text-sm mt-2 max-w-md mx-auto">
+                        Selecione uma empresa e clique em "Carregar Dados" para analisar
+                        as necessidades de compra.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
           </Tabs>
         </>
       )}
 
       {/* Estado inicial */}
-      {!loading && itensOtb.length === 0 && !error && (
+      {!isLoading && dadosEstoque.length === 0 && itensOtb.length === 0 && !hasError && (
         <Card className="border-dashed">
           <CardContent className="py-12">
             <div className="text-center text-muted-foreground">
               <Package className="h-16 w-16 mx-auto mb-4 opacity-30" />
               <p className="text-lg font-medium">Gestão de Estoque</p>
               <p className="text-sm mt-2 max-w-md mx-auto">
-                Selecione uma empresa e clique em "Carregar Dados" para analisar
-                o estoque e as necessidades de compra.
+                Selecione uma empresa para começar a analisar o estoque
+                e planejar as compras.
               </p>
             </div>
           </CardContent>
