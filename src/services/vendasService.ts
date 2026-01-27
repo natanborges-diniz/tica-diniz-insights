@@ -320,7 +320,14 @@ export async function getAnaliseSku(
       codSku: r.cod_sku ?? 0,
       descricaoItem: (r.descricao_item ?? '').trim(),
       marca: (r.marca ?? 'SEM MARCA').trim(),
-      fornecedor: (r.fornecedor ?? 'SEM FORNECEDOR').trim(),
+      // Fornecedor: tratar valores nulos, vazios ou apenas espaços
+      fornecedor: (() => {
+        const forn = (r.fornecedor ?? '').trim();
+        if (!forn || forn === '' || forn.toUpperCase() === 'NULL') {
+          return 'SEM FORNECEDOR';
+        }
+        return forn;
+      })(),
       tipo: (r.tipo ?? 'OUTROS').trim(),
       estoqueAtual,
       dataUltimaVenda: r.data_ultima_venda,
