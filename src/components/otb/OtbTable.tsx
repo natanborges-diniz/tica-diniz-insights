@@ -1,7 +1,7 @@
 // src/components/otb/OtbTable.tsx
 // Tabela de OTB agrupada por fornecedor/marca
 
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   Table,
   TableBody,
@@ -96,10 +96,9 @@ export function OtbTable({ itensAgrupados, itensOtb, agrupamento }: OtbTableProp
             const itensGrupo = getItensDoGrupo(grupo);
             
             return (
-              <>
+              <React.Fragment key={grupo.chave}>
                 {/* Linha do grupo */}
                 <TableRow 
-                  key={grupo.chave} 
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => toggleExpand(grupo.chave)}
                 >
@@ -145,7 +144,7 @@ export function OtbTable({ itensAgrupados, itensOtb, agrupamento }: OtbTableProp
                 {/* Linhas detalhadas (expandidas) */}
                 {expandido && itensGrupo
                   .sort((a, b) => b.otb - a.otb)
-                  .slice(0, 20) // Limitar a 20 itens por grupo
+                  .slice(0, 20)
                   .map((item) => (
                     <TableRow 
                       key={`${grupo.chave}-${item.codSku}`}
@@ -183,7 +182,7 @@ export function OtbTable({ itensAgrupados, itensOtb, agrupamento }: OtbTableProp
                     </TableCell>
                   </TableRow>
                 )}
-              </>
+              </React.Fragment>
             );
           })}
         </TableBody>
