@@ -1,13 +1,13 @@
 // src/hooks/useOtb.ts
 // Hook para módulo OTB (Open to Buy) - cálculo de necessidades de compra
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useEmpresas } from "./useEmpresas";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getAnaliseSku, AnaliseSku } from "@/services/vendasService";
 import { getPeriodoComercial } from "@/utils/dateValidation";
 import { toast } from "@/hooks/use-toast";
-
+import { supabase } from "@/integrations/supabase/client";
 // ============================================
 // INTERFACES
 // ============================================
@@ -93,6 +93,11 @@ export interface OtbMetrics {
 // HOOK
 // ============================================
 
+interface MapeamentoFornecedor {
+  marca: string;
+  fornecedor: string;
+}
+
 export function useOtb() {
   const { empresas, isLoading: loadingEmpresas } = useEmpresas();
   
@@ -113,6 +118,33 @@ export function useOtb() {
   const [error, setError] = useState<string | null>(null);
   const [dadosBrutos, setDadosBrutos] = useState<AnaliseSku[]>([]);
   const [agrupamento, setAgrupamento] = useState<'fornecedor' | 'marca'>('fornecedor');
+  const [mapeamentoFornecedor, setMapeamentoFornecedor] = useState<Map<string, string>>(new Map());
+
+  // Carregar mapeamentos marca→fornecedor do Supabase
+  useEffect(() => {
+    const carregarMapeamentos = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('fornecedor_marca')
+          .select('marca, fornecedor');
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          const mapa = new Map<string, string>();
+          data.forEach((m: MapeamentoFornecedor) => {
+            mapa.set(m.marca.toUpperCase(), m.fornecedor);
+          });
+          setMapeamentoFornecedor(mapa);
+          console.log('[useOtb] Mapeamentos carregados:', mapa.size);
+        }
+      } catch (err) {
+        console.error('[useOtb] Erro ao carregar mapeamentos:', err);
+      }
+    };
+    
+    carregarMapeamentos();
+  }, []);
 
   /**
    * Calcula o número de dias do período selecionado
@@ -257,12 +289,22 @@ export function useOtb() {
       
       // Curva ABC do SKU
       const curvaABC = curvaMap.get(sku.codSku) || 'C';
+      
+      // Aplicar fallback de fornecedor usando mapeamento marca→fornecedor
+      let fornecedorFinal = sku.fornecedor;
+      if (!fornecedorFinal || fornecedorFinal === 'SEM FORNECEDOR' || fornecedorFinal === 'N/D') {
+        const marcaUpper = (sku.marca || '').toUpperCase();
+        const fornecedorMapeado = mapeamentoFornecedor.get(marcaUpper);
+        if (fornecedorMapeado) {
+          fornecedorFinal = fornecedorMapeado;
+        }
+      }
 
       return {
         codSku: sku.codSku,
         descricaoItem: sku.descricaoItem,
         marca: sku.marca,
-        fornecedor: sku.fornecedor,
+        fornecedor: fornecedorFinal,
         tipo: sku.tipo,
         estoqueAtual: sku.estoqueAtual,
         qtdVendidos: sku.qtdProdutos,
@@ -281,7 +323,7 @@ export function useOtb() {
         giroEstoque: sku.giroEstoque,
       };
     });
-  }, [dadosBrutos, diasPeriodo, filters.coberturaDias, filters.tipoFiltro]);
+  }, [dadosBrutos, diasPeriodo, filters.coberturaDias, filters.tipoFiltro, mapeamentoFornecedor]);
 
   /**
    * Agrupa itens por fornecedor ou marca
@@ -410,6 +452,26 @@ export function useOtb() {
     }
   }, [filters.empresa, filters.dataInicio, filters.dataFim]);
 
+  /**
+   * Identifica marcas sem fornecedor para sugestão de mapeamento
+   */
+  const marcasSemFornecedor = useMemo(() => {
+    if (!itensOtb || itensOtb.length === 0) return [];
+    
+    const marcaContagem = new Map<string, number>();
+    
+    itensOtb.forEach(item => {
+      if (!item.fornecedor || item.fornecedor === 'SEM FORNECEDOR' || item.fornecedor === 'N/D') {
+        const marca = item.marca || 'SEM MARCA';
+        marcaContagem.set(marca, (marcaContagem.get(marca) || 0) + 1);
+      }
+    });
+    
+    return Array.from(marcaContagem.entries())
+      .map(([marca, qtdSkus]) => ({ marca, qtdSkus }))
+      .sort((a, b) => b.qtdSkus - a.qtdSkus);
+  }, [itensOtb]);
+
   return {
     // Empresas
     empresas,
@@ -432,6 +494,7 @@ export function useOtb() {
     diasPeriodo,
     contagemPorCategoria,
     totalSkusBrutos: dadosBrutos.length,
+    marcasSemFornecedor,
     
     // Ações
     carregarDados,

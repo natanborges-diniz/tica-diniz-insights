@@ -107,6 +107,30 @@ export type Database = {
         }
         Relationships: []
       }
+      fornecedor_marca: {
+        Row: {
+          created_at: string
+          fornecedor: string
+          id: string
+          marca: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          fornecedor: string
+          id?: string
+          marca: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          fornecedor?: string
+          id?: string
+          marca?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       lojas_configuracao: {
         Row: {
           abre_domingo: boolean | null

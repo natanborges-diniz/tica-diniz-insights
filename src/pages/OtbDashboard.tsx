@@ -15,6 +15,7 @@ import { OtbCurvaABCChart } from "@/components/otb/OtbCurvaABCChart";
 import { OtbCoberturaCard } from "@/components/otb/OtbCoberturaCard";
 import { OtbMinimoLojaConfig, type MinimoLojaConfig } from "@/components/otb/OtbMinimoLojaConfig";
 import { OtbSugestaoCoberturaIA } from "@/components/otb/OtbSugestaoCoberturaIA";
+import { OtbFornecedorMarcaConfig } from "@/components/otb/OtbFornecedorMarcaConfig";
 import { 
   ShoppingCart, 
   AlertCircle, 
@@ -40,6 +41,7 @@ export default function OtbDashboard() {
     contagemPorCategoria,
     totalSkusBrutos,
     carregarDados,
+    marcasSemFornecedor,
   } = useOtb();
 
   // Estado para filtro por curva ABC
@@ -113,11 +115,14 @@ export default function OtbDashboard() {
             </div>
           </div>
           {empresas.length > 0 && (
-            <OtbMinimoLojaConfig 
-              empresas={empresas}
-              configuracoes={minimosLoja}
-              onSave={setMinimosLoja}
-            />
+            <div className="flex items-center gap-2">
+              <OtbFornecedorMarcaConfig marcasSemFornecedor={marcasSemFornecedor} />
+              <OtbMinimoLojaConfig 
+                empresas={empresas}
+                configuracoes={minimosLoja}
+                onSave={setMinimosLoja}
+              />
+            </div>
           )}
         </div>
       </div>
