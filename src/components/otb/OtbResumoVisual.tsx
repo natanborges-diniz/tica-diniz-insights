@@ -2,12 +2,9 @@
 // Cards visuais de resumo do estoque com indicadores coloridos
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { 
   Package, 
   TrendingUp,
-  TrendingDown,
-  Clock,
   DollarSign,
   BarChart3,
   Layers
@@ -18,10 +15,9 @@ import { useMemo } from "react";
 interface OtbResumoVisualProps {
   metrics: OtbMetrics;
   itens: OtbItem[];
-  coberturaDias: number;
 }
 
-export function OtbResumoVisual({ metrics, itens, coberturaDias }: OtbResumoVisualProps) {
+export function OtbResumoVisual({ metrics, itens }: OtbResumoVisualProps) {
   
   const indicadores = useMemo(() => {
     if (itens.length === 0) return null;
@@ -31,9 +27,6 @@ export function OtbResumoVisual({ metrics, itens, coberturaDias }: OtbResumoVisu
     
     // Giro médio
     const giroMedio = itens.reduce((acc, i) => acc + i.giroEstoque, 0) / itens.length;
-    
-    // Cobertura média
-    const coberturaMedia = itens.reduce((acc, i) => acc + Math.min(i.coberturaAtual, 365), 0) / itens.length;
     
     // Margem média ponderada
     const totalVendido = itens.reduce((acc, i) => acc + i.totalVendido, 0);
@@ -56,18 +49,17 @@ export function OtbResumoVisual({ metrics, itens, coberturaDias }: OtbResumoVisu
     return {
       estoqueValor,
       giroMedio,
-      coberturaMedia,
       margemPonderada,
       distribuicao: {
-        urgente: { pecas: pecasUrgente, pct: (pecasUrgente / totalPecas) * 100 },
-        comprar: { pecas: pecasComprar, pct: (pecasComprar / totalPecas) * 100 },
-        ok: { pecas: pecasOk, pct: (pecasOk / totalPecas) * 100 },
-        excesso: { pecas: pecasExcesso, pct: (pecasExcesso / totalPecas) * 100 },
+        urgente: { pecas: pecasUrgente, pct: totalPecas > 0 ? (pecasUrgente / totalPecas) * 100 : 0 },
+        comprar: { pecas: pecasComprar, pct: totalPecas > 0 ? (pecasComprar / totalPecas) * 100 : 0 },
+        ok: { pecas: pecasOk, pct: totalPecas > 0 ? (pecasOk / totalPecas) * 100 : 0 },
+        excesso: { pecas: pecasExcesso, pct: totalPecas > 0 ? (pecasExcesso / totalPecas) * 100 : 0 },
       },
       curvaABC: {
-        a: { valor: curvaAValor, pct: (curvaAValor / estoqueValor) * 100 },
-        b: { valor: curvaBValor, pct: (curvaBValor / estoqueValor) * 100 },
-        c: { valor: curvaCValor, pct: (curvaCValor / estoqueValor) * 100 },
+        a: { valor: curvaAValor, pct: estoqueValor > 0 ? (curvaAValor / estoqueValor) * 100 : 0 },
+        b: { valor: curvaBValor, pct: estoqueValor > 0 ? (curvaBValor / estoqueValor) * 100 : 0 },
+        c: { valor: curvaCValor, pct: estoqueValor > 0 ? (curvaCValor / estoqueValor) * 100 : 0 },
       }
     };
   }, [itens, metrics]);
@@ -132,20 +124,20 @@ export function OtbResumoVisual({ metrics, itens, coberturaDias }: OtbResumoVisu
           </CardContent>
         </Card>
 
-        {/* Cobertura Média */}
+        {/* OTB Total */}
         <Card className="bg-gradient-to-br from-blue-500/5 to-background border-blue-500/20">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4 text-blue-600" />
-              Cobertura Média
+              <Package className="h-4 w-4 text-blue-600" />
+              OTB Total
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              {Math.round(indicadores.coberturaMedia)} dias
+              {metrics.totalOtb.toLocaleString('pt-BR')}
             </div>
             <p className="text-xs text-muted-foreground">
-              meta: {coberturaDias} dias
+              unidades a comprar
             </p>
           </CardContent>
         </Card>

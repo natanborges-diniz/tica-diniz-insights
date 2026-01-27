@@ -1,11 +1,11 @@
 // src/components/otb/OtbFilters.tsx
-// Filtros para módulo OTB
+// Filtros para módulo OTB - Simplificado para avaliação mensal
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, Building2, Calendar, Clock, Layers } from "lucide-react";
+import { RefreshCw, Building2, Calendar, Layers } from "lucide-react";
 import type { OtbFilters as OtbFiltersType } from "@/hooks/useOtb";
 
 interface Empresa {
@@ -46,6 +46,7 @@ export function OtbFilters({
     if (totalSkusBrutos === 0) return tipo;
     return `${tipo} (${contagem})`;
   };
+  
   return (
     <div className="flex flex-wrap items-end gap-4">
       {/* Empresa */}
@@ -102,29 +103,6 @@ export function OtbFilters({
           onChange={(e) => setFilters(prev => ({ ...prev, dataFim: e.target.value }))}
           className="w-[140px]"
         />
-      </div>
-
-      {/* Cobertura */}
-      <div className="space-y-1.5">
-        <Label className="flex items-center gap-1 text-xs">
-          <Clock className="h-3 w-3" />
-          Cobertura (dias)
-        </Label>
-        <Select
-          value={String(filters.coberturaDias)}
-          onValueChange={(value) => setFilters(prev => ({ ...prev, coberturaDias: Number(value) }))}
-        >
-          <SelectTrigger className="w-[100px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="30">30 dias</SelectItem>
-            <SelectItem value="45">45 dias</SelectItem>
-            <SelectItem value="60">60 dias</SelectItem>
-            <SelectItem value="90">90 dias</SelectItem>
-            <SelectItem value="120">120 dias</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       {/* Tipo/Família */}

@@ -15,7 +15,6 @@ export interface OtbFilters {
   empresa: EmpresaParam;
   dataInicio: string;
   dataFim: string;
-  coberturaDias: number; // Dias de cobertura desejados
   tipoFiltro: 'TODOS' | 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS';
 }
 
@@ -45,12 +44,8 @@ export interface OtbItem {
   
   // Cálculos OTB
   vendaDiaria: number; // média de vendas por dia
-  vendasProjetadas: number; // vendas projetadas para o período de cobertura
-  otb: number; // Open to Buy = MAX(Vendas Projetadas, Mínimo) - Estoque Atual
+  otb: number; // Open to Buy = Mínimo por Loja - Estoque Atual
   otbValor: number; // OTB em valor (OTB * preço custo)
-  
-  // Cobertura atual em dias
-  coberturaAtual: number; // Estoque Atual / Venda Diária
   
   // Curva ABC - classificação por giro
   curvaABC: 'A' | 'B' | 'C';
@@ -119,7 +114,6 @@ export function useOtb() {
     empresa: 'ALL',
     dataInicio,
     dataFim,
-    coberturaDias: 60, // 60 dias de cobertura padrão
     tipoFiltro: 'TODOS', // Começa com TODOS para mostrar todos os dados
   });
 
@@ -327,29 +321,42 @@ export function useOtb() {
         estoqueMinimo = configEspecifica?.quantidade_minima || configGenerica?.quantidade_minima || 0;
       }
       
-      // Projeção de vendas para o período de cobertura
-      const vendasProjetadas = vendaDiaria * filters.coberturaDias;
-      
-      // OTB = MAX(Vendas Projetadas, Mínimo) - Estoque Atual
-      // Isso garante que sempre teremos pelo menos o mínimo configurado
-      const necessidadeTotal = Math.max(vendasProjetadas, estoqueMinimo);
-      const otb = Math.max(0, Math.ceil(necessidadeTotal - sku.estoqueAtual));
+      // OTB SIMPLIFICADO: OTB = Mínimo por Loja - Estoque Atual
+      // Se não há mínimo configurado, usa 0 (não precisa comprar)
+      const otb = Math.max(0, Math.ceil(estoqueMinimo - sku.estoqueAtual));
       
       // Valor do OTB em reais
       const otbValor = otb * sku.precoCusto;
       
-      // Classificação baseada na situação
+      // Classificação baseada no estoque vs mínimo configurado
       let classificacao: OtbItem['classificacao'];
-      const diasEstoque = coberturaAtual;
       
-      if (diasEstoque < 15 && sku.qtdProdutos > 0) {
-        classificacao = 'COMPRAR_URGENTE';
-      } else if (otb > 0) {
-        classificacao = 'COMPRAR';
-      } else if (diasEstoque > filters.coberturaDias * 2) {
-        classificacao = 'EXCESSO';
+      if (estoqueMinimo > 0) {
+        // Se tem mínimo configurado, classifica baseado nele
+        const percentualDoMinimo = estoqueMinimo > 0 ? (sku.estoqueAtual / estoqueMinimo) * 100 : 100;
+        
+        if (percentualDoMinimo < 30) {
+          // Menos de 30% do mínimo = URGENTE
+          classificacao = 'COMPRAR_URGENTE';
+        } else if (percentualDoMinimo < 100) {
+          // Abaixo do mínimo = COMPRAR
+          classificacao = 'COMPRAR';
+        } else if (percentualDoMinimo > 200) {
+          // Mais de 2x o mínimo = EXCESSO
+          classificacao = 'EXCESSO';
+        } else {
+          // Entre 100% e 200% do mínimo = OK
+          classificacao = 'ESTOQUE_OK';
+        }
       } else {
-        classificacao = 'ESTOQUE_OK';
+        // Sem mínimo configurado: baseia no giro/vendas
+        if (sku.qtdProdutos > 0 && sku.estoqueAtual === 0) {
+          classificacao = 'COMPRAR_URGENTE'; // Vende mas está zerado
+        } else if (sku.estoqueAtual > 0 && sku.diasDesdeUltimaVenda > 180) {
+          classificacao = 'EXCESSO'; // Parado há muito tempo
+        } else {
+          classificacao = 'ESTOQUE_OK';
+        }
       }
       
       // Aplicar fallback de fornecedor usando mapeamento marca→fornecedor
@@ -377,16 +384,14 @@ export function useOtb() {
         precoVendaFinal: sku.precoVendaFinal,
         margemBruta: sku.margemBruta,
         vendaDiaria,
-        vendasProjetadas,
         otb,
         otbValor,
-        coberturaAtual: Math.round(coberturaAtual),
         curvaABC,
         classificacao,
         giroEstoque: sku.giroEstoque,
       };
     });
-  }, [dadosBrutos, diasPeriodo, filters.coberturaDias, filters.tipoFiltro, filters.empresa, mapeamentoFornecedor, configMinimos]);
+  }, [dadosBrutos, diasPeriodo, filters.tipoFiltro, filters.empresa, mapeamentoFornecedor, configMinimos]);
 
   /**
    * Agrupa itens por fornecedor ou marca

@@ -1,5 +1,5 @@
 // src/components/otb/OtbSugestaoCoberturaIA.tsx
-// Componente para sugestão de cobertura ideal via IA com comparativo de mínimos
+// Componente para sugestão de mínimos por loja via IA com comparativo
 
 import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
@@ -18,11 +18,9 @@ import {
   Sparkles, 
   Loader2, 
   RefreshCw, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Info,
+  Settings,
   ArrowRight,
-  Settings
+  Save
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -30,23 +28,7 @@ import type { OtbItem } from '@/hooks/useOtb';
 
 interface OtbSugestaoCoberturaIAProps {
   itens: OtbItem[];
-  coberturaAtual: number;
   codEmpresa?: number;
-  onSugestaoCoberturaChange?: (dias: number) => void;
-}
-
-interface SugestaoCategoria {
-  categoria: string;
-  diasSugeridos: number;
-  justificativa: string;
-  confianca: 'alta' | 'media' | 'baixa';
-}
-
-interface ResultadoIA {
-  resumo: string;
-  sugestoes: SugestaoCategoria[];
-  coberturaGlobalSugerida: number;
-  alertas: string[];
 }
 
 interface ConfigMinimo {
@@ -67,14 +49,11 @@ interface ComparativoLinha {
 
 export function OtbSugestaoCoberturaIA({ 
   itens, 
-  coberturaAtual,
   codEmpresa,
-  onSugestaoCoberturaChange 
 }: OtbSugestaoCoberturaIAProps) {
-  const [loading, setLoading] = useState(false);
-  const [resultado, setResultado] = useState<ResultadoIA | null>(null);
   const [configMinimos, setConfigMinimos] = useState<ConfigMinimo[]>([]);
   const [loadingMinimos, setLoadingMinimos] = useState(false);
+  const [salvando, setSalvando] = useState(false);
   const [ultimoFiltroHash, setUltimoFiltroHash] = useState<string>('');
 
   // Hash para detectar mudanças nos itens (baseado em quantidade e categorias)
@@ -84,10 +63,9 @@ export function OtbSugestaoCoberturaIA({
     return `${itens.length}-${categorias}`;
   }, [itens]);
 
-  // Limpar resultado da IA quando os filtros mudam
+  // Detectar mudanças nos filtros
   useEffect(() => {
     if (filtroHash !== ultimoFiltroHash && filtroHash !== '') {
-      setResultado(null);
       setUltimoFiltroHash(filtroHash);
     }
   }, [filtroHash, ultimoFiltroHash]);
@@ -150,27 +128,24 @@ export function OtbSugestaoCoberturaIA({
       // Calcular média de venda diária do grupo
       const vendaDiariaMedia = itensGrupo.reduce((acc, i) => acc + i.vendaDiaria, 0) / itensGrupo.length;
       
-      // Calcular cobertura média atual
-      const coberturaMedia = itensGrupo.reduce((acc, i) => acc + Math.min(i.coberturaAtual, 365), 0) / itensGrupo.length;
-      
-      // Quantos SKUs estão em ruptura (<15 dias)?
-      const skusEmRuptura = itensGrupo.filter(i => i.coberturaAtual < 15).length;
-      const percRuptura = (skusEmRuptura / itensGrupo.length) * 100;
+      // Quantos SKUs estão com estoque zerado?
+      const skusZerados = itensGrupo.filter(i => i.estoqueAtual === 0 && i.qtdVendidos > 0).length;
+      const percZerado = (skusZerados / itensGrupo.length) * 100;
       
       // Sugestão de mínimo:
       // Base: 1 para todos
-      // Curva A: mínimo 2-3 para garantir exposição
-      // Curva B: mínimo 1-2
+      // Curva A: mínimo 3-4 para garantir exposição
+      // Curva B: mínimo 2-3
       // Curva C: mínimo 1
       // Se há muita ruptura, aumentar
       
       let minimoBase = 1;
       if (curva === 'A') {
         minimoBase = 3;
-        if (percRuptura > 20) minimoBase = 4; // Muita ruptura em curva A = problema
+        if (percZerado > 20) minimoBase = 4; // Muita ruptura em curva A = problema
       } else if (curva === 'B') {
         minimoBase = 2;
-        if (percRuptura > 30) minimoBase = 3;
+        if (percZerado > 30) minimoBase = 3;
       } else {
         minimoBase = 1;
       }
@@ -193,7 +168,7 @@ export function OtbSugestaoCoberturaIA({
   // Gerar tabela comparativa
   const comparativo = useMemo((): ComparativoLinha[] => {
     const linhas: ComparativoLinha[] = [];
-    const categoriasOrdem = ['ARMACOES', 'LENTES', 'ACESSORIOS', 'TODOS'];
+    const categoriasOrdem = ['ARMACOES', 'LENTES', 'ACESSORIOS', 'OUTROS'];
     const curvasOrdem = ['A', 'B', 'C'];
     
     // Todas as combinações possíveis
@@ -234,111 +209,55 @@ export function OtbSugestaoCoberturaIA({
     return linhas;
   }, [configMinimos, minimosSugeridos]);
 
-  const solicitarSugestao = async () => {
-    if (itens.length === 0) {
-      toast({
-        title: "Dados insuficientes",
-        description: "Carregue os dados do OTB primeiro",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setLoading(true);
+  // Salvar todos os mínimos sugeridos
+  const salvarTodos = async () => {
+    if (!codEmpresa || minimosSugeridos.length === 0) return;
+    
+    setSalvando(true);
     try {
-      // Preparar métricas agregadas por tipo/categoria
-      const porTipo = new Map<string, {
-        qtdSkus: number;
-        estoqueTotal: number;
-        vendaTotal: number;
-        coberturaMedia: number;
-        skusCurvaA: number;
-        skusCurvaC: number;
-      }>();
-
-      itens.forEach(item => {
-        const tipo = item.tipo.split(' ')[0] || 'OUTROS';
-        const existente = porTipo.get(tipo) || {
-          qtdSkus: 0,
-          estoqueTotal: 0,
-          vendaTotal: 0,
-          coberturaMedia: 0,
-          skusCurvaA: 0,
-          skusCurvaC: 0,
-        };
-        
-        existente.qtdSkus++;
-        existente.estoqueTotal += item.estoqueAtual;
-        existente.vendaTotal += item.totalVendido;
-        existente.coberturaMedia += item.coberturaAtual;
-        if (item.curvaABC === 'A') existente.skusCurvaA++;
-        if (item.curvaABC === 'C') existente.skusCurvaC++;
-        
-        porTipo.set(tipo, existente);
-      });
-
-      const categorias = Array.from(porTipo.entries()).map(([tipo, dados]) => ({
-        tipo,
-        qtdSkus: dados.qtdSkus,
-        estoqueTotal: dados.estoqueTotal,
-        vendaTotal: dados.vendaTotal,
-        coberturaMedia: dados.qtdSkus > 0 ? dados.coberturaMedia / dados.qtdSkus : 0,
-        percCurvaA: dados.qtdSkus > 0 ? (dados.skusCurvaA / dados.qtdSkus) * 100 : 0,
-        percCurvaC: dados.qtdSkus > 0 ? (dados.skusCurvaC / dados.qtdSkus) * 100 : 0,
+      // Preparar dados para upsert
+      const dados = minimosSugeridos.map(s => ({
+        cod_empresa: codEmpresa,
+        categoria: s.categoria,
+        curva_abc: s.curva,
+        quantidade_minima: s.minimo,
+        updated_at: new Date().toISOString(),
       }));
-
-      const totalSkus = itens.length;
-      const totalEstoque = itens.reduce((acc, i) => acc + i.estoqueAtual, 0);
-      const totalVendido = itens.reduce((acc, i) => acc + i.totalVendido, 0);
-      const coberturaMediaGeral = itens.reduce((acc, i) => acc + i.coberturaAtual, 0) / totalSkus;
-
-      const { data, error } = await supabase.functions.invoke('ai-sugestao-cobertura', {
-        body: {
-          coberturaAtualConfig: coberturaAtual,
-          totalSkus,
-          totalEstoque,
-          totalVendido,
-          coberturaMediaGeral,
-          categorias,
-        }
-      });
-
-      if (error) throw error;
-
-      setResultado(data);
+      
+      // Upsert para cada item
+      for (const item of dados) {
+        const { error } = await supabase
+          .from('estoque_minimo_loja')
+          .upsert(item, { 
+            onConflict: 'cod_empresa,categoria,curva_abc',
+          });
+        
+        if (error) throw error;
+      }
+      
+      // Recarregar configurações
+      const { data, error } = await supabase
+        .from('estoque_minimo_loja')
+        .select('categoria, curva_abc, quantidade_minima')
+        .eq('cod_empresa', codEmpresa);
+      
+      if (!error && data) {
+        setConfigMinimos(data);
+      }
       
       toast({
-        title: "Sugestão gerada",
-        description: `IA sugere cobertura de ${data.coberturaGlobalSugerida} dias`,
+        title: "Mínimos atualizados",
+        description: `${dados.length} configurações salvas com sucesso`,
       });
     } catch (err) {
-      console.error('[OtbSugestaoCoberturaIA] Erro:', err);
+      console.error('[OtbSugestaoCoberturaIA] Erro ao salvar:', err);
       toast({
-        title: "Erro ao gerar sugestão",
+        title: "Erro ao salvar",
         description: err instanceof Error ? err.message : "Erro desconhecido",
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const aplicarSugestao = (dias: number) => {
-    if (onSugestaoCoberturaChange) {
-      onSugestaoCoberturaChange(dias);
-      toast({
-        title: "Cobertura atualizada",
-        description: `Cobertura alterada para ${dias} dias`,
-      });
-    }
-  };
-
-  const getConfiancaColor = (confianca: string) => {
-    switch (confianca) {
-      case 'alta': return 'bg-primary';
-      case 'media': return 'bg-warning';
-      case 'baixa': return 'bg-muted';
-      default: return 'bg-muted';
+      setSalvando(false);
     }
   };
 
@@ -355,6 +274,9 @@ export function OtbSugestaoCoberturaIA({
     }
   };
 
+  // Verificar se há alterações a fazer
+  const temAlteracoes = comparativo.some(l => l.status !== 'igual');
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -365,28 +287,27 @@ export function OtbSugestaoCoberturaIA({
               Mínimo Configurado vs Sugerido
             </CardTitle>
             <CardDescription>
-              Comparativo entre configuração atual e sugestão baseada em dados reais
+              Comparativo entre configuração atual e sugestão baseada em dados de vendas
             </CardDescription>
           </div>
-          <Button 
-            onClick={solicitarSugestao} 
-            disabled={loading || itens.length === 0}
-            variant={resultado ? "outline" : "default"}
-            className="gap-2"
-          >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : resultado ? (
-              <RefreshCw className="h-4 w-4" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-            {loading ? 'Analisando...' : resultado ? 'Atualizar IA' : 'Análise IA'}
-          </Button>
+          {temAlteracoes && codEmpresa && (
+            <Button 
+              onClick={salvarTodos} 
+              disabled={salvando}
+              className="gap-2"
+            >
+              {salvando ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              {salvando ? 'Salvando...' : 'Aplicar Sugestões'}
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent>
-        {(loading || loadingMinimos) && (
+        {loadingMinimos && (
           <div className="space-y-3">
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-3/4" />
@@ -394,7 +315,7 @@ export function OtbSugestaoCoberturaIA({
           </div>
         )}
 
-        {!loading && !loadingMinimos && itens.length > 0 && (
+        {!loadingMinimos && itens.length > 0 && (
           <div className="space-y-4">
             {/* Tabela Comparativa */}
             {comparativo.length > 0 ? (
@@ -467,79 +388,27 @@ export function OtbSugestaoCoberturaIA({
                 <Settings className="h-8 w-8 mx-auto mb-2 opacity-30" />
                 <p className="text-sm">Nenhuma configuração ou sugestão disponível</p>
                 <p className="text-xs mt-1">
-                  Configure mínimos por loja ou carregue dados para gerar sugestões
+                  Selecione uma empresa específica para ver/configurar mínimos
                 </p>
               </div>
             )}
 
-            {/* Resultado da IA (se disponível) */}
-            {resultado && (
-              <>
-                {/* Resumo */}
-                <div className="p-3 bg-muted/50 rounded-lg">
-                  <p className="text-sm">{resultado.resumo}</p>
-                </div>
-
-                {/* Sugestão Global de Cobertura */}
-                <div className="flex items-center justify-between p-4 bg-primary/5 border border-primary/20 rounded-lg">
-                  <div>
-                    <div className="text-sm text-muted-foreground">Cobertura Sugerida (dias)</div>
-                    <div className="text-3xl font-bold text-primary">
-                      {resultado.coberturaGlobalSugerida} dias
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Atual: {coberturaAtual} dias
-                      {resultado.coberturaGlobalSugerida !== coberturaAtual && (
-                        <span className={resultado.coberturaGlobalSugerida > coberturaAtual ? 'text-warning' : 'text-primary'}>
-                          {' '}({resultado.coberturaGlobalSugerida > coberturaAtual ? '+' : ''}
-                          {resultado.coberturaGlobalSugerida - coberturaAtual} dias)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {onSugestaoCoberturaChange && resultado.coberturaGlobalSugerida !== coberturaAtual && (
-                    <Button 
-                      onClick={() => aplicarSugestao(resultado.coberturaGlobalSugerida)}
-                      className="gap-2"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Aplicar
-                    </Button>
-                  )}
-                </div>
-
-                {/* Alertas */}
-                {resultado.alertas.length > 0 && (
-                  <div className="space-y-2">
-                    {resultado.alertas.map((alerta, idx) => (
-                      <div key={idx} className="flex items-start gap-2 text-sm text-warning">
-                        <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                        <span>{alerta}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Dica sobre configuração */}
-            {comparativo.some(c => c.status === 'novo' || c.status === 'aumentar') && (
-              <div className="flex items-start gap-2 p-3 bg-muted/30 rounded text-sm">
-                <Info className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                <p className="text-muted-foreground">
-                  Para aplicar os mínimos sugeridos, use o botão <strong>"Mínimo por Loja"</strong> no cabeçalho 
-                  e atualize as configurações manualmente. Os valores sugeridos são baseados no histórico de vendas.
-                </p>
-              </div>
-            )}
+            {/* Info sobre a lógica */}
+            <div className="p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+              <strong>Como a sugestão é calculada:</strong>
+              <ul className="list-disc list-inside mt-1 space-y-1">
+                <li><strong>Curva A:</strong> Mínimo 3-4 un. (produtos que mais vendem)</li>
+                <li><strong>Curva B:</strong> Mínimo 2-3 un. (vendas moderadas)</li>
+                <li><strong>Curva C:</strong> Mínimo 1 un. (exposição)</li>
+                <li>Se há muita ruptura no grupo, o mínimo é aumentado automaticamente</li>
+              </ul>
+            </div>
           </div>
         )}
 
-        {!loading && itens.length === 0 && (
+        {!loadingMinimos && itens.length === 0 && (
           <div className="text-center py-6 text-muted-foreground">
-            <p className="text-sm">
-              Carregue os dados do OTB primeiro para ver o comparativo.
-            </p>
+            <p className="text-sm">Carregue os dados do OTB para ver sugestões</p>
           </div>
         )}
       </CardContent>

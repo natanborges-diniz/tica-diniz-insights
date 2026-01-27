@@ -1,5 +1,5 @@
 // src/components/otb/OtbPainelAcoes.tsx
-// Painel de Ações Priorizadas para o módulo OTB
+// Painel de Ações Priorizadas para o módulo OTB - Baseado em Mínimo por Loja
 
 import { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,7 +23,6 @@ import type { OtbItem, OtbMetrics } from '@/hooks/useOtb';
 interface OtbPainelAcoesProps {
   itens: OtbItem[];
   metrics: OtbMetrics;
-  coberturaDias: number;
   onFiltrarCategoria?: (classificacao: string) => void;
 }
 
@@ -42,7 +41,7 @@ interface AcaoItem {
   corBg: string;
 }
 
-export function OtbPainelAcoes({ itens, metrics, coberturaDias, onFiltrarCategoria }: OtbPainelAcoesProps) {
+export function OtbPainelAcoes({ itens, metrics, onFiltrarCategoria }: OtbPainelAcoesProps) {
   
   const acoes = useMemo((): AcaoItem[] => {
     if (itens.length === 0) return [];
@@ -50,14 +49,14 @@ export function OtbPainelAcoes({ itens, metrics, coberturaDias, onFiltrarCategor
     const acoesList: AcaoItem[] = [];
     
     // =====================================================
-    // 1. RUPTURA DE ESTOQUE - Produtos acabando
+    // 1. RUPTURA DE ESTOQUE - Abaixo do mínimo configurado
     // =====================================================
     
-    // 1.1 Curva A em ruptura crítica (< 7 dias)
+    // 1.1 Curva A com estoque crítico (< 30% do mínimo)
     const curvaACritico = itens.filter(i => 
       i.curvaABC === 'A' && 
-      i.coberturaAtual < 7 && 
-      i.qtdVendidos > 0
+      i.estoqueMinimo > 0 &&
+      i.estoqueAtual < i.estoqueMinimo * 0.3
     );
     
     if (curvaACritico.length > 0) {
@@ -66,7 +65,7 @@ export function OtbPainelAcoes({ itens, metrics, coberturaDias, onFiltrarCategor
         tipo: 'RUPTURA',
         prioridade: 1,
         titulo: '🔥 Ruptura Iminente - Curva A',
-        descricao: `${curvaACritico.length} produtos TOP de vendas com menos de 7 dias de estoque`,
+        descricao: `${curvaACritico.length} produtos TOP com menos de 30% do mínimo configurado`,
         justificativa: 'Itens Curva A representam 80% do seu faturamento. Ruptura nesses itens causa perda direta de vendas.',
         impacto: `Potencial de perda: R$ ${(valorPerdaPotencial / 1000).toFixed(0)}k/período`,
         valor: valorPerdaPotencial,
@@ -78,7 +77,7 @@ export function OtbPainelAcoes({ itens, metrics, coberturaDias, onFiltrarCategor
       });
     }
     
-    // 1.2 Compra urgente geral (< 15 dias)
+    // 1.2 Compra urgente geral (abaixo do mínimo)
     const compraUrgente = itens.filter(i => 
       i.classificacao === 'COMPRAR_URGENTE' &&
       !curvaACritico.includes(i)
@@ -89,9 +88,9 @@ export function OtbPainelAcoes({ itens, metrics, coberturaDias, onFiltrarCategor
       acoesList.push({
         tipo: 'RUPTURA',
         prioridade: 2,
-        titulo: '⚠️ Estoque Baixo - Ação Necessária',
-        descricao: `${compraUrgente.length} SKUs com menos de 15 dias de cobertura`,
-        justificativa: 'Estoque abaixo do mínimo seguro pode gerar rupturas em dias de alta demanda.',
+        titulo: '⚠️ Estoque Abaixo do Mínimo',
+        descricao: `${compraUrgente.length} SKUs precisam de reposição urgente`,
+        justificativa: 'Estoque abaixo do mínimo configurado pode gerar rupturas.',
         impacto: `Investimento para repor: R$ ${(investimentoNecessario / 1000).toFixed(0)}k`,
         valor: investimentoNecessario,
         qtd: compraUrgente.length,
@@ -109,7 +108,7 @@ export function OtbPainelAcoes({ itens, metrics, coberturaDias, onFiltrarCategor
     // 2.1 Excesso em Curva C (produtos que não giram)
     const curvaCExcesso = itens.filter(i => 
       i.curvaABC === 'C' && 
-      i.coberturaAtual > 180
+      i.diasDesdeUltimaVenda > 180
     );
     
     if (curvaCExcesso.length > 0) {
@@ -118,8 +117,8 @@ export function OtbPainelAcoes({ itens, metrics, coberturaDias, onFiltrarCategor
         tipo: 'CAPITAL_PARADO',
         prioridade: 3,
         titulo: '❄️ Capital Congelado - Curva C',
-        descricao: `${curvaCExcesso.length} SKUs de baixo giro com +180 dias de estoque`,
-        justificativa: 'Produtos Curva C com excesso representam capital que poderia estar em itens de alta demanda.',
+        descricao: `${curvaCExcesso.length} SKUs de baixo giro parados há +180 dias`,
+        justificativa: 'Produtos Curva C parados representam capital que poderia estar em itens de alta demanda.',
         impacto: `Capital imobilizado: R$ ${(capitalImobilizado / 1000).toFixed(0)}k`,
         valor: capitalImobilizado,
         qtd: curvaCExcesso.length,
@@ -130,7 +129,7 @@ export function OtbPainelAcoes({ itens, metrics, coberturaDias, onFiltrarCategor
       });
     }
     
-    // 2.2 Excesso geral (> 2x cobertura)
+    // 2.2 Excesso geral (> 2x mínimo)
     const excessoGeral = itens.filter(i => 
       i.classificacao === 'EXCESSO' &&
       !curvaCExcesso.includes(i)
@@ -138,8 +137,7 @@ export function OtbPainelAcoes({ itens, metrics, coberturaDias, onFiltrarCategor
     
     if (excessoGeral.length > 0) {
       const capitalExcesso = excessoGeral.reduce((acc, i) => {
-        const ideal = i.vendaDiaria * coberturaDias;
-        const excesso = Math.max(0, i.estoqueAtual - ideal);
+        const excesso = Math.max(0, i.estoqueAtual - (i.estoqueMinimo * 2));
         return acc + (excesso * i.precoCusto);
       }, 0);
       
@@ -147,7 +145,7 @@ export function OtbPainelAcoes({ itens, metrics, coberturaDias, onFiltrarCategor
         tipo: 'CAPITAL_PARADO',
         prioridade: 4,
         titulo: '📦 Estoque Acima do Ideal',
-        descricao: `${excessoGeral.length} SKUs com estoque superior a 2x a meta de cobertura`,
+        descricao: `${excessoGeral.length} SKUs com estoque superior a 2x o mínimo`,
         justificativa: 'Excesso de estoque compromete capital de giro e aumenta risco de obsolescência.',
         impacto: `Excesso estimado: R$ ${(capitalExcesso / 1000).toFixed(0)}k`,
         valor: capitalExcesso,
@@ -213,7 +211,7 @@ export function OtbPainelAcoes({ itens, metrics, coberturaDias, onFiltrarCategor
     }
     
     return acoesList.sort((a, b) => a.prioridade - b.prioridade);
-  }, [itens, coberturaDias]);
+  }, [itens]);
 
   // Resumo por pilar
   const resumoPilares = useMemo(() => {

@@ -14,10 +14,9 @@ import type { OtbMetrics } from "@/hooks/useOtb";
 
 interface OtbKPICardsProps {
   metrics: OtbMetrics;
-  coberturaDias: number;
 }
 
-export function OtbKPICards({ metrics, coberturaDias }: OtbKPICardsProps) {
+export function OtbKPICards({ metrics }: OtbKPICardsProps) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
       {/* Total SKUs */}
@@ -45,7 +44,7 @@ export function OtbKPICards({ metrics, coberturaDias }: OtbKPICardsProps) {
             {metrics.totalOtb.toLocaleString('pt-BR')}
           </div>
           <p className="text-xs text-muted-foreground">
-            unidades p/ {coberturaDias} dias
+            unidades a comprar
           </p>
         </CardContent>
       </Card>
