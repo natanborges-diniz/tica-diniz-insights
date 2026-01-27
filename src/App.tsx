@@ -14,7 +14,6 @@ import FluxoCaixaDashboard from "./pages/FluxoCaixaDashboard";
 import InteligenciaVendasDashboard from "./pages/InteligenciaVendasDashboard";
 import MetasConfigDashboard from "./pages/MetasConfigDashboard";
 import CentralIADashboard from "./pages/CentralIADashboard";
-import OtbDashboard from "./pages/OtbDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,7 +50,6 @@ const App = () => (
             
             {/* Central de IA */}
             <Route path="/ia" element={<CentralIADashboard />} />
-            <Route path="/ia/otb" element={<OtbDashboard />} />
           </Route>
           
           {/* Catch-all */}
