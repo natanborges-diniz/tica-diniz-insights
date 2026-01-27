@@ -47,6 +47,12 @@ export interface OtbItem {
   otb: number; // Open to Buy = Vendas Projetadas - Estoque Atual
   otbValor: number; // OTB em valor (OTB * preço custo)
   
+  // Cobertura atual em dias
+  coberturaAtual: number; // Estoque Atual / Venda Diária
+  
+  // Curva ABC - classificação por giro
+  curvaABC: 'A' | 'B' | 'C';
+  
   // Classificação
   classificacao: 'COMPRAR_URGENTE' | 'COMPRAR' | 'ESTOQUE_OK' | 'EXCESSO';
   giroEstoque: number;
@@ -191,9 +197,40 @@ export function useOtb() {
 
     console.log('[useOtb] Após filtro:', filtrados.length, 'SKUs');
 
+    // Primeiro passo: calcular totais para definir curva ABC
+    const totalVendasGeral = filtrados.reduce((acc, sku) => acc + sku.totalVendido, 0);
+    
+    // Ordenar por vendas para calcular ABC
+    const ordenadosPorVenda = [...filtrados].sort((a, b) => b.totalVendido - a.totalVendido);
+    
+    // Calcular percentuais acumulados para curva ABC
+    let acumulado = 0;
+    const skuComPercentual = ordenadosPorVenda.map(sku => {
+      acumulado += sku.totalVendido;
+      const percentualAcumulado = totalVendasGeral > 0 ? (acumulado / totalVendasGeral) * 100 : 0;
+      
+      // Curva A: 80% das vendas, B: 80-95%, C: 95-100%
+      let curvaABC: 'A' | 'B' | 'C';
+      if (percentualAcumulado <= 80) {
+        curvaABC = 'A';
+      } else if (percentualAcumulado <= 95) {
+        curvaABC = 'B';
+      } else {
+        curvaABC = 'C';
+      }
+      
+      return { ...sku, curvaABC, percentualAcumulado };
+    });
+    
+    // Criar mapa para lookup rápido
+    const curvaMap = new Map(skuComPercentual.map(s => [s.codSku, s.curvaABC]));
+
     return filtrados.map(sku => {
       // Cálculo da venda diária média
       const vendaDiaria = diasPeriodo > 0 ? sku.qtdProdutos / diasPeriodo : 0;
+      
+      // Cobertura atual = quantos dias o estoque atual dura
+      const coberturaAtual = vendaDiaria > 0 ? sku.estoqueAtual / vendaDiaria : 999;
       
       // Projeção de vendas para o período de cobertura
       const vendasProjetadas = vendaDiaria * filters.coberturaDias;
@@ -206,7 +243,7 @@ export function useOtb() {
       
       // Classificação baseada na situação
       let classificacao: OtbItem['classificacao'];
-      const diasEstoque = vendaDiaria > 0 ? sku.estoqueAtual / vendaDiaria : 999;
+      const diasEstoque = coberturaAtual;
       
       if (diasEstoque < 15 && sku.qtdProdutos > 0) {
         classificacao = 'COMPRAR_URGENTE';
@@ -217,6 +254,9 @@ export function useOtb() {
       } else {
         classificacao = 'ESTOQUE_OK';
       }
+      
+      // Curva ABC do SKU
+      const curvaABC = curvaMap.get(sku.codSku) || 'C';
 
       return {
         codSku: sku.codSku,
@@ -235,6 +275,8 @@ export function useOtb() {
         vendasProjetadas,
         otb,
         otbValor,
+        coberturaAtual: Math.round(coberturaAtual),
+        curvaABC,
         classificacao,
         giroEstoque: sku.giroEstoque,
       };
