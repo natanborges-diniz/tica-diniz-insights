@@ -1,5 +1,5 @@
 // src/pages/OtbDashboard.tsx
-// Página dedicada do módulo OTB (Open to Buy)
+// Página dedicada do módulo OTB (Open to Buy) - Simplificado para avaliação mensal
 
 import { useState, useMemo } from "react";
 import { useOtb } from "@/hooks/useOtb";
@@ -12,7 +12,6 @@ import { OtbFilters } from "@/components/otb/OtbFilters";
 import { OtbKPICards } from "@/components/otb/OtbKPICards";
 import { OtbTable } from "@/components/otb/OtbTable";
 import { OtbCurvaABCChart } from "@/components/otb/OtbCurvaABCChart";
-import { OtbCoberturaCard } from "@/components/otb/OtbCoberturaCard";
 import { OtbSugestaoCoberturaIA } from "@/components/otb/OtbSugestaoCoberturaIA";
 import { OtbFornecedorMarcaConfig } from "@/components/otb/OtbFornecedorMarcaConfig";
 import { OtbPainelAcoes } from "@/components/otb/OtbPainelAcoes";
@@ -119,6 +118,11 @@ export default function OtbDashboard() {
     return Array.from(agrupado.values()).sort((a, b) => b.otbValorTotal - a.otbValorTotal);
   }, [itensFiltrados, agrupamento]);
 
+  // Obter código da empresa para IA
+  const codEmpresaAtual = filters.empresa !== 'ALL' 
+    ? (typeof filters.empresa === 'number' ? filters.empresa : parseInt(filters.empresa as string))
+    : undefined;
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       {/* Header */}
@@ -129,7 +133,7 @@ export default function OtbDashboard() {
             <div>
               <h1 className="text-3xl font-bold">Open to Buy (OTB)</h1>
               <p className="text-muted-foreground">
-                Avaliação mensal de compras - manter estoque saudável e oxigenado
+                Avaliação mensal de compras - manter estoque no mínimo configurado
               </p>
             </div>
           </div>
@@ -146,7 +150,7 @@ export default function OtbDashboard() {
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">Parâmetros de Análise</CardTitle>
           <CardDescription>
-            Defina o período base para análise de vendas e a cobertura desejada
+            Selecione a empresa e o período base para análise de vendas
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -186,11 +190,10 @@ export default function OtbDashboard() {
       {/* Conteúdo Principal */}
       {!loading && itensOtb.length > 0 && (
         <>
-          {/* Resumo Visual - Usando itens filtrados */}
+          {/* Resumo Visual */}
           <OtbResumoVisual 
             metrics={metrics} 
-            itens={itensFiltrados} 
-            coberturaDias={filters.coberturaDias} 
+            itens={itensFiltrados}
           />
 
           {/* Tabs: Ações vs Detalhes */}
@@ -206,12 +209,11 @@ export default function OtbDashboard() {
               </TabsTrigger>
             </TabsList>
 
-            {/* Tab: Painel de Ações - usa métricas filtradas */}
+            {/* Tab: Painel de Ações */}
             <TabsContent value="acoes" className="mt-4">
               <OtbPainelAcoes 
                 itens={itensFiltrados} 
                 metrics={metricsFiltradas}
-                coberturaDias={filters.coberturaDias}
                 onFiltrarCategoria={(cat) => {
                   setTabAtiva('detalhes');
                 }}
@@ -226,37 +228,29 @@ export default function OtbDashboard() {
                 <AlertDescription className="flex items-center gap-2 flex-wrap">
                   <strong>Fórmula OTB:</strong>
                   <code className="bg-muted px-2 py-0.5 rounded text-sm">
-                    OTB = MAX(Venda Diária × Cobertura, Mínimo Loja) - Estoque Atual
+                    OTB = Mínimo por Loja - Estoque Atual
                   </code>
                   <span className="text-muted-foreground text-sm ml-2">
-                    Período: {diasPeriodo} dias | Meta: {filters.coberturaDias} dias
+                    Período base: {diasPeriodo} dias
                   </span>
                 </AlertDescription>
               </Alert>
 
-              {/* KPIs Detalhados - usa métricas filtradas */}
-              <OtbKPICards metrics={metricsFiltradas} coberturaDias={filters.coberturaDias} />
+              {/* KPIs Detalhados */}
+              <OtbKPICards metrics={metricsFiltradas} />
 
-              {/* Grid: Curva ABC + Cobertura */}
+              {/* Grid: Curva ABC + Sugestão IA */}
               <div className="grid md:grid-cols-2 gap-6">
                 <OtbCurvaABCChart 
                   itens={itensFiltrados} 
                   selectedCurva={curvaFiltro}
                   onCurvaClick={setCurvaFiltro}
                 />
-                <OtbCoberturaCard 
-                  itens={itensFiltrados} 
-                  coberturaMeta={filters.coberturaDias} 
+                <OtbSugestaoCoberturaIA 
+                  itens={itensFiltrados}
+                  codEmpresa={codEmpresaAtual}
                 />
               </div>
-
-              {/* Sugestão de Cobertura via IA com comparativo de mínimos - usa itens filtrados */}
-              <OtbSugestaoCoberturaIA 
-                itens={itensFiltrados}
-                coberturaAtual={filters.coberturaDias}
-                codEmpresa={typeof filters.empresa === 'number' ? filters.empresa : parseInt(filters.empresa as string) || undefined}
-                onSugestaoCoberturaChange={(dias) => setFilters(prev => ({ ...prev, coberturaDias: dias }))}
-              />
 
               {/* Filtro ativo por curva */}
               {curvaFiltro && (
@@ -317,19 +311,19 @@ export default function OtbDashboard() {
               <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <Badge variant="destructive">Urgente</Badge>
-                  <span>Estoque &lt; 15 dias de venda</span>
+                  <span>Estoque &lt; 30% do mínimo</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge className="bg-warning text-warning-foreground">Comprar</Badge>
-                  <span>OTB positivo (precisa repor)</span>
+                  <span>Abaixo do mínimo configurado</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">OK</Badge>
-                  <span>Estoque suficiente para cobertura</span>
+                  <span>Estoque dentro do esperado</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">Excesso</Badge>
-                  <span>Estoque &gt; 2x a cobertura desejada</span>
+                  <span>Estoque &gt; 2x o mínimo</span>
                 </div>
               </div>
             </TabsContent>
@@ -346,7 +340,7 @@ export default function OtbDashboard() {
               <p className="text-lg font-medium">Módulo OTB Pronto</p>
               <p className="text-sm mt-2 max-w-md mx-auto">
                 Selecione uma empresa e clique em "Calcular OTB" para analisar
-                as necessidades de compra e manter seu estoque saudável.
+                as necessidades de compra baseadas no mínimo por loja.
               </p>
             </div>
           </CardContent>

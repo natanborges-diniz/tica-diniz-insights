@@ -2,18 +2,18 @@
 
 ## 📋 O que é o OTB?
 
-O **OTB (Open to Buy)** é uma ferramenta de **avaliação mensal de compras** que analisa seu estoque atual e histórico de vendas para indicar exatamente **o que comprar, quanto comprar e com qual urgência**.
+O **OTB (Open to Buy)** é uma ferramenta de **avaliação mensal de compras** que analisa seu estoque atual em relação ao **mínimo configurado por loja** para indicar exatamente **o que comprar, quanto comprar e com qual urgência**.
 
 ### Fórmula Principal
 
 ```
-OTB = MAX(Venda Diária × Dias de Cobertura, Mínimo Loja) - Estoque Atual
+OTB = Mínimo por Loja - Estoque Atual
 ```
 
-- **Venda Diária**: média de vendas por dia no período analisado (padrão: últimos 180 dias)
-- **Dias de Cobertura**: quantos dias de estoque você quer manter (padrão: 60 dias)
-- **Mínimo Loja**: quantidade mínima configurada por categoria/curva ABC
+- **Mínimo por Loja**: quantidade mínima configurada por categoria/curva ABC
 - **Estoque Atual**: quantidade em estoque no momento
+- Se OTB > 0 → Precisa comprar
+- Se OTB = 0 → Estoque OK
 
 ---
 
@@ -28,8 +28,7 @@ Na seção "Parâmetros de Análise":
 | Parâmetro | Descrição | Valor Padrão |
 |-----------|-----------|--------------|
 | **Empresa** | Loja a ser analisada (ou "Todas") | Todas |
-| **Período Base Início/Fim** | Período para calcular média de vendas | Últimos 180 dias |
-| **Cobertura (dias)** | Meta de dias de estoque | 60 dias |
+| **Período Base Início/Fim** | Período para calcular vendas e curva ABC | Últimos 180 dias |
 | **Categoria** | Filtrar por tipo de produto | Todas |
 
 ### 3. Calcular OTB
@@ -44,14 +43,14 @@ O sistema apresenta duas visões:
 
 ## 📊 Classificações de SKU
 
-Cada produto recebe uma classificação automática:
+Cada produto recebe uma classificação automática baseada no estoque vs mínimo configurado:
 
 | Classificação | Critério | Ação |
 |---------------|----------|------|
-| 🔴 **Comprar Urgente** | Estoque < 15 dias de venda | Comprar imediatamente |
-| 🟠 **Comprar** | OTB > 0 (precisa repor) | Incluir no próximo pedido |
-| 🟢 **Estoque OK** | Cobertura dentro da meta | Monitorar |
-| ⚪ **Excesso** | Estoque > 2x a cobertura meta | Considerar promoção |
+| 🔴 **Comprar Urgente** | Estoque < 30% do mínimo | Comprar imediatamente |
+| 🟠 **Comprar** | Estoque abaixo do mínimo | Incluir no próximo pedido |
+| 🟢 **Estoque OK** | Entre 100% e 200% do mínimo | Monitorar |
+| ⚪ **Excesso** | Estoque > 2x o mínimo | Considerar promoção |
 
 ---
 
@@ -59,23 +58,23 @@ Cada produto recebe uma classificação automática:
 
 O sistema classifica automaticamente os produtos pela **curva ABC de giro**:
 
-| Curva | Participação nas Vendas | Recomendação |
-|-------|------------------------|--------------|
-| **A** | 80% do faturamento | Nunca deixar faltar |
-| **B** | 15% do faturamento | Manter cobertura |
-| **C** | 5% do faturamento | Estoque mínimo |
+| Curva | Participação nas Vendas | Mínimo Sugerido |
+|-------|------------------------|-----------------|
+| **A** | 80% do faturamento | 3-4 unidades (nunca pode faltar) |
+| **B** | 15% do faturamento | 2-3 unidades |
+| **C** | 5% do faturamento | 1 unidade (exposição) |
 
 ---
 
 ## 🎯 Painel de Ações - Os 3 Pilares
 
 ### 1. Risco de Ruptura 🔴
-- **Curva A em ruptura crítica** (< 7 dias): Ação imediata!
-- **Compra urgente geral** (< 15 dias): Incluir no pedido
+- **Curva A em ruptura crítica** (< 30% do mínimo): Ação imediata!
+- **Abaixo do mínimo configurado**: Incluir no pedido
 
 ### 2. Capital Parado 🔵
-- **Curva C com excesso** (> 180 dias): Capital congelado
-- **Estoque acima do ideal** (> 2x meta): Dinheiro parado
+- **Curva C parada há +180 dias**: Capital congelado
+- **Estoque acima de 2x o mínimo**: Dinheiro parado
 
 ### 3. Saúde do Mix 🟣
 - **Curva A zerada**: Perdendo vendas agora
@@ -86,12 +85,13 @@ O sistema classifica automaticamente os produtos pela **curva ABC de giro**:
 ## ⚙️ Configurações
 
 ### Estoque Mínimo por Loja
-O sistema permite configurar um **mínimo de estoque por loja, categoria e curva ABC**. Este mínimo é usado como piso no cálculo OTB.
+O sistema utiliza uma tabela de **mínimo por loja, categoria e curva ABC**. Este mínimo é a base do cálculo OTB.
 
-**Como funciona:**
-1. A IA calcula sugestões baseada nos dados reais de vendas
-2. O sistema compara com o mínimo configurado
-3. A tabela comparativa mostra: **Atual vs Sugerido**
+**Configuração automática via IA:**
+1. O sistema analisa os dados de vendas e rupturas
+2. Sugere mínimos baseados na realidade do negócio
+3. Exibe comparativo: **Atual vs Sugerido**
+4. Clique em "Aplicar Sugestões" para salvar
 
 **Lógica de sugestão da IA:**
 - **Curva A**: Mínimo 3-4 unidades (produtos TOP não podem faltar)
@@ -134,29 +134,12 @@ Escolha entre visualizar por:
 | **Vendidos** | Quantidade vendida no período |
 | **OTB (un)** | Unidades a comprar |
 | **OTB (R$)** | Valor a investir (preço de custo) |
-| **Urgente** | SKUs com estoque < 15 dias |
-| **Comprar** | SKUs com OTB > 0 |
+| **Urgente** | SKUs abaixo de 30% do mínimo |
+| **Comprar** | SKUs abaixo do mínimo |
 | **Margem** | Margem bruta média |
 
 ### Expandir Detalhes
 Clique em uma linha para ver os SKUs individuais daquele fornecedor/marca.
-
----
-
-## 🤖 Sugestões da IA
-
-O sistema usa Inteligência Artificial para:
-
-1. **Analisar a saúde do estoque** por categoria
-2. **Sugerir cobertura ideal** baseada no giro real
-3. **Comparar mínimos configurados** vs recomendados
-4. **Alertar sobre anomalias** (excesso, ruptura, etc.)
-
-### Como usar
-1. Clique em **"Análise IA"** na seção de sugestões
-2. Aguarde a análise (pode levar alguns segundos)
-3. Revise as recomendações
-4. Aplique a cobertura sugerida se desejar
 
 ---
 
@@ -166,17 +149,17 @@ O OTB foi desenhado para um **processo mensal de compras**:
 
 ### Semana 1-2: Análise
 1. Acesse o OTB
-2. Selecione a loja ou "Todas"
-3. Calcule o OTB com cobertura de 60 dias
-4. Analise o Painel de Ações
+2. Selecione a loja
+3. Calcule o OTB
+4. Revise e aplique as sugestões de mínimo da IA
 
 ### Semana 2-3: Decisão
-1. Identifique os fornecedores prioritários
-2. Exporte a lista de compras
-3. Negocie com fornecedores
+1. Analise o Painel de Ações
+2. Identifique os fornecedores prioritários
+3. Exporte a lista de compras
 
 ### Semana 3-4: Execução
-1. Faça os pedidos
+1. Faça os pedidos aos fornecedores
 2. Acompanhe entregas
 3. Atualize o estoque no sistema
 
@@ -188,26 +171,26 @@ O módulo permite exportar os dados para Excel/PDF:
 - Lista completa de SKUs a comprar
 - Agrupamento por fornecedor
 - Investimento necessário por fornecedor
-- Justificativas e classificações
+- Classificações e prioridades
 
 ---
 
 ## ❓ FAQ
 
 ### Por que o OTB de um produto é zero?
-O estoque atual já cobre a meta de cobertura configurada.
+O estoque atual já está igual ou acima do mínimo configurado.
 
 ### Por que alguns produtos aparecem como "Excesso"?
-O estoque atual é maior que 2x a cobertura meta. Considere promoções.
+O estoque atual é maior que 2x o mínimo configurado. Considere promoções.
 
 ### Como a Curva ABC é calculada?
 Ordenamos todos os produtos por valor de venda. Os 80% do topo são Curva A, os próximos 15% são B, e o restante é C.
 
-### O mínimo por loja substitui o cálculo de cobertura?
-Não. O sistema usa o **maior valor** entre (Venda Diária × Cobertura) e (Mínimo Loja).
+### Preciso configurar mínimos antes de usar?
+A IA sugere mínimos automaticamente baseada nos dados de vendas. Você pode revisar e aplicar as sugestões.
 
 ### Posso usar o OTB para múltiplas lojas ao mesmo tempo?
-Sim, selecione "Todas" no filtro de empresa para uma visão consolidada.
+Sim, selecione "Todas" no filtro de empresa para uma visão consolidada. Para configurar mínimos, selecione uma loja específica.
 
 ---
 
