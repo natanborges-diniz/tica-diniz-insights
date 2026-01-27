@@ -2,7 +2,7 @@ import { useLocation } from "react-router-dom";
 import { 
   TrendingUp, BarChart3, Layers, 
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
-  Target, Users, Brain, ShoppingCart
+  Target, Users, Brain
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -54,7 +54,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
     {
       label: "Análises",
       items: [
-        { title: "Painel de Estoque", url: "/estoque", icon: Package },
+        { title: "Estoque & OTB", url: "/estoque", icon: Package },
       ],
     },
   ],
@@ -81,7 +81,6 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       label: "Inteligência Artificial",
       items: [
         { title: "Central de IA", url: "/ia", icon: Brain },
-        { title: "Open to Buy (OTB)", url: "/ia/otb", icon: ShoppingCart },
       ],
     },
   ],
