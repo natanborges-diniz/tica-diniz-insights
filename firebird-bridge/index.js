@@ -1067,6 +1067,7 @@ app.get('/api/v1/vendas/analise-sku', async (req, res) => {
           SUM(e.QUANTIDADE) AS ESTOQUE
         FROM ESTOQUE e
         JOIN empresas_filtradas ef ON ef.COD_EMPRESA = e.COD_EMPRESA
+        WHERE e.QUANTIDADE > 0
         GROUP BY e.COD_PRODUTO
       ),
       ultimo_custo AS (
