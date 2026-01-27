@@ -237,10 +237,11 @@ export default function OtbDashboard() {
                 />
               </div>
 
-              {/* Sugestão de Cobertura via IA */}
+              {/* Sugestão de Cobertura via IA com comparativo de mínimos */}
               <OtbSugestaoCoberturaIA 
                 itens={itensOtb}
                 coberturaAtual={filters.coberturaDias}
+                codEmpresa={typeof filters.empresa === 'number' ? filters.empresa : undefined}
                 onSugestaoCoberturaChange={(dias) => setFilters(prev => ({ ...prev, coberturaDias: dias }))}
               />
 
