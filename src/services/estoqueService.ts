@@ -45,16 +45,18 @@ export async function getAnaliseEstoqueAcao(
   params: GetAnaliseEstoqueParams
 ): Promise<AnaliseEstoqueAcao[]> {
   // Usa o mesmo endpoint do OTB para garantir consistência
+  // IMPORTANTE: Usa os mesmos parâmetros de data que o OTB (180 dias)
   const hoje = new Date();
-  const inicioAno = new Date(hoje.getFullYear(), 0, 1);
+  const dataFim = params.dataFim || hoje.toISOString().split('T')[0];
+  const dataInicio = params.dataInicio || new Date(hoje.getTime() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
   const raw = await apiGet<AnaliseSkuRaw>('/vendas/analise-sku', {
     empresa: formatEmpresaParam(params.empresa),
-    dataInicio: params.dataInicio || inicioAno.toISOString().split('T')[0],
-    dataFim: params.dataFim || hoje.toISOString().split('T')[0],
+    dataInicio,
+    dataFim,
   });
 
-  console.log('[estoqueService] Raw data from /vendas/analise-sku:', raw.length, 'items');
+  console.log('[estoqueService] Raw data from /vendas/analise-sku:', raw.length, 'items, period:', dataInicio, 'to', dataFim);
 
   // Calcula ação sugerida baseado em dias de estoque e vendas
   const mapped = raw

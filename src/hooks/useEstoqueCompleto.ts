@@ -38,7 +38,7 @@ export function useEstoqueCompleto() {
     busca: "",
   });
 
-  const carregarDados = useCallback(async (empresa: EmpresaParam) => {
+  const carregarDados = useCallback(async (empresa: EmpresaParam, dataInicio?: string, dataFim?: string) => {
     if (empresa === null || empresa === 'ALL') {
       setError("Selecione uma empresa específica para a visão de estoque");
       return;
@@ -48,8 +48,8 @@ export function useEstoqueCompleto() {
     setError(null);
     
     try {
-      console.log('[useEstoqueCompleto] Carregando estoque para empresa:', empresa);
-      const result = await getAnaliseEstoqueAcao({ empresa });
+      console.log('[useEstoqueCompleto] Carregando estoque para empresa:', empresa, 'período:', dataInicio, '-', dataFim);
+      const result = await getAnaliseEstoqueAcao({ empresa, dataInicio, dataFim });
       console.log('[useEstoqueCompleto] Dados carregados:', result.length, 'SKUs');
       setDados(result);
       
