@@ -448,8 +448,9 @@ export function useOtb() {
 
   /**
    * Métricas consolidadas
-   * IMPORTANTE: totalEstoque soma apenas itens com estoqueAtual > 0
-   * para manter consistência com a aba Visão Estoque
+   * IMPORTANTE: Para manter consistência com a aba Visão Estoque:
+   * - totalEstoque e totalSkus consideram APENAS itens com estoqueAtual > 0
+   * - totalOtb e classificações consideram TODOS os itens (incluindo zerados que precisam comprar)
    */
   const metrics = useMemo((): OtbMetrics => {
     const base: OtbMetrics = {
@@ -467,22 +468,37 @@ export function useOtb() {
 
     if (!itensOtb || itensOtb.length === 0) return base;
 
-    // Filtra apenas itens com estoque > 0 para contagem de SKUs e total de estoque
+    // Para estoque total e SKUs: filtra apenas itens com estoque > 0
     // Isso garante consistência com a aba Visão Estoque
     const itensComEstoque = itensOtb.filter(item => item.estoqueAtual > 0);
+    
+    const totalSkus = itensComEstoque.length;
+    const totalEstoque = itensComEstoque.reduce((acc, i) => acc + i.estoqueAtual, 0);
+    
+    // Para OTB e classificações: usa TODOS os itens
+    // Pois precisamos considerar itens zerados que precisam ser comprados
+    const totalVendido = itensOtb.reduce((acc, i) => acc + i.totalVendido, 0);
+    const totalOtb = itensOtb.reduce((acc, i) => acc + i.otb, 0);
+    const totalOtbValor = itensOtb.reduce((acc, i) => acc + i.otbValor, 0);
+    
+    // Classificações também usam todos os itens
+    const skusComprarUrgente = itensOtb.filter(i => i.classificacao === 'COMPRAR_URGENTE').length;
+    const skusComprar = itensOtb.filter(i => i.classificacao === 'COMPRAR').length;
+    const skusEstoqueOk = itensOtb.filter(i => i.classificacao === 'ESTOQUE_OK').length;
+    const skusExcesso = itensOtb.filter(i => i.classificacao === 'EXCESSO').length;
 
-    return itensComEstoque.reduce((acc, item) => ({
-      totalSkus: acc.totalSkus + 1,
-      totalEstoque: acc.totalEstoque + item.estoqueAtual,
-      totalVendido: acc.totalVendido + item.totalVendido,
-      totalOtb: acc.totalOtb + item.otb,
-      totalOtbValor: acc.totalOtbValor + item.otbValor,
-      skusComprarUrgente: acc.skusComprarUrgente + (item.classificacao === 'COMPRAR_URGENTE' ? 1 : 0),
-      skusComprar: acc.skusComprar + (item.classificacao === 'COMPRAR' ? 1 : 0),
-      skusEstoqueOk: acc.skusEstoqueOk + (item.classificacao === 'ESTOQUE_OK' ? 1 : 0),
-      skusExcesso: acc.skusExcesso + (item.classificacao === 'EXCESSO' ? 1 : 0),
+    return {
+      totalSkus,
+      totalEstoque,
+      totalVendido,
+      totalOtb,
+      totalOtbValor,
+      skusComprarUrgente,
+      skusComprar,
+      skusEstoqueOk,
+      skusExcesso,
       diasPeriodo,
-    }), base);
+    };
   }, [itensOtb, diasPeriodo]);
 
   /**
