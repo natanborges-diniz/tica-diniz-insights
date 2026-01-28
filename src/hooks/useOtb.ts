@@ -448,6 +448,8 @@ export function useOtb() {
 
   /**
    * Métricas consolidadas
+   * IMPORTANTE: totalEstoque soma apenas itens com estoqueAtual > 0
+   * para manter consistência com a aba Visão Estoque
    */
   const metrics = useMemo((): OtbMetrics => {
     const base: OtbMetrics = {
@@ -465,7 +467,11 @@ export function useOtb() {
 
     if (!itensOtb || itensOtb.length === 0) return base;
 
-    return itensOtb.reduce((acc, item) => ({
+    // Filtra apenas itens com estoque > 0 para contagem de SKUs e total de estoque
+    // Isso garante consistência com a aba Visão Estoque
+    const itensComEstoque = itensOtb.filter(item => item.estoqueAtual > 0);
+
+    return itensComEstoque.reduce((acc, item) => ({
       totalSkus: acc.totalSkus + 1,
       totalEstoque: acc.totalEstoque + item.estoqueAtual,
       totalVendido: acc.totalVendido + item.totalVendido,
