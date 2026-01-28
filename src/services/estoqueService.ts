@@ -1,5 +1,6 @@
 // src/services/estoqueService.ts
-// Service para endpoint de estoque
+// Service para endpoint de estoque - usa o mesmo endpoint /vendas/analise-sku do OTB
+// para garantir consistência nos valores de estoque
 
 import { apiGet, EmpresaParam, formatEmpresaParam } from './firebirdBridge';
 
@@ -7,19 +8,18 @@ import { apiGet, EmpresaParam, formatEmpresaParam } from './firebirdBridge';
 // INTERFACES
 // ============================================
 
-interface AnaliseEstoqueAcaoRaw {
-  // Campos retornados pela API (snake_case)
-  empresa_nome: string;
-  fornecedor_cod_pessoa?: number;
-  fornecedor_nome: string;
-  grife: string;
-  codigo_barras: string;
+// Campos retornados pela API /vendas/analise-sku (snake_case)
+interface AnaliseSkuRaw {
+  cod_sku: number;
   descricao_item: string;
-  quantidade_estoque: number;
+  marca: string;
+  fornecedor: string;
+  tipo: string;
+  estoque_atual: number;
+  qtd_produtos: number;
+  total_vendido: number;
   caf?: number | null;
-  data_ultima_entrada?: string | null;
-  dias_estoque: number | null;
-  acao_sugerida: string;
+  dias_estoque?: number | null;
 }
 
 export interface AnaliseEstoqueAcao {
@@ -37,30 +37,54 @@ export interface AnaliseEstoqueAcao {
 
 export interface GetAnaliseEstoqueParams {
   empresa: EmpresaParam;
+  dataInicio?: string;
+  dataFim?: string;
 }
 
 export async function getAnaliseEstoqueAcao(
   params: GetAnaliseEstoqueParams
 ): Promise<AnaliseEstoqueAcao[]> {
-  const raw = await apiGet<AnaliseEstoqueAcaoRaw>('/estoque/analise-acao', {
+  // Usa o mesmo endpoint do OTB para garantir consistência
+  const hoje = new Date();
+  const inicioAno = new Date(hoje.getFullYear(), 0, 1);
+  
+  const raw = await apiGet<AnaliseSkuRaw>('/vendas/analise-sku', {
     empresa: formatEmpresaParam(params.empresa),
+    dataInicio: params.dataInicio || inicioAno.toISOString().split('T')[0],
+    dataFim: params.dataFim || hoje.toISOString().split('T')[0],
   });
 
-  console.log('[estoqueService] Raw data sample:', raw[0]);
+  console.log('[estoqueService] Raw data from /vendas/analise-sku:', raw.length, 'items');
 
-  const mapped = raw.map((r) => ({
-    codEmpresa: 0,
-    empresa: r.empresa_nome ?? '',
-    codProduto: 0,
-    fornecedor: r.fornecedor_nome ?? '',
-    marca: r.grife ?? '',
-    codigoBarra: r.codigo_barras ?? '',
-    descricao: r.descricao_item ?? '',
-    quantidadeEstoque: r.quantidade_estoque ?? 0,
-    diasEstoque: r.dias_estoque ?? 0,
-    acaoSugerida: (r.acao_sugerida ?? '').trim(),
-  }));
+  // Calcula ação sugerida baseado em dias de estoque e vendas
+  const mapped = raw
+    .filter((r) => (r.estoque_atual ?? 0) > 0) // Apenas itens com estoque
+    .map((r) => {
+      const diasEstoque = r.dias_estoque ?? 999;
+      const qtdVendida = r.qtd_produtos ?? 0;
+      
+      // Lógica de ação: sem vendas ou parado > 90 dias = LIQUIDAR
+      let acaoSugerida = 'COMPRAR';
+      if (qtdVendida === 0 || diasEstoque > 90) {
+        acaoSugerida = 'LIQUIDAR';
+      } else if (diasEstoque > 30) {
+        acaoSugerida = 'MANTER';
+      }
 
-  console.log('[estoqueService] Mapped data sample:', mapped[0]);
+      return {
+        codEmpresa: 0,
+        empresa: '',
+        codProduto: r.cod_sku ?? 0,
+        fornecedor: r.fornecedor ?? '',
+        marca: r.marca ?? '',
+        codigoBarra: String(r.cod_sku ?? ''),
+        descricao: r.descricao_item ?? '',
+        quantidadeEstoque: r.estoque_atual ?? 0,
+        diasEstoque,
+        acaoSugerida,
+      };
+    });
+
+  console.log('[estoqueService] Mapped data:', mapped.length, 'items with stock');
   return mapped;
 }
