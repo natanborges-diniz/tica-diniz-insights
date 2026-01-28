@@ -81,12 +81,12 @@ export default function StockDashboard() {
   // Busca textual para OTB
   const [buscaTextoOtb, setBuscaTextoOtb] = useState("");
 
-  // Carregar estoque quando empresa mudar
+  // Carregar estoque quando empresa mudar (com mesmas datas do OTB)
   useEffect(() => {
     if (otbFilters.empresa !== null && otbFilters.empresa !== 'ALL') {
-      carregarEstoque(otbFilters.empresa);
+      carregarEstoque(otbFilters.empresa, otbFilters.dataInicio, otbFilters.dataFim);
     }
-  }, [otbFilters.empresa, carregarEstoque]);
+  }, [otbFilters.empresa, otbFilters.dataInicio, otbFilters.dataFim, carregarEstoque]);
 
   // Filtrar itens OTB por curva e busca
   const itensFiltradosOtb = useMemo(() => {
@@ -233,9 +233,10 @@ export default function StockDashboard() {
             loadingEmpresas={loadingEmpresas}
             loading={isLoading}
             onReload={() => {
+              // Carrega AMBAS as views com os mesmos parâmetros
               carregarOtb();
               if (otbFilters.empresa !== null && otbFilters.empresa !== 'ALL') {
-                carregarEstoque(otbFilters.empresa);
+                carregarEstoque(otbFilters.empresa, otbFilters.dataInicio, otbFilters.dataFim);
               }
             }}
             contagemPorCategoria={contagemPorCategoria}
@@ -296,7 +297,7 @@ export default function StockDashboard() {
                         <Button 
                           variant="outline" 
                           size="sm" 
-                          onClick={() => carregarEstoque(otbFilters.empresa)}
+                          onClick={() => carregarEstoque(otbFilters.empresa, otbFilters.dataInicio, otbFilters.dataFim)}
                           disabled={loadingEstoque}
                         >
                           <RefreshCw className={`h-4 w-4 mr-2 ${loadingEstoque ? 'animate-spin' : ''}`} />
