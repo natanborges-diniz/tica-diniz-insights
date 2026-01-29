@@ -1,11 +1,16 @@
 // src/hooks/useEstoqueUnificado.ts
 // Hook UNIFICADO para gestão de estoque - fonte única de dados para todas as abas
-// RESOLVE: Inconsistência entre abas (Visão Estoque, O que Fazer, Análise OTB)
+// 
+// ESTRATÉGIA DE DADOS:
+// - /estoque/completo: Inventário físico TOTAL (estoque > 0) para "Visão Estoque"
+// - /vendas/analise-sku: Métricas de giro/vendas para "Análise OTB"
+// - Dados são MESCLADOS pelo cod_sku para ter visão completa
 
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useEmpresas } from "./useEmpresas";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getAnaliseSku, AnaliseSku } from "@/services/vendasService";
+import { getEstoqueCompleto, EstoqueCompleto, calcularMetricasEstoqueCompleto } from "@/services/estoqueCompletoService";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -33,11 +38,12 @@ export interface ItemEstoque {
   tipo: string;
   categoria: 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS';
   
-  // Estoque
+  // Estoque (do /estoque/completo)
   estoqueAtual: number;
   estoqueMinimo: number;
+  valorEstoqueCusto: number;
   
-  // Vendas
+  // Vendas (do /vendas/analise-sku)
   qtdVendidos: number;
   totalVendido: number;
   diasDesdeUltimaVenda: number;
@@ -55,12 +61,21 @@ export interface ItemEstoque {
   classificacao: 'COMPRAR_URGENTE' | 'COMPRAR' | 'ESTOQUE_OK' | 'EXCESSO';
   acaoSugerida: string;
   giroEstoque: number;
+  
+  // Dead stock
+  isDeadStock: boolean;
 }
 
 export interface MetricasEstoque {
-  // Métricas de estoque físico (apenas itens com estoque > 0)
+  // Métricas de estoque físico (do /estoque/completo)
   totalPecas: number;
   totalSkusComEstoque: number;
+  valorTotalCusto: number;
+  
+  // Dead stock
+  deadStockPecas: number;
+  deadStockValor: number;
+  deadStockPercentual: number;
   
   // Métricas gerais
   totalSkus: number;
@@ -72,7 +87,7 @@ export interface MetricasEstoque {
   pecasManter: number;
   pecasComprar: number;
   
-  // OTB
+  // OTB (do /vendas/analise-sku)
   totalVendido: number;
   totalOtb: number;
   totalOtbValor: number;
@@ -114,15 +129,15 @@ function categorizarTipo(tipo: string): 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | '
   return 'OUTROS';
 }
 
-function calcularAcaoSugerida(item: { estoqueAtual: number; estoqueMinimo: number; qtdVendidos: number; diasDesdeUltimaVenda: number; classificacao: string }): string {
+function calcularAcaoSugerida(item: { estoqueAtual: number; estoqueMinimo: number; qtdVendidos: number; diasDesdeUltimaVenda: number; classificacao: string; isDeadStock: boolean }): string {
+  // Dead stock = LIQUIDAR (prioridade máxima)
+  if (item.isDeadStock) {
+    return 'LIQUIDAR';
+  }
+  
   // Sem estoque mas com vendas = COMPRAR URGENTE
   if (item.estoqueAtual === 0 && item.qtdVendidos > 0) {
     return 'COMPRAR URGENTE';
-  }
-  
-  // Parado há muito tempo = LIQUIDAR
-  if (item.diasDesdeUltimaVenda > 180 || (item.qtdVendidos === 0 && item.estoqueAtual > 0)) {
-    return 'LIQUIDAR';
   }
   
   // Baseado na classificação OTB
@@ -159,7 +174,11 @@ export function useEstoqueUnificado() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dadosBrutos, setDadosBrutos] = useState<AnaliseSku[]>([]);
+  
+  // Dados de ambos endpoints
+  const [dadosEstoqueCompleto, setDadosEstoqueCompleto] = useState<EstoqueCompleto[]>([]);
+  const [dadosVendasSku, setDadosVendasSku] = useState<AnaliseSku[]>([]);
+  
   const [mapeamentoFornecedor, setMapeamentoFornecedor] = useState<Map<string, string>>(new Map());
   const [configMinimos, setConfigMinimos] = useState<EstoqueMinimoConfig[]>([]);
 
@@ -217,35 +236,27 @@ export function useEstoqueUnificado() {
     return Math.ceil((fim.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   }, [filters.dataInicio, filters.dataFim]);
 
-  // Contagem por categoria (dados brutos)
-  const contagemPorCategoria = useMemo(() => {
-    if (!dadosBrutos || dadosBrutos.length === 0) return { armacoes: 0, lentes: 0, acessorios: 0, outros: 0 };
-    
-    let armacoes = 0, lentes = 0, acessorios = 0, outros = 0;
-    
-    dadosBrutos.forEach(sku => {
-      const cat = categorizarTipo(sku.tipo);
-      if (cat === 'ARMACOES') armacoes++;
-      else if (cat === 'LENTES') lentes++;
-      else if (cat === 'ACESSORIOS') acessorios++;
-      else outros++;
-    });
-    
-    return { armacoes, lentes, acessorios, outros };
-  }, [dadosBrutos]);
-
-  // Processa dados brutos em ItemEstoque com cálculos OTB
+  // Mescla dados de ambos endpoints por cod_sku
   const itensProcessados = useMemo((): ItemEstoque[] => {
-    if (!dadosBrutos || dadosBrutos.length === 0) {
-      console.log('[useEstoqueUnificado] Nenhum dado bruto disponível');
+    // Se não tem dados de estoque completo, retorna vazio
+    if (!dadosEstoqueCompleto || dadosEstoqueCompleto.length === 0) {
+      console.log('[useEstoqueUnificado] Nenhum dado de estoque completo disponível');
       return [];
     }
 
-    console.log('[useEstoqueUnificado] Processando', dadosBrutos.length, 'SKUs');
+    console.log('[useEstoqueUnificado] Processando dados:');
+    console.log('  - Estoque completo:', dadosEstoqueCompleto.length, 'SKUs');
+    console.log('  - Vendas SKU:', dadosVendasSku.length, 'SKUs');
     
-    // Calcular curva ABC
-    const totalVendasGeral = dadosBrutos.reduce((acc, sku) => acc + sku.totalVendido, 0);
-    const ordenadosPorVenda = [...dadosBrutos].sort((a, b) => b.totalVendido - a.totalVendido);
+    // Criar mapa de vendas por cod_sku para lookup rápido
+    const vendasMap = new Map<number, AnaliseSku>();
+    dadosVendasSku.forEach(sku => {
+      vendasMap.set(sku.codSku, sku);
+    });
+    
+    // Calcular curva ABC baseado em vendas (usa dadosVendasSku)
+    const totalVendasGeral = dadosVendasSku.reduce((acc, sku) => acc + sku.totalVendido, 0);
+    const ordenadosPorVenda = [...dadosVendasSku].sort((a, b) => b.totalVendido - a.totalVendido);
     
     let acumulado = 0;
     const curvaMap = new Map<number, 'A' | 'B' | 'C'>();
@@ -259,10 +270,21 @@ export function useEstoqueUnificado() {
       else curvaMap.set(sku.codSku, 'C');
     });
 
-    return dadosBrutos.map(sku => {
-      const categoria = categorizarTipo(sku.tipo);
-      const curvaABC = curvaMap.get(sku.codSku) || 'C';
-      const vendaDiaria = diasPeriodo > 0 ? sku.qtdProdutos / diasPeriodo : 0;
+    // Processar cada item do estoque completo
+    return dadosEstoqueCompleto.map(estoqueItem => {
+      // Buscar dados de vendas correspondentes
+      const vendas = vendasMap.get(estoqueItem.codSku);
+      
+      const categoria = categorizarTipo(estoqueItem.tipo);
+      // Curva ABC: do mapa de vendas ou 'C' se não tiver vendas (sem giro)
+      const curvaABC = curvaMap.get(estoqueItem.codSku) || 'C';
+      
+      // Métricas de vendas (do endpoint de vendas ou zero se não vendeu)
+      const qtdVendidos = vendas?.qtdProdutos ?? 0;
+      const totalVendido = vendas?.totalVendido ?? 0;
+      const vendaDiaria = diasPeriodo > 0 ? qtdVendidos / diasPeriodo : 0;
+      const giroEstoque = vendas?.giroEstoque ?? 0;
+      const margemBruta = vendas?.margemBruta ?? 0;
       
       // Buscar mínimo configurado
       let estoqueMinimo = 0;
@@ -285,62 +307,91 @@ export function useEstoqueUnificado() {
       }
       
       // OTB = Mínimo - Estoque Atual
-      const otb = Math.max(0, Math.ceil(estoqueMinimo - sku.estoqueAtual));
-      const otbValor = otb * sku.precoCusto;
+      const otb = Math.max(0, Math.ceil(estoqueMinimo - estoqueItem.quantidadeEstoque));
+      const otbValor = otb * estoqueItem.precoCusto;
       
-      // Classificação
+      // Classificação baseada em estoque vs mínimo
       let classificacao: ItemEstoque['classificacao'];
       
       if (estoqueMinimo > 0) {
-        const percentualDoMinimo = (sku.estoqueAtual / estoqueMinimo) * 100;
+        const percentualDoMinimo = (estoqueItem.quantidadeEstoque / estoqueMinimo) * 100;
         
         if (percentualDoMinimo < 30) classificacao = 'COMPRAR_URGENTE';
         else if (percentualDoMinimo < 100) classificacao = 'COMPRAR';
         else if (percentualDoMinimo > 200) classificacao = 'EXCESSO';
         else classificacao = 'ESTOQUE_OK';
       } else {
-        if (sku.qtdProdutos > 0 && sku.estoqueAtual === 0) classificacao = 'COMPRAR_URGENTE';
-        else if (sku.estoqueAtual > 0 && sku.diasDesdeUltimaVenda > 180) classificacao = 'EXCESSO';
+        // Sem mínimo configurado: usa lógica baseada em vendas
+        if (qtdVendidos > 0 && estoqueItem.quantidadeEstoque === 0) classificacao = 'COMPRAR_URGENTE';
+        else if (estoqueItem.isDeadStock) classificacao = 'EXCESSO';
         else classificacao = 'ESTOQUE_OK';
       }
       
-      // Fornecedor com fallback
-      let fornecedorFinal = sku.fornecedor;
+      // Fornecedor com fallback para mapeamento
+      let fornecedorFinal = estoqueItem.fornecedor;
       if (!fornecedorFinal || fornecedorFinal === 'SEM FORNECEDOR' || fornecedorFinal === 'N/D') {
-        const marcaUpper = (sku.marca || '').toUpperCase();
+        const marcaUpper = (estoqueItem.marca || '').toUpperCase();
         const fornecedorMapeado = mapeamentoFornecedor.get(marcaUpper);
         if (fornecedorMapeado) fornecedorFinal = fornecedorMapeado;
       }
 
       const item: ItemEstoque = {
-        codSku: sku.codSku,
-        descricao: sku.descricaoItem,
-        marca: sku.marca,
+        codSku: estoqueItem.codSku,
+        descricao: estoqueItem.descricao,
+        marca: estoqueItem.marca,
         fornecedor: fornecedorFinal,
-        tipo: sku.tipo,
+        tipo: estoqueItem.tipo,
         categoria,
-        estoqueAtual: sku.estoqueAtual,
+        
+        // Estoque do /estoque/completo
+        estoqueAtual: estoqueItem.quantidadeEstoque,
         estoqueMinimo,
-        qtdVendidos: sku.qtdProdutos,
-        totalVendido: sku.totalVendido,
-        diasDesdeUltimaVenda: sku.diasDesdeUltimaVenda,
+        valorEstoqueCusto: estoqueItem.valorEstoqueCusto,
+        
+        // Vendas do /vendas/analise-sku
+        qtdVendidos,
+        totalVendido,
+        diasDesdeUltimaVenda: estoqueItem.diasSemVenda,
         vendaDiaria,
-        precoCusto: sku.precoCusto,
-        precoVenda: sku.precoVendaFinal,
-        margemBruta: sku.margemBruta,
+        
+        // Custos
+        precoCusto: estoqueItem.precoCusto,
+        precoVenda: estoqueItem.precoVenda,
+        margemBruta,
+        
+        // OTB
         otb,
         otbValor,
         curvaABC,
         classificacao,
         acaoSugerida: '',
-        giroEstoque: sku.giroEstoque,
+        giroEstoque,
+        
+        // Dead stock
+        isDeadStock: estoqueItem.isDeadStock,
       };
       
       item.acaoSugerida = calcularAcaoSugerida(item);
       
       return item;
     });
-  }, [dadosBrutos, diasPeriodo, filters.empresa, mapeamentoFornecedor, configMinimos]);
+  }, [dadosEstoqueCompleto, dadosVendasSku, diasPeriodo, filters.empresa, mapeamentoFornecedor, configMinimos]);
+
+  // Contagem por categoria (dados brutos)
+  const contagemPorCategoria = useMemo(() => {
+    if (!itensProcessados || itensProcessados.length === 0) return { armacoes: 0, lentes: 0, acessorios: 0, outros: 0 };
+    
+    let armacoes = 0, lentes = 0, acessorios = 0, outros = 0;
+    
+    itensProcessados.forEach(item => {
+      if (item.categoria === 'ARMACOES') armacoes++;
+      else if (item.categoria === 'LENTES') lentes++;
+      else if (item.categoria === 'ACESSORIOS') acessorios++;
+      else outros++;
+    });
+    
+    return { armacoes, lentes, acessorios, outros };
+  }, [itensProcessados]);
 
   // Itens filtrados (aplica TODOS os filtros)
   const itensFiltrados = useMemo(() => {
@@ -387,10 +438,29 @@ export function useEstoqueUnificado() {
 
   // Métricas consolidadas
   const metricas = useMemo((): MetricasEstoque => {
-    // Para estoque físico: apenas itens com estoque > 0
+    // Métricas de estoque físico direto do endpoint completo
+    const metricasEstoque = calcularMetricasEstoqueCompleto(
+      dadosEstoqueCompleto.filter(item => {
+        // Aplica filtro de categoria se selecionado
+        if (filters.categoria !== 'TODOS') {
+          const cat = categorizarTipo(item.tipo);
+          return cat === filters.categoria;
+        }
+        return true;
+      })
+    );
+    
+    // Para estoque físico filtrado: apenas itens com estoque > 0
     const comEstoque = itensFiltrados.filter(item => item.estoqueAtual > 0);
     const totalPecas = comEstoque.reduce((acc, i) => acc + i.estoqueAtual, 0);
     const totalSkusComEstoque = comEstoque.length;
+    const valorTotalCusto = comEstoque.reduce((acc, i) => acc + i.valorEstoqueCusto, 0);
+    
+    // Dead stock
+    const deadStock = comEstoque.filter(i => i.isDeadStock);
+    const deadStockPecas = deadStock.reduce((acc, i) => acc + i.estoqueAtual, 0);
+    const deadStockValor = deadStock.reduce((acc, i) => acc + i.valorEstoqueCusto, 0);
+    const deadStockPercentual = totalPecas > 0 ? (deadStockPecas / totalPecas) * 100 : 0;
     
     // Métricas gerais
     const totalSkus = itensFiltrados.length;
@@ -422,6 +492,10 @@ export function useEstoqueUnificado() {
     return {
       totalPecas,
       totalSkusComEstoque,
+      valorTotalCusto,
+      deadStockPecas,
+      deadStockValor,
+      deadStockPercentual,
       totalSkus,
       fornecedoresDistintos,
       marcasDistintas,
@@ -437,7 +511,7 @@ export function useEstoqueUnificado() {
       skusExcesso,
       diasPeriodo,
     };
-  }, [itensFiltrados, diasPeriodo]);
+  }, [itensFiltrados, dadosEstoqueCompleto, filters.categoria, diasPeriodo]);
 
   // Listas para filtros
   const listaFornecedores = useMemo(() => {
@@ -466,7 +540,7 @@ export function useEstoqueUnificado() {
       .sort((a, b) => b.qtdSkus - a.qtdSkus);
   }, [itensProcessados]);
 
-  // Carregar dados
+  // Carregar dados de AMBOS endpoints
   const carregarDados = useCallback(async () => {
     if (filters.empresa === null) {
       toast({
@@ -481,29 +555,40 @@ export function useEstoqueUnificado() {
     setError(null);
     
     try {
-      console.log('[useEstoqueUnificado] Carregando dados...', {
+      console.log('[useEstoqueUnificado] Carregando dados de ambos endpoints...', {
         empresa: filters.empresa,
         dataInicio: filters.dataInicio,
         dataFim: filters.dataFim,
       });
       
-      const dados = await getAnaliseSku({
-        empresa: filters.empresa,
-        dataInicio: filters.dataInicio,
-        dataFim: filters.dataFim,
-      });
+      // Busca PARALELA de ambos endpoints
+      const [estoqueCompleto, vendasSku] = await Promise.all([
+        // 1. Estoque completo: inventário físico total
+        getEstoqueCompleto({
+          empresa: filters.empresa,
+        }),
+        // 2. Vendas por SKU: métricas de giro e vendas
+        getAnaliseSku({
+          empresa: filters.empresa,
+          dataInicio: filters.dataInicio,
+          dataFim: filters.dataFim,
+        }),
+      ]);
       
-      console.log('[useEstoqueUnificado] Dados carregados:', dados.length, 'SKUs');
+      console.log('[useEstoqueUnificado] Dados carregados:');
+      console.log('  - Estoque completo:', estoqueCompleto.length, 'SKUs');
+      console.log('  - Vendas por SKU:', vendasSku.length, 'SKUs');
       
-      // Contar peças com estoque > 0
-      const pecasComEstoque = dados.filter(d => d.estoqueAtual > 0);
-      const totalPecas = pecasComEstoque.reduce((acc, d) => acc + d.estoqueAtual, 0);
+      // Contar totais
+      const totalPecasEstoque = estoqueCompleto.reduce((acc, d) => acc + d.quantidadeEstoque, 0);
+      const pecasDeadStock = estoqueCompleto.filter(d => d.isDeadStock).reduce((acc, d) => acc + d.quantidadeEstoque, 0);
       
-      setDadosBrutos(dados);
+      setDadosEstoqueCompleto(estoqueCompleto);
+      setDadosVendasSku(vendasSku);
       
       toast({
         title: "Dados Carregados",
-        description: `${pecasComEstoque.length} SKUs com estoque • ${totalPecas.toLocaleString('pt-BR')} peças`,
+        description: `${estoqueCompleto.length} SKUs • ${totalPecasEstoque.toLocaleString('pt-BR')} peças em estoque • ${pecasDeadStock.toLocaleString('pt-BR')} paradas`,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao carregar dados';
@@ -520,6 +605,9 @@ export function useEstoqueUnificado() {
     }
   }, [filters.empresa, filters.dataInicio, filters.dataFim]);
 
+  // Para compatibilidade com código existente
+  const dadosBrutos = dadosVendasSku;
+
   return {
     // Empresas
     empresas,
@@ -533,8 +621,12 @@ export function useEstoqueUnificado() {
     loading,
     error,
     
-    // Dados
+    // Dados brutos
     dadosBrutos,
+    dadosEstoqueCompleto,
+    dadosVendasSku,
+    
+    // Dados processados
     itensProcessados,
     itensFiltrados,
     itensComEstoque,

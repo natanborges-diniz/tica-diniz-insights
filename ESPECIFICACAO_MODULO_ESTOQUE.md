@@ -408,14 +408,37 @@ Investimento = SUM(OTB * preco_custo) WHERE fornecedor = X
 
 ---
 
-## 🚀 Próximos Passos
+## ✅ Status de Implementação
 
-1. **Backend**: Validar e ajustar endpoints conforme especificação
-2. **Frontend**: Implementar consumo dos novos endpoints
-3. **Testes**: Validar consistência de dados entre endpoints
-4. **Deploy**: Disponibilizar em produção
+### Endpoints Integrados
+| Endpoint | Status | Uso no Frontend |
+|----------|--------|-----------------|
+| `/estoque/completo` | ✅ Implementado | `estoqueCompletoService.ts` - Inventário físico total |
+| `/vendas/analise-sku` | ✅ Implementado | `vendasService.ts` - Giro e Curva ABC |
+| `/estoque/resumo-agrupado` | 🔄 Pendente | Visão por fornecedor (manual no frontend) |
+| `/estoque/movimentacao` | 🔄 Pendente | Histórico de entradas/saídas |
+| `/estoque/sugestao-minimos` | 🔄 Pendente | IA via edge function |
+
+### Arquivos Implementados
+- `src/services/estoqueCompletoService.ts` - Service para endpoint /estoque/completo
+- `src/services/vendasService.ts` - getAnaliseSku() para OTB
+- `src/hooks/useEstoqueUnificado.ts` - Hook unificado que mescla ambos endpoints
+- `src/pages/StockDashboard.tsx` - Dashboard com 3 abas
+
+### Fluxo de Dados Implementado
+```
+/estoque/completo       →  Inventário físico (estoque > 0)
+         ↓
+     MERGE by cod_sku
+         ↓
+/vendas/analise-sku     →  Métricas de giro (período)
+         ↓
+useEstoqueUnificado     →  ItemEstoque[] com dados completos
+         ↓
+StockDashboard          →  Abas: Visão Estoque | O que Fazer | Análise OTB
+```
 
 ---
 
-*Documento gerado em: 29/01/2025*
-*Versão: 1.0*
+*Documento atualizado em: 29/01/2026*
+*Versão: 2.0 - Implementação concluída*

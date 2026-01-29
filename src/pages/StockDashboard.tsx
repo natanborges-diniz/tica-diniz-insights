@@ -37,7 +37,7 @@ import {
 
 function EstoqueKPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueUnificado>['metricas'] }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Total em Estoque</CardTitle>
@@ -45,7 +45,35 @@ function EstoqueKPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueU
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{metricas.totalPecas.toLocaleString('pt-BR')}</div>
-          <p className="text-xs text-muted-foreground">{metricas.totalSkusComEstoque} SKUs com estoque</p>
+          <p className="text-xs text-muted-foreground">{metricas.totalSkusComEstoque} SKUs distintos</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Valor em Estoque</CardTitle>
+          <BoxIcon className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">
+            {metricas.valorTotalCusto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </div>
+          <p className="text-xs text-muted-foreground">custo total</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Dead Stock</CardTitle>
+          <AlertTriangle className="h-4 w-4 text-accent-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-accent-foreground">
+            {metricas.deadStockPecas.toLocaleString('pt-BR')}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {metricas.deadStockPercentual.toFixed(1)}% do estoque • {metricas.deadStockValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </p>
         </CardContent>
       </Card>
 
@@ -56,18 +84,7 @@ function EstoqueKPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueU
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{metricas.fornecedoresDistintos}</div>
-          <p className="text-xs text-muted-foreground">distintos</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Marcas</CardTitle>
-          <Tag className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{metricas.marcasDistintas}</div>
-          <p className="text-xs text-muted-foreground">distintas</p>
+          <p className="text-xs text-muted-foreground">{metricas.marcasDistintas} marcas</p>
         </CardContent>
       </Card>
 
@@ -103,29 +120,43 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
             <th className="text-left p-3 font-medium">Descrição</th>
             <th className="text-left p-3 font-medium">Marca</th>
             <th className="text-left p-3 font-medium">Fornecedor</th>
-            <th className="text-left p-3 font-medium">Categoria</th>
+            <th className="text-left p-3 font-medium">Cat.</th>
             <th className="text-right p-3 font-medium">Estoque</th>
-            <th className="text-right p-3 font-medium">Vendidos</th>
+            <th className="text-right p-3 font-medium">Valor Custo</th>
+            <th className="text-right p-3 font-medium">Dias s/ Venda</th>
             <th className="text-left p-3 font-medium">Curva</th>
             <th className="text-left p-3 font-medium">Ação</th>
           </tr>
         </thead>
         <tbody>
           {itens.slice(0, 100).map((item) => (
-            <tr key={item.codSku} className="border-t hover:bg-muted/30">
+            <tr 
+              key={item.codSku} 
+              className={`border-t hover:bg-muted/30 ${item.isDeadStock ? 'bg-destructive/5' : ''}`}
+            >
               <td className="p-3 font-mono text-xs">{item.codSku}</td>
-              <td className="p-3 max-w-[200px] truncate" title={item.descricao}>{item.descricao}</td>
+              <td className="p-3 max-w-[200px] truncate" title={item.descricao}>
+                {item.isDeadStock && <AlertTriangle className="h-3 w-3 inline mr-1 text-destructive" />}
+                {item.descricao}
+              </td>
               <td className="p-3">{item.marca}</td>
               <td className="p-3">{item.fornecedor}</td>
               <td className="p-3">
                 <Badge variant="outline" className="text-xs">
-                  {item.categoria === 'ARMACOES' ? 'Armações' : 
-                   item.categoria === 'LENTES' ? 'Lentes' : 
-                   item.categoria === 'ACESSORIOS' ? 'Acessórios' : 'Outros'}
+                  {item.categoria === 'ARMACOES' ? 'AR' : 
+                   item.categoria === 'LENTES' ? 'LT' : 
+                   item.categoria === 'ACESSORIOS' ? 'AC' : 'OU'}
                 </Badge>
               </td>
               <td className="p-3 text-right font-medium">{item.estoqueAtual}</td>
-              <td className="p-3 text-right">{item.qtdVendidos}</td>
+              <td className="p-3 text-right text-muted-foreground">
+                {item.valorEstoqueCusto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </td>
+              <td className="p-3 text-right">
+                <span className={item.diasDesdeUltimaVenda > 180 ? 'text-destructive font-medium' : ''}>
+                  {item.diasDesdeUltimaVenda > 900 ? '∞' : item.diasDesdeUltimaVenda}
+                </span>
+              </td>
               <td className="p-3">
                 <Badge 
                   variant={item.curvaABC === 'A' ? 'default' : item.curvaABC === 'B' ? 'secondary' : 'outline'}
