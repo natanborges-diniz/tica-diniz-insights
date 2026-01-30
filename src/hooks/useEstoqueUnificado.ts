@@ -286,6 +286,18 @@ export function useEstoqueUnificado() {
     console.log('  - Estoque completo:', dadosEstoqueCompleto.length, 'SKUs');
     console.log('  - Vendas SKU:', dadosVendasSku.length, 'SKUs');
     
+    // DEBUG: Log dos tipos únicos para diagnóstico de categorização
+    const tiposUnicos = [...new Set(dadosEstoqueCompleto.map(item => item.tipo))];
+    console.log('[useEstoqueUnificado] TIPOS ÚNICOS DO ESTOQUE:', tiposUnicos);
+    
+    // Contar quantos itens têm cada tipo
+    const contagemTipos: Record<string, number> = {};
+    dadosEstoqueCompleto.forEach(item => {
+      const tipo = item.tipo || 'NULL/VAZIO';
+      contagemTipos[tipo] = (contagemTipos[tipo] || 0) + 1;
+    });
+    console.log('[useEstoqueUnificado] CONTAGEM POR TIPO:', contagemTipos);
+    
     // Criar mapa de vendas por cod_sku para lookup rápido
     const vendasMap = new Map<number, AnaliseSku>();
     dadosVendasSku.forEach(sku => {
