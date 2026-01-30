@@ -117,15 +117,53 @@ interface MapeamentoFornecedor {
 function categorizarTipo(tipo: string): 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS' {
   const tipoNorm = (tipo || '').toUpperCase().trim();
   
-  if (tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || tipoNorm.includes('ARMAC') || tipoNorm.includes('ARMAÇÃO')) {
+  // Debug: log para verificar valores vindos do backend
+  // console.log('[categorizarTipo] Input:', tipo, '-> Normalizado:', tipoNorm);
+  
+  // ARMAÇÕES: AR, ARM, ARMAÇÃO, ARMACAO, ou qualquer coisa que comece com AR
+  if (
+    tipoNorm === 'AR' ||
+    tipoNorm === 'ARM' ||
+    tipoNorm.startsWith('AR ') ||
+    tipoNorm.startsWith('AR-') ||
+    tipoNorm.startsWith('ARM ') ||
+    tipoNorm.startsWith('ARM-') ||
+    tipoNorm.includes('ARMAC') ||
+    tipoNorm.includes('ARMAÇÃO') ||
+    tipoNorm.includes('ARMA')
+  ) {
     return 'ARMACOES';
   }
-  if (tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || tipoNorm === 'LG' || tipoNorm === 'GC' || tipoNorm.includes('LENT')) {
+  
+  // LENTES: LG (lentes de grau), GC (grau de contato), LC (lentes de contato)
+  if (
+    tipoNorm === 'LG' ||
+    tipoNorm === 'GC' ||
+    tipoNorm === 'LC' ||
+    tipoNorm.startsWith('LG ') ||
+    tipoNorm.startsWith('LG-') ||
+    tipoNorm.startsWith('GC ') ||
+    tipoNorm.startsWith('GC-') ||
+    tipoNorm.startsWith('LC ') ||
+    tipoNorm.startsWith('LC-') ||
+    tipoNorm.includes('LENT') ||
+    tipoNorm.includes('GRAU') ||
+    tipoNorm.includes('CONTATO')
+  ) {
     return 'LENTES';
   }
-  if (tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || tipoNorm.includes('ACESS') || tipoNorm.includes('ACC')) {
+  
+  // ACESSÓRIOS: AC, ACESSÓRIO
+  if (
+    tipoNorm === 'AC' ||
+    tipoNorm.startsWith('AC ') ||
+    tipoNorm.startsWith('AC-') ||
+    tipoNorm.includes('ACESS') ||
+    tipoNorm.includes('ACC')
+  ) {
     return 'ACESSORIOS';
   }
+  
   return 'OUTROS';
 }
 
