@@ -68,6 +68,9 @@ export async function getEstoqueCompleto(
   console.log('[estoqueCompletoService] Raw data count:', raw.length);
   if (raw.length > 0) {
     console.log('[estoqueCompletoService] Sample record:', raw[0]);
+    // Log tipos únicos para debug de categorização
+    const tiposUnicos = [...new Set(raw.map(r => r.tipo))];
+    console.log('[estoqueCompletoService] Tipos únicos encontrados:', tiposUnicos);
   }
 
   return raw.map((r) => {
