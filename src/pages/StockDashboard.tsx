@@ -129,9 +129,9 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
           </tr>
         </thead>
         <tbody>
-          {itens.slice(0, 100).map((item) => (
+          {itens.slice(0, 100).map((item, index) => (
             <tr 
-              key={item.codSku} 
+              key={`${item.codSku}-${index}`} 
               className={`border-t hover:bg-muted/30 ${item.isDeadStock ? 'bg-destructive/5' : ''}`}
             >
               <td className="p-3 font-mono text-xs">{item.codSku}</td>

@@ -317,7 +317,8 @@ export async function getAnaliseSku(
       : qtdProdutos > 0 ? 999 : 0; // 999 indica sem estoque mas com vendas
 
     return {
-      codSku: r.cod_sku ?? 0,
+      // Converter para número garantindo consistência (backend pode enviar como string)
+      codSku: typeof r.cod_sku === 'string' ? parseInt(r.cod_sku, 10) : (r.cod_sku ?? 0),
       descricaoItem: (r.descricao_item ?? '').trim(),
       marca: (r.marca ?? 'SEM MARCA').trim(),
       // Fornecedor: tratar valores nulos, vazios ou apenas espaços

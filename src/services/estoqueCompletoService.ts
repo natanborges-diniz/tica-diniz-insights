@@ -79,7 +79,8 @@ export async function getEstoqueCompleto(
     const diasSemVenda = r.dias_sem_venda ?? 999;
     
     return {
-      codSku: r.cod_sku ?? 0,
+      // Converter para número garantindo consistência (backend pode enviar como string)
+      codSku: typeof r.cod_sku === 'string' ? parseInt(r.cod_sku, 10) : (r.cod_sku ?? 0),
       descricao: (r.descricao ?? '').trim(),
       // Fornecedor: tratar valores nulos ou vazios
       fornecedor: (() => {
