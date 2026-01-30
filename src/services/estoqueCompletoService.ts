@@ -9,17 +9,57 @@ import { apiGet, EmpresaParam, formatEmpresaParam, ApiGetOptions } from './fireb
 // ============================================
 
 interface EstoqueCompletoRaw {
-  cod_sku: number;
-  descricao: string;
-  fornecedor_nome: string;
-  grife: string;
-  tipo: string;
-  quantidade_estoque: number;
-  preco_custo: number;
-  preco_venda: number;
-  data_entrada: string | null;
-  data_ultima_venda: string | null;
-  dias_sem_venda: number;
+  cod_sku: number | string;
+  // Backend pode retornar como descricao ou descricao_item
+  descricao?: string;
+  descricao_item?: string;
+  fornecedor_nome?: string;
+  grife?: string;
+  tipo?: string;
+  quantidade_estoque?: number;
+  preco_custo?: number;
+  preco_venda?: number;
+  data_entrada?: string | null;
+  data_ultima_entrada?: string | null;
+  data_ultima_venda?: string | null;
+  dias_sem_venda?: number | null;
+}
+
+/**
+ * Extrai o tipo/categoria do produto a partir do prefixo da descrição
+ * Ex: "AR TIGO 047" -> "AR", "LG HOYA 1.60" -> "LG", "AC ESTOJO" -> "AC"
+ */
+function extrairTipoDeDescricao(descricao: string): string {
+  if (!descricao) return 'OUTROS';
+  
+  const desc = descricao.trim().toUpperCase();
+  
+  // Pega as primeiras 2-3 letras antes do primeiro espaço
+  const primeiroEspaco = desc.indexOf(' ');
+  const prefixo = primeiroEspaco > 0 ? desc.substring(0, primeiroEspaco) : desc.substring(0, 3);
+  
+  // Armações: AR, ARM, OC (óculos)
+  if (prefixo === 'AR' || prefixo === 'ARM' || prefixo === 'OC') {
+    return 'AR';
+  }
+  
+  // Lentes: LG (lentes de grau), GC (grau contato), LC (lentes contato)
+  if (prefixo === 'LG' || prefixo === 'GC' || prefixo === 'LC') {
+    return 'LG';
+  }
+  
+  // Acessórios: AC, EST (estojo), CORD (cordão), etc
+  if (prefixo === 'AC' || prefixo === 'EST' || prefixo.startsWith('CORD')) {
+    return 'AC';
+  }
+  
+  // Solar: SOL, OS (óculos solar)
+  if (prefixo === 'SOL' || prefixo === 'OS') {
+    return 'SOL';
+  }
+  
+  console.log('[estoqueCompletoService] Tipo não reconhecido:', prefixo, 'de:', descricao.substring(0, 30));
+  return 'OUTROS';
 }
 
 // ============================================
@@ -67,21 +107,25 @@ export async function getEstoqueCompleto(
 
   console.log('[estoqueCompletoService] Raw data count:', raw.length);
   if (raw.length > 0) {
-    console.log('[estoqueCompletoService] Sample record:', raw[0]);
-    // Log tipos únicos para debug de categorização
-    const tiposUnicos = [...new Set(raw.map(r => r.tipo))];
-    console.log('[estoqueCompletoService] Tipos únicos encontrados:', tiposUnicos);
+    console.log('[estoqueCompletoService] Sample record:', JSON.stringify(raw[0], null, 2));
   }
 
-  return raw.map((r) => {
+  const resultado = raw.map((r) => {
     const quantidadeEstoque = r.quantidade_estoque ?? 0;
     const precoCusto = r.preco_custo ?? 0;
     const diasSemVenda = r.dias_sem_venda ?? 999;
     
+    // Descrição pode vir como descricao ou descricao_item
+    const descricao = (r.descricao || r.descricao_item || '').trim();
+    
+    // Tipo: extrair do prefixo da descrição se não vier do backend
+    const tipoBackend = r.tipo?.trim();
+    const tipo = tipoBackend && tipoBackend !== '' ? tipoBackend : extrairTipoDeDescricao(descricao);
+    
     return {
       // Converter para número garantindo consistência (backend pode enviar como string)
       codSku: typeof r.cod_sku === 'string' ? parseInt(r.cod_sku, 10) : (r.cod_sku ?? 0),
-      descricao: (r.descricao ?? '').trim(),
+      descricao,
       // Fornecedor: tratar valores nulos ou vazios
       fornecedor: (() => {
         const forn = (r.fornecedor_nome ?? '').trim();
@@ -98,18 +142,31 @@ export async function getEstoqueCompleto(
         }
         return grife;
       })(),
-      tipo: (r.tipo ?? 'OUTROS').trim(),
+      tipo,
       quantidadeEstoque,
       precoCusto,
       precoVenda: r.preco_venda ?? 0,
       valorEstoqueCusto: quantidadeEstoque * precoCusto,
-      dataEntrada: r.data_entrada,
+      dataEntrada: r.data_entrada || r.data_ultima_entrada || null,
       dataUltimaVenda: r.data_ultima_venda,
       diasSemVenda,
       // Dead stock: mais de 180 dias sem venda ou nunca vendeu
       isDeadStock: diasSemVenda > 180 || r.data_ultima_venda === null,
     };
   });
+  
+  // Log tipos extraídos para debug
+  const tiposExtraidos = [...new Set(resultado.map(r => r.tipo))];
+  console.log('[estoqueCompletoService] Tipos extraídos das descrições:', tiposExtraidos);
+  
+  // Contagem por tipo
+  const contagemTipos: Record<string, number> = {};
+  resultado.forEach(r => {
+    contagemTipos[r.tipo] = (contagemTipos[r.tipo] || 0) + 1;
+  });
+  console.log('[estoqueCompletoService] Contagem por tipo:', contagemTipos);
+  
+  return resultado;
 }
 
 // ============================================
