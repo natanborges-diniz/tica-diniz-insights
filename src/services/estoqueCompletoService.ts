@@ -10,6 +10,7 @@ import { apiGet, EmpresaParam, formatEmpresaParam, ApiGetOptions } from './fireb
 
 interface EstoqueCompletoRaw {
   cod_sku: number | string;
+  codigo_barras?: string;
   // Backend pode retornar como descricao ou descricao_item
   descricao?: string;
   descricao_item?: string;
@@ -68,6 +69,7 @@ function extrairTipoDeDescricao(descricao: string): string {
 
 export interface EstoqueCompleto {
   codSku: number;
+  codigoBarra: string;
   descricao: string;
   fornecedor: string;
   marca: string; // grife no backend
@@ -125,6 +127,7 @@ export async function getEstoqueCompleto(
     return {
       // Converter para número garantindo consistência (backend pode enviar como string)
       codSku: typeof r.cod_sku === 'string' ? parseInt(r.cod_sku, 10) : (r.cod_sku ?? 0),
+      codigoBarra: (r.codigo_barras ?? '').trim(),
       descricao,
       // Fornecedor: tratar valores nulos ou vazios
       fornecedor: (() => {

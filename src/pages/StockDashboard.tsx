@@ -16,6 +16,8 @@ import { OtbFornecedorMarcaConfig } from "@/components/otb/OtbFornecedorMarcaCon
 import { OtbPainelAcoes } from "@/components/otb/OtbPainelAcoes";
 import { OtbCurvaABCChart } from "@/components/otb/OtbCurvaABCChart";
 import { OtbSugestaoCoberturaIA } from "@/components/otb/OtbSugestaoCoberturaIA";
+import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
+import { formatters, ExportColumn } from "@/utils/exportData";
 import { 
   Package, 
   AlertCircle, 
@@ -103,6 +105,21 @@ function EstoqueKPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueU
 }
 
 function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
+  // Colunas para exportação
+  const exportColumns: ExportColumn[] = [
+    { key: 'codSku', header: 'Código SKU' },
+    { key: 'codigoBarra', header: 'Cód. Barras' },
+    { key: 'descricao', header: 'Descrição' },
+    { key: 'marca', header: 'Marca' },
+    { key: 'fornecedor', header: 'Fornecedor' },
+    { key: 'categoria', header: 'Categoria' },
+    { key: 'estoqueAtual', header: 'Estoque', format: formatters.number },
+    { key: 'valorEstoqueCusto', header: 'Valor Custo', format: formatters.currency },
+    { key: 'diasDesdeUltimaVenda', header: 'Dias s/ Venda', format: (v) => v > 900 ? '∞' : String(v) },
+    { key: 'curvaABC', header: 'Curva ABC' },
+    { key: 'acaoSugerida', header: 'Ação Sugerida' },
+  ];
+
   if (itens.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -112,80 +129,96 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
   }
 
   return (
-    <div className="rounded-md border overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50">
-          <tr>
-            <th className="text-left p-3 font-medium">Código</th>
-            <th className="text-left p-3 font-medium">Descrição</th>
-            <th className="text-left p-3 font-medium">Marca</th>
-            <th className="text-left p-3 font-medium">Fornecedor</th>
-            <th className="text-left p-3 font-medium">Cat.</th>
-            <th className="text-right p-3 font-medium">Estoque</th>
-            <th className="text-right p-3 font-medium">Valor Custo</th>
-            <th className="text-right p-3 font-medium">Dias s/ Venda</th>
-            <th className="text-left p-3 font-medium">Curva</th>
-            <th className="text-left p-3 font-medium">Ação</th>
-          </tr>
-        </thead>
-        <tbody>
-          {itens.slice(0, 100).map((item, index) => (
-            <tr 
-              key={`${item.codSku}-${index}`} 
-              className={`border-t hover:bg-muted/30 ${item.isDeadStock ? 'bg-destructive/5' : ''}`}
-            >
-              <td className="p-3 font-mono text-xs">{item.codSku}</td>
-              <td className="p-3 max-w-[200px] truncate" title={item.descricao}>
-                {item.isDeadStock && <AlertTriangle className="h-3 w-3 inline mr-1 text-destructive" />}
-                {item.descricao}
-              </td>
-              <td className="p-3">{item.marca}</td>
-              <td className="p-3">{item.fornecedor}</td>
-              <td className="p-3">
-                <Badge variant="outline" className="text-xs">
-                  {item.categoria === 'ARMACOES' ? 'AR' : 
-                   item.categoria === 'LENTES' ? 'LT' : 
-                   item.categoria === 'ACESSORIOS' ? 'AC' : 'OU'}
-                </Badge>
-              </td>
-              <td className="p-3 text-right font-medium">{item.estoqueAtual}</td>
-              <td className="p-3 text-right text-muted-foreground">
-                {item.valorEstoqueCusto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </td>
-              <td className="p-3 text-right">
-                <span className={item.diasDesdeUltimaVenda > 180 ? 'text-destructive font-medium' : ''}>
-                  {item.diasDesdeUltimaVenda > 900 ? '∞' : item.diasDesdeUltimaVenda}
-                </span>
-              </td>
-              <td className="p-3">
-                <Badge 
-                  variant={item.curvaABC === 'A' ? 'default' : item.curvaABC === 'B' ? 'secondary' : 'outline'}
-                  className="text-xs"
-                >
-                  {item.curvaABC}
-                </Badge>
-              </td>
-              <td className="p-3">
-                <Badge 
-                  variant={
-                    item.acaoSugerida.includes('URGENTE') ? 'destructive' : 
-                    item.acaoSugerida.includes('COMPRAR') ? 'default' : 
-                    item.acaoSugerida.includes('LIQUIDAR') ? 'secondary' : 'outline'
-                  }
-                  className="text-xs whitespace-nowrap"
-                >
-                  {item.acaoSugerida}
-                </Badge>
-              </td>
+    <div className="space-y-4">
+      {/* Toolbar com exportação */}
+      <DataTableToolbar
+        exportOptions={{
+          filename: `estoque_${new Date().toISOString().split('T')[0]}`,
+          title: 'Detalhamento de Estoque',
+          columns: exportColumns,
+          data: itens,
+        }}
+      >
+        <span className="text-sm text-muted-foreground">
+          {itens.length.toLocaleString('pt-BR')} itens • Posição: {new Date().toLocaleDateString('pt-BR')} (tempo real)
+        </span>
+      </DataTableToolbar>
+
+      <div className="rounded-md border overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="text-left p-3 font-medium">Cód. Barras</th>
+              <th className="text-left p-3 font-medium">Descrição</th>
+              <th className="text-left p-3 font-medium">Marca</th>
+              <th className="text-left p-3 font-medium">Fornecedor</th>
+              <th className="text-left p-3 font-medium">Cat.</th>
+              <th className="text-right p-3 font-medium">Estoque</th>
+              <th className="text-right p-3 font-medium">Valor Custo</th>
+              <th className="text-right p-3 font-medium">Dias s/ Venda</th>
+              <th className="text-left p-3 font-medium">Curva</th>
+              <th className="text-left p-3 font-medium">Ação</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      {itens.length > 100 && (
-        <div className="p-3 text-center text-sm text-muted-foreground border-t">
-          Mostrando 100 de {itens.length} itens. Use os filtros para refinar.
-        </div>
-      )}
+          </thead>
+          <tbody>
+            {itens.slice(0, 100).map((item, index) => (
+              <tr 
+                key={`${item.codSku}-${index}`} 
+                className={`border-t hover:bg-muted/30 ${item.isDeadStock ? 'bg-destructive/5' : ''}`}
+              >
+                <td className="p-3 font-mono text-xs">{item.codigoBarra || item.codSku}</td>
+                <td className="p-3 max-w-[200px] truncate" title={item.descricao}>
+                  {item.isDeadStock && <AlertTriangle className="h-3 w-3 inline mr-1 text-destructive" />}
+                  {item.descricao}
+                </td>
+                <td className="p-3">{item.marca}</td>
+                <td className="p-3">{item.fornecedor}</td>
+                <td className="p-3">
+                  <Badge variant="outline" className="text-xs">
+                    {item.categoria === 'ARMACOES' ? 'AR' : 
+                     item.categoria === 'LENTES' ? 'LT' : 
+                     item.categoria === 'ACESSORIOS' ? 'AC' : 'OU'}
+                  </Badge>
+                </td>
+                <td className="p-3 text-right font-medium">{item.estoqueAtual}</td>
+                <td className="p-3 text-right text-muted-foreground">
+                  {item.valorEstoqueCusto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </td>
+                <td className="p-3 text-right">
+                  <span className={item.diasDesdeUltimaVenda > 180 ? 'text-destructive font-medium' : ''}>
+                    {item.diasDesdeUltimaVenda > 900 ? '∞' : item.diasDesdeUltimaVenda}
+                  </span>
+                </td>
+                <td className="p-3">
+                  <Badge 
+                    variant={item.curvaABC === 'A' ? 'default' : item.curvaABC === 'B' ? 'secondary' : 'outline'}
+                    className="text-xs"
+                  >
+                    {item.curvaABC}
+                  </Badge>
+                </td>
+                <td className="p-3">
+                  <Badge 
+                    variant={
+                      item.acaoSugerida.includes('URGENTE') ? 'destructive' : 
+                      item.acaoSugerida.includes('COMPRAR') ? 'default' : 
+                      item.acaoSugerida.includes('LIQUIDAR') ? 'secondary' : 'outline'
+                    }
+                    className="text-xs whitespace-nowrap"
+                  >
+                    {item.acaoSugerida}
+                  </Badge>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {itens.length > 100 && (
+          <div className="p-3 text-center text-sm text-muted-foreground border-t">
+            Mostrando 100 de {itens.length} itens. Use os filtros para refinar.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
