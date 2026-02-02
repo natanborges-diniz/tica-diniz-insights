@@ -131,6 +131,7 @@ export async function getEstoqueCompleto(
     const tipo = tipoBackend && tipoBackend !== '' ? tipoBackend : extrairTipoDeDescricao(descricao);
     
     // Dias em estoque: preferir dias_estoque do backend, senão calcular
+    // Fallback 1: data_ultima_entrada, Fallback 2: dias_sem_venda
     let diasEmEstoque = 0;
     if (r.dias_estoque !== undefined && r.dias_estoque !== null) {
       diasEmEstoque = r.dias_estoque;
@@ -140,13 +141,22 @@ export async function getEstoqueCompleto(
         diasEmEstoque = Math.floor((hoje.getTime() - dataEntrada.getTime()) / (1000 * 60 * 60 * 24));
         if (diasEmEstoque < 0) diasEmEstoque = 0;
       }
+    } else if (r.dias_sem_venda !== undefined && r.dias_sem_venda !== null) {
+      // Se não tem data de entrada, usar dias_sem_venda como proxy
+      diasEmEstoque = r.dias_sem_venda;
     }
     
     // Ação sugerida: preferir do backend, senão calcular baseado em dias
     let acaoSugerida = r.acao_sugerida;
     if (!acaoSugerida) {
-      if (r.data_ultima_entrada === null) {
-        acaoSugerida = 'SEM MOVIMENTO';
+      // Se não temos NENHUMA informação de tempo, classificar como SEM MOVIMENTO
+      const temInfoTempo = r.data_ultima_entrada !== null || 
+                           (r.dias_sem_venda !== undefined && r.dias_sem_venda !== null) ||
+                           (r.dias_estoque !== undefined && r.dias_estoque !== null);
+      
+      if (!temInfoTempo) {
+        // Itens sem nenhum registro de movimento - potencialmente antigos
+        acaoSugerida = 'LIQUIDA 50%';
       } else if (diasEmEstoque <= 90) {
         acaoSugerida = 'ANALISE PARA RECOMPRA';
       } else if (diasEmEstoque <= 180) {
