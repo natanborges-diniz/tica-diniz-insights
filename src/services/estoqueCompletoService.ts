@@ -22,7 +22,8 @@ interface EstoqueCompletoRaw {
   preco_venda?: number;
   data_ultima_entrada?: string | null;
   data_ultima_venda?: string | null;
-  // Campos calculados pelo backend
+  dias_sem_venda?: number | null;
+  // Campos que virão quando a query for atualizada
   dias_estoque?: number | null;
   acao_sugerida?: string | null;
 }
@@ -114,6 +115,8 @@ export async function getEstoqueCompleto(
     console.log('[estoqueCompletoService] Sample record:', JSON.stringify(raw[0], null, 2));
   }
 
+  const hoje = new Date();
+  
   const resultado = raw.map((r) => {
     const quantidadeEstoque = r.quantidade_estoque ?? 0;
     const precoCusto = r.preco_custo ?? 0;
@@ -125,11 +128,37 @@ export async function getEstoqueCompleto(
     const tipoBackend = r.tipo?.trim();
     const tipo = tipoBackend && tipoBackend !== '' ? tipoBackend : extrairTipoDeDescricao(descricao);
     
-    // Dias em estoque vem calculado do backend
-    const diasEmEstoque = r.dias_estoque ?? 0;
+    // Dias em estoque: preferir dias_estoque do backend, senão calcular
+    let diasEmEstoque = 0;
+    if (r.dias_estoque !== undefined && r.dias_estoque !== null) {
+      diasEmEstoque = r.dias_estoque;
+    } else if (r.data_ultima_entrada) {
+      const dataEntrada = new Date(r.data_ultima_entrada);
+      if (!isNaN(dataEntrada.getTime())) {
+        diasEmEstoque = Math.floor((hoje.getTime() - dataEntrada.getTime()) / (1000 * 60 * 60 * 24));
+        if (diasEmEstoque < 0) diasEmEstoque = 0;
+      }
+    }
     
-    // Ação sugerida vem do backend
-    const acaoSugerida = r.acao_sugerida ?? 'DADOS INSUFICIENTES';
+    // Ação sugerida: preferir do backend, senão calcular baseado em dias
+    let acaoSugerida = r.acao_sugerida;
+    if (!acaoSugerida) {
+      if (r.data_ultima_entrada === null) {
+        acaoSugerida = 'SEM MOVIMENTO';
+      } else if (diasEmEstoque <= 90) {
+        acaoSugerida = 'ANALISE PARA RECOMPRA';
+      } else if (diasEmEstoque <= 180) {
+        acaoSugerida = 'ACOMPANHAMENTO';
+      } else if (diasEmEstoque <= 270) {
+        acaoSugerida = 'SINAL DE ALERTA';
+      } else if (diasEmEstoque <= 360) {
+        acaoSugerida = 'LIQUIDA 20%';
+      } else if (diasEmEstoque <= 720) {
+        acaoSugerida = 'LIQUIDA 30%';
+      } else {
+        acaoSugerida = 'LIQUIDA 50%';
+      }
+    }
     
     return {
       // Converter para número garantindo consistência (backend pode enviar como string)
