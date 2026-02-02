@@ -26,6 +26,7 @@ export interface EstoqueFilters {
   curvaABC: 'A' | 'B' | 'C' | null;
   fornecedor: string;
   marca: string;
+  acao: string; // TODAS, LIQUIDAR, COMPRAR, COMPRAR URGENTE, MANTER
   busca: string;
 }
 
@@ -208,6 +209,7 @@ export function useEstoqueUnificado() {
     curvaABC: null,
     fornecedor: 'TODOS',
     marca: 'TODAS',
+    acao: 'TODAS',
     busca: '',
   });
 
@@ -469,6 +471,11 @@ export function useEstoqueUnificado() {
       resultado = resultado.filter(item => item.marca === filters.marca);
     }
     
+    // Filtro por ação sugerida
+    if (filters.acao !== 'TODAS') {
+      resultado = resultado.filter(item => item.acaoSugerida === filters.acao);
+    }
+    
     // Busca textual
     if (filters.busca.trim()) {
       const termo = filters.busca.toLowerCase();
@@ -573,6 +580,12 @@ export function useEstoqueUnificado() {
 
   const listaMarcas = useMemo(() => {
     const set = new Set(itensProcessados.map(i => i.marca).filter(Boolean));
+    return ['TODAS', ...Array.from(set).sort()];
+  }, [itensProcessados]);
+
+  // Lista de ações para filtro
+  const listaAcoes = useMemo(() => {
+    const set = new Set(itensProcessados.map(i => i.acaoSugerida).filter(Boolean));
     return ['TODAS', ...Array.from(set).sort()];
   }, [itensProcessados]);
 
@@ -691,6 +704,7 @@ export function useEstoqueUnificado() {
     // Listas para filtros
     listaFornecedores,
     listaMarcas,
+    listaAcoes,
     marcasSemFornecedor,
     
     // Ações
