@@ -9,7 +9,9 @@ import { apiGet, EmpresaParam, formatEmpresaParam, ApiGetOptions } from './fireb
 // ============================================
 
 interface EstoqueCompletoRaw {
-  cod_sku: number | string;
+  // Backend pode retornar como cod_sku OU cod_armacao
+  cod_sku?: number | string;
+  cod_armacao?: number | string;
   codigo_barras?: string;
   // Backend pode retornar como descricao ou descricao_item
   descricao?: string;
@@ -23,7 +25,7 @@ interface EstoqueCompletoRaw {
   data_ultima_entrada?: string | null;
   data_ultima_venda?: string | null;
   dias_sem_venda?: number | null;
-  // Campos que virão quando a query for atualizada
+  // Campos calculados pelo backend (quando disponíveis)
   dias_estoque?: number | null;
   acao_sugerida?: string | null;
 }
@@ -160,9 +162,13 @@ export async function getEstoqueCompleto(
       }
     }
     
+    // cod_sku: backend pode enviar como cod_sku OU cod_armacao (fallback)
+    const rawCodSku = r.cod_sku ?? r.cod_armacao ?? 0;
+    const codSku = typeof rawCodSku === 'string' ? parseInt(rawCodSku, 10) : rawCodSku;
+    
     return {
-      // Converter para número garantindo consistência (backend pode enviar como string)
-      codSku: typeof r.cod_sku === 'string' ? parseInt(r.cod_sku, 10) : (r.cod_sku ?? 0),
+      // Converter para número garantindo consistência
+      codSku: isNaN(codSku) ? 0 : codSku,
       codigoBarra: (r.codigo_barras ?? '').trim(),
       descricao,
       // Fornecedor: tratar valores nulos ou vazios
