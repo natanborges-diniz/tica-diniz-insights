@@ -32,6 +32,7 @@ export interface EstoqueFilters {
 export interface ItemEstoque {
   // Dados do SKU
   codSku: number;
+  codigoBarra: string;
   descricao: string;
   marca: string;
   fornecedor: string;
@@ -387,6 +388,7 @@ export function useEstoqueUnificado() {
 
       const item: ItemEstoque = {
         codSku: estoqueItem.codSku,
+        codigoBarra: estoqueItem.codigoBarra,
         descricao: estoqueItem.descricao,
         marca: estoqueItem.marca,
         fornecedor: fornecedorFinal,
