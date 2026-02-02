@@ -104,6 +104,13 @@ function EstoqueKPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueU
   );
 }
 
+// Helper para formatar dias sem venda
+function formatarDiasSemVenda(dias: number): string {
+  if (dias >= 999) return 'Nunca';
+  if (dias > 180) return `${dias}`;
+  return String(dias);
+}
+
 function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
   // Colunas para exportação
   const exportColumns: ExportColumn[] = [
@@ -115,7 +122,7 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
     { key: 'categoria', header: 'Categoria' },
     { key: 'estoqueAtual', header: 'Estoque', format: formatters.number },
     { key: 'valorEstoqueCusto', header: 'Valor Custo', format: formatters.currency },
-    { key: 'diasDesdeUltimaVenda', header: 'Dias s/ Venda', format: (v) => v > 900 ? '∞' : String(v) },
+    { key: 'diasDesdeUltimaVenda', header: 'Dias s/ Venda', format: (v) => formatarDiasSemVenda(v) },
     { key: 'curvaABC', header: 'Curva ABC' },
     { key: 'acaoSugerida', header: 'Ação Sugerida' },
   ];
@@ -186,7 +193,7 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
                 </td>
                 <td className="p-3 text-right">
                   <span className={item.diasDesdeUltimaVenda > 180 ? 'text-destructive font-medium' : ''}>
-                    {item.diasDesdeUltimaVenda > 900 ? '∞' : item.diasDesdeUltimaVenda}
+                    {formatarDiasSemVenda(item.diasDesdeUltimaVenda)}
                   </span>
                 </td>
                 <td className="p-3">
@@ -243,6 +250,7 @@ export default function StockDashboard() {
     diasPeriodo,
     listaFornecedores,
     listaMarcas,
+    listaAcoes,
     marcasSemFornecedor,
     carregarDados,
   } = useEstoqueUnificado();
@@ -339,6 +347,7 @@ export default function StockDashboard() {
                   empresa: Number(value),
                   fornecedor: 'TODOS',
                   marca: 'TODAS',
+                  acao: 'TODAS',
                   categoria: 'TODOS',
                   curvaABC: null,
                   busca: '',
@@ -538,6 +547,22 @@ export default function StockDashboard() {
                         <SelectContent>
                           {listaMarcas.map((m) => (
                             <SelectItem key={m} value={m}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="flex-1 min-w-[150px]">
+                      <Select
+                        value={filters.acao}
+                        onValueChange={(v) => setFilters(prev => ({ ...prev, acao: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Ação" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {listaAcoes.map((a) => (
+                            <SelectItem key={a} value={a}>{a}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
