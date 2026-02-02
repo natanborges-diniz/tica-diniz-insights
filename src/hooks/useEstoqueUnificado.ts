@@ -169,25 +169,7 @@ function categorizarTipo(tipo: string): 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | '
   return 'OUTROS';
 }
 
-function calcularAcaoSugerida(item: { estoqueAtual: number; estoqueMinimo: number; qtdVendidos: number; diasEmEstoque: number; classificacao: string; isDeadStock: boolean }): string {
-  // Dead stock = LIQUIDAR (prioridade máxima)
-  if (item.isDeadStock) {
-    return 'LIQUIDAR';
-  }
-  
-  // Sem estoque mas com vendas = COMPRAR URGENTE
-  if (item.estoqueAtual === 0 && item.qtdVendidos > 0) {
-    return 'COMPRAR URGENTE';
-  }
-  
-  // Baseado na classificação OTB
-  switch (item.classificacao) {
-    case 'COMPRAR_URGENTE': return 'COMPRAR URGENTE';
-    case 'COMPRAR': return 'COMPRAR';
-    case 'EXCESSO': return 'LIQUIDAR';
-    default: return 'MANTER';
-  }
-}
+// Ação sugerida agora vem calculada do backend baseada em dias_estoque
 
 // ============================================
 // HOOK PRINCIPAL
@@ -418,14 +400,13 @@ export function useEstoqueUnificado() {
         otbValor,
         curvaABC,
         classificacao,
-        acaoSugerida: '',
+        // Ação sugerida vem diretamente do backend (baseada em dias_estoque)
+        acaoSugerida: estoqueItem.acaoSugerida,
         giroEstoque,
         
         // Dead stock
         isDeadStock: estoqueItem.isDeadStock,
       };
-      
-      item.acaoSugerida = calcularAcaoSugerida(item);
       
       return item;
     });
