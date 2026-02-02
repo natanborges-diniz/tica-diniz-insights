@@ -507,9 +507,9 @@ export function useEstoqueUnificado() {
     const fornecedoresDistintos = new Set(comEstoque.map(i => i.fornecedor)).size;
     const marcasDistintas = new Set(comEstoque.map(i => i.marca)).size;
     
-    // Por ação sugerida
+    // Por ação sugerida (LIQUIDA, não LIQUIDAR)
     const pecasLiquidar = comEstoque
-      .filter(i => i.acaoSugerida.includes('LIQUIDAR'))
+      .filter(i => i.acaoSugerida.toUpperCase().includes('LIQUIDA'))
       .reduce((acc, i) => acc + i.estoqueAtual, 0);
     
     const pecasManter = comEstoque
