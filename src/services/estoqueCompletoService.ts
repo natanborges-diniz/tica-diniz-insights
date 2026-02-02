@@ -20,10 +20,11 @@ interface EstoqueCompletoRaw {
   quantidade_estoque?: number;
   preco_custo?: number;
   preco_venda?: number;
-  data_entrada?: string | null;
   data_ultima_entrada?: string | null;
   data_ultima_venda?: string | null;
-  dias_sem_venda?: number | null;
+  // Campos calculados pelo backend
+  dias_estoque?: number | null;
+  acao_sugerida?: string | null;
 }
 
 /**
@@ -78,11 +79,11 @@ export interface EstoqueCompleto {
   precoCusto: number;
   precoVenda: number;
   valorEstoqueCusto: number; // calculado: qtd * custo
-  dataEntrada: string | null;
+  dataUltimaEntrada: string | null;
   dataUltimaVenda: string | null;
-  diasEmEstoque: number; // dias desde a entrada do produto
-  diasSemVenda: number; // dias desde a última venda (mantido para compatibilidade)
-  isDeadStock: boolean; // dias_sem_venda > 180 ou nunca vendeu
+  diasEmEstoque: number; // calculado pelo backend (dias desde última entrada)
+  acaoSugerida: string; // calculado pelo backend baseado em dias_estoque
+  isDeadStock: boolean; // dias_estoque > 180
 }
 
 export interface GetEstoqueCompletoParams {
@@ -113,12 +114,9 @@ export async function getEstoqueCompleto(
     console.log('[estoqueCompletoService] Sample record:', JSON.stringify(raw[0], null, 2));
   }
 
-  const hoje = new Date();
-  
   const resultado = raw.map((r) => {
     const quantidadeEstoque = r.quantidade_estoque ?? 0;
     const precoCusto = r.preco_custo ?? 0;
-    const diasSemVenda = r.dias_sem_venda ?? 999;
     
     // Descrição pode vir como descricao ou descricao_item
     const descricao = (r.descricao || r.descricao_item || '').trim();
@@ -127,18 +125,11 @@ export async function getEstoqueCompleto(
     const tipoBackend = r.tipo?.trim();
     const tipo = tipoBackend && tipoBackend !== '' ? tipoBackend : extrairTipoDeDescricao(descricao);
     
-    // Data de entrada do produto
-    const dataEntradaStr = r.data_entrada || r.data_ultima_entrada || null;
+    // Dias em estoque vem calculado do backend
+    const diasEmEstoque = r.dias_estoque ?? 0;
     
-    // Calcular dias em estoque desde a data de entrada
-    let diasEmEstoque = 0;
-    if (dataEntradaStr) {
-      const dataEntrada = new Date(dataEntradaStr);
-      if (!isNaN(dataEntrada.getTime())) {
-        diasEmEstoque = Math.floor((hoje.getTime() - dataEntrada.getTime()) / (1000 * 60 * 60 * 24));
-        if (diasEmEstoque < 0) diasEmEstoque = 0;
-      }
-    }
+    // Ação sugerida vem do backend
+    const acaoSugerida = r.acao_sugerida ?? 'DADOS INSUFICIENTES';
     
     return {
       // Converter para número garantindo consistência (backend pode enviar como string)
@@ -166,12 +157,12 @@ export async function getEstoqueCompleto(
       precoCusto,
       precoVenda: r.preco_venda ?? 0,
       valorEstoqueCusto: quantidadeEstoque * precoCusto,
-      dataEntrada: dataEntradaStr,
-      dataUltimaVenda: r.data_ultima_venda,
+      dataUltimaEntrada: r.data_ultima_entrada ?? null,
+      dataUltimaVenda: r.data_ultima_venda ?? null,
       diasEmEstoque,
-      diasSemVenda,
-      // Dead stock: mais de 180 dias sem venda ou nunca vendeu
-      isDeadStock: diasSemVenda > 180 || r.data_ultima_venda === null,
+      acaoSugerida,
+      // Dead stock: mais de 180 dias em estoque
+      isDeadStock: diasEmEstoque > 180,
     };
   });
   
