@@ -104,10 +104,9 @@ function EstoqueKPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueU
   );
 }
 
-// Helper para formatar dias sem venda
-function formatarDiasSemVenda(dias: number): string {
-  if (dias >= 999) return 'Nunca';
-  if (dias > 180) return `${dias}`;
+// Helper para formatar dias em estoque
+function formatarDiasEmEstoque(dias: number): string {
+  if (dias === 0) return '-';
   return String(dias);
 }
 
@@ -122,7 +121,7 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
     { key: 'categoria', header: 'Categoria' },
     { key: 'estoqueAtual', header: 'Estoque', format: formatters.number },
     { key: 'valorEstoqueCusto', header: 'Valor Custo', format: formatters.currency },
-    { key: 'diasDesdeUltimaVenda', header: 'Dias s/ Venda', format: (v) => formatarDiasSemVenda(v) },
+    { key: 'diasEmEstoque', header: 'Dias em Estoque', format: (v) => formatarDiasEmEstoque(v) },
     { key: 'curvaABC', header: 'Curva ABC' },
     { key: 'acaoSugerida', header: 'Ação Sugerida' },
   ];
@@ -162,7 +161,7 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
               <th className="text-left p-3 font-medium">Cat.</th>
               <th className="text-right p-3 font-medium">Estoque</th>
               <th className="text-right p-3 font-medium">Valor Custo</th>
-              <th className="text-right p-3 font-medium">Dias s/ Venda</th>
+              <th className="text-right p-3 font-medium">Dias em Estoque</th>
               <th className="text-left p-3 font-medium">Curva</th>
               <th className="text-left p-3 font-medium">Ação</th>
             </tr>
@@ -192,8 +191,8 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
                   {item.valorEstoqueCusto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </td>
                 <td className="p-3 text-right">
-                  <span className={item.diasDesdeUltimaVenda > 180 ? 'text-destructive font-medium' : ''}>
-                    {formatarDiasSemVenda(item.diasDesdeUltimaVenda)}
+                  <span className={item.diasEmEstoque > 180 ? 'text-destructive font-medium' : ''}>
+                    {formatarDiasEmEstoque(item.diasEmEstoque)}
                   </span>
                 </td>
                 <td className="p-3">
@@ -280,7 +279,7 @@ export default function StockDashboard() {
       estoqueMinimo: item.estoqueMinimo,
       qtdVendidos: item.qtdVendidos,
       totalVendido: item.totalVendido,
-      diasDesdeUltimaVenda: item.diasDesdeUltimaVenda,
+      diasDesdeUltimaVenda: item.diasEmEstoque,
       precoCusto: item.precoCusto,
       precoVendaFinal: item.precoVenda,
       margemBruta: item.margemBruta,

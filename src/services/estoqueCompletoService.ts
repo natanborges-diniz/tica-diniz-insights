@@ -80,7 +80,8 @@ export interface EstoqueCompleto {
   valorEstoqueCusto: number; // calculado: qtd * custo
   dataEntrada: string | null;
   dataUltimaVenda: string | null;
-  diasSemVenda: number;
+  diasEmEstoque: number; // dias desde a entrada do produto
+  diasSemVenda: number; // dias desde a última venda (mantido para compatibilidade)
   isDeadStock: boolean; // dias_sem_venda > 180 ou nunca vendeu
 }
 
@@ -112,6 +113,8 @@ export async function getEstoqueCompleto(
     console.log('[estoqueCompletoService] Sample record:', JSON.stringify(raw[0], null, 2));
   }
 
+  const hoje = new Date();
+  
   const resultado = raw.map((r) => {
     const quantidadeEstoque = r.quantidade_estoque ?? 0;
     const precoCusto = r.preco_custo ?? 0;
@@ -123,6 +126,19 @@ export async function getEstoqueCompleto(
     // Tipo: extrair do prefixo da descrição se não vier do backend
     const tipoBackend = r.tipo?.trim();
     const tipo = tipoBackend && tipoBackend !== '' ? tipoBackend : extrairTipoDeDescricao(descricao);
+    
+    // Data de entrada do produto
+    const dataEntradaStr = r.data_entrada || r.data_ultima_entrada || null;
+    
+    // Calcular dias em estoque desde a data de entrada
+    let diasEmEstoque = 0;
+    if (dataEntradaStr) {
+      const dataEntrada = new Date(dataEntradaStr);
+      if (!isNaN(dataEntrada.getTime())) {
+        diasEmEstoque = Math.floor((hoje.getTime() - dataEntrada.getTime()) / (1000 * 60 * 60 * 24));
+        if (diasEmEstoque < 0) diasEmEstoque = 0;
+      }
+    }
     
     return {
       // Converter para número garantindo consistência (backend pode enviar como string)
@@ -150,8 +166,9 @@ export async function getEstoqueCompleto(
       precoCusto,
       precoVenda: r.preco_venda ?? 0,
       valorEstoqueCusto: quantidadeEstoque * precoCusto,
-      dataEntrada: r.data_entrada || r.data_ultima_entrada || null,
+      dataEntrada: dataEntradaStr,
       dataUltimaVenda: r.data_ultima_venda,
+      diasEmEstoque,
       diasSemVenda,
       // Dead stock: mais de 180 dias sem venda ou nunca vendeu
       isDeadStock: diasSemVenda > 180 || r.data_ultima_venda === null,

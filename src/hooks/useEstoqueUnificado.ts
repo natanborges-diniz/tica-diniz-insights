@@ -48,7 +48,7 @@ export interface ItemEstoque {
   // Vendas (do /vendas/analise-sku)
   qtdVendidos: number;
   totalVendido: number;
-  diasDesdeUltimaVenda: number;
+  diasEmEstoque: number; // dias desde a entrada do produto
   vendaDiaria: number;
   
   // Custos
@@ -169,7 +169,7 @@ function categorizarTipo(tipo: string): 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | '
   return 'OUTROS';
 }
 
-function calcularAcaoSugerida(item: { estoqueAtual: number; estoqueMinimo: number; qtdVendidos: number; diasDesdeUltimaVenda: number; classificacao: string; isDeadStock: boolean }): string {
+function calcularAcaoSugerida(item: { estoqueAtual: number; estoqueMinimo: number; qtdVendidos: number; diasEmEstoque: number; classificacao: string; isDeadStock: boolean }): string {
   // Dead stock = LIQUIDAR (prioridade máxima)
   if (item.isDeadStock) {
     return 'LIQUIDAR';
@@ -405,7 +405,7 @@ export function useEstoqueUnificado() {
         // Vendas do /vendas/analise-sku
         qtdVendidos,
         totalVendido,
-        diasDesdeUltimaVenda: estoqueItem.diasSemVenda,
+        diasEmEstoque: estoqueItem.diasEmEstoque,
         vendaDiaria,
         
         // Custos
