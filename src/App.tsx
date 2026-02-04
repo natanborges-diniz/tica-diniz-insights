@@ -5,7 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import SalesDashboard from "./pages/SalesDashboard";
-import StockDashboard from "./pages/StockDashboard";
+import VisaoEstoquePage from "./pages/estoque/VisaoEstoquePage";
+import OQueFazerPage from "./pages/estoque/OQueFazerPage";
+import AnaliseOTBPage from "./pages/estoque/AnaliseOTBPage";
 import SalesFamilyDashboard from "./pages/SalesFamilyDashboard";
 import OsDashboard from "./pages/OsDashboard";
 import FinanceiroDashboard from "./pages/FinanceiroDashboard";
@@ -35,7 +37,9 @@ const App = () => (
             <Route path="/vendas/inteligencia" element={<InteligenciaVendasDashboard />} />
             
             {/* Estoque */}
-            <Route path="/estoque" element={<StockDashboard />} />
+            <Route path="/estoque" element={<VisaoEstoquePage />} />
+            <Route path="/estoque/acoes" element={<OQueFazerPage />} />
+            <Route path="/estoque/otb" element={<AnaliseOTBPage />} />
             
             {/* Monitor */}
             <Route path="/os" element={<OsDashboard />} />
