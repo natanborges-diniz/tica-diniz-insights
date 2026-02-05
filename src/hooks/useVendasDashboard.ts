@@ -1,7 +1,9 @@
 // src/hooks/useVendasDashboard.ts
-// Hook para dashboard de vendas - VERSÃO FIREBIRD-FIRST
-// Estratégia: Buscar dados SEMPRE do Firebird Bridge para garantir dados atualizados
-// O Firebird Bridge é a fonte primária de verdade (ERP real)
+// Hook para dashboard de vendas - VERSÃO HÍBRIDA (CACHE + FIREBIRD)
+// Estratégia: 
+//   - Períodos FECHADOS (meses anteriores): usar cache Supabase
+//   - Período ABERTO (mês atual): buscar do Firebird Bridge
+//   - Concatenar os dois resultados
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
@@ -12,6 +14,7 @@ import {
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
+import { separarPeriodo } from "@/services/agregadosService";
 
 // Tipo para progresso (mantido para compatibilidade com UI)
 export interface ProgressoPaginacao {
@@ -390,51 +393,189 @@ export function useVendasDashboard() {
     setErroDesconto(null);
     setFontesDados({ supabase: false, firebird: false });
     
-    console.log('[useVendasDashboard] 🔄 Buscando dados DIRETO DO FIREBIRD:', { empresa, dataInicio, dataFim, diasNoPeriodo });
-    
     const startTime = performance.now();
     
     try {
       // ========================================
-      // ESTRATÉGIA FIREBIRD-FIRST
-      // Buscar dados sempre do Firebird Bridge (fonte primária)
+      // ESTRATÉGIA HÍBRIDA: CACHE + FIREBIRD
+      // - Meses FECHADOS: usar cache Supabase (rápido)
+      // - Mês ABERTO: buscar do Firebird (dados frescos)
       // ========================================
       
-      console.log('[useVendasDashboard] Chamando getResumoFormasPagamento...');
+      const periodoInfo = separarPeriodo(dataInicio, dataFim);
       
-      const dados = await fetchComRetry(() => getResumoFormasPagamento({
-        empresa,
-        dataInicio,
-        dataFim,
-        bypassCache: true, // Sempre buscar dados frescos
-        incluirDevolucoes: true,
+      console.log('[useVendasDashboard] 🔄 Análise do período:', {
+        mesesFechados: periodoInfo.mesesFechados,
+        mesAberto: periodoInfo.mesAberto,
+        todosFechados: periodoInfo.todosFechados,
+      });
+      
+      let dadosCache: ResumoFormaPagamento[] = [];
+      let dadosFirebird: ResumoFormaPagamento[] = [];
+      let usouCache = false;
+      let usouFirebird = false;
+      
+      // ========================================
+      // PASSO 1: Buscar meses fechados do CACHE
+      // ========================================
+      if (periodoInfo.mesesFechados.length > 0) {
+        console.log('[useVendasDashboard] 📦 Buscando meses fechados do cache...');
+        
+        try {
+          let queryCache = supabase
+            .from('vendas_agregado_diario')
+            .select('*')
+            .in('data', periodoInfo.mesesFechados);
+          
+          if (empresa !== 'ALL') {
+            const codEmpresa = typeof empresa === 'string' 
+              ? parseInt(empresa, 10) 
+              : empresa;
+            queryCache = queryCache.eq('cod_empresa', codEmpresa);
+          }
+          
+          const { data: cacheData, error: cacheError } = await queryCache;
+          
+          if (!cacheError && cacheData && cacheData.length > 0) {
+            // Buscar nomes das empresas
+            const empresasMap = await getEmpresasMap();
+            
+            // Converter dados do cache para ResumoFormaPagamento
+            dadosCache = cacheData.map(d => ({
+              codEmpresa: d.cod_empresa,
+              empresa: empresasMap.get(d.cod_empresa) || `Loja ${d.cod_empresa}`,
+              vendedor: d.vendedor,
+              formaPagamento: d.forma_pagamento,
+              totalGeral: Number(d.total_vendido) || 0,
+              qtdVendas: Number(d.qtd_vendas) || 0,
+              totalBruto: Number(d.total_bruto) || 0,
+              totalDesconto: Number(d.total_desconto) || 0,
+              percentualDesconto: (Number(d.total_bruto) || 0) > 0 
+                ? ((Number(d.total_desconto) || 0) / (Number(d.total_bruto) || 0)) * 100 
+                : 0,
+            }));
+            
+            usouCache = true;
+            console.log(`[useVendasDashboard] ✓ Cache: ${dadosCache.length} registros de ${periodoInfo.mesesFechados.length} meses fechados`);
+          } else {
+            console.log('[useVendasDashboard] ⚠ Cache vazio para meses fechados, buscando do Firebird...');
+            
+            // Se não tem cache, buscar meses fechados do Firebird
+            const primeiroMesFechado = periodoInfo.mesesFechados[periodoInfo.mesesFechados.length - 1];
+            const ultimoMesFechado = periodoInfo.mesesFechados[0];
+            
+            // Calcular primeiro dia do primeiro mês
+            const primeiroDia = primeiroMesFechado.substring(0, 7) + '-01';
+            
+            dadosCache = await fetchComRetry(() => getResumoFormasPagamento({
+              empresa,
+              dataInicio: primeiroDia,
+              dataFim: ultimoMesFechado,
+              bypassCache: true,
+              incluirDevolucoes: true,
+            }));
+            
+            usouFirebird = true;
+            console.log(`[useVendasDashboard] ✓ Firebird (meses fechados): ${dadosCache.length} registros`);
+          }
+        } catch (cacheErr) {
+          console.warn('[useVendasDashboard] Erro ao buscar cache, usando Firebird:', cacheErr);
+        }
+      }
+      
+      // ========================================
+      // PASSO 2: Buscar mês ABERTO do FIREBIRD
+      // ========================================
+      if (periodoInfo.mesAberto) {
+        console.log('[useVendasDashboard] 🔥 Buscando período aberto do Firebird...');
+        
+        dadosFirebird = await fetchComRetry(() => getResumoFormasPagamento({
+          empresa,
+          dataInicio: periodoInfo.mesAberto!.inicio,
+          dataFim: periodoInfo.mesAberto!.fim,
+          bypassCache: true,
+          incluirDevolucoes: true,
+        }));
+        
+        usouFirebird = true;
+        console.log(`[useVendasDashboard] ✓ Firebird (período aberto): ${dadosFirebird.length} registros`);
+      }
+      
+      // ========================================
+      // PASSO 3: Se período TODO fechado e cache vazio, buscar tudo do Firebird
+      // ========================================
+      if (periodoInfo.todosFechados && dadosCache.length === 0) {
+        console.log('[useVendasDashboard] 📡 Período fechado sem cache, buscando tudo do Firebird...');
+        
+        dadosCache = await fetchComRetry(() => getResumoFormasPagamento({
+          empresa,
+          dataInicio,
+          dataFim,
+          bypassCache: true,
+          incluirDevolucoes: true,
+        }));
+        
+        usouFirebird = true;
+      }
+      
+      // ========================================
+      // PASSO 4: Concatenar e agregar resultados
+      // ========================================
+      const todosOsDados = [...dadosCache, ...dadosFirebird];
+      
+      // Agregar por chave única (empresa + vendedor + forma_pagamento)
+      const mapaAgregado = new Map<string, ResumoFormaPagamento>();
+      
+      todosOsDados.forEach(d => {
+        const key = `${d.codEmpresa}|${d.vendedor}|${d.formaPagamento}`;
+        const existing = mapaAgregado.get(key);
+        
+        if (existing) {
+          existing.totalGeral += d.totalGeral;
+          existing.qtdVendas += d.qtdVendas;
+          existing.totalBruto += d.totalBruto;
+          existing.totalDesconto += d.totalDesconto;
+        } else {
+          mapaAgregado.set(key, { ...d });
+        }
+      });
+      
+      // Recalcular percentual de desconto
+      const dadosFinais = Array.from(mapaAgregado.values()).map(d => ({
+        ...d,
+        percentualDesconto: d.totalBruto > 0 ? (d.totalDesconto / d.totalBruto) * 100 : 0,
       }));
       
       const tempoMs = Math.round(performance.now() - startTime);
       
-      console.log(`[useVendasDashboard] ✓ Firebird retornou ${dados.length} registros em ${tempoMs}ms`);
+      console.log(`[useVendasDashboard] ✓ Total: ${dadosFinais.length} registros agregados em ${tempoMs}ms`);
       
-      if (dados.length > 0) {
-        setDadosFormasPagamento(dados);
+      // Definir fonte dos dados
+      let mensagemFonte = '';
+      if (usouCache && usouFirebird) {
+        mensagemFonte = `Híbrido: cache + Firebird (${tempoMs}ms)`;
+      } else if (usouCache) {
+        mensagemFonte = `Cache Supabase (${tempoMs}ms)`;
+      } else {
+        mensagemFonte = `Firebird ao vivo (${tempoMs}ms)`;
+      }
+      
+      if (dadosFinais.length > 0) {
+        setDadosFormasPagamento(dadosFinais);
         setFontesDados({ 
-          supabase: false, 
-          firebird: true,
-          mensagem: `Dados ao vivo (${tempoMs}ms)`
+          supabase: usouCache, 
+          firebird: usouFirebird,
+          mensagem: mensagemFonte,
         });
         setDataLoaded(true);
-        setLoading(false);
-        setLoadingDesconto(false);
       } else {
-        // Sem dados para o período
         setDadosFormasPagamento([]);
         setFontesDados({ 
           supabase: false, 
           firebird: true,
-          mensagem: 'Nenhuma venda no período'
+          mensagem: 'Nenhuma venda no período',
         });
         setDataLoaded(true);
-        setLoading(false);
-        setLoadingDesconto(false);
       }
       
     } catch (err) {
@@ -447,9 +588,10 @@ export function useVendasDashboard() {
         supabase: false, 
         firebird: false, 
         parcial: true,
-        mensagem: `Erro: ${message}`
+        mensagem: `Erro: ${message}`,
       });
       setDataLoaded(true);
+    } finally {
       setLoading(false);
       setLoadingDesconto(false);
     }
