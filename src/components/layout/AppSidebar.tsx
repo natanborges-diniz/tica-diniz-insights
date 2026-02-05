@@ -2,7 +2,7 @@ import { useLocation } from "react-router-dom";
 import { 
   TrendingUp, BarChart3, Layers, 
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
-  Target, Users, Brain
+  Target, Users, Brain, Eye
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -65,6 +65,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       label: "Operações",
       items: [
         { title: "Monitor de OS", url: "/os", icon: ClipboardList },
+        { title: "Hub de Receitas", url: "/os/hub-receitas", icon: Eye },
       ],
     },
   ],
