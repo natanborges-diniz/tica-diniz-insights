@@ -15,6 +15,8 @@ interface OsHubRaw {
   empresa?: string;
   codempresa?: number;
   cod_empresa?: number;
+  cod_empresa_origem?: number;
+  codcliente?: number;
   cliente?: string;
   cod_cliente?: number;
   telefone?: string;
@@ -40,7 +42,9 @@ interface OsHubRaw {
   od_perto_eixo?: number;
   od_adicao?: number;
   od_dnp?: number;
+  od_dp?: number;
   od_altura?: number;
+  od_alt?: number;
   // Receita OE
   oe_longe_esf?: number;
   oe_longe_cil?: number;
@@ -50,7 +54,9 @@ interface OsHubRaw {
   oe_perto_eixo?: number;
   oe_adicao?: number;
   oe_dnp?: number;
+  oe_dp?: number;
   oe_altura?: number;
+  oe_alt?: number;
   // Prismas
   prisma?: string;
   prisma1?: string;
@@ -145,9 +151,9 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     codOs: r.cod_os ?? 0,
     numeroOs: String(r.numero_os ?? r.os ?? ''),
     empresa: (r.empresa ?? '').trim(),
-    codEmpresa: r.codempresa ?? r.cod_empresa ?? 0,
+    codEmpresa: r.codempresa ?? r.cod_empresa ?? r.cod_empresa_origem ?? 0,
     cliente: (r.cliente ?? '').trim(),
-    codCliente: r.cod_cliente ?? null,
+    codCliente: r.cod_cliente ?? r.codcliente ?? null,
     telefone: r.telefone?.trim() ?? null,
     etapa: (r.etapa ?? '').trim(),
     statusAtraso: (r.status_atraso ?? 'SEM_DATA').trim().toUpperCase(),
@@ -165,8 +171,8 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     odPertoCil: r.od_perto_cil ?? null,
     odPertoEixo: r.od_perto_eixo ?? null,
     odAdicao: r.od_adicao ?? null,
-    odDnp: r.od_dnp ?? null,
-    odAltura: r.od_altura ?? null,
+    odDnp: r.od_dnp ?? r.od_dp ?? null,
+    odAltura: r.od_altura ?? r.od_alt ?? null,
     oeLongeEsf: r.oe_longe_esf ?? null,
     oeLongeCil: r.oe_longe_cil ?? null,
     oeLongeEixo: r.oe_longe_eixo ?? null,
@@ -174,8 +180,8 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     oePertoCil: r.oe_perto_cil ?? null,
     oePertoEixo: r.oe_perto_eixo ?? null,
     oeAdicao: r.oe_adicao ?? null,
-    oeDnp: r.oe_dnp ?? null,
-    oeAltura: r.oe_altura ?? null,
+    oeDnp: r.oe_dnp ?? r.oe_dp ?? null,
+    oeAltura: r.oe_altura ?? r.oe_alt ?? null,
     prisma: r.prisma?.trim() ?? null,
     prisma1: r.prisma1?.trim() ?? null,
     imagemReceita: r.imagem_receita?.trim() ?? null,
