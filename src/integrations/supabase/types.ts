@@ -320,6 +320,159 @@ export type Database = {
         }
         Relationships: []
       }
+      os_hub_receitas: {
+        Row: {
+          atraso_dias: number | null
+          cache_loaded_at: string
+          cliente: string | null
+          cod_cliente: number | null
+          cod_empresa: number
+          cod_os: number
+          data_emissao: string | null
+          data_entrada: string | null
+          data_previsao: string | null
+          data_saida: string | null
+          empresa: string | null
+          etapa: string | null
+          id: string
+          imagem_armacao: string | null
+          imagem_receita: string | null
+          imagem_tracer: string | null
+          numero_os: string | null
+          observacao_lente: string | null
+          observacao_os: string | null
+          observacao_pendencia: string | null
+          od_adicao: number | null
+          od_altura: number | null
+          od_dnp: number | null
+          od_longe_cil: number | null
+          od_longe_eixo: number | null
+          od_longe_esf: number | null
+          od_perto_cil: number | null
+          od_perto_eixo: number | null
+          od_perto_esf: number | null
+          oe_adicao: number | null
+          oe_altura: number | null
+          oe_dnp: number | null
+          oe_longe_cil: number | null
+          oe_longe_eixo: number | null
+          oe_longe_esf: number | null
+          oe_perto_cil: number | null
+          oe_perto_eixo: number | null
+          oe_perto_esf: number | null
+          prisma: string | null
+          prisma1: string | null
+          status_atraso: string | null
+          telefone: string | null
+          tem_imagem: boolean | null
+          tem_receita: boolean | null
+          total: number | null
+          url_imagem_armacao: string | null
+          url_imagem_receita: string | null
+          usuario: string | null
+        }
+        Insert: {
+          atraso_dias?: number | null
+          cache_loaded_at?: string
+          cliente?: string | null
+          cod_cliente?: number | null
+          cod_empresa: number
+          cod_os: number
+          data_emissao?: string | null
+          data_entrada?: string | null
+          data_previsao?: string | null
+          data_saida?: string | null
+          empresa?: string | null
+          etapa?: string | null
+          id?: string
+          imagem_armacao?: string | null
+          imagem_receita?: string | null
+          imagem_tracer?: string | null
+          numero_os?: string | null
+          observacao_lente?: string | null
+          observacao_os?: string | null
+          observacao_pendencia?: string | null
+          od_adicao?: number | null
+          od_altura?: number | null
+          od_dnp?: number | null
+          od_longe_cil?: number | null
+          od_longe_eixo?: number | null
+          od_longe_esf?: number | null
+          od_perto_cil?: number | null
+          od_perto_eixo?: number | null
+          od_perto_esf?: number | null
+          oe_adicao?: number | null
+          oe_altura?: number | null
+          oe_dnp?: number | null
+          oe_longe_cil?: number | null
+          oe_longe_eixo?: number | null
+          oe_longe_esf?: number | null
+          oe_perto_cil?: number | null
+          oe_perto_eixo?: number | null
+          oe_perto_esf?: number | null
+          prisma?: string | null
+          prisma1?: string | null
+          status_atraso?: string | null
+          telefone?: string | null
+          tem_imagem?: boolean | null
+          tem_receita?: boolean | null
+          total?: number | null
+          url_imagem_armacao?: string | null
+          url_imagem_receita?: string | null
+          usuario?: string | null
+        }
+        Update: {
+          atraso_dias?: number | null
+          cache_loaded_at?: string
+          cliente?: string | null
+          cod_cliente?: number | null
+          cod_empresa?: number
+          cod_os?: number
+          data_emissao?: string | null
+          data_entrada?: string | null
+          data_previsao?: string | null
+          data_saida?: string | null
+          empresa?: string | null
+          etapa?: string | null
+          id?: string
+          imagem_armacao?: string | null
+          imagem_receita?: string | null
+          imagem_tracer?: string | null
+          numero_os?: string | null
+          observacao_lente?: string | null
+          observacao_os?: string | null
+          observacao_pendencia?: string | null
+          od_adicao?: number | null
+          od_altura?: number | null
+          od_dnp?: number | null
+          od_longe_cil?: number | null
+          od_longe_eixo?: number | null
+          od_longe_esf?: number | null
+          od_perto_cil?: number | null
+          od_perto_eixo?: number | null
+          od_perto_esf?: number | null
+          oe_adicao?: number | null
+          oe_altura?: number | null
+          oe_dnp?: number | null
+          oe_longe_cil?: number | null
+          oe_longe_eixo?: number | null
+          oe_longe_esf?: number | null
+          oe_perto_cil?: number | null
+          oe_perto_eixo?: number | null
+          oe_perto_esf?: number | null
+          prisma?: string | null
+          prisma1?: string | null
+          status_atraso?: string | null
+          telefone?: string | null
+          tem_imagem?: boolean | null
+          tem_receita?: boolean | null
+          total?: number | null
+          url_imagem_armacao?: string | null
+          url_imagem_receita?: string | null
+          usuario?: string | null
+        }
+        Relationships: []
+      }
       pessoa: {
         Row: {
           ativo: boolean | null
