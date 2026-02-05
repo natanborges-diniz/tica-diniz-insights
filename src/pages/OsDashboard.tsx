@@ -107,10 +107,13 @@ const OsDashboardPage: React.FC = () => {
         .eq("cod_os", codOs)
         .maybeSingle();
 
-      if (row) {
-        console.log("[OsDashboard] Recipe found in cache for OS:", codOs);
+      if (row && row.tem_receita) {
+        console.log("[OsDashboard] Recipe found in cache (with prescription) for OS:", codOs);
         setSelectedHubOs(mapCacheRowToHubRecord(row as Record<string, unknown>));
         return;
+      }
+      if (row) {
+        console.log("[OsDashboard] Cache hit but tem_receita=false for OS:", codOs, "- will fallback to Firebird");
       }
 
       // 2) Fallback: fetch from Firebird directly
