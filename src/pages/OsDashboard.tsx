@@ -98,6 +98,7 @@ const OsDashboardPage: React.FC = () => {
   const handleOpenRecipe = async (codOs: number, codEmpresa?: number) => {
     try {
       setLoadingRecipe(true);
+      console.log("[OsDashboard] handleOpenRecipe called with codOs:", codOs, "codEmpresa:", codEmpresa);
 
       // 1) Try cache first
       const { data: row } = await supabase
@@ -113,17 +114,18 @@ const OsDashboardPage: React.FC = () => {
       }
 
       // 2) Fallback: fetch from Firebird directly
-      console.log("[OsDashboard] Cache miss for OS:", codOs, "- fetching from Firebird...");
+      const empresaFallback = codEmpresa && codEmpresa > 0 ? codEmpresa : "ALL";
+      console.log("[OsDashboard] Cache miss for OS:", codOs, "- fallback with codEmpresa:", empresaFallback);
       toast({
         title: "Buscando receita...",
         description: "Consultando dados do ERP diretamente.",
       });
 
-      // Use a wide date range to find the OS
+      // Use 2-month window (narrower = faster response)
       const fallbackStart = new Date();
-      fallbackStart.setMonth(fallbackStart.getMonth() - 6);
+      fallbackStart.setMonth(fallbackStart.getMonth() - 2);
       const records = await fetchOsHubFromFirebird({
-        empresa: codEmpresa && codEmpresa > 0 ? codEmpresa : "ALL",
+        empresa: empresaFallback,
         dataInicio: fallbackStart.toISOString().slice(0, 10),
         dataFim: new Date().toISOString().slice(0, 10),
       });

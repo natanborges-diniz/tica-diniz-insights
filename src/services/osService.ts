@@ -12,6 +12,7 @@ interface OsRecordRaw {
   os?: string;
   empresa?: string;
   codempresa?: number;
+  cod_empresa_origem?: number;
   cliente?: string;
   etapa?: string;
   status_atraso?: string;
@@ -62,7 +63,7 @@ function mapOsRecordRaw(r: OsRecordRaw): OsRecord {
     codOs: r.cod_os ?? 0,
     os: String(r.os ?? ''),
     empresa: r.empresa?.trim() ?? '',
-    codEmpresa: r.codempresa ?? null,
+    codEmpresa: r.codempresa || r.cod_empresa_origem || null,
     cliente: r.cliente?.trim() ?? '',
     etapa: r.etapa?.trim() ?? '',
     statusAtraso: normalizeStatusAtraso(r.status_atraso),
