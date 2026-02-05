@@ -1,11 +1,12 @@
 // src/pages/OsDashboard.tsx
-// Monitor de Produção — carrega automaticamente ALL empresas, últimos 30 dias
+// Monitor de Produção — auto-load ALL, fallback Firebird para receitas
 
 import React, { useState } from "react";
 import { useOsMonitor } from "../hooks/useOsMonitor";
 import { OsDashboardLayout } from "../components/os-dashboard/OsDashboardLayout";
-import { OsHubRecord } from "@/services/osHubService";
+import { OsHubRecord, fetchOsHubFromFirebird, saveToCache } from "@/services/osHubService";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 const hoje = new Date();
 const fim = hoje.toISOString().slice(0, 10);
@@ -14,6 +15,13 @@ inicioDate.setDate(inicioDate.getDate() - 30);
 const inicio = inicioDate.toISOString().slice(0, 10);
 
 function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
+  const hasReceita = !!(
+    r.od_longe_esf || r.od_longe_cil || r.od_perto_esf ||
+    r.oe_longe_esf || r.oe_longe_cil || r.oe_perto_esf ||
+    r.od_adicao || r.oe_adicao
+  );
+  const hasImagem = !!(r.url_imagem_receita || r.url_imagem_armacao || r.imagem_tracer);
+
   return {
     codOs: r.cod_os as number,
     numeroOs: (r.numero_os as string) ?? "",
@@ -59,8 +67,8 @@ function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
     observacaoOs: (r.observacao_os as string) ?? null,
     observacaoLente: (r.observacao_lente as string) ?? null,
     observacaoPendencia: (r.observacao_pendencia as string) ?? null,
-    temReceita: (r.tem_receita as boolean) ?? false,
-    temImagem: (r.tem_imagem as boolean) ?? false,
+    temReceita: (r.tem_receita as boolean) ?? hasReceita,
+    temImagem: (r.tem_imagem as boolean) ?? hasImagem,
     cacheLoadedAt: (r.cache_loaded_at as string) ?? undefined,
   };
 }
@@ -84,26 +92,64 @@ const OsDashboardPage: React.FC = () => {
     dataFim: fim,
   });
 
-  // State for recipe detail
   const [selectedHubOs, setSelectedHubOs] = useState<OsHubRecord | null>(null);
   const [loadingRecipe, setLoadingRecipe] = useState(false);
 
-  const handleOpenRecipe = async (codOs: number) => {
+  const handleOpenRecipe = async (codOs: number, codEmpresa?: number) => {
     try {
       setLoadingRecipe(true);
-      const { data: rows } = await supabase
+
+      // 1) Try cache first
+      const { data: row } = await supabase
         .from("os_hub_receitas")
         .select("*")
         .eq("cod_os", codOs)
         .maybeSingle();
 
-      if (rows) {
-        setSelectedHubOs(mapCacheRowToHubRecord(rows as Record<string, unknown>));
+      if (row) {
+        console.log("[OsDashboard] Recipe found in cache for OS:", codOs);
+        setSelectedHubOs(mapCacheRowToHubRecord(row as Record<string, unknown>));
+        return;
+      }
+
+      // 2) Fallback: fetch from Firebird directly
+      console.log("[OsDashboard] Cache miss for OS:", codOs, "- fetching from Firebird...");
+      toast({
+        title: "Buscando receita...",
+        description: "Consultando dados do ERP diretamente.",
+      });
+
+      // Use a wide date range to find the OS
+      const fallbackStart = new Date();
+      fallbackStart.setMonth(fallbackStart.getMonth() - 6);
+      const records = await fetchOsHubFromFirebird({
+        empresa: codEmpresa ?? "ALL",
+        dataInicio: fallbackStart.toISOString().slice(0, 10),
+        dataFim: new Date().toISOString().slice(0, 10),
+      });
+
+      const found = records.find(r => r.codOs === codOs);
+      if (found) {
+        setSelectedHubOs(found);
+        // Save to cache for next time (fire and forget)
+        saveToCache([found]).catch(err => 
+          console.warn("[OsDashboard] Failed to cache recipe:", err)
+        );
       } else {
+        toast({
+          title: "Receita não encontrada",
+          description: "Não foi possível localizar a receita para esta OS.",
+          variant: "destructive",
+        });
         setSelectedHubOs(null);
       }
     } catch (err) {
       console.error("[OsDashboard] Error loading recipe:", err);
+      toast({
+        title: "Erro ao buscar receita",
+        description: err instanceof Error ? err.message : "Erro desconhecido",
+        variant: "destructive",
+      });
     } finally {
       setLoadingRecipe(false);
     }
