@@ -97,11 +97,9 @@ export function useOsMonitor(initialFilters: OsApiFilters) {
     }
   }, []);
 
-  // Busca automaticamente se empresa estiver definida
+  // Busca automaticamente quando apiFilters muda
   useEffect(() => {
-    if (apiFilters.empresa !== null) {
-      fetchData(apiFilters);
-    }
+    fetchData(apiFilters);
   }, [apiFilters, fetchData]);
 
   const reload = useCallback((newApiFilters?: Partial<OsApiFilters>) => {
