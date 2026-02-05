@@ -123,7 +123,7 @@ const OsDashboardPage: React.FC = () => {
       const fallbackStart = new Date();
       fallbackStart.setMonth(fallbackStart.getMonth() - 6);
       const records = await fetchOsHubFromFirebird({
-        empresa: codEmpresa ?? "ALL",
+        empresa: codEmpresa && codEmpresa > 0 ? codEmpresa : "ALL",
         dataInicio: fallbackStart.toISOString().slice(0, 10),
         dataFim: new Date().toISOString().slice(0, 10),
       });
