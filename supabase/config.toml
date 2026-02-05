@@ -35,3 +35,12 @@ verify_jwt = false
 
 [functions.ai-central]
 verify_jwt = false
+
+[functions.sync-os-hub]
+verify_jwt = false
+
+[functions.ai-sugestao-cobertura]
+verify_jwt = false
+
+[functions.cache-diagnostico]
+verify_jwt = false
