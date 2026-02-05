@@ -41,7 +41,7 @@ type Props = {
   empresasUnicas: string[];
   etapasUnicas: string[];
   selectedHubOs: OsHubRecord | null;
-  onOpenRecipe: (codOs: number) => void;
+  onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   onCloseRecipe: () => void;
   loadingRecipe: boolean;
 };

@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 
 interface Props {
   os: OsRecord;
-  onOpenRecipe: (codOs: number) => void;
+  onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   loadingRecipe: boolean;
 }
 
@@ -96,7 +96,7 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onOpenRecipe(os.codOs);
+                      onOpenRecipe(os.codOs, os.codEmpresa ?? undefined);
                     }}
                     disabled={loadingRecipe}
                   >
