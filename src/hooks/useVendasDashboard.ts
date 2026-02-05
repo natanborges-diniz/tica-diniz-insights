@@ -1,30 +1,17 @@
 // src/hooks/useVendasDashboard.ts
-// Hook para dashboard de vendas - VERSÃO OTIMIZADA
-// Otimizações implementadas:
-// 1. Sempre usar cache do backend (não enviar cache=0)
-// 2. Loading progressivo (placeholders primeiro)
-// 3. Limitar range padrão a 30 dias
-// 4. Evitar múltiplas empresas simultaneamente
-// 5. Retry automático (1x) em caso de timeout
-// 6. Carregar dados principais primeiro
-// 7. Sincronização automática do cache quando detecta gap até D-1
+// Hook para dashboard de vendas - VERSÃO FIREBIRD-FIRST
+// Estratégia: Buscar dados SEMPRE do Firebird Bridge para garantir dados atualizados
+// O Firebird Bridge é a fonte primária de verdade (ERP real)
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   getResumoFormasPagamento,
-  getResumoEmpresaVendedor,
   ResumoFormaPagamento,
   ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
-import { getVendasAgregado, AgregadoFormaPagamento, contarDiasNoCache, isPeriodoFechado, separarPeriodo } from "@/services/agregadosService";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  verificarStatusSync, 
-  sincronizarCache, 
-  SyncStatus 
-} from "@/services/syncCacheService";
 
 // Tipo para progresso (mantido para compatibilidade com UI)
 export interface ProgressoPaginacao {
@@ -36,9 +23,9 @@ export interface ProgressoPaginacao {
 
 export type ViewMode = "loja" | "vendedor";
 
-// CONFIGURAÇÕES DE OTIMIZAÇÃO
+// CONFIGURAÇÕES
 const CONFIG = {
-  /** Timeout para primeira tentativa (aumentado para auditoria paginada) */
+  /** Timeout para primeira tentativa */
   TIMEOUT_PRIMEIRA_TENTATIVA: 60000, // 60s
   /** Timeout para retry (um pouco maior) */
   TIMEOUT_RETRY: 90000, // 90s
@@ -94,7 +81,7 @@ export interface ResumoLoja {
 export type { ResumoEmpresaVendedorAPI as ResumoEmpresaVendedor };
 export type { ResumoFormaPagamento };
 
-// Cache de nomes de empresas
+// Cache de nomes de empresas (local, para enriquecer dados)
 let empresasCache: Map<number, string> | null = null;
 let empresasCacheTime: number = 0;
 const CACHE_TTL = 5 * 60 * 1000;
@@ -114,24 +101,6 @@ async function getEmpresasMap(): Promise<Map<number, string>> {
   empresasCacheTime = now;
   
   return empresasCache;
-}
-
-async function converterAgregadoParaResumo(
-  agregados: AgregadoFormaPagamento[]
-): Promise<ResumoFormaPagamento[]> {
-  const empresasMap = await getEmpresasMap();
-  
-  return agregados.map((a) => ({
-    codEmpresa: a.codEmpresa,
-    empresa: empresasMap.get(a.codEmpresa) || `Loja ${a.codEmpresa}`,
-    vendedor: a.vendedor,
-    formaPagamento: a.formaPagamento,
-    totalGeral: a.totalGeral,
-    qtdVendas: a.qtdVendas,
-    totalBruto: a.totalBruto,
-    totalDesconto: a.totalDesconto,
-    percentualDesconto: a.percentualDesconto,
-  }));
 }
 
 function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
@@ -245,9 +214,6 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
 }
 
 // Agrupar por vendedor (para visão "Por Vendedor")
-// IMPORTANTE: Usa a MESMA lógica de calcularMetricasFormasPagamento para consistência
-// - Devoluções: excluídas de TUDO
-// - Créditos: incluídos em totalVendido e no cálculo de desconto (como na função de KPIs)
 function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedorAPI[] {
   const mapaVendedores = new Map<string, {
     vendedor: string;
@@ -269,9 +235,6 @@ function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedo
     const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
     const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
     
-    // MESMA LÓGICA de calcularMetricasFormasPagamento:
-    // - Devoluções: não contam em nada (nem vendas, nem desconto)
-    // - Créditos: contam em totalVendido e desconto
     const valorVenda = isDevolucao ? 0 : d.totalGeral;
     const valorCredito = isCredito ? d.totalGeral : 0;
     const valorDevolucao = isDevolucao ? Math.abs(d.totalGeral) : 0;
@@ -304,7 +267,6 @@ function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedo
   return Array.from(mapaVendedores.values()).map((item) => {
     const totalVendidoSemCreditos = item.totalVendido - item.totalCreditos;
     const ticketMedio = item.qtdTransacao > 0 ? totalVendidoSemCreditos / item.qtdTransacao : 0;
-    // MESMA fórmula de calcularMetricasFormasPagamento: totalDesconto / totalBruto
     const percentualDesconto = item.totalBruto > 0 ? (item.totalDesconto / item.totalBruto) * 100 : 0;
     
     return {
@@ -350,8 +312,6 @@ export function useVendasDashboard() {
   });
 
   const [dadosFormasPagamento, setDadosFormasPagamento] = useState<ResumoFormaPagamento[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_dadosComDescontoState] = useState<ResumoEmpresaVendedorAPI[]>([]); // Mantido para estabilidade de hooks
   const [loading, setLoading] = useState(false);
   const [loadingDesconto, setLoadingDesconto] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -369,16 +329,11 @@ export function useVendasDashboard() {
   
   // Progresso da paginação
   const [progressoPaginacao, setProgressoPaginacao] = useState<ProgressoPaginacao | null>(null);
-  
-  // Estado de sincronização do cache
-  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const syncAttemptedRef = useRef(false);
 
   // Ref para controlar requisições em andamento
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // OTIMIZAÇÃO 5: Função de fetch com retry automático
+  // Função de fetch com retry automático
   const fetchComRetry = useCallback(async <T>(
     fetchFn: () => Promise<T>,
     tentativaAtual = 1
@@ -394,7 +349,6 @@ export function useVendasDashboard() {
         `Timeout na tentativa ${tentativaAtual} (${timeout/1000}s)`
       );
     } catch (error) {
-      // OTIMIZAÇÃO 5: Se for a primeira tentativa e for timeout, tenta novamente
       if (tentativaAtual === 1 && error instanceof Error && error.message.includes('Timeout')) {
         console.log('[useVendasDashboard] Primeira tentativa falhou, fazendo retry...');
         return fetchComRetry(fetchFn, 2);
@@ -403,14 +357,10 @@ export function useVendasDashboard() {
     }
   }, []);
 
-  // Flag para forçar busca no Firebird (bypass cache)
-  const [forceFirebird, setForceFirebird] = useState(false);
-
   const fetchData = useCallback(async (
     empresa: EmpresaParam, 
     dataInicio: string, 
-    dataFim: string,
-    forcarFirebird = false
+    dataFim: string
   ) => {
     // Cancelar requisição anterior se existir
     if (abortControllerRef.current) {
@@ -432,231 +382,81 @@ export function useVendasDashboard() {
       setAlertaPeriodo(null);
     }
     
-    // Loading progressivo
+    // Loading
     setLoading(true);
     setError(null);
     setLoadingDesconto(true);
-    setProgressoPaginacao(null); // Limpar progresso anterior
+    setProgressoPaginacao(null);
     setErroDesconto(null);
     setFontesDados({ supabase: false, firebird: false });
     
-    console.log('[useVendasDashboard] Buscando dados:', { empresa, dataInicio, dataFim, diasNoPeriodo, forcarFirebird });
-    
-    // ========================================
-    // ESTRATÉGIA CACHE-FIRST COM DADOS FECHADOS
-    // ========================================
-    // 1. Verificar se período é FECHADO (meses anteriores ao atual)
-    //    - Se fechado → usar APENAS cache (não chamar Firebird)
-    // 2. Se período ABERTO (inclui mês atual) → tentar cache, depois Firebird
-    // 3. Mostrar indicador visual da fonte (cache hit/miss)
+    console.log('[useVendasDashboard] 🔄 Buscando dados DIRETO DO FIREBIRD:', { empresa, dataInicio, dataFim, diasNoPeriodo });
     
     const startTime = performance.now();
     
-    // Verificar política de dados fechados
-    const periodoFechado = isPeriodoFechado(dataInicio, dataFim);
-    const periodoInfo = separarPeriodo(dataInicio, dataFim);
-    
-    console.log('[useVendasDashboard] Análise do período:', {
-      periodoFechado,
-      mesesFechados: periodoInfo.mesesFechados.length,
-      temMesAberto: !!periodoInfo.mesAberto,
-    });
-    
-    // PASSO 1: Verificar cache Supabase PRIMEIRO (< 100ms)
-    if (!forcarFirebird) {
-      try {
-        console.log('[useVendasDashboard] CACHE-FIRST: Verificando cache Supabase...');
-        
-        const dadosAgregados = await getVendasAgregado({
-          empresa,
-          dataInicio,
-          dataFim,
+    try {
+      // ========================================
+      // ESTRATÉGIA FIREBIRD-FIRST
+      // Buscar dados sempre do Firebird Bridge (fonte primária)
+      // ========================================
+      
+      console.log('[useVendasDashboard] Chamando getResumoFormasPagamento...');
+      
+      const dados = await fetchComRetry(() => getResumoFormasPagamento({
+        empresa,
+        dataInicio,
+        dataFim,
+        bypassCache: true, // Sempre buscar dados frescos
+        incluirDevolucoes: true,
+      }));
+      
+      const tempoMs = Math.round(performance.now() - startTime);
+      
+      console.log(`[useVendasDashboard] ✓ Firebird retornou ${dados.length} registros em ${tempoMs}ms`);
+      
+      if (dados.length > 0) {
+        setDadosFormasPagamento(dados);
+        setFontesDados({ 
+          supabase: false, 
+          firebird: true,
+          mensagem: `Dados ao vivo (${tempoMs}ms)`
         });
-        
-        const tempoMs = Math.round(performance.now() - startTime);
-        console.log(`[useVendasDashboard] Cache: ${dadosAgregados.length} registros em ${tempoMs}ms`);
-        
-        if (dadosAgregados.length > 0) {
-          // Cache encontrado! Usar imediatamente
-          const diasNoCache = await contarDiasNoCache(dataInicio, dataFim);
-          const cobertura = Math.round((diasNoCache / diasNoPeriodo) * 100);
-          
-          const dadosConvertidos = await converterAgregadoParaResumo(dadosAgregados);
-          setDadosFormasPagamento(dadosConvertidos);
-          
-          // Logs de diagnóstico cache hit/miss
-          const cacheInfo = periodoFechado 
-            ? `✓ CACHE HIT (período fechado): ${dadosAgregados.length} registros`
-            : `✓ CACHE HIT (parcial): ${cobertura}% cobertura`;
-          console.log(`[useVendasDashboard] ${cacheInfo}`);
-          
-          if (cobertura < 100) {
-            setFontesDados({ 
-              supabase: true, 
-              firebird: false, 
-              parcial: true,
-              mensagem: periodoFechado 
-                ? `Dados históricos (cache): ${diasNoCache} dias`
-                : `Cache parcial: ${diasNoCache}/${diasNoPeriodo} dias (${cobertura}%)`
-            });
-          } else {
-            setFontesDados({ 
-              supabase: true, 
-              firebird: false,
-              mensagem: periodoFechado ? 'Período fechado (cache)' : 'Cache completo'
-            });
-          }
-          
-          setDataLoaded(true);
-          setLoading(false);
-          setLoadingDesconto(false);
-          
-          // Se período é fechado, NÃO tenta Firebird
-          if (periodoFechado) {
-            console.log('[useVendasDashboard] Período fechado - usando apenas cache');
-            return;
-          }
-          
-          console.log(`[useVendasDashboard] ✓ Dados do cache carregados em ${tempoMs}ms (${cobertura}% cobertura)`);
-          return; // SUCESSO - não precisa ir ao Firebird!
-        }
-        
-        // Cache vazio
-        console.log('[useVendasDashboard] ✗ CACHE MISS: Nenhum dado encontrado');
-        
-        // Tentar sincronizar automaticamente se ainda não tentou
-        if (!syncAttemptedRef.current && !isSyncing) {
-          console.log('[useVendasDashboard] Iniciando sincronização automática do cache...');
-          syncAttemptedRef.current = true;
-          setIsSyncing(true);
-          
-          setFontesDados({ 
-            supabase: false, 
-            firebird: false, 
-            parcial: true,
-            mensagem: 'Sincronizando dados do período...'
-          });
-          
-          // Executar sincronização
-          sincronizarCache((status) => {
-            setSyncStatus(status);
-          }).then(async (result) => {
-            console.log('[useVendasDashboard] Sincronização concluída:', result);
-            setIsSyncing(false);
-            
-            if (result.success && result.registrosSincronizados > 0) {
-              // Recarregar dados após sincronização bem-sucedida
-              console.log('[useVendasDashboard] Recarregando dados após sync...');
-              fetchData(empresa, dataInicio, dataFim, false);
-            } else if (result.registrosSincronizados === 0) {
-              // Sem dados para sincronizar
-              setDadosFormasPagamento([]);
-              setFontesDados({ 
-                supabase: false, 
-                firebird: false, 
-                parcial: true,
-                mensagem: 'Nenhum dado encontrado para o período.'
-              });
-              setError('Não há dados de vendas para este período.');
-              setDataLoaded(true);
-              setLoading(false);
-              setLoadingDesconto(false);
-            } else {
-              // Erro na sincronização
-              setDadosFormasPagamento([]);
-              setFontesDados({ 
-                supabase: false, 
-                firebird: false, 
-                parcial: true,
-                mensagem: `Erro na sincronização: ${result.erro}`
-              });
-              setError(`Erro ao sincronizar: ${result.erro}`);
-              setDataLoaded(true);
-              setLoading(false);
-              setLoadingDesconto(false);
-            }
-          });
-          
-          return; // Aguardar callback da sincronização
-        }
-        
-        // Já tentou sincronizar e ainda sem dados
+        setDataLoaded(true);
+        setLoading(false);
+        setLoadingDesconto(false);
+      } else {
+        // Sem dados para o período
         setDadosFormasPagamento([]);
         setFontesDados({ 
           supabase: false, 
-          firebird: false, 
-          parcial: true,
-          mensagem: 'Cache vazio para este período.'
+          firebird: true,
+          mensagem: 'Nenhuma venda no período'
         });
-        setError('Dados não disponíveis no cache.');
-        setDataLoaded(true);
-        setLoading(false);
-        setLoadingDesconto(false);
-        return;
-        
-      } catch (cacheError) {
-        console.error('[useVendasDashboard] Erro ao verificar cache:', cacheError);
-        setDadosFormasPagamento([]);
-        setFontesDados({ supabase: false, firebird: false, parcial: true });
-        setError('Erro ao consultar cache. Tente novamente.');
-        setDataLoaded(true);
-        setLoading(false);
-        setLoadingDesconto(false);
-        return;
-      }
-    } else {
-      // forcarFirebird = true, mas não vamos mais chamar Firebird direto
-      // Apenas recarrega do cache
-      console.log('[useVendasDashboard] Force refresh solicitado - recarregando cache...');
-      try {
-        const dadosAgregados = await getVendasAgregado({
-          empresa,
-          dataInicio,
-          dataFim,
-        });
-        
-        if (dadosAgregados.length > 0) {
-          const diasNoCache = await contarDiasNoCache(dataInicio, dataFim);
-          const cobertura = Math.round((diasNoCache / diasNoPeriodo) * 100);
-          
-          const dadosConvertidos = await converterAgregadoParaResumo(dadosAgregados);
-          setDadosFormasPagamento(dadosConvertidos);
-          setFontesDados({ 
-            supabase: true, 
-            firebird: false,
-            parcial: cobertura < 100,
-            mensagem: `Cache: ${diasNoCache}/${diasNoPeriodo} dias (${cobertura}%)`
-          });
-        } else {
-          setDadosFormasPagamento([]);
-          setFontesDados({ 
-            supabase: false, 
-            firebird: false, 
-            parcial: true,
-            mensagem: 'Cache vazio. Execute sincronização.'
-          });
-          setError('Cache vazio para este período. Execute a sincronização.');
-        }
-        
-        setDataLoaded(true);
-        setLoading(false);
-        setLoadingDesconto(false);
-        
-      } catch (error) {
-        console.error('[useVendasDashboard] Erro ao recarregar cache:', error);
-        setError('Erro ao consultar cache.');
         setDataLoaded(true);
         setLoading(false);
         setLoadingDesconto(false);
       }
+      
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[useVendasDashboard] ❌ Erro ao buscar dados:', message);
+      
+      setError(`Erro ao carregar dados: ${message}`);
+      setDadosFormasPagamento([]);
+      setFontesDados({ 
+        supabase: false, 
+        firebird: false, 
+        parcial: true,
+        mensagem: `Erro: ${message}`
+      });
+      setDataLoaded(true);
+      setLoading(false);
+      setLoadingDesconto(false);
     }
   }, [fetchComRetry]);
 
   // Carregar dados ao montar e quando filtros mudam
   useEffect(() => {
-    // Reset do controle de sync ao mudar filtros
-    syncAttemptedRef.current = false;
-    
     if (filters.empresa && filters.empresa !== 'ALL') {
       fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
     } else if (filters.empresa === 'ALL') {
@@ -727,16 +527,14 @@ export function useVendasDashboard() {
     return agruparPorVendedor(dadosFormasPagamento);
   }, [dadosFormasPagamento]);
 
-  // Reload normal (usa cache-first)
+  // Reload
   const reload = useCallback(() => {
-    setForceFirebird(false);
-    fetchData(filters.empresa, filters.dataInicio, filters.dataFim, false);
+    fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
   }, [filters, fetchData]);
 
-  // Reload forçando Firebird (bypass cache)
+  // Force refresh (mesmo comportamento agora, sempre busca do Firebird)
   const forceRefresh = useCallback(() => {
-    setForceFirebird(true);
-    fetchData(filters.empresa, filters.dataInicio, filters.dataFim, true);
+    fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
   }, [filters, fetchData]);
 
   return {
@@ -757,8 +555,8 @@ export function useVendasDashboard() {
     progressoPaginacao,
     reload,
     forceRefresh,
-    // Novos estados de sync
-    syncStatus,
-    isSyncing,
+    // Estados removidos (mantidos para compatibilidade)
+    syncStatus: null,
+    isSyncing: false,
   };
 }
