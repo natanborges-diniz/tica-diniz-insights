@@ -108,7 +108,7 @@ const OsDashboardPage: React.FC = () => {
   } = useOsMonitor();
 
   const [selectedHubOs, setSelectedHubOs] = useState<OsHubRecord | null>(null);
-  const [loadingRecipe, setLoadingRecipe] = useState(false);
+  const [loadingRecipeCodOs, setLoadingRecipeCodOs] = useState<number | null>(null);
 
   const handleLoad = (apiFilters: OsApiFilters) => {
     reload(apiFilters);
@@ -116,7 +116,7 @@ const OsDashboardPage: React.FC = () => {
 
   const handleOpenRecipe = async (codOs: number, codEmpresa?: number) => {
     try {
-      setLoadingRecipe(true);
+      setLoadingRecipeCodOs(codOs);
       toast({ title: "Buscando receita...", description: "Consultando dados completos." });
 
       const found = await fetchSingleOsRecipe(codOs, codEmpresa);
@@ -152,7 +152,7 @@ const OsDashboardPage: React.FC = () => {
         variant: "destructive",
       });
     } finally {
-      setLoadingRecipe(false);
+      setLoadingRecipeCodOs(null);
     }
   };
 
@@ -178,7 +178,7 @@ const OsDashboardPage: React.FC = () => {
       selectedHubOs={selectedHubOs}
       onOpenRecipe={handleOpenRecipe}
       onCloseRecipe={() => setSelectedHubOs(null)}
-      loadingRecipe={loadingRecipe}
+      loadingRecipeCodOs={loadingRecipeCodOs}
     />
   );
 };

@@ -58,7 +58,7 @@ type Props = {
   selectedHubOs: OsHubRecord | null;
   onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   onCloseRecipe: () => void;
-  loadingRecipe: boolean;
+  loadingRecipeCodOs: number | null;
 };
 
 function DatePickerField({ label, date, onSelect }: { label: string; date: Date; onSelect: (d: Date) => void }) {
@@ -103,7 +103,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
   selectedHubOs,
   onOpenRecipe,
   onCloseRecipe,
-  loadingRecipe,
+  loadingRecipeCodOs,
 }) => {
   // Local state for initial load filters
   const hoje = new Date();
@@ -362,7 +362,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
                           key={os.codOs}
                           os={os}
                           onOpenRecipe={onOpenRecipe}
-                          loadingRecipe={loadingRecipe}
+                          loadingRecipe={loadingRecipeCodOs === os.codOs}
                           pedidoFornecedor={pedidosMap[os.codOs] || null}
                         />
                       ))}
