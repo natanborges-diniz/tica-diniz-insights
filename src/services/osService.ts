@@ -48,10 +48,13 @@ export interface OsRecord {
   telefone: string | null;
 }
 
+export type CampoDataOs = 'PREVISAO' | 'EMISSAO' | 'ENTRADA' | 'SAIDA';
+
 export interface GetOsMonitorParams {
   empresa: EmpresaParam;
   dataInicio: string;
   dataFim: string;
+  campoData?: CampoDataOs;
 }
 
 function normalizeStatusAtraso(value: string | undefined): StatusAtraso {
@@ -86,6 +89,10 @@ export async function getOsMonitor(params: GetOsMonitorParams): Promise<OsRecord
     dataInicio: params.dataInicio,
     dataFim: params.dataFim,
   };
+
+  if (params.campoData) {
+    queryParams.campoData = params.campoData;
+  }
   
   // codEmpresa: ALL ou número
   if (params.empresa === 'ALL' || params.empresa === null) {

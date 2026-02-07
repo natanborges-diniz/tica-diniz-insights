@@ -1,10 +1,12 @@
 // src/components/os-dashboard/OsDashboardLayout.tsx
-// Layout do Monitor de Produção com linhas expansíveis e acesso à receita
+// Layout do Monitor de Produção com carga manual e filtros de data
 
 import React, { useEffect, useState } from "react";
+import { format } from "date-fns";
 import { OsRecord } from "@/services/osService";
+import { CampoDataOs } from "@/services/osService";
 import { OsMetrics } from "@/utils/osMetrics";
-import { OsFilterState, OsStatusFilter } from "@/hooks/useOsMonitor";
+import { OsFilterState, OsStatusFilter, OsApiFilters } from "@/hooks/useOsMonitor";
 import { OsKpiCards } from "./OsKpiCards";
 import { OsExpandableRow } from "./OsExpandableRow";
 import { OsHubDetailSheet } from "@/components/os-hub/OsHubDetailSheet";
@@ -13,7 +15,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { RefreshCw, Search, AlertTriangle, Info } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RefreshCw, Search, AlertTriangle, Info, CalendarIcon, Play } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -29,15 +34,24 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+const CAMPO_DATA_LABELS: Record<CampoDataOs, string> = {
+  PREVISAO: "Data de Previsão",
+  EMISSAO: "Data de Emissão",
+  ENTRADA: "Data de Entrada",
+  SAIDA: "Data de Saída",
+};
+
 type Props = {
   data: OsRecord[];
   rawData: OsRecord[];
   loading: boolean;
   error: string | null;
+  loaded: boolean;
   metrics: OsMetrics;
   rawMetrics: OsMetrics;
   filters: OsFilterState;
   onChangeFilters: (next: Partial<OsFilterState>) => void;
+  onLoad: (apiFilters: OsApiFilters) => void;
   onRefresh: () => void;
   empresasUnicas: string[];
   etapasUnicas: string[];
@@ -47,15 +61,42 @@ type Props = {
   loadingRecipe: boolean;
 };
 
+function DatePickerField({ label, date, onSelect }: { label: string; date: Date; onSelect: (d: Date) => void }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className={cn("w-[160px] justify-start text-left font-normal text-sm")}>
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {format(date, "dd/MM/yyyy")}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={date}
+            onSelect={(d) => d && onSelect(d)}
+            initialFocus
+            className={cn("p-3 pointer-events-auto")}
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 export const OsDashboardLayout: React.FC<Props> = ({
   data,
   rawData,
   loading,
   error,
+  loaded,
   metrics,
   rawMetrics,
   filters,
   onChangeFilters,
+  onLoad,
   onRefresh,
   empresasUnicas,
   etapasUnicas,
@@ -64,6 +105,15 @@ export const OsDashboardLayout: React.FC<Props> = ({
   onCloseRecipe,
   loadingRecipe,
 }) => {
+  // Local state for initial load filters
+  const hoje = new Date();
+  const inicio30 = new Date(hoje);
+  inicio30.setDate(inicio30.getDate() - 30);
+
+  const [campoData, setCampoData] = useState<CampoDataOs>("PREVISAO");
+  const [dataInicio, setDataInicio] = useState<Date>(inicio30);
+  const [dataFim, setDataFim] = useState<Date>(hoje);
+
   // Pedidos de fornecedor vinculados
   const [pedidosMap, setPedidosMap] = useState<Record<number, { numero_pedido: string | null; fornecedor: string; status: string }>>(
     {}
@@ -72,7 +122,6 @@ export const OsDashboardLayout: React.FC<Props> = ({
   useEffect(() => {
     if (rawData.length === 0) return;
     const codOsList = rawData.map(os => os.codOs);
-    // Fetch in batches of 100
     (async () => {
       const map: typeof pedidosMap = {};
       for (let i = 0; i < codOsList.length; i += 100) {
@@ -91,6 +140,15 @@ export const OsDashboardLayout: React.FC<Props> = ({
     })();
   }, [rawData]);
 
+  const handleCarregar = () => {
+    onLoad({
+      empresa: "ALL",
+      dataInicio: format(dataInicio, "yyyy-MM-dd"),
+      dataFim: format(dataFim, "yyyy-MM-dd"),
+      campoData,
+    });
+  };
+
   // Alertas para OS críticas
   const osAtrasadas = rawData.filter(os => os.statusAtraso === 'ATRASO');
   const osSemData = rawData.filter(os => os.statusAtraso === 'SEM_DATA');
@@ -102,149 +160,60 @@ export const OsDashboardLayout: React.FC<Props> = ({
         <div>
           <h1 className="text-2xl font-bold">Monitor de Produção (OS)</h1>
           <p className="text-sm text-muted-foreground">
-            Últimos 30 dias — todas as empresas • {rawData.length} OS carregadas
+            {loaded
+              ? `${CAMPO_DATA_LABELS[campoData]} — ${format(dataInicio, "dd/MM/yyyy")} a ${format(dataFim, "dd/MM/yyyy")} • ${rawData.length} OS carregadas`
+              : "Selecione o período e o tipo de data para carregar"
+            }
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-          Atualizar
-        </Button>
+        {loaded && (
+          <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
+        )}
       </div>
 
-      {/* Alertas */}
-      {(osAtrasadas.length > 0 || osSemData.length > 0) && (
-        <div className="space-y-2">
-          {osAtrasadas.length > 0 && (
-            <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-              <span className="text-sm font-medium text-destructive">
-                {osAtrasadas.length} OS em atraso crítico!
-              </span>
-            </div>
-          )}
-          {osSemData.length > 0 && (
-            <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
-              <span className="text-sm font-medium text-amber-700">
-                {osSemData.length} OS sem data de previsão.
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* KPI Cards */}
-      <OsKpiCards
-        metrics={rawMetrics}
-        filters={filters}
-        onChangeFilters={onChangeFilters}
-        loading={loading}
-      />
-
-      {/* Error */}
-      {error && (
-        <Card className="border-destructive bg-destructive/10">
-          <CardContent className="py-4">
-            <p className="text-destructive text-sm">{error}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Filtros */}
+      {/* Barra de carga — sempre visível */}
       <Card>
         <CardContent className="py-4">
-          <div className="flex flex-wrap gap-4 items-center">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por OS ou Cliente..."
-                value={filters.busca}
-                onChange={(e) => onChangeFilters({ busca: e.target.value })}
-                className="pl-9"
-              />
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground">Tipo de Data</span>
+              <Select value={campoData} onValueChange={(v) => setCampoData(v as CampoDataOs)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(CAMPO_DATA_LABELS).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <Select
-              value={filters.empresaVisual ?? "TODAS"}
-              onValueChange={(v) => onChangeFilters({ empresaVisual: v === "TODAS" ? null : v })}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Empresa" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="TODAS">Todas as empresas</SelectItem>
-                {empresasUnicas.map((nome) => (
-                  <SelectItem key={nome} value={nome}>{nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <DatePickerField label="Data Início" date={dataInicio} onSelect={setDataInicio} />
+            <DatePickerField label="Data Fim" date={dataFim} onSelect={setDataFim} />
 
-            <Select
-              value={filters.etapa ?? "TODAS"}
-              onValueChange={(v) => onChangeFilters({ etapa: v === "TODAS" ? null : v })}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Etapa" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="TODAS">Todas as etapas</SelectItem>
-                {etapasUnicas.map((etapa) => (
-                  <SelectItem key={etapa} value={etapa}>{etapa}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={filters.status}
-              onValueChange={(v) => onChangeFilters({ status: v as OsStatusFilter })}
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="TODOS">Todos</SelectItem>
-                <SelectItem value="ATRASADAS">Atrasadas</SelectItem>
-                <SelectItem value="NO_PRAZO">No Prazo</SelectItem>
-                <SelectItem value="ATRASO">Atraso Crítico</SelectItem>
-                <SelectItem value="ATRASO_LEVE">Atraso Leve</SelectItem>
-                <SelectItem value="SEM_DATA">Sem Data</SelectItem>
-                <SelectItem value="ENTREGUE">Entregue</SelectItem>
-              </SelectContent>
-            </Select>
+            <Button onClick={handleCarregar} disabled={loading} className="h-10">
+              {loading ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4 mr-2" />
+              )}
+              Carregar
+            </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Tabela com linhas expansíveis */}
-      {!loading && data.length > 0 && (
+      {/* Se ainda não carregou, mostrar mensagem */}
+      {!loaded && !loading && (
         <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[40px]"></TableHead>
-                    <TableHead className="w-[100px]">OS</TableHead>
-                    <TableHead>Empresa</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Etapa</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-center">Atraso</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.map((os) => (
-                    <OsExpandableRow
-                      key={os.codOs}
-                      os={os}
-                      onOpenRecipe={onOpenRecipe}
-                      loadingRecipe={loadingRecipe}
-                      pedidoFornecedor={pedidosMap[os.codOs] || null}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center justify-center">
+              <Info className="h-8 w-8 text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">Selecione o período e clique em <strong>Carregar</strong> para visualizar as OS.</p>
             </div>
           </CardContent>
         </Card>
@@ -256,29 +225,182 @@ export const OsDashboardLayout: React.FC<Props> = ({
           <CardContent className="py-12">
             <div className="flex flex-col items-center justify-center">
               <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">Carregando OS dos últimos 30 dias...</p>
+              <p className="text-muted-foreground">Carregando OS...</p>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Empty */}
-      {!loading && data.length === 0 && !error && (
-        <Card>
-          <CardContent className="py-12">
-            <div className="flex flex-col items-center justify-center">
-              <Info className="h-8 w-8 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">Nenhuma OS encontrada.</p>
+      {/* Conteúdo carregado */}
+      {loaded && !loading && (
+        <>
+          {/* Alertas */}
+          {(osAtrasadas.length > 0 || osSemData.length > 0) && (
+            <div className="space-y-2">
+              {osAtrasadas.length > 0 && (
+                <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  <span className="text-sm font-medium text-destructive">
+                    {osAtrasadas.length} OS em atraso crítico!
+                  </span>
+                </div>
+              )}
+              {osSemData.length > 0 && (
+                <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  <span className="text-sm font-medium text-amber-700">
+                    {osSemData.length} OS sem data de previsão.
+                  </span>
+                </div>
+              )}
             </div>
-          </CardContent>
-        </Card>
+          )}
+
+          {/* KPI Cards */}
+          <OsKpiCards
+            metrics={rawMetrics}
+            filters={filters}
+            onChangeFilters={onChangeFilters}
+            loading={loading}
+          />
+
+          {/* Error */}
+          {error && (
+            <Card className="border-destructive bg-destructive/10">
+              <CardContent className="py-4">
+                <p className="text-destructive text-sm">{error}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Filtros client-side */}
+          <Card>
+            <CardContent className="py-4">
+              <div className="flex flex-wrap gap-4 items-center">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por OS ou Cliente..."
+                    value={filters.busca}
+                    onChange={(e) => onChangeFilters({ busca: e.target.value })}
+                    className="pl-9"
+                  />
+                </div>
+
+                <Select
+                  value={filters.empresaVisual ?? "TODAS"}
+                  onValueChange={(v) => onChangeFilters({ empresaVisual: v === "TODAS" ? null : v })}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TODAS">Todas as empresas</SelectItem>
+                    {empresasUnicas.map((nome) => (
+                      <SelectItem key={nome} value={nome}>{nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={filters.etapa ?? "TODAS"}
+                  onValueChange={(v) => onChangeFilters({ etapa: v === "TODAS" ? null : v })}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Etapa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TODAS">Todas as etapas</SelectItem>
+                    {etapasUnicas.map((etapa) => (
+                      <SelectItem key={etapa} value={etapa}>{etapa}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={filters.status}
+                  onValueChange={(v) => onChangeFilters({ status: v as OsStatusFilter })}
+                >
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TODOS">Todos</SelectItem>
+                    <SelectItem value="ATRASADAS">Atrasadas</SelectItem>
+                    <SelectItem value="NO_PRAZO">No Prazo</SelectItem>
+                    <SelectItem value="ATRASO">Atraso Crítico</SelectItem>
+                    <SelectItem value="ATRASO_LEVE">Atraso Leve</SelectItem>
+                    <SelectItem value="SEM_DATA">Sem Data</SelectItem>
+                    <SelectItem value="ENTREGUE">Entregue</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tabela */}
+          {data.length > 0 && (
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[40px]"></TableHead>
+                        <TableHead className="w-[100px]">OS</TableHead>
+                        <TableHead>Empresa</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Etapa</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-center">Atraso</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.map((os) => (
+                        <OsExpandableRow
+                          key={os.codOs}
+                          os={os}
+                          onOpenRecipe={onOpenRecipe}
+                          loadingRecipe={loadingRecipe}
+                          pedidoFornecedor={pedidosMap[os.codOs] || null}
+                        />
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Empty */}
+          {data.length === 0 && !error && (
+            <Card>
+              <CardContent className="py-12">
+                <div className="flex flex-col items-center justify-center">
+                  <Info className="h-8 w-8 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Nenhuma OS encontrada no período selecionado.</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Rodapé */}
+          {data.length > 0 && (
+            <p className="text-sm text-muted-foreground text-center">
+              Exibindo {data.length} de {rawData.length} OS
+            </p>
+          )}
+        </>
       )}
 
-      {/* Rodapé */}
-      {data.length > 0 && (
-        <p className="text-sm text-muted-foreground text-center">
-          Exibindo {data.length} de {rawData.length} OS
-        </p>
+      {/* Error fora do loaded (ex: falha na carga inicial) */}
+      {!loaded && error && (
+        <Card className="border-destructive bg-destructive/10">
+          <CardContent className="py-4">
+            <p className="text-destructive text-sm">{error}</p>
+          </CardContent>
+        </Card>
       )}
 
       {/* Sheet de receita */}
