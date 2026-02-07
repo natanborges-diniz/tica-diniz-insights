@@ -161,6 +161,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
   const hasPrismas = hasPrismaOd || hasPrismaOe;
   const hasImages = !!(os.urlImagemReceita || os.urlImagemArmacao || os.imagemTracer || os.arquivoTracer);
   const hasObs = !!(os.observacaoOs || os.observacaoLente || os.observacaoPendencia || os.observacaoReceita);
+  const hasLentes = !!(os.lenteOdDescricao || os.lenteOeDescricao);
 
   return (
     <Dialog open={!!os} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -293,6 +294,37 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                 <CardContent className="p-4 flex items-center gap-3 text-muted-foreground">
                   <EyeOff className="h-5 w-5" />
                   <span className="text-sm">Receita sem dados de dioptria para esta OS.</span>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Lentes (Produtos OD/OE) */}
+            {hasLentes && (
+              <Card className="border-primary/20">
+                <CardContent className="p-4 space-y-3">
+                  <SectionHeader icon={Focus} title="Lentes — Produtos" accent="bg-indigo-500/10 text-indigo-600" />
+                  {os.lenteOdDescricao && (
+                    <div className="flex items-start gap-3 rounded-lg bg-muted/50 p-3">
+                      <div className="flex items-center justify-center h-7 w-7 rounded-full bg-blue-500/15 text-blue-700 text-xs font-bold shrink-0">
+                        OD
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-0.5">Olho Direito</p>
+                        <p className="text-sm font-medium">{os.lenteOdDescricao}</p>
+                      </div>
+                    </div>
+                  )}
+                  {os.lenteOeDescricao && (
+                    <div className="flex items-start gap-3 rounded-lg bg-muted/50 p-3">
+                      <div className="flex items-center justify-center h-7 w-7 rounded-full bg-emerald-500/15 text-emerald-700 text-xs font-bold shrink-0">
+                        OE
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-0.5">Olho Esquerdo</p>
+                        <p className="text-sm font-medium">{os.lenteOeDescricao}</p>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

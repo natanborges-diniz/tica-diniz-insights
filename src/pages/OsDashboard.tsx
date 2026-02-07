@@ -87,6 +87,8 @@ function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
     observacaoLente: (r.observacao_lente as string) ?? null,
     observacaoPendencia: (r.observacao_pendencia as string) ?? null,
     observacaoReceita: null,
+    lenteOdDescricao: null,
+    lenteOeDescricao: null,
     temReceita: (r.tem_receita as boolean) ?? hasReceita,
     temImagem: (r.tem_imagem as boolean) ?? hasImagem,
     cacheLoadedAt: (r.cache_loaded_at as string) ?? undefined,
