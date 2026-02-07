@@ -2,6 +2,7 @@
 // Tela 2 — Detalhe da OS com receita completa, full-screen dialog
 
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { OsHubRecord } from '@/services/osHubService';
 import {
   Dialog,
@@ -10,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -31,6 +33,7 @@ import {
   Building2,
   DollarSign,
   Clock,
+  Send,
 } from 'lucide-react';
 
 interface Props {
@@ -149,6 +152,7 @@ function SectionHeader({ icon: Icon, title, accent }: { icon: React.ElementType;
 /* ---- Main Component ---- */
 
 export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
+  const navigate = useNavigate();
   if (!os) return null;
 
   const status = statusConfig[os.statusAtraso] || statusConfig.SEM_DATA;
@@ -190,6 +194,17 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                   {os.atrasoDias}d
                 </Badge>
               )}
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  onClose();
+                  navigate(`/os/pedido?codOs=${os.codOs}&codEmpresa=${os.codEmpresa}`);
+                }}
+              >
+                <Send className="h-3.5 w-3.5" />
+                Gerar Pedido
+              </Button>
             </div>
           </div>
         </DialogHeader>

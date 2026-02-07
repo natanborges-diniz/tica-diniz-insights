@@ -10,6 +10,7 @@ import OQueFazerPage from "./pages/estoque/OQueFazerPage";
 import AnaliseOTBPage from "./pages/estoque/AnaliseOTBPage";
 import SalesFamilyDashboard from "./pages/SalesFamilyDashboard";
 import OsDashboard from "./pages/OsDashboard";
+import PedidoFornecedorPage from "./pages/PedidoFornecedorPage";
 
 import FinanceiroDashboard from "./pages/FinanceiroDashboard";
 import FinanceiroDreDashboard from "./pages/FinanceiroDreDashboard";
@@ -44,6 +45,7 @@ const App = () => (
             
             {/* Monitor */}
             <Route path="/os" element={<OsDashboard />} />
+            <Route path="/os/pedido" element={<PedidoFornecedorPage />} />
             
             
             {/* Financeiro */}

@@ -1,7 +1,7 @@
 // src/components/os-dashboard/OsDashboardLayout.tsx
 // Layout do Monitor de Produção com linhas expansíveis e acesso à receita
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { OsRecord } from "@/services/osService";
 import { OsMetrics } from "@/utils/osMetrics";
 import { OsFilterState, OsStatusFilter } from "@/hooks/useOsMonitor";
@@ -9,6 +9,7 @@ import { OsKpiCards } from "./OsKpiCards";
 import { OsExpandableRow } from "./OsExpandableRow";
 import { OsHubDetailSheet } from "@/components/os-hub/OsHubDetailSheet";
 import { OsHubRecord } from "@/services/osHubService";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +64,33 @@ export const OsDashboardLayout: React.FC<Props> = ({
   onCloseRecipe,
   loadingRecipe,
 }) => {
+  // Pedidos de fornecedor vinculados
+  const [pedidosMap, setPedidosMap] = useState<Record<number, { numero_pedido: string | null; fornecedor: string; status: string }>>(
+    {}
+  );
+
+  useEffect(() => {
+    if (rawData.length === 0) return;
+    const codOsList = rawData.map(os => os.codOs);
+    // Fetch in batches of 100
+    (async () => {
+      const map: typeof pedidosMap = {};
+      for (let i = 0; i < codOsList.length; i += 100) {
+        const batch = codOsList.slice(i, i + 100);
+        const { data: rows } = await supabase
+          .from("pedidos_fornecedor")
+          .select("cod_os, numero_pedido, fornecedor, status")
+          .in("cod_os", batch);
+        if (rows) {
+          for (const r of rows) {
+            map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "" };
+          }
+        }
+      }
+      setPedidosMap(map);
+    })();
+  }, [rawData]);
+
   // Alertas para OS críticas
   const osAtrasadas = rawData.filter(os => os.statusAtraso === 'ATRASO');
   const osSemData = rawData.filter(os => os.statusAtraso === 'SEM_DATA');
@@ -212,6 +240,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
                       os={os}
                       onOpenRecipe={onOpenRecipe}
                       loadingRecipe={loadingRecipe}
+                      pedidoFornecedor={pedidosMap[os.codOs] || null}
                     />
                   ))}
                 </TableBody>

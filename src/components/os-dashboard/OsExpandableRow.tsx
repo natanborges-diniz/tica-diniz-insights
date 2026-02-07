@@ -1,19 +1,21 @@
 // src/components/os-dashboard/OsExpandableRow.tsx
 // Linha expansível da tabela de OS com visual aprimorado
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { OsRecord } from "@/services/osService";
 import { getStatusColor, getStatusLabel } from "@/utils/osMetrics";
+import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { ChevronDown, ChevronRight, Glasses, Loader2, Calendar, User, Phone, Clock } from "lucide-react";
+import { ChevronDown, ChevronRight, Glasses, Loader2, Calendar, User, Phone, Clock, ExternalLink } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface Props {
   os: OsRecord;
   onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   loadingRecipe: boolean;
+  pedidoFornecedor?: { numero_pedido: string | null; fornecedor: string; status: string } | null;
 }
 
 function formatDate(value: string | null) {
@@ -25,7 +27,7 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
-export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingRecipe }) => {
+export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingRecipe, pedidoFornecedor }) => {
   const [open, setOpen] = useState(false);
 
   return (
@@ -100,23 +102,31 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                     </div>
                   </div>
                 </div>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="gap-2 shadow-sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenRecipe(os.codOs, os.codEmpresa ?? undefined);
-                  }}
-                  disabled={loadingRecipe}
-                >
-                  {loadingRecipe ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Glasses className="h-4 w-4" />
+                <div className="flex items-center gap-2">
+                  {pedidoFornecedor?.numero_pedido && (
+                    <Badge variant="outline" className="gap-1 bg-orange-500/10 text-orange-700 border-orange-300">
+                      <ExternalLink className="h-3 w-3" />
+                      Pedido {pedidoFornecedor.fornecedor}: {pedidoFornecedor.numero_pedido}
+                    </Badge>
                   )}
-                  Ver Receita
-                </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="gap-2 shadow-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenRecipe(os.codOs, os.codEmpresa ?? undefined);
+                    }}
+                    disabled={loadingRecipe}
+                  >
+                    {loadingRecipe ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Glasses className="h-4 w-4" />
+                    )}
+                    Ver Receita
+                  </Button>
+                </div>
               </div>
             </TableCell>
           </TableRow>

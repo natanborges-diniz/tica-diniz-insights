@@ -161,6 +161,39 @@ export type Database = {
         }
         Relationships: []
       }
+      fornecedor_produto_depara: {
+        Row: {
+          codigo_fornecedor: number | null
+          created_at: string
+          descricao_local: string
+          fornecedor: string
+          id: string
+          nome_fornecedor: string | null
+          sku_fornecedor: string | null
+          updated_at: string
+        }
+        Insert: {
+          codigo_fornecedor?: number | null
+          created_at?: string
+          descricao_local: string
+          fornecedor?: string
+          id?: string
+          nome_fornecedor?: string | null
+          sku_fornecedor?: string | null
+          updated_at?: string
+        }
+        Update: {
+          codigo_fornecedor?: number | null
+          created_at?: string
+          descricao_local?: string
+          fornecedor?: string
+          id?: string
+          nome_fornecedor?: string | null
+          sku_fornecedor?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       lojas_configuracao: {
         Row: {
           abre_domingo: boolean | null
@@ -470,6 +503,45 @@ export type Database = {
           url_imagem_armacao?: string | null
           url_imagem_receita?: string | null
           usuario?: string | null
+        }
+        Relationships: []
+      }
+      pedidos_fornecedor: {
+        Row: {
+          cod_empresa: number
+          cod_os: number
+          created_at: string
+          fornecedor: string
+          id: string
+          numero_pedido: string | null
+          payload: Json | null
+          response: Json | null
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          cod_empresa: number
+          cod_os: number
+          created_at?: string
+          fornecedor?: string
+          id?: string
+          numero_pedido?: string | null
+          payload?: Json | null
+          response?: Json | null
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cod_empresa?: number
+          cod_os?: number
+          created_at?: string
+          fornecedor?: string
+          id?: string
+          numero_pedido?: string | null
+          payload?: Json | null
+          response?: Json | null
+          status?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
