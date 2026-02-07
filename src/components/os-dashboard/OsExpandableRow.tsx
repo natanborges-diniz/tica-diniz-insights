@@ -1,5 +1,5 @@
 // src/components/os-dashboard/OsExpandableRow.tsx
-// Linha expansível da tabela de OS com detalhes e botão de receita
+// Linha expansível da tabela de OS com visual aprimorado
 
 import React, { useState } from "react";
 import { OsRecord } from "@/services/osService";
@@ -7,7 +7,7 @@ import { getStatusColor, getStatusLabel } from "@/utils/osMetrics";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { ChevronDown, ChevronRight, FileText, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Glasses, Loader2, Calendar, User, Phone, Clock } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface Props {
@@ -17,8 +17,8 @@ interface Props {
 }
 
 function formatDate(value: string | null) {
-  if (!value) return "-";
-  try { return new Date(value).toLocaleDateString("pt-BR"); } catch { return "-"; }
+  if (!value) return "—";
+  try { return new Date(value).toLocaleDateString("pt-BR"); } catch { return "—"; }
 }
 
 function formatCurrency(value: number) {
@@ -32,82 +32,91 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
     <Collapsible asChild open={open} onOpenChange={setOpen}>
       <>
         <CollapsibleTrigger asChild>
-          <TableRow className="cursor-pointer hover:bg-muted/50">
+          <TableRow className="cursor-pointer hover:bg-muted/50 transition-colors">
             <TableCell className="w-[40px] px-2">
               {open ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                <ChevronDown className="h-4 w-4 text-primary transition-transform" />
               ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform" />
               )}
             </TableCell>
-            <TableCell className="font-medium">{os.os || os.codOs}</TableCell>
-            <TableCell>{os.empresa || "-"}</TableCell>
-            <TableCell className="max-w-[200px] truncate" title={os.cliente}>
-              {os.cliente || "-"}
+            <TableCell className="font-mono font-semibold text-primary">{os.os || os.codOs}</TableCell>
+            <TableCell className="text-xs">{os.empresa || "—"}</TableCell>
+            <TableCell className="max-w-[200px] truncate font-medium" title={os.cliente}>
+              {os.cliente || "—"}
             </TableCell>
-            <TableCell>{os.etapa || "-"}</TableCell>
+            <TableCell>
+              <span className="text-xs bg-muted px-2 py-0.5 rounded-md">{os.etapa || "—"}</span>
+            </TableCell>
             <TableCell>
               <Badge variant="outline" className={getStatusColor(os.statusAtraso)}>
                 {getStatusLabel(os.statusAtraso)}
               </Badge>
             </TableCell>
             <TableCell className="text-center">
-              {os.statusAtraso === "ENTREGUE" ? "-" : (
-                <span className={os.atrasoDias > 0 ? "text-destructive font-medium" : ""}>
-                  {os.atrasoDias}
-                </span>
+              {os.statusAtraso === "ENTREGUE" ? (
+                <span className="text-muted-foreground">—</span>
+              ) : os.atrasoDias > 0 ? (
+                <span className="text-destructive font-bold">{os.atrasoDias}d</span>
+              ) : (
+                <span className="text-muted-foreground">{os.atrasoDias}</span>
               )}
             </TableCell>
-            <TableCell className="text-right">{formatCurrency(os.total)}</TableCell>
+            <TableCell className="text-right font-medium">{formatCurrency(os.total)}</TableCell>
           </TableRow>
         </CollapsibleTrigger>
 
         <CollapsibleContent asChild>
-          <TableRow className="bg-muted/30 hover:bg-muted/40">
+          <TableRow className="bg-primary/[0.02] border-l-2 border-l-primary/30">
             <TableCell colSpan={8} className="p-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground">Emissão</p>
-                  <p className="font-medium">{formatDate(os.dataEmissao)}</p>
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm flex-1">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-3.5 w-3.5 text-blue-500" />
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Emissão</p>
+                      <p className="font-medium text-xs">{formatDate(os.dataEmissao)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-3.5 w-3.5 text-amber-500" />
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Previsão</p>
+                      <p className="font-medium text-xs">{formatDate(os.dataPrevisao)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <User className="h-3.5 w-3.5 text-muted-foreground" />
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Usuário</p>
+                      <p className="font-medium text-xs">{os.usuario || "—"}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Telefone</p>
+                      <p className="font-medium text-xs">{os.telefone || "—"}</p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Previsão</p>
-                  <p className="font-medium">{formatDate(os.dataPrevisao)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Entrada</p>
-                  <p className="font-medium">{formatDate(os.dataHoraEntrada)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Saída</p>
-                  <p className="font-medium">{formatDate(os.dataHoraSaida)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Usuário</p>
-                  <p className="font-medium">{os.usuario || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Telefone</p>
-                  <p className="font-medium">{os.telefone || "-"}</p>
-                </div>
-                <div className="md:col-span-2 flex items-end">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenRecipe(os.codOs, os.codEmpresa ?? undefined);
-                    }}
-                    disabled={loadingRecipe}
-                  >
-                    {loadingRecipe ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <FileText className="h-4 w-4 mr-2" />
-                    )}
-                    Ver Receita
-                  </Button>
-                </div>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="gap-2 shadow-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenRecipe(os.codOs, os.codEmpresa ?? undefined);
+                  }}
+                  disabled={loadingRecipe}
+                >
+                  {loadingRecipe ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Glasses className="h-4 w-4" />
+                  )}
+                  Ver Receita
+                </Button>
               </div>
             </TableCell>
           </TableRow>

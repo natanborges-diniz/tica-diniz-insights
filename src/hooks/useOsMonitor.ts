@@ -29,7 +29,7 @@ export function useOsMonitor(initialFilters: OsApiFilters) {
   const [filters, setFilters] = useState<OsFilterState>({
     status: "TODOS",
     empresaVisual: null,
-    etapa: null,
+    etapa: "TRANSLADO LOJA-ESTOQUE",
     busca: "",
   });
 
