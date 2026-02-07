@@ -88,8 +88,8 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                   <div className="flex items-center gap-2">
                     <User className="h-3.5 w-3.5 text-muted-foreground" />
                     <div>
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Usuário</p>
-                      <p className="font-medium text-xs">{os.usuario || "—"}</p>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Vendedor</p>
+                      <p className="font-medium text-xs">{os.vendedor || os.usuario || "—"}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

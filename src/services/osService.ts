@@ -23,6 +23,7 @@ interface OsRecordRaw {
   datahorasaida?: string;
   total?: number;
   usuario?: string;
+  vendedor?: string;
   telefone?: string;
 }
 
@@ -43,6 +44,7 @@ export interface OsRecord {
   dataHoraSaida: string | null;
   total: number;
   usuario: string;
+  vendedor: string;
   telefone: string | null;
 }
 
@@ -74,6 +76,7 @@ function mapOsRecordRaw(r: OsRecordRaw): OsRecord {
     dataHoraSaida: r.datahorasaida ?? null,
     total: r.total ?? 0,
     usuario: r.usuario?.trim() ?? '',
+    vendedor: r.vendedor?.trim() ?? '',
     telefone: r.telefone?.trim() ?? null,
   };
 }
