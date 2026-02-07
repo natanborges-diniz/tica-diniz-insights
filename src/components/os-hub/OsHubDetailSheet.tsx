@@ -62,7 +62,7 @@ function formatGrau(v: number | null): string {
 }
 
 function hasAnyValue(...values: (number | null | undefined)[]): boolean {
-  return values.some(v => v !== null && v !== undefined && v !== 0);
+  return values.some(v => v !== null && v !== undefined);
 }
 
 /* ---- Reusable sub-components ---- */
@@ -259,7 +259,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
             </Card>
 
             {/* ===== RECEITA ===== */}
-            {os.temReceita && (hasOd || hasOe) ? (
+            {(hasOd || hasOe) ? (
               <Card className="border-primary/20">
                 <CardContent className="p-4 space-y-4">
                   <SectionHeader icon={Eye} title="Receita — Dioptrias" accent="bg-blue-500/10 text-blue-600" />
