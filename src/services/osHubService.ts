@@ -33,7 +33,7 @@ interface OsHubRaw {
   data_saida?: string;
   total?: number;
   usuario?: string;
-  // Receita OD
+  // Receita OD (OS fields)
   od_longe_esf?: number;
   od_longe_cil?: number;
   od_longe_eixo?: number;
@@ -45,7 +45,7 @@ interface OsHubRaw {
   od_dp?: number;
   od_altura?: number;
   od_alt?: number;
-  // Receita OE
+  // Receita OE (OS fields)
   oe_longe_esf?: number;
   oe_longe_cil?: number;
   oe_longe_eixo?: number;
@@ -57,6 +57,36 @@ interface OsHubRaw {
   oe_dp?: number;
   oe_altura?: number;
   oe_alt?: number;
+  // Cliente fallback fields (when OS fields are null)
+  cliente_longe_esf?: number;
+  cliente_longe_cil?: number;
+  cliente_longe_eixo?: number;
+  cliente_perto_esf?: number;
+  cliente_perto_cil?: number;
+  cliente_perto_eixo?: number;
+  cliente_adicao?: number;
+  cliente_dnp?: number;
+  cliente_alt?: number;
+  cliente_dp?: number;
+  cliente_perto_dp?: number;
+  cliente_distancia_leitura?: number;
+  cliente_distancia_progressao?: number;
+  cliente_distancia_vertice?: number;
+  cliente_ponte?: number;
+  cliente_aa_vertical?: number;
+  cliente_ca_horizontal?: number;
+  cliente_diametro?: number;
+  cliente_ta?: number;
+  cliente_md?: number;
+  cliente_he?: number;
+  cliente_st?: number;
+  cliente_observacao_receita?: string;
+  cliente_prisma?: string;
+  cliente_prismaangulo?: number;
+  cliente_prismaeixo?: number;
+  cliente_prisma1?: string;
+  cliente_prisma1angulo?: number;
+  cliente_prisma1eixo?: number;
   // Medidas gerais
   dp?: number;
   perto_dp?: number;
@@ -182,13 +212,61 @@ export interface GetOsHubParams {
 // MAPPER
 // ============================================
 
+const S3_BASE = 'https://dataweb-images.s3.amazonaws.com/';
+
+function normalizeImageUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('http')) return trimmed;
+  // Relative path → prepend S3 base
+  return S3_BASE + trimmed;
+}
+
+function coalesce(...vals: (number | undefined | null)[]): number | null {
+  for (const v of vals) {
+    if (v != null && v !== 0) return v;
+  }
+  // If all are null/undefined but some are 0, return 0
+  for (const v of vals) {
+    if (v === 0) return 0;
+  }
+  return null;
+}
+
 function mapRawToRecord(r: OsHubRaw): OsHubRecord {
+  // OD prescription: OS fields → cliente fallback (hub uses same eye for both OD/OE from cliente)
+  const odLongeEsf = coalesce(r.od_longe_esf, r.cliente_longe_esf);
+  const odLongeCil = coalesce(r.od_longe_cil, r.cliente_longe_cil);
+  const odLongeEixo = coalesce(r.od_longe_eixo, r.cliente_longe_eixo);
+  const odPertoEsf = coalesce(r.od_perto_esf, r.cliente_perto_esf);
+  const odPertoCil = coalesce(r.od_perto_cil, r.cliente_perto_cil);
+  const odPertoEixo = coalesce(r.od_perto_eixo, r.cliente_perto_eixo);
+  const odAdicao = coalesce(r.od_adicao, r.cliente_adicao);
+  const odDnp = coalesce(r.od_dnp, r.od_dp, r.cliente_dnp);
+  const odAltura = coalesce(r.od_altura, r.od_alt, r.cliente_alt);
+
+  // OE prescription: OS fields → cliente fallback
+  const oeLongeEsf = coalesce(r.oe_longe_esf, r.cliente_longe_esf);
+  const oeLongeCil = coalesce(r.oe_longe_cil, r.cliente_longe_cil);
+  const oeLongeEixo = coalesce(r.oe_longe_eixo, r.cliente_longe_eixo);
+  const oePertoEsf = coalesce(r.oe_perto_esf, r.cliente_perto_esf);
+  const oePertoCil = coalesce(r.oe_perto_cil, r.cliente_perto_cil);
+  const oePertoEixo = coalesce(r.oe_perto_eixo, r.cliente_perto_eixo);
+  const oeAdicao = coalesce(r.oe_adicao, r.cliente_adicao);
+  const oeDnp = coalesce(r.oe_dnp, r.oe_dp, r.cliente_dnp);
+  const oeAltura = coalesce(r.oe_altura, r.oe_alt, r.cliente_alt);
+
   const hasReceita = !!(
-    r.od_longe_esf || r.od_longe_cil || r.od_perto_esf ||
-    r.oe_longe_esf || r.oe_longe_cil || r.oe_perto_esf ||
-    r.od_adicao || r.oe_adicao
+    odLongeEsf || odLongeCil || odPertoEsf ||
+    oeLongeEsf || oeLongeCil || oePertoEsf ||
+    odAdicao || oeAdicao
   );
-  const hasImagem = !!(r.url_imagem_receita || r.url_imagem_armacao || r.imagem_tracer || r.arquivo_tracer);
+
+  const urlReceita = normalizeImageUrl(r.url_imagem_receita);
+  const urlArmacao = normalizeImageUrl(r.url_imagem_armacao);
+  const urlTracer = normalizeImageUrl(r.imagem_tracer);
+  const hasImagem = !!(urlReceita || urlArmacao || urlTracer || r.arquivo_tracer);
 
   return {
     codOs: r.cod_os ?? 0,
@@ -207,58 +285,58 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     dataSaida: r.datahorasaida ?? r.data_saida ?? null,
     total: r.total ?? 0,
     usuario: (r.usuario ?? '').trim(),
-    odLongeEsf: r.od_longe_esf ?? null,
-    odLongeCil: r.od_longe_cil ?? null,
-    odLongeEixo: r.od_longe_eixo ?? null,
-    odPertoEsf: r.od_perto_esf ?? null,
-    odPertoCil: r.od_perto_cil ?? null,
-    odPertoEixo: r.od_perto_eixo ?? null,
-    odAdicao: r.od_adicao ?? null,
-    odDnp: r.od_dnp ?? r.od_dp ?? null,
-    odAltura: r.od_altura ?? r.od_alt ?? null,
-    oeLongeEsf: r.oe_longe_esf ?? null,
-    oeLongeCil: r.oe_longe_cil ?? null,
-    oeLongeEixo: r.oe_longe_eixo ?? null,
-    oePertoEsf: r.oe_perto_esf ?? null,
-    oePertoCil: r.oe_perto_cil ?? null,
-    oePertoEixo: r.oe_perto_eixo ?? null,
-    oeAdicao: r.oe_adicao ?? null,
-    oeDnp: r.oe_dnp ?? r.oe_dp ?? null,
-    oeAltura: r.oe_altura ?? r.oe_alt ?? null,
-    // Medidas gerais
-    dp: r.dp ?? null,
-    pertoDp: r.perto_dp ?? null,
-    distanciaLeitura: r.distancia_leitura ?? null,
-    distanciaProgressao: r.distancia_progressao ?? null,
-    distanciaVertice: r.distancia_vertice ?? null,
-    // Armação
-    ponte: r.ponte ?? null,
-    aaVertical: r.aa_vertical ?? null,
-    caHorizontal: r.ca_horizontal ?? null,
-    diametro: r.diametro ?? null,
-    ta: r.ta ?? null,
-    md: r.md ?? null,
-    he: r.he ?? null,
-    st: r.st ?? null,
-    // Prismas completos
-    prisma: r.prisma?.trim() ?? null,
-    prismaAngulo: r.prismaangulo ?? null,
-    prismaEixo: r.prismaeixo ?? null,
-    prisma1: r.prisma1?.trim() ?? null,
-    prisma1Angulo: r.prisma1angulo ?? null,
-    prisma1Eixo: r.prisma1eixo ?? null,
-    // Imagens
+    odLongeEsf,
+    odLongeCil,
+    odLongeEixo,
+    odPertoEsf,
+    odPertoCil,
+    odPertoEixo,
+    odAdicao,
+    odDnp,
+    odAltura,
+    oeLongeEsf,
+    oeLongeCil,
+    oeLongeEixo,
+    oePertoEsf,
+    oePertoCil,
+    oePertoEixo,
+    oeAdicao,
+    oeDnp,
+    oeAltura,
+    // Medidas gerais (OS → cliente fallback)
+    dp: coalesce(r.dp, r.cliente_dp),
+    pertoDp: coalesce(r.perto_dp, r.cliente_perto_dp),
+    distanciaLeitura: coalesce(r.distancia_leitura, r.cliente_distancia_leitura),
+    distanciaProgressao: coalesce(r.distancia_progressao, r.cliente_distancia_progressao),
+    distanciaVertice: coalesce(r.distancia_vertice, r.cliente_distancia_vertice),
+    // Armação (OS → cliente fallback)
+    ponte: coalesce(r.ponte, r.cliente_ponte),
+    aaVertical: coalesce(r.aa_vertical, r.cliente_aa_vertical),
+    caHorizontal: coalesce(r.ca_horizontal, r.cliente_ca_horizontal),
+    diametro: coalesce(r.diametro, r.cliente_diametro),
+    ta: coalesce(r.ta, r.cliente_ta),
+    md: coalesce(r.md, r.cliente_md),
+    he: coalesce(r.he, r.cliente_he),
+    st: coalesce(r.st, r.cliente_st),
+    // Prismas (OS → cliente fallback)
+    prisma: r.prisma?.trim() ?? r.cliente_prisma?.trim() ?? null,
+    prismaAngulo: coalesce(r.prismaangulo, r.cliente_prismaangulo),
+    prismaEixo: coalesce(r.prismaeixo, r.cliente_prismaeixo),
+    prisma1: r.prisma1?.trim() ?? r.cliente_prisma1?.trim() ?? null,
+    prisma1Angulo: coalesce(r.prisma1angulo, r.cliente_prisma1angulo),
+    prisma1Eixo: coalesce(r.prisma1eixo, r.cliente_prisma1eixo),
+    // Imagens (normalized URLs)
     imagemReceita: r.imagem_receita?.trim() ?? null,
-    urlImagemReceita: r.url_imagem_receita?.trim() ?? null,
+    urlImagemReceita: urlReceita,
     imagemArmacao: r.imagem_armacao?.trim() ?? null,
-    urlImagemArmacao: r.url_imagem_armacao?.trim() ?? null,
-    imagemTracer: r.imagem_tracer?.trim() ?? null,
+    urlImagemArmacao: urlArmacao,
+    imagemTracer: urlTracer,
     arquivoTracer: r.arquivo_tracer?.trim() ?? null,
-    // Observações
+    // Observações (OS → cliente fallback for receita)
     observacaoOs: r.observacao_os?.trim() ?? null,
     observacaoLente: r.observacao_lente?.trim() ?? null,
     observacaoPendencia: r.observacao_pendencia?.trim() ?? null,
-    observacaoReceita: r.observacao_receita?.trim() ?? null,
+    observacaoReceita: r.observacao_receita?.trim() ?? r.cliente_observacao_receita?.trim() ?? null,
     temReceita: hasReceita,
     temImagem: hasImagem,
   };
