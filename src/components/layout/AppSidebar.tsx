@@ -60,15 +60,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       ],
     },
   ],
-  monitor: [
-    {
-      label: "Operações",
-      items: [
-        { title: "Monitor de OS", url: "/os", icon: ClipboardList },
-        { title: "Hub de Receitas", url: "/os/hub-receitas", icon: Eye },
-      ],
-    },
-  ],
+  monitor: [],
   financeiro: [
     {
       label: "Análises",
@@ -103,6 +95,11 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const sections = moduleMenus[activeModule] || [];
+
+  // Hide sidebar entirely for modules with no menu items
+  if (sections.length === 0 || sections.every(s => s.items.length === 0)) {
+    return null;
+  }
 
   return (
     <Sidebar collapsible="icon" className="border-r">
