@@ -1,5 +1,5 @@
 // src/components/os-hub/OsHubDetailSheet.tsx
-// Tela 2 — Detalhe da OS com receita completa, imagens e observações
+// Tela 2 — Detalhe da OS com receita completa, medidas, prismas, imagens e observações
 
 import React from 'react';
 import { OsHubRecord } from '@/services/osHubService';
@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Eye, Image, FileText, Phone, User, Calendar, Clock, AlertTriangle } from 'lucide-react';
+import { Eye, Image, FileText, Phone, User, Calendar, AlertTriangle, Ruler, Triangle } from 'lucide-react';
 
 interface Props {
   os: OsHubRecord | null;
@@ -31,8 +31,8 @@ const statusLabels: Record<string, string> = {
 };
 
 function formatDate(v: string | null) {
-  if (!v) return '-';
-  try { return new Date(v).toLocaleDateString('pt-BR'); } catch { return '-'; }
+  if (!v) return '—';
+  try { return new Date(v).toLocaleDateString('pt-BR'); } catch { return '—'; }
 }
 
 function formatCurrency(v: number) {
@@ -40,9 +40,14 @@ function formatCurrency(v: number) {
 }
 
 function formatGrau(v: number | null): string {
-  if (v === null || v === undefined) return '-';
+  if (v === null || v === undefined) return '—';
   const sign = v > 0 ? '+' : '';
   return `${sign}${v.toFixed(2)}`;
+}
+
+function formatMedida(v: number | null): string {
+  if (v === null || v === undefined) return '—';
+  return String(v);
 }
 
 function GrauCell({ value, label }: { value: number | null; label: string }) {
@@ -58,18 +63,40 @@ function EixoCell({ value, label }: { value: number | null; label: string }) {
   return (
     <div className="text-center">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="font-mono text-sm font-medium">{value !== null ? `${value}°` : '-'}</p>
+      <p className="font-mono text-sm font-medium">{value !== null ? `${value}°` : '—'}</p>
     </div>
   );
+}
+
+function MedidaCell({ value, label, suffix }: { value: number | null; label: string; suffix?: string }) {
+  return (
+    <div className="text-center">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="font-mono text-sm font-medium">
+        {value !== null && value !== undefined ? `${value}${suffix || ''}` : '—'}
+      </p>
+    </div>
+  );
+}
+
+function hasAnyValue(...values: (number | null | undefined)[]): boolean {
+  return values.some(v => v !== null && v !== undefined && v !== 0);
 }
 
 export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
   if (!os) return null;
 
-  const hasOdLonge = os.odLongeEsf !== null || os.odLongeCil !== null;
-  const hasOeLonge = os.oeLongeEsf !== null || os.oeLongeCil !== null;
-  const hasOdPerto = os.odPertoEsf !== null || os.odPertoCil !== null;
-  const hasOePerto = os.oePertoEsf !== null || os.oePertoCil !== null;
+  const hasOdLonge = hasAnyValue(os.odLongeEsf, os.odLongeCil);
+  const hasOeLonge = hasAnyValue(os.oeLongeEsf, os.oeLongeCil);
+  const hasOdPerto = hasAnyValue(os.odPertoEsf, os.odPertoCil);
+  const hasOePerto = hasAnyValue(os.oePertoEsf, os.oePertoCil);
+  const hasMedidasGerais = hasAnyValue(os.dp, os.pertoDp, os.distanciaLeitura, os.distanciaProgressao, os.distanciaVertice);
+  const hasArmacao = hasAnyValue(os.ponte, os.aaVertical, os.caHorizontal, os.diametro, os.ta, os.md, os.he, os.st);
+  const hasPrismaOd = !!(os.prisma && os.prisma.trim());
+  const hasPrismaOe = !!(os.prisma1 && os.prisma1.trim());
+  const hasPrismas = hasPrismaOd || hasPrismaOe;
+  const hasImages = !!(os.urlImagemReceita || os.urlImagemArmacao || os.imagemTracer || os.arquivoTracer);
+  const hasObs = !!(os.observacaoOs || os.observacaoLente || os.observacaoPendencia || os.observacaoReceita);
 
   return (
     <Sheet open={!!os} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -94,7 +121,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
             <CardContent className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="text-muted-foreground">Cliente</p>
-                <p className="font-medium">{os.cliente || '-'}</p>
+                <p className="font-medium">{os.cliente || '—'}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Empresa</p>
@@ -108,7 +135,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
               )}
               <div>
                 <p className="text-muted-foreground">Etapa</p>
-                <p className="font-medium">{os.etapa || '-'}</p>
+                <p className="font-medium">{os.etapa || '—'}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Valor</p>
@@ -116,7 +143,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
               </div>
               <div>
                 <p className="text-muted-foreground">Usuário</p>
-                <p className="font-medium">{os.usuario || '-'}</p>
+                <p className="font-medium">{os.usuario || '—'}</p>
               </div>
             </CardContent>
           </Card>
@@ -154,7 +181,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
             </CardContent>
           </Card>
 
-          {/* Receita */}
+          {/* Receita OD/OE */}
           {os.temReceita && (
             <Card>
               <CardHeader className="pb-3">
@@ -171,8 +198,8 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                       <GrauCell value={os.odLongeEsf} label="Esférico" />
                       <GrauCell value={os.odLongeCil} label="Cilíndrico" />
                       <EixoCell value={os.odLongeEixo} label="Eixo" />
-                      <GrauCell value={os.odDnp} label="DNP" />
-                      <GrauCell value={os.odAltura} label="Altura" />
+                      <MedidaCell value={os.odDnp} label="DP" />
+                      <MedidaCell value={os.odAltura} label="Altura" />
                     </div>
                   </div>
                 )}
@@ -200,8 +227,8 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                       <GrauCell value={os.oeLongeEsf} label="Esférico" />
                       <GrauCell value={os.oeLongeCil} label="Cilíndrico" />
                       <EixoCell value={os.oeLongeEixo} label="Eixo" />
-                      <GrauCell value={os.oeDnp} label="DNP" />
-                      <GrauCell value={os.oeAltura} label="Altura" />
+                      <MedidaCell value={os.oeDnp} label="DP" />
+                      <MedidaCell value={os.oeAltura} label="Altura" />
                     </div>
                   </div>
                 )}
@@ -220,14 +247,40 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                 )}
 
                 {/* Prismas */}
-                {(os.prisma || os.prisma1) && (
+                {hasPrismas && (
                   <>
                     <Separator />
                     <div>
-                      <p className="text-xs font-semibold text-muted-foreground mb-2">Prismas</p>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        {os.prisma && <div><span className="text-muted-foreground">Prisma: </span>{os.prisma}</div>}
-                        {os.prisma1 && <div><span className="text-muted-foreground">Prisma 1: </span>{os.prisma1}</div>}
+                      <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                        <Triangle className="h-3 w-3" /> Prismas
+                      </p>
+                      <div className="grid grid-cols-2 gap-4">
+                        {hasPrismaOd && (
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">Prisma OD</p>
+                            <p className="font-mono text-sm">{os.prisma}</p>
+                            {(os.prismaAngulo !== null || os.prismaEixo !== null) && (
+                              <p className="text-xs text-muted-foreground">
+                                {os.prismaAngulo !== null && `Ângulo: ${os.prismaAngulo}°`}
+                                {os.prismaAngulo !== null && os.prismaEixo !== null && ' • '}
+                                {os.prismaEixo !== null && `Eixo: ${os.prismaEixo}°`}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {hasPrismaOe && (
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">Prisma OE</p>
+                            <p className="font-mono text-sm">{os.prisma1}</p>
+                            {(os.prisma1Angulo !== null || os.prisma1Eixo !== null) && (
+                              <p className="text-xs text-muted-foreground">
+                                {os.prisma1Angulo !== null && `Ângulo: ${os.prisma1Angulo}°`}
+                                {os.prisma1Angulo !== null && os.prisma1Eixo !== null && ' • '}
+                                {os.prisma1Eixo !== null && `Eixo: ${os.prisma1Eixo}°`}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </>
@@ -236,8 +289,51 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
             </Card>
           )}
 
+          {/* Medidas Gerais */}
+          {hasMedidasGerais && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Ruler className="h-4 w-4" /> Medidas Gerais
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+                  <MedidaCell value={os.dp} label="DP" suffix="mm" />
+                  <MedidaCell value={os.pertoDp} label="DP Perto" suffix="mm" />
+                  <MedidaCell value={os.distanciaLeitura} label="D. Leitura" suffix="mm" />
+                  <MedidaCell value={os.distanciaProgressao} label="D. Progressão" suffix="mm" />
+                  <MedidaCell value={os.distanciaVertice} label="D. Vértice" suffix="mm" />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Armação */}
+          {hasArmacao && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Ruler className="h-4 w-4" /> Armação
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-4 sm:grid-cols-4 gap-3">
+                  <MedidaCell value={os.ponte} label="Ponte" />
+                  <MedidaCell value={os.aaVertical} label="AA Vertical" />
+                  <MedidaCell value={os.caHorizontal} label="CA Horizontal" />
+                  <MedidaCell value={os.diametro} label="Diâmetro" />
+                  <MedidaCell value={os.ta} label="TA" />
+                  <MedidaCell value={os.md} label="MD" />
+                  <MedidaCell value={os.he} label="HE" />
+                  <MedidaCell value={os.st} label="ST" />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Imagens */}
-          {os.temImagem && (
+          {hasImages && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -267,11 +363,11 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                     />
                   </div>
                 )}
-                {os.imagemTracer && (
+                {(os.imagemTracer || os.arquivoTracer) && (
                   <div className="sm:col-span-2">
                     <p className="text-xs text-muted-foreground mb-1">Tracer</p>
                     <img
-                      src={os.imagemTracer}
+                      src={os.imagemTracer || os.arquivoTracer || ''}
                       alt="Tracer"
                       className="rounded-lg border max-h-[200px] object-contain w-full"
                       loading="lazy"
@@ -283,7 +379,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
           )}
 
           {/* Observações */}
-          {(os.observacaoOs || os.observacaoLente || os.observacaoPendencia) && (
+          {hasObs && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -301,6 +397,12 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                   <div>
                     <p className="text-xs text-muted-foreground font-semibold">Lente</p>
                     <p className="whitespace-pre-wrap">{os.observacaoLente}</p>
+                  </div>
+                )}
+                {os.observacaoReceita && (
+                  <div>
+                    <p className="text-xs text-muted-foreground font-semibold">Receita</p>
+                    <p className="whitespace-pre-wrap">{os.observacaoReceita}</p>
                   </div>
                 )}
                 {os.observacaoPendencia && (

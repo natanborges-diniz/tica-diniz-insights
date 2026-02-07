@@ -57,19 +57,40 @@ interface OsHubRaw {
   oe_dp?: number;
   oe_altura?: number;
   oe_alt?: number;
+  // Medidas gerais
+  dp?: number;
+  perto_dp?: number;
+  distancia_leitura?: number;
+  distancia_progressao?: number;
+  distancia_vertice?: number;
+  // Armação
+  ponte?: number;
+  aa_vertical?: number;
+  ca_horizontal?: number;
+  diametro?: number;
+  ta?: number;
+  md?: number;
+  he?: number;
+  st?: number;
   // Prismas
   prisma?: string;
+  prismaangulo?: number;
+  prismaeixo?: number;
   prisma1?: string;
+  prisma1angulo?: number;
+  prisma1eixo?: number;
   // Imagens
   imagem_receita?: string;
   url_imagem_receita?: string;
   imagem_armacao?: string;
   url_imagem_armacao?: string;
   imagem_tracer?: string;
+  arquivo_tracer?: string;
   // Observações
   observacao_os?: string;
   observacao_lente?: string;
   observacao_pendencia?: string;
+  observacao_receita?: string;
 }
 
 export interface OsHubRecord {
@@ -109,19 +130,40 @@ export interface OsHubRecord {
   oeAdicao: number | null;
   oeDnp: number | null;
   oeAltura: number | null;
+  // Medidas gerais
+  dp: number | null;
+  pertoDp: number | null;
+  distanciaLeitura: number | null;
+  distanciaProgressao: number | null;
+  distanciaVertice: number | null;
+  // Armação
+  ponte: number | null;
+  aaVertical: number | null;
+  caHorizontal: number | null;
+  diametro: number | null;
+  ta: number | null;
+  md: number | null;
+  he: number | null;
+  st: number | null;
   // Prismas
   prisma: string | null;
+  prismaAngulo: number | null;
+  prismaEixo: number | null;
   prisma1: string | null;
+  prisma1Angulo: number | null;
+  prisma1Eixo: number | null;
   // Imagens
   imagemReceita: string | null;
   urlImagemReceita: string | null;
   imagemArmacao: string | null;
   urlImagemArmacao: string | null;
   imagemTracer: string | null;
+  arquivoTracer: string | null;
   // Observações
   observacaoOs: string | null;
   observacaoLente: string | null;
   observacaoPendencia: string | null;
+  observacaoReceita: string | null;
   // Flags
   temReceita: boolean;
   temImagem: boolean;
@@ -133,6 +175,7 @@ export interface GetOsHubParams {
   empresa: EmpresaParam;
   dataInicio: string;
   dataFim: string;
+  os?: number | string;
 }
 
 // ============================================
@@ -145,7 +188,7 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     r.oe_longe_esf || r.oe_longe_cil || r.oe_perto_esf ||
     r.od_adicao || r.oe_adicao
   );
-  const hasImagem = !!(r.url_imagem_receita || r.url_imagem_armacao || r.imagem_tracer);
+  const hasImagem = !!(r.url_imagem_receita || r.url_imagem_armacao || r.imagem_tracer || r.arquivo_tracer);
 
   return {
     codOs: r.cod_os ?? 0,
@@ -182,16 +225,40 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     oeAdicao: r.oe_adicao ?? null,
     oeDnp: r.oe_dnp ?? r.oe_dp ?? null,
     oeAltura: r.oe_altura ?? r.oe_alt ?? null,
+    // Medidas gerais
+    dp: r.dp ?? null,
+    pertoDp: r.perto_dp ?? null,
+    distanciaLeitura: r.distancia_leitura ?? null,
+    distanciaProgressao: r.distancia_progressao ?? null,
+    distanciaVertice: r.distancia_vertice ?? null,
+    // Armação
+    ponte: r.ponte ?? null,
+    aaVertical: r.aa_vertical ?? null,
+    caHorizontal: r.ca_horizontal ?? null,
+    diametro: r.diametro ?? null,
+    ta: r.ta ?? null,
+    md: r.md ?? null,
+    he: r.he ?? null,
+    st: r.st ?? null,
+    // Prismas completos
     prisma: r.prisma?.trim() ?? null,
+    prismaAngulo: r.prismaangulo ?? null,
+    prismaEixo: r.prismaeixo ?? null,
     prisma1: r.prisma1?.trim() ?? null,
+    prisma1Angulo: r.prisma1angulo ?? null,
+    prisma1Eixo: r.prisma1eixo ?? null,
+    // Imagens
     imagemReceita: r.imagem_receita?.trim() ?? null,
     urlImagemReceita: r.url_imagem_receita?.trim() ?? null,
     imagemArmacao: r.imagem_armacao?.trim() ?? null,
     urlImagemArmacao: r.url_imagem_armacao?.trim() ?? null,
     imagemTracer: r.imagem_tracer?.trim() ?? null,
+    arquivoTracer: r.arquivo_tracer?.trim() ?? null,
+    // Observações
     observacaoOs: r.observacao_os?.trim() ?? null,
     observacaoLente: r.observacao_lente?.trim() ?? null,
     observacaoPendencia: r.observacao_pendencia?.trim() ?? null,
+    observacaoReceita: r.observacao_receita?.trim() ?? null,
     temReceita: hasReceita,
     temImagem: hasImagem,
   };
@@ -213,11 +280,34 @@ export async function fetchOsHubFromFirebird(params: GetOsHubParams): Promise<Os
     queryParams.codEmpresa = Number(params.empresa);
   }
 
+  if (params.os) {
+    queryParams.os = params.os;
+  }
+
   console.log('[osHubService] Fetching from Firebird /os/hub-receitas:', queryParams);
   const raw = await apiGet<OsHubRaw>('/os/hub-receitas', queryParams, { timeoutMs: 120000 });
   console.log('[osHubService] Firebird returned:', raw.length, 'records');
 
   return raw.map(mapRawToRecord);
+}
+
+// ============================================
+// FETCH SINGLE OS (on-demand recipe lookup)
+// ============================================
+
+export async function fetchSingleOsRecipe(codOs: number, codEmpresa?: number): Promise<OsHubRecord | null> {
+  const empresaParam = codEmpresa && codEmpresa > 0 ? codEmpresa : 'ALL';
+  const fallbackStart = new Date();
+  fallbackStart.setMonth(fallbackStart.getMonth() - 2);
+
+  const records = await fetchOsHubFromFirebird({
+    empresa: empresaParam,
+    dataInicio: fallbackStart.toISOString().slice(0, 10),
+    dataFim: new Date().toISOString().slice(0, 10),
+    os: codOs,
+  });
+
+  return records.find(r => r.codOs === codOs) ?? records[0] ?? null;
 }
 
 // ============================================
@@ -227,7 +317,6 @@ export async function fetchOsHubFromFirebird(params: GetOsHubParams): Promise<Os
 export async function saveToCache(records: OsHubRecord[]): Promise<void> {
   if (records.length === 0) return;
 
-  // Upsert em batches de 100
   const batchSize = 100;
   for (let i = 0; i < records.length; i += batchSize) {
     const batch = records.slice(i, i + batchSize).map(r => ({
@@ -362,16 +451,36 @@ export async function loadFromCache(params: {
     oeAdicao: r.oe_adicao != null ? Number(r.oe_adicao) : null,
     oeDnp: r.oe_dnp != null ? Number(r.oe_dnp) : null,
     oeAltura: r.oe_altura != null ? Number(r.oe_altura) : null,
+    // Campos extras não estão no cache Supabase, vêm null
+    dp: null,
+    pertoDp: null,
+    distanciaLeitura: null,
+    distanciaProgressao: null,
+    distanciaVertice: null,
+    ponte: null,
+    aaVertical: null,
+    caHorizontal: null,
+    diametro: null,
+    ta: null,
+    md: null,
+    he: null,
+    st: null,
     prisma: (r.prisma as string) ?? null,
+    prismaAngulo: null,
+    prismaEixo: null,
     prisma1: (r.prisma1 as string) ?? null,
+    prisma1Angulo: null,
+    prisma1Eixo: null,
     imagemReceita: (r.imagem_receita as string) ?? null,
     urlImagemReceita: (r.url_imagem_receita as string) ?? null,
     imagemArmacao: (r.imagem_armacao as string) ?? null,
     urlImagemArmacao: (r.url_imagem_armacao as string) ?? null,
     imagemTracer: (r.imagem_tracer as string) ?? null,
+    arquivoTracer: null,
     observacaoOs: (r.observacao_os as string) ?? null,
     observacaoLente: (r.observacao_lente as string) ?? null,
     observacaoPendencia: (r.observacao_pendencia as string) ?? null,
+    observacaoReceita: null,
     temReceita: (r.tem_receita as boolean) ?? false,
     temImagem: (r.tem_imagem as boolean) ?? false,
     cacheLoadedAt: (r.cache_loaded_at as string) ?? undefined,
