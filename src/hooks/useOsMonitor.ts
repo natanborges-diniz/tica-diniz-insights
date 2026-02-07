@@ -29,9 +29,11 @@ export function useOsMonitor(initialFilters: OsApiFilters) {
   const [filters, setFilters] = useState<OsFilterState>({
     status: "TODOS",
     empresaVisual: null,
-    etapa: "TRANSLADO LOJA-ESTOQUE",
+    etapa: null,
     busca: "",
   });
+
+  const [defaultEtapaApplied, setDefaultEtapaApplied] = useState(false);
 
   // Filtrar dados client-side
   const filteredData = useMemo(() => {
@@ -89,13 +91,23 @@ export function useOsMonitor(initialFilters: OsApiFilters) {
         dataFim: f.dataFim,
       });
       setData(result);
+
+      // Apply default etapa filter on first load if the etapa exists
+      if (!defaultEtapaApplied) {
+        setDefaultEtapaApplied(true);
+        const etapas = Array.from(new Set(result.map(os => os.etapa).filter(Boolean)));
+        const target = etapas.find(e => e.toUpperCase().includes('TRANSLADO'));
+        if (target) {
+          setFilters(prev => ({ ...prev, etapa: target }));
+        }
+      }
     } catch (err: unknown) {
       console.error('[useOsMonitor] Error:', err);
       setError(err instanceof Error ? err.message : "Erro ao carregar monitor de OS");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [defaultEtapaApplied]);
 
   // Busca automaticamente quando apiFilters muda
   useEffect(() => {
