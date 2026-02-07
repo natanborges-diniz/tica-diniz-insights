@@ -121,6 +121,9 @@ interface OsHubRaw {
   observacao_lente?: string;
   observacao_pendencia?: string;
   observacao_receita?: string;
+  // Lens product descriptions (from transacao_item → item)
+  lente_od_descricao?: string;
+  lente_oe_descricao?: string;
 }
 
 export interface OsHubRecord {
@@ -194,6 +197,9 @@ export interface OsHubRecord {
   observacaoLente: string | null;
   observacaoPendencia: string | null;
   observacaoReceita: string | null;
+  // Lens product descriptions
+  lenteOdDescricao: string | null;
+  lenteOeDescricao: string | null;
   // Flags
   temReceita: boolean;
   temImagem: boolean;
@@ -337,6 +343,8 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     observacaoLente: r.observacao_lente?.trim() ?? null,
     observacaoPendencia: r.observacao_pendencia?.trim() ?? null,
     observacaoReceita: r.observacao_receita?.trim() ?? r.cliente_observacao_receita?.trim() ?? null,
+    lenteOdDescricao: r.lente_od_descricao?.trim() ?? null,
+    lenteOeDescricao: r.lente_oe_descricao?.trim() ?? null,
     temReceita: hasReceita,
     temImagem: hasImagem,
   };
@@ -575,6 +583,8 @@ export async function loadFromCache(params: {
     observacaoLente: (r.observacao_lente as string) ?? null,
     observacaoPendencia: (r.observacao_pendencia as string) ?? null,
     observacaoReceita: null,
+    lenteOdDescricao: null,
+    lenteOeDescricao: null,
     temReceita: (r.tem_receita as boolean) ?? false,
     temImagem: (r.tem_imagem as boolean) ?? false,
     cacheLoadedAt: (r.cache_loaded_at as string) ?? undefined,
