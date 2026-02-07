@@ -39,6 +39,7 @@ function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
     dataSaida: (r.data_saida as string) ?? null,
     total: Number(r.total) || 0,
     usuario: (r.usuario as string) ?? "",
+    vendedor: (r.vendedor as string) ?? "",
     odLongeEsf: r.od_longe_esf != null ? Number(r.od_longe_esf) : null,
     odLongeCil: r.od_longe_cil != null ? Number(r.od_longe_cil) : null,
     odLongeEixo: (r.od_longe_eixo as number) ?? null,
