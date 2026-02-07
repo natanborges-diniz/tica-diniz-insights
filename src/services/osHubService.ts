@@ -33,6 +33,7 @@ interface OsHubRaw {
   data_saida?: string;
   total?: number;
   usuario?: string;
+  vendedor?: string;
   // Receita OD (OS fields)
   od_longe_esf?: number;
   od_longe_cil?: number;
@@ -143,6 +144,7 @@ export interface OsHubRecord {
   dataSaida: string | null;
   total: number;
   usuario: string;
+  vendedor: string;
   // Receita OD
   odLongeEsf: number | null;
   odLongeCil: number | null;
@@ -291,6 +293,7 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     dataSaida: r.datahorasaida ?? r.data_saida ?? null,
     total: r.total ?? 0,
     usuario: (r.usuario ?? '').trim(),
+    vendedor: (r.vendedor ?? '').trim(),
     odLongeEsf,
     odLongeCil,
     odLongeEixo,
@@ -535,6 +538,7 @@ export async function loadFromCache(params: {
     dataSaida: (r.data_saida as string) ?? null,
     total: Number(r.total) || 0,
     usuario: (r.usuario as string) ?? '',
+    vendedor: (r.vendedor as string) ?? '',
     odLongeEsf: r.od_longe_esf != null ? Number(r.od_longe_esf) : null,
     odLongeCil: r.od_longe_cil != null ? Number(r.od_longe_cil) : null,
     odLongeEixo: (r.od_longe_eixo as number) ?? null,

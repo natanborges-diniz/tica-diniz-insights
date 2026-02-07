@@ -228,7 +228,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
               </Card>
               <Card className="border-dashed">
                 <CardContent className="p-3">
-                  <InfoItem icon={User} label="Usuário" value={os.usuario} />
+                  <InfoItem icon={User} label="Vendedor" value={os.vendedor || os.usuario || '—'} />
                 </CardContent>
               </Card>
               <Card className="border-dashed">
