@@ -1,10 +1,10 @@
 // src/pages/OsDashboard.tsx
-// Monitor de Produção — auto-load ALL, fallback Firebird para receitas
+// Monitor de Produção — auto-load ALL, busca receita on-demand via &os=
 
 import React, { useState } from "react";
 import { useOsMonitor } from "../hooks/useOsMonitor";
 import { OsDashboardLayout } from "../components/os-dashboard/OsDashboardLayout";
-import { OsHubRecord, fetchOsHubFromFirebird, saveToCache } from "@/services/osHubService";
+import { OsHubRecord, fetchSingleOsRecipe, saveToCache } from "@/services/osHubService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -57,16 +57,36 @@ function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
     oeAdicao: r.oe_adicao != null ? Number(r.oe_adicao) : null,
     oeDnp: r.oe_dnp != null ? Number(r.oe_dnp) : null,
     oeAltura: r.oe_altura != null ? Number(r.oe_altura) : null,
+    // Cache não tem estes campos extras
+    dp: null,
+    pertoDp: null,
+    distanciaLeitura: null,
+    distanciaProgressao: null,
+    distanciaVertice: null,
+    ponte: null,
+    aaVertical: null,
+    caHorizontal: null,
+    diametro: null,
+    ta: null,
+    md: null,
+    he: null,
+    st: null,
     prisma: (r.prisma as string) ?? null,
+    prismaAngulo: null,
+    prismaEixo: null,
     prisma1: (r.prisma1 as string) ?? null,
+    prisma1Angulo: null,
+    prisma1Eixo: null,
     imagemReceita: (r.imagem_receita as string) ?? null,
     urlImagemReceita: (r.url_imagem_receita as string) ?? null,
     imagemArmacao: (r.imagem_armacao as string) ?? null,
     urlImagemArmacao: (r.url_imagem_armacao as string) ?? null,
     imagemTracer: (r.imagem_tracer as string) ?? null,
+    arquivoTracer: null,
     observacaoOs: (r.observacao_os as string) ?? null,
     observacaoLente: (r.observacao_lente as string) ?? null,
     observacaoPendencia: (r.observacao_pendencia as string) ?? null,
+    observacaoReceita: null,
     temReceita: (r.tem_receita as boolean) ?? hasReceita,
     temImagem: (r.tem_imagem as boolean) ?? hasImagem,
     cacheLoadedAt: (r.cache_loaded_at as string) ?? undefined,
@@ -98,55 +118,39 @@ const OsDashboardPage: React.FC = () => {
   const handleOpenRecipe = async (codOs: number, codEmpresa?: number) => {
     try {
       setLoadingRecipe(true);
-      console.log("[OsDashboard] handleOpenRecipe called with codOs:", codOs, "codEmpresa:", codEmpresa);
+      console.log("[OsDashboard] handleOpenRecipe codOs:", codOs, "codEmpresa:", codEmpresa);
 
-      // 1) Try cache first
-      const { data: row } = await supabase
-        .from("os_hub_receitas")
-        .select("*")
-        .eq("cod_os", codOs)
-        .maybeSingle();
+      // 1) Always fetch from Firebird with &os= for complete data (medidas, prismas, armação)
+      // Cache doesn't have all extended fields
+      toast({ title: "Buscando receita...", description: "Consultando dados completos." });
 
-      if (row && row.tem_receita) {
-        console.log("[OsDashboard] Recipe found in cache (with prescription) for OS:", codOs);
-        setSelectedHubOs(mapCacheRowToHubRecord(row as Record<string, unknown>));
-        return;
-      }
-      if (row) {
-        console.log("[OsDashboard] Cache hit but tem_receita=false for OS:", codOs, "- will fallback to Firebird");
-      }
+      const found = await fetchSingleOsRecipe(codOs, codEmpresa);
 
-      // 2) Fallback: fetch from Firebird directly
-      const empresaFallback = codEmpresa && codEmpresa > 0 ? codEmpresa : "ALL";
-      console.log("[OsDashboard] Cache miss for OS:", codOs, "- fallback with codEmpresa:", empresaFallback);
-      toast({
-        title: "Buscando receita...",
-        description: "Consultando dados do ERP diretamente.",
-      });
-
-      // Use 2-month window (narrower = faster response)
-      const fallbackStart = new Date();
-      fallbackStart.setMonth(fallbackStart.getMonth() - 2);
-      const records = await fetchOsHubFromFirebird({
-        empresa: empresaFallback,
-        dataInicio: fallbackStart.toISOString().slice(0, 10),
-        dataFim: new Date().toISOString().slice(0, 10),
-      });
-
-      const found = records.find(r => r.codOs === codOs);
       if (found) {
         setSelectedHubOs(found);
-        // Save to cache for next time (fire and forget)
-        saveToCache([found]).catch(err => 
+        // Save to cache for basic fields (fire and forget)
+        saveToCache([found]).catch(err =>
           console.warn("[OsDashboard] Failed to cache recipe:", err)
         );
       } else {
-        toast({
-          title: "Receita não encontrada",
-          description: "Não foi possível localizar a receita para esta OS.",
-          variant: "destructive",
-        });
-        setSelectedHubOs(null);
+        // Fallback to cache for basic info
+        const { data: row } = await supabase
+          .from("os_hub_receitas")
+          .select("*")
+          .eq("cod_os", codOs)
+          .maybeSingle();
+
+        if (row) {
+          console.log("[OsDashboard] Firebird miss, using cache for OS:", codOs);
+          setSelectedHubOs(mapCacheRowToHubRecord(row as Record<string, unknown>));
+        } else {
+          toast({
+            title: "Receita não encontrada",
+            description: "Não foi possível localizar a receita para esta OS.",
+            variant: "destructive",
+          });
+          setSelectedHubOs(null);
+        }
       }
     } catch (err) {
       console.error("[OsDashboard] Error loading recipe:", err);
