@@ -296,14 +296,30 @@ export async function fetchOsHubFromFirebird(params: GetOsHubParams): Promise<Os
 // ============================================
 
 export async function fetchSingleOsRecipe(codOs: number, codEmpresa?: number): Promise<OsHubRecord | null> {
-  const empresaParam = codEmpresa && codEmpresa > 0 ? codEmpresa : 'ALL';
   const fallbackStart = new Date();
-  fallbackStart.setMonth(fallbackStart.getMonth() - 2);
+  fallbackStart.setMonth(fallbackStart.getMonth() - 6); // 6 months window
+  const hoje = new Date().toISOString().slice(0, 10);
+  const inicio = fallbackStart.toISOString().slice(0, 10);
 
+  // 1) Try with specific company first
+  if (codEmpresa && codEmpresa > 0) {
+    console.log('[osHubService] fetchSingleOsRecipe trying codEmpresa:', codEmpresa);
+    const records = await fetchOsHubFromFirebird({
+      empresa: codEmpresa,
+      dataInicio: inicio,
+      dataFim: hoje,
+      os: codOs,
+    });
+    const found = records.find(r => r.codOs === codOs) ?? records[0] ?? null;
+    if (found) return found;
+    console.log('[osHubService] Not found with codEmpresa', codEmpresa, '→ retrying with ALL');
+  }
+
+  // 2) Fallback: search across ALL companies
   const records = await fetchOsHubFromFirebird({
-    empresa: empresaParam,
-    dataInicio: fallbackStart.toISOString().slice(0, 10),
-    dataFim: new Date().toISOString().slice(0, 10),
+    empresa: 'ALL',
+    dataInicio: inicio,
+    dataFim: hoje,
     os: codOs,
   });
 
