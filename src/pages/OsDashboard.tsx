@@ -1,18 +1,13 @@
 // src/pages/OsDashboard.tsx
-// Monitor de Produção — auto-load ALL, busca receita on-demand via &os=
+// Monitor de Produção — manual load with date type + range selection
 
 import React, { useState } from "react";
-import { useOsMonitor } from "../hooks/useOsMonitor";
+import { useOsMonitor, OsApiFilters } from "../hooks/useOsMonitor";
 import { OsDashboardLayout } from "../components/os-dashboard/OsDashboardLayout";
 import { OsHubRecord, fetchSingleOsRecipe, saveToCache } from "@/services/osHubService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-
-const hoje = new Date();
-const fim = hoje.toISOString().slice(0, 10);
-const inicioDate = new Date(hoje);
-inicioDate.setDate(inicioDate.getDate() - 30);
-const inicio = inicioDate.toISOString().slice(0, 10);
+import { CampoDataOs } from "@/services/osService";
 
 function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
   const hasReceita = !!(
@@ -58,7 +53,6 @@ function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
     oeAdicao: r.oe_adicao != null ? Number(r.oe_adicao) : null,
     oeDnp: r.oe_dnp != null ? Number(r.oe_dnp) : null,
     oeAltura: r.oe_altura != null ? Number(r.oe_altura) : null,
-    // Cache não tem estes campos extras
     dp: null,
     pertoDp: null,
     distanciaLeitura: null,
@@ -102,6 +96,8 @@ const OsDashboardPage: React.FC = () => {
     filteredData,
     loading,
     error,
+    loaded,
+    lastApiFilters,
     metrics,
     filteredMetrics,
     filters,
@@ -109,34 +105,28 @@ const OsDashboardPage: React.FC = () => {
     empresasUnicas,
     etapasUnicas,
     reload,
-  } = useOsMonitor({
-    empresa: "ALL",
-    dataInicio: inicio,
-    dataFim: fim,
-  });
+  } = useOsMonitor();
 
   const [selectedHubOs, setSelectedHubOs] = useState<OsHubRecord | null>(null);
   const [loadingRecipe, setLoadingRecipe] = useState(false);
 
+  const handleLoad = (apiFilters: OsApiFilters) => {
+    reload(apiFilters);
+  };
+
   const handleOpenRecipe = async (codOs: number, codEmpresa?: number) => {
     try {
       setLoadingRecipe(true);
-      console.log("[OsDashboard] handleOpenRecipe codOs:", codOs, "codEmpresa:", codEmpresa);
-
-      // 1) Always fetch from Firebird with &os= for complete data (medidas, prismas, armação)
-      // Cache doesn't have all extended fields
       toast({ title: "Buscando receita...", description: "Consultando dados completos." });
 
       const found = await fetchSingleOsRecipe(codOs, codEmpresa);
 
       if (found) {
         setSelectedHubOs(found);
-        // Save to cache for basic fields (fire and forget)
         saveToCache([found]).catch(err =>
           console.warn("[OsDashboard] Failed to cache recipe:", err)
         );
       } else {
-        // Fallback to cache for basic info
         const { data: row } = await supabase
           .from("os_hub_receitas")
           .select("*")
@@ -144,7 +134,6 @@ const OsDashboardPage: React.FC = () => {
           .maybeSingle();
 
         if (row) {
-          console.log("[OsDashboard] Firebird miss, using cache for OS:", codOs);
           setSelectedHubOs(mapCacheRowToHubRecord(row as Record<string, unknown>));
         } else {
           toast({
@@ -177,11 +166,13 @@ const OsDashboardPage: React.FC = () => {
       rawData={data}
       loading={loading}
       error={error}
+      loaded={loaded}
       metrics={filteredMetrics}
       rawMetrics={metrics}
       filters={filters}
       onChangeFilters={handleChangeFilters}
-      onRefresh={() => reload({ empresa: "ALL", dataInicio: inicio, dataFim: fim })}
+      onLoad={handleLoad}
+      onRefresh={() => lastApiFilters && reload(lastApiFilters)}
       empresasUnicas={empresasUnicas}
       etapasUnicas={etapasUnicas}
       selectedHubOs={selectedHubOs}
