@@ -2,7 +2,6 @@
 // Tela 2 — Detalhe da OS com receita completa, full-screen dialog
 
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { OsHubRecord } from '@/services/osHubService';
 import {
   Dialog,
@@ -152,7 +151,6 @@ function SectionHeader({ icon: Icon, title, accent }: { icon: React.ElementType;
 /* ---- Main Component ---- */
 
 export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
-  const navigate = useNavigate();
   if (!os) return null;
 
   const status = statusConfig[os.statusAtraso] || statusConfig.SEM_DATA;
@@ -198,8 +196,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                 size="sm"
                 className="gap-1.5"
                 onClick={() => {
-                  onClose();
-                  navigate(`/os/pedido?codOs=${os.codOs}&codEmpresa=${os.codEmpresa}`);
+                  window.open(`/os/pedido?codOs=${os.codOs}&codEmpresa=${os.codEmpresa}`, '_blank');
                 }}
               >
                 <Send className="h-3.5 w-3.5" />
