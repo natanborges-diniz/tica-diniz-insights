@@ -196,7 +196,11 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                 size="sm"
                 className="gap-1.5"
                 onClick={() => {
-                  window.open(`/os/pedido?codOs=${os.codOs}&codEmpresa=${os.codEmpresa}`, '_blank');
+                  window.open(
+                    `/os/pedido?codOs=${os.codOs}&codEmpresa=${os.codEmpresa}`,
+                    'pedido_hoya',
+                    'width=1100,height=800,scrollbars=yes,resizable=yes'
+                  );
                 }}
               >
                 <Send className="h-3.5 w-3.5" />
