@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { OsRecord } from "@/services/osService";
 import { CampoDataOs } from "@/services/osService";
 import { OsMetrics } from "@/utils/osMetrics";
-import { OsFilterState, OsStatusFilter, OsApiFilters } from "@/hooks/useOsMonitor";
+import { OsFilterState, OsStatusFilter, OsReceitaFotoFilter, OsApiFilters } from "@/hooks/useOsMonitor";
 import { OsKpiCards } from "./OsKpiCards";
 import { OsExpandableRow } from "./OsExpandableRow";
 import { OsHubDetailSheet } from "@/components/os-hub/OsHubDetailSheet";
@@ -55,6 +55,7 @@ type Props = {
   onRefresh: () => void;
   empresasUnicas: string[];
   etapasUnicas: string[];
+  receitaFotoMap: Record<number, { temReceita: boolean; temFoto: boolean }>;
   selectedHubOs: OsHubRecord | null;
   onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   onCloseRecipe: () => void;
@@ -100,6 +101,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
   onRefresh,
   empresasUnicas,
   etapasUnicas,
+  receitaFotoMap,
   selectedHubOs,
   onOpenRecipe,
   onCloseRecipe,
@@ -334,6 +336,34 @@ export const OsDashboardLayout: React.FC<Props> = ({
                     <SelectItem value="ENTREGUE">Entregue</SelectItem>
                   </SelectContent>
                 </Select>
+
+                <Select
+                  value={filters.receita}
+                  onValueChange={(v) => onChangeFilters({ receita: v as OsReceitaFotoFilter })}
+                >
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Receita" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TODOS">Receita: Todos</SelectItem>
+                    <SelectItem value="COM">Com Receita</SelectItem>
+                    <SelectItem value="SEM">Sem Receita</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={filters.foto}
+                  onValueChange={(v) => onChangeFilters({ foto: v as OsReceitaFotoFilter })}
+                >
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Foto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TODOS">Foto: Todos</SelectItem>
+                    <SelectItem value="COM">Com Foto</SelectItem>
+                    <SelectItem value="SEM">Sem Foto</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>
@@ -351,6 +381,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
                         <TableHead>Empresa</TableHead>
                         <TableHead>Cliente</TableHead>
                         <TableHead>Etapa</TableHead>
+                        <TableHead>Tags</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-center">Atraso</TableHead>
                         <TableHead className="text-right">Total</TableHead>
@@ -364,6 +395,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
                           onOpenRecipe={onOpenRecipe}
                           loadingRecipe={loadingRecipeCodOs === os.codOs}
                           pedidoFornecedor={pedidosMap[os.codOs] || null}
+                          receitaFotoInfo={receitaFotoMap[os.codOs] || null}
                         />
                       ))}
                     </TableBody>

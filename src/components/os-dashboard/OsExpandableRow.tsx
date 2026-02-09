@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { ChevronDown, ChevronRight, Glasses, Loader2, Calendar, User, Phone, Clock, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronRight, Glasses, Loader2, Calendar, User, Phone, Clock, ExternalLink, FileText, Camera } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface Props {
@@ -16,6 +16,7 @@ interface Props {
   onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   loadingRecipe: boolean;
   pedidoFornecedor?: { numero_pedido: string | null; fornecedor: string; status: string } | null;
+  receitaFotoInfo?: { temReceita: boolean; temFoto: boolean } | null;
 }
 
 function formatDate(value: string | null) {
@@ -27,7 +28,7 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
-export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingRecipe, pedidoFornecedor }) => {
+export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingRecipe, pedidoFornecedor, receitaFotoInfo }) => {
   const [open, setOpen] = useState(false);
 
   return (
@@ -51,6 +52,28 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
               <span className="text-xs bg-muted px-2 py-0.5 rounded-md">{os.etapa || "—"}</span>
             </TableCell>
             <TableCell>
+              <div className="flex gap-1">
+                {receitaFotoInfo?.temReceita && (
+                  <Badge variant="outline" className="gap-1 bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[10px] px-1.5 py-0">
+                    <FileText className="h-3 w-3" />
+                    Rx
+                  </Badge>
+                )}
+                {receitaFotoInfo?.temFoto && (
+                  <Badge variant="outline" className="gap-1 bg-violet-500/10 text-violet-700 border-violet-500/30 text-[10px] px-1.5 py-0">
+                    <Camera className="h-3 w-3" />
+                    Foto
+                  </Badge>
+                )}
+                {receitaFotoInfo && !receitaFotoInfo.temReceita && !receitaFotoInfo.temFoto && (
+                  <span className="text-muted-foreground text-xs">—</span>
+                )}
+                {!receitaFotoInfo && (
+                  <span className="text-muted-foreground text-xs">—</span>
+                )}
+              </div>
+            </TableCell>
+            <TableCell>
               <Badge variant="outline" className={getStatusColor(os.statusAtraso)}>
                 {getStatusLabel(os.statusAtraso)}
               </Badge>
@@ -70,7 +93,7 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
 
         <CollapsibleContent asChild>
           <TableRow className="bg-primary/[0.02] border-l-2 border-l-primary/30">
-            <TableCell colSpan={8} className="p-4">
+            <TableCell colSpan={9} className="p-4">
               <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm flex-1">
                   <div className="flex items-center gap-2">
