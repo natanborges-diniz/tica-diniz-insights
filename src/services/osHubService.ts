@@ -125,6 +125,40 @@ interface OsHubRaw {
   // Lens product descriptions (from transacao_item → item)
   lente_od_descricao?: string;
   lente_oe_descricao?: string;
+  // New: receita_lente_cliente (ocrl_*) fields per eye
+  ocrl_oe_longe_esf?: number;
+  ocrl_oe_longe_cil?: number;
+  ocrl_oe_longe_eixo?: number;
+  ocrl_oe_perto_esf?: number;
+  ocrl_oe_perto_cil?: number;
+  ocrl_oe_perto_eixo?: number;
+  ocrl_oe_dnp?: number;
+  ocrl_oe_perto_dnp?: number;
+  ocrl_oe_alt?: number;
+  ocrl_oe_adicao?: number;
+  ocrl_oe_lcdiametro?: number;
+  ocrl_oe_cro?: number;
+  ocrl_oe_cod_produtolente?: number;
+  ocrl_oe_descricaolente?: string;
+  ocrl_oe_codigobarra?: string;
+  ocrl_od_longe_esf?: number;
+  ocrl_od_longe_cil?: number;
+  ocrl_od_longe_eixo?: number;
+  ocrl_od_perto_esf?: number;
+  ocrl_od_perto_cil?: number;
+  ocrl_od_perto_eixo?: number;
+  ocrl_od_dnp?: number;
+  ocrl_od_perto_dnp?: number;
+  ocrl_od_alt?: number;
+  ocrl_od_adicao?: number;
+  ocrl_od_lcdiametro?: number;
+  ocrl_od_cro?: number;
+  ocrl_od_cod_produtolente?: number;
+  ocrl_od_descricaolente?: string;
+  ocrl_od_codigobarra?: string;
+  // Imagem documento
+  imagem_documento?: string;
+  url_imagem_documento?: string;
 }
 
 export interface OsHubRecord {
@@ -243,27 +277,27 @@ function coalesce(...vals: (number | undefined | null)[]): number | null {
 }
 
 function mapRawToRecord(r: OsHubRaw): OsHubRecord {
-  // OD prescription: OS fields → cliente fallback (hub uses same eye for both OD/OE from cliente)
-  const odLongeEsf = coalesce(r.od_longe_esf, r.cliente_longe_esf);
-  const odLongeCil = coalesce(r.od_longe_cil, r.cliente_longe_cil);
-  const odLongeEixo = coalesce(r.od_longe_eixo, r.cliente_longe_eixo);
-  const odPertoEsf = coalesce(r.od_perto_esf, r.cliente_perto_esf);
-  const odPertoCil = coalesce(r.od_perto_cil, r.cliente_perto_cil);
-  const odPertoEixo = coalesce(r.od_perto_eixo, r.cliente_perto_eixo);
-  const odAdicao = coalesce(r.od_adicao, r.cliente_adicao);
-  const odDnp = coalesce(r.od_dnp, r.od_dp, r.cliente_dnp);
-  const odAltura = coalesce(r.od_altura, r.od_alt, r.cliente_alt);
+  // OD prescription: OS fields → ocrl (receita_lente_cliente) → cliente fallback
+  const odLongeEsf = coalesce(r.od_longe_esf, r.ocrl_od_longe_esf, r.cliente_longe_esf);
+  const odLongeCil = coalesce(r.od_longe_cil, r.ocrl_od_longe_cil, r.cliente_longe_cil);
+  const odLongeEixo = coalesce(r.od_longe_eixo, r.ocrl_od_longe_eixo, r.cliente_longe_eixo);
+  const odPertoEsf = coalesce(r.od_perto_esf, r.ocrl_od_perto_esf, r.cliente_perto_esf);
+  const odPertoCil = coalesce(r.od_perto_cil, r.ocrl_od_perto_cil, r.cliente_perto_cil);
+  const odPertoEixo = coalesce(r.od_perto_eixo, r.ocrl_od_perto_eixo, r.cliente_perto_eixo);
+  const odAdicao = coalesce(r.od_adicao, r.ocrl_od_adicao, r.cliente_adicao);
+  const odDnp = coalesce(r.od_dnp, r.od_dp, r.ocrl_od_dnp, r.cliente_dnp);
+  const odAltura = coalesce(r.od_altura, r.od_alt, r.ocrl_od_alt, r.cliente_alt);
 
-  // OE prescription: OS fields → cliente fallback
-  const oeLongeEsf = coalesce(r.oe_longe_esf, r.cliente_longe_esf);
-  const oeLongeCil = coalesce(r.oe_longe_cil, r.cliente_longe_cil);
-  const oeLongeEixo = coalesce(r.oe_longe_eixo, r.cliente_longe_eixo);
-  const oePertoEsf = coalesce(r.oe_perto_esf, r.cliente_perto_esf);
-  const oePertoCil = coalesce(r.oe_perto_cil, r.cliente_perto_cil);
-  const oePertoEixo = coalesce(r.oe_perto_eixo, r.cliente_perto_eixo);
-  const oeAdicao = coalesce(r.oe_adicao, r.cliente_adicao);
-  const oeDnp = coalesce(r.oe_dnp, r.oe_dp, r.cliente_dnp);
-  const oeAltura = coalesce(r.oe_altura, r.oe_alt, r.cliente_alt);
+  // OE prescription: OS fields → ocrl (receita_lente_cliente) → cliente fallback
+  const oeLongeEsf = coalesce(r.oe_longe_esf, r.ocrl_oe_longe_esf, r.cliente_longe_esf);
+  const oeLongeCil = coalesce(r.oe_longe_cil, r.ocrl_oe_longe_cil, r.cliente_longe_cil);
+  const oeLongeEixo = coalesce(r.oe_longe_eixo, r.ocrl_oe_longe_eixo, r.cliente_longe_eixo);
+  const oePertoEsf = coalesce(r.oe_perto_esf, r.ocrl_oe_perto_esf, r.cliente_perto_esf);
+  const oePertoCil = coalesce(r.oe_perto_cil, r.ocrl_oe_perto_cil, r.cliente_perto_cil);
+  const oePertoEixo = coalesce(r.oe_perto_eixo, r.ocrl_oe_perto_eixo, r.cliente_perto_eixo);
+  const oeAdicao = coalesce(r.oe_adicao, r.ocrl_oe_adicao, r.cliente_adicao);
+  const oeDnp = coalesce(r.oe_dnp, r.oe_dp, r.ocrl_oe_dnp, r.cliente_dnp);
+  const oeAltura = coalesce(r.oe_altura, r.oe_alt, r.ocrl_oe_alt, r.cliente_alt);
 
   const hasReceita = !!(
     odLongeEsf || odLongeCil || odPertoEsf ||
@@ -346,8 +380,8 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     observacaoLente: r.observacao_lente?.trim() ?? null,
     observacaoPendencia: r.observacao_pendencia?.trim() ?? null,
     observacaoReceita: r.observacao_receita?.trim() ?? r.cliente_observacao_receita?.trim() ?? null,
-    lenteOdDescricao: r.lente_od_descricao?.trim() ?? null,
-    lenteOeDescricao: r.lente_oe_descricao?.trim() ?? null,
+    lenteOdDescricao: r.lente_od_descricao?.trim() ?? r.ocrl_od_descricaolente?.trim() ?? null,
+    lenteOeDescricao: r.lente_oe_descricao?.trim() ?? r.ocrl_oe_descricaolente?.trim() ?? null,
     temReceita: hasReceita,
     temImagem: hasImagem,
   };
