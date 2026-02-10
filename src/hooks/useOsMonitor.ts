@@ -1,6 +1,6 @@
 // src/hooks/useOsMonitor.ts
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { getOsMonitor, OsRecord, StatusAtraso, CampoDataOs } from "../services/osService";
 import { calculateOsMetrics, OsMetrics, sortOsByPriority } from "../utils/osMetrics";
 import { EmpresaParam } from "@/services/firebirdBridge";
@@ -32,6 +32,7 @@ export function useOsMonitor() {
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [lastApiFilters, setLastApiFilters] = useState<OsApiFilters | null>(null);
+  const autoLoadedRef = useRef(false);
 
   const [filters, setFilters] = useState<OsFilterState>({
     status: "TODOS",
@@ -159,6 +160,22 @@ export function useOsMonitor() {
 
   const reload = useCallback((apiFilters: OsApiFilters) => {
     fetchData(apiFilters);
+  }, [fetchData]);
+
+  // Auto-load on mount: last 30 days, EMISSAO, all companies
+  useEffect(() => {
+    if (autoLoadedRef.current) return;
+    autoLoadedRef.current = true;
+    const hoje = new Date();
+    const inicio30 = new Date(hoje);
+    inicio30.setDate(inicio30.getDate() - 30);
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    fetchData({
+      empresa: "ALL",
+      dataInicio: fmt(inicio30),
+      dataFim: fmt(hoje),
+      campoData: "EMISSAO",
+    });
   }, [fetchData]);
 
   return {
