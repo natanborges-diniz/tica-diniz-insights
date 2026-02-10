@@ -661,16 +661,16 @@ export async function fetchReceitaFotoFlags(params: {
   empresa: EmpresaParam;
   dataInicio: string;
   dataFim: string;
-}): Promise<Record<number, { temReceita: boolean; temFoto: boolean }>> {
+}): Promise<Record<number, { temReceita: boolean; temFoto: boolean; lenteOdDescricao: string | null; lenteOeDescricao: string | null }>> {
   const records = await fetchOsHubFromFirebird({
     empresa: params.empresa,
     dataInicio: params.dataInicio,
     dataFim: params.dataFim,
   });
 
-  const map: Record<number, { temReceita: boolean; temFoto: boolean }> = {};
+  const map: Record<number, { temReceita: boolean; temFoto: boolean; lenteOdDescricao: string | null; lenteOeDescricao: string | null }> = {};
   for (const r of records) {
-    map[r.codOs] = { temReceita: r.temReceita, temFoto: r.temImagem };
+    map[r.codOs] = { temReceita: r.temReceita, temFoto: r.temImagem, lenteOdDescricao: r.lenteOdDescricao, lenteOeDescricao: r.lenteOeDescricao };
   }
   return map;
 }

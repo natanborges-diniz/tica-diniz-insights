@@ -5,6 +5,7 @@ import React, { useState, useEffect } from "react";
 import { OsRecord } from "@/services/osService";
 import { getStatusColor, getStatusLabel } from "@/utils/osMetrics";
 import { supabase } from "@/integrations/supabase/client";
+import { detectSupplier, getSupplierBadgeInfo } from "@/services/hoyaMatchingService";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -16,7 +17,7 @@ interface Props {
   onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   loadingRecipe: boolean;
   pedidoFornecedor?: { numero_pedido: string | null; fornecedor: string; status: string } | null;
-  receitaFotoInfo?: { temReceita: boolean; temFoto: boolean } | null;
+  receitaFotoInfo?: { temReceita: boolean; temFoto: boolean; lenteOdDescricao: string | null; lenteOeDescricao: string | null } | null;
 }
 
 function formatDate(value: string | null) {
@@ -52,7 +53,16 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
               <span className="text-xs bg-muted px-2 py-0.5 rounded-md">{os.etapa || "—"}</span>
             </TableCell>
             <TableCell>
-              <div className="flex gap-1">
+              <div className="flex gap-1 flex-wrap">
+                {(() => {
+                  const supplier = detectSupplier(receitaFotoInfo?.lenteOdDescricao || receitaFotoInfo?.lenteOeDescricao);
+                  const badge = getSupplierBadgeInfo(supplier);
+                  return badge ? (
+                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${badge.className}`}>
+                      {badge.label}
+                    </Badge>
+                  ) : null;
+                })()}
                 {receitaFotoInfo?.temReceita && (
                   <Badge variant="outline" className="gap-1 bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[10px] px-1.5 py-0">
                     <FileText className="h-3 w-3" />
@@ -65,7 +75,7 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                     Foto
                   </Badge>
                 )}
-                {receitaFotoInfo && !receitaFotoInfo.temReceita && !receitaFotoInfo.temFoto && (
+                {receitaFotoInfo && !receitaFotoInfo.temReceita && !receitaFotoInfo.temFoto && !detectSupplier(receitaFotoInfo?.lenteOdDescricao || receitaFotoInfo?.lenteOeDescricao) && (
                   <span className="text-muted-foreground text-xs">—</span>
                 )}
                 {!receitaFotoInfo && (
