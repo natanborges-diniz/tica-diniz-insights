@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { useOsHub, OsHubFilters } from '@/hooks/useOsHub';
 import { useEmpresas } from '@/hooks/useEmpresas';
 import { OsHubRecord } from '@/services/osHubService';
+import { detectSupplier, getSupplierBadgeInfo } from '@/services/hoyaMatchingService';
 import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -268,6 +269,7 @@ export const OsHubListPage: React.FC = () => {
                   <TableRow>
                     <TableHead className="w-[90px]">OS</TableHead>
                     <TableHead>Empresa</TableHead>
+                    <TableHead>Fornecedor</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Etapa</TableHead>
                     <TableHead>Status</TableHead>
@@ -287,6 +289,17 @@ export const OsHubListPage: React.FC = () => {
                     <TableRow key={os.codOs} className="hover:bg-muted/50 cursor-pointer" onClick={() => handleOpenDetail(os)}>
                       <TableCell className="font-medium">{os.numeroOs || os.codOs}</TableCell>
                       <TableCell className="text-sm">{os.empresa || '-'}</TableCell>
+                      <TableCell>
+                        {(() => {
+                          const supplier = detectSupplier(os.lenteOdDescricao || os.lenteOeDescricao);
+                          const badge = getSupplierBadgeInfo(supplier);
+                          return badge ? (
+                            <Badge variant="outline" className={`text-[10px] ${badge.className}`}>
+                              {badge.label}
+                            </Badge>
+                          ) : <span className="text-muted-foreground text-xs">-</span>;
+                        })()}
+                      </TableCell>
                       <TableCell className="max-w-[200px] truncate" title={os.cliente}>
                         {os.cliente || '-'}
                       </TableCell>

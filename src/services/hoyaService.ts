@@ -17,9 +17,10 @@ export interface HoyaProduto {
   material: number | string;
   codigoTratamento: number;
   tratamento: string;
-  codigoAltura: number;
-  altura: number;
-  codigoFotossensivel?: number;
+  codigoAltura: number | null;
+  altura: number | null;
+  codigoFotossensivel?: number | null;
+  fotossensivel?: string | null;
   origem: string;
   esfericoMinimo: number;
   esfericoMaximo: number;
