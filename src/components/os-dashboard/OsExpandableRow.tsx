@@ -1,5 +1,5 @@
 // src/components/os-dashboard/OsExpandableRow.tsx
-// Linha expansível da tabela de OS com visual aprimorado
+// Linha expansível da tabela de OS com visual aprimorado e badges Rx/Foto
 
 import React, { useState, useEffect } from "react";
 import { OsRecord } from "@/services/osService";
