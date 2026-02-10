@@ -55,7 +55,7 @@ type Props = {
   onRefresh: () => void;
   empresasUnicas: string[];
   etapasUnicas: string[];
-  receitaFotoMap: Record<number, { temReceita: boolean; temFoto: boolean; lenteOdDescricao: string | null; lenteOeDescricao: string | null }>;
+  receitaFotoMap: Record<number, { temReceita: boolean; temFoto: boolean }>;
   selectedHubOs: OsHubRecord | null;
   onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   onCloseRecipe: () => void;

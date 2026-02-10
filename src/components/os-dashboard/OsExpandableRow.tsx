@@ -1,11 +1,9 @@
 // src/components/os-dashboard/OsExpandableRow.tsx
 // Linha expansível da tabela de OS com visual aprimorado e badges Rx/Foto
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { OsRecord } from "@/services/osService";
 import { getStatusColor, getStatusLabel } from "@/utils/osMetrics";
-import { supabase } from "@/integrations/supabase/client";
-import { detectSupplier, getSupplierBadgeInfo } from "@/services/hoyaMatchingService";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -17,7 +15,7 @@ interface Props {
   onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   loadingRecipe: boolean;
   pedidoFornecedor?: { numero_pedido: string | null; fornecedor: string; status: string } | null;
-  receitaFotoInfo?: { temReceita: boolean; temFoto: boolean; lenteOdDescricao: string | null; lenteOeDescricao: string | null } | null;
+  receitaFotoInfo?: { temReceita: boolean; temFoto: boolean } | null;
 }
 
 function formatDate(value: string | null) {
@@ -54,15 +52,6 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
             </TableCell>
             <TableCell>
               <div className="flex gap-1 flex-wrap">
-                {(() => {
-                  const supplier = detectSupplier(receitaFotoInfo?.lenteOdDescricao || receitaFotoInfo?.lenteOeDescricao);
-                  const badge = getSupplierBadgeInfo(supplier);
-                  return badge ? (
-                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${badge.className}`}>
-                      {badge.label}
-                    </Badge>
-                  ) : null;
-                })()}
                 {receitaFotoInfo?.temReceita && (
                   <Badge variant="outline" className="gap-1 bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[10px] px-1.5 py-0">
                     <FileText className="h-3 w-3" />
@@ -75,7 +64,7 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                     Foto
                   </Badge>
                 )}
-                {receitaFotoInfo && !receitaFotoInfo.temReceita && !receitaFotoInfo.temFoto && !detectSupplier(receitaFotoInfo?.lenteOdDescricao || receitaFotoInfo?.lenteOeDescricao) && (
+                {receitaFotoInfo && !receitaFotoInfo.temReceita && !receitaFotoInfo.temFoto && (
                   <span className="text-muted-foreground text-xs">—</span>
                 )}
                 {!receitaFotoInfo && (
