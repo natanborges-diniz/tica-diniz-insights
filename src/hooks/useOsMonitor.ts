@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import { getOsMonitor, OsRecord, StatusAtraso, CampoDataOs } from "../services/osService";
 import { calculateOsMetrics, OsMetrics, sortOsByPriority } from "../utils/osMetrics";
 import { EmpresaParam } from "@/services/firebirdBridge";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchReceitaFotoFlags } from "@/services/osHubService";
 
 export type OsStatusFilter = "TODOS" | StatusAtraso | "ATRASADAS";
 
@@ -119,8 +119,8 @@ export function useOsMonitor() {
       setData(result);
       setLoaded(true);
 
-      // Enrich with receita/foto info from cache
-      _loadReceitaFotoMap(result.map(os => os.codOs));
+      // Enrich with receita/foto flags from Firebird (same date range)
+      _loadReceitaFotoFlags(f);
 
       // Apply default etapa filter on first load
       if (!defaultEtapaApplied) {
@@ -139,33 +139,20 @@ export function useOsMonitor() {
     }
   }, [defaultEtapaApplied]);
 
-  const _loadReceitaFotoMap = useCallback(async (codOsList: number[]) => {
-    if (codOsList.length === 0) return;
-    const map: Record<number, { temReceita: boolean; temFoto: boolean }> = {};
-    const diopterFields = [
-      'od_longe_esf', 'od_longe_cil', 'oe_longe_esf', 'oe_longe_cil',
-      'od_adicao', 'oe_adicao', 'od_perto_esf', 'oe_perto_esf',
-    ] as const;
-    const imageFields = ['imagem_receita', 'imagem_armacao', 'imagem_tracer', 'url_imagem_receita', 'url_imagem_armacao'] as const;
-
-    for (let i = 0; i < codOsList.length; i += 100) {
-      const batch = codOsList.slice(i, i + 100);
-      const { data: rows } = await supabase
-        .from("os_hub_receitas")
-        .select("cod_os, od_longe_esf, od_longe_cil, oe_longe_esf, oe_longe_cil, od_adicao, oe_adicao, od_perto_esf, oe_perto_esf, imagem_receita, imagem_armacao, imagem_tracer, url_imagem_receita, url_imagem_armacao")
-        .in("cod_os", batch);
-      if (rows) {
-        for (const r of rows) {
-          const temReceita = diopterFields.some(f => r[f] != null && r[f] !== 0);
-          const temFoto = imageFields.some(f => {
-            const v = r[f];
-            return typeof v === 'string' && v.trim().length > 0;
-          });
-          map[r.cod_os] = { temReceita, temFoto };
-        }
-      }
+  const _loadReceitaFotoFlags = useCallback(async (apiFilters: OsApiFilters) => {
+    try {
+      console.log('[useOsMonitor] Loading receita/foto flags from Firebird...');
+      const map = await fetchReceitaFotoFlags({
+        empresa: apiFilters.empresa,
+        dataInicio: apiFilters.dataInicio,
+        dataFim: apiFilters.dataFim,
+      });
+      console.log('[useOsMonitor] Receita/foto flags loaded:', Object.keys(map).length, 'entries');
+      setReceitaFotoMap(map);
+    } catch (err) {
+      console.warn('[useOsMonitor] Failed to load receita/foto flags:', err);
+      // Non-critical: badges will just show "—"
     }
-    setReceitaFotoMap(map);
   }, []);
 
   const reload = useCallback((apiFilters: OsApiFilters) => {
