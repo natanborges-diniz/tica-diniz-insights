@@ -126,7 +126,9 @@ export function useOsMonitor() {
       if (!defaultEtapaApplied) {
         setDefaultEtapaApplied(true);
         const etapas = Array.from(new Set(result.map(os => os.etapa).filter(Boolean)));
-        const target = etapas.find(e => e.toUpperCase().includes('TRANSLADO'));
+        // Prefer exact "TRANSLADO LOJA-ESTOQUE", fallback to any TRANSLADO
+        const target = etapas.find(e => e.toUpperCase() === 'TRANSLADO LOJA-ESTOQUE')
+          || etapas.find(e => e.toUpperCase().includes('TRANSLADO'));
         if (target) {
           setFilters(prev => ({ ...prev, etapa: target }));
         }
