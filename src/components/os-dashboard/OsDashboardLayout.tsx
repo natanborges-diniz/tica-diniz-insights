@@ -116,19 +116,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
   const [dataInicio, setDataInicio] = useState<Date>(inicio30);
   const [dataFim, setDataFim] = useState<Date>(hoje);
 
-  // Auto-load on mount
-  const [autoLoaded, setAutoLoaded] = useState(false);
-  useEffect(() => {
-    if (!autoLoaded && !loaded && !loading) {
-      setAutoLoaded(true);
-      onLoad({
-        empresa: "ALL",
-        dataInicio: format(inicio30, "yyyy-MM-dd"),
-        dataFim: format(hoje, "yyyy-MM-dd"),
-        campoData: "EMISSAO",
-      });
-    }
-  }, [autoLoaded, loaded, loading]);
+  // Auto-load is now handled by useOsMonitor hook directly
 
   // Pedidos de fornecedor vinculados
   const [pedidosMap, setPedidosMap] = useState<Record<number, { numero_pedido: string | null; fornecedor: string; status: string }>>(
