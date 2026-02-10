@@ -647,3 +647,30 @@ export async function getCacheStats(): Promise<{ total: number; lastUpdate: stri
     lastUpdate: data?.[0]?.cache_loaded_at ?? null,
   };
 }
+
+// ============================================
+// BATCH FLAGS: Receita / Foto por OS (lightweight)
+// ============================================
+
+/**
+ * Fetches hub-receitas from Firebird for the given date range and returns
+ * a lightweight map of codOs → { temReceita, temFoto } flags.
+ * This avoids relying on the Supabase cache (which is only populated on-demand).
+ */
+export async function fetchReceitaFotoFlags(params: {
+  empresa: EmpresaParam;
+  dataInicio: string;
+  dataFim: string;
+}): Promise<Record<number, { temReceita: boolean; temFoto: boolean }>> {
+  const records = await fetchOsHubFromFirebird({
+    empresa: params.empresa,
+    dataInicio: params.dataInicio,
+    dataFim: params.dataFim,
+  });
+
+  const map: Record<number, { temReceita: boolean; temFoto: boolean }> = {};
+  for (const r of records) {
+    map[r.codOs] = { temReceita: r.temReceita, temFoto: r.temImagem };
+  }
+  return map;
+}
