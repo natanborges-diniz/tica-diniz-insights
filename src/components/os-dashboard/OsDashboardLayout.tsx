@@ -112,9 +112,23 @@ export const OsDashboardLayout: React.FC<Props> = ({
   const inicio30 = new Date(hoje);
   inicio30.setDate(inicio30.getDate() - 30);
 
-  const [campoData, setCampoData] = useState<CampoDataOs>("PREVISAO");
+  const [campoData, setCampoData] = useState<CampoDataOs>("EMISSAO");
   const [dataInicio, setDataInicio] = useState<Date>(inicio30);
   const [dataFim, setDataFim] = useState<Date>(hoje);
+
+  // Auto-load on mount
+  const [autoLoaded, setAutoLoaded] = useState(false);
+  useEffect(() => {
+    if (!autoLoaded && !loaded && !loading) {
+      setAutoLoaded(true);
+      onLoad({
+        empresa: "ALL",
+        dataInicio: format(inicio30, "yyyy-MM-dd"),
+        dataFim: format(hoje, "yyyy-MM-dd"),
+        campoData: "EMISSAO",
+      });
+    }
+  }, [autoLoaded, loaded, loading]);
 
   // Pedidos de fornecedor vinculados
   const [pedidosMap, setPedidosMap] = useState<Record<number, { numero_pedido: string | null; fornecedor: string; status: string }>>(

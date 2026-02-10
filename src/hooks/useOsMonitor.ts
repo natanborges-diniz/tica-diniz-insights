@@ -38,7 +38,7 @@ export function useOsMonitor() {
     empresaVisual: null,
     etapa: null,
     busca: "",
-    receita: "TODOS",
+    receita: "COM",
     foto: "TODOS",
   });
 
