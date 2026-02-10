@@ -653,22 +653,57 @@ export async function getCacheStats(): Promise<{ total: number; lastUpdate: stri
 // ============================================
 
 /**
- * Fetches hub-receitas from Firebird for the given date range and returns
- * a lightweight map of codOs → { temReceita, temFoto } flags.
- * This avoids relying on the Supabase cache (which is only populated on-demand).
+ * Fetches receita/foto flags prioritizing Supabase cache (fast),
+ * falling back to Firebird only if cache is empty.
  */
 export async function fetchReceitaFotoFlags(params: {
   empresa: EmpresaParam;
   dataInicio: string;
   dataFim: string;
 }): Promise<Record<number, { temReceita: boolean; temFoto: boolean; lenteOdDescricao: string | null; lenteOeDescricao: string | null }>> {
+  const map: Record<number, { temReceita: boolean; temFoto: boolean; lenteOdDescricao: string | null; lenteOeDescricao: string | null }> = {};
+
+  // 1) Try Supabase cache first (instant, no Firebird hit)
+  try {
+    let query = supabase
+      .from("os_hub_receitas")
+      .select("cod_os, tem_receita, tem_imagem, od_longe_esf, oe_longe_esf, url_imagem_receita, url_imagem_armacao, imagem_tracer, observacao_lente")
+      .gte("data_emissao", params.dataInicio)
+      .lte("data_emissao", params.dataFim);
+
+    if (params.empresa !== "ALL" && params.empresa !== null) {
+      query = query.eq("cod_empresa", Number(params.empresa));
+    }
+
+    const { data: cacheRows, error } = await query;
+
+    if (!error && cacheRows && cacheRows.length > 0) {
+      console.log('[fetchReceitaFotoFlags] Using Supabase cache:', cacheRows.length, 'rows');
+      for (const r of cacheRows) {
+        const hasReceita = !!(r.tem_receita || r.od_longe_esf || r.oe_longe_esf);
+        const hasImagem = !!(r.tem_imagem || r.url_imagem_receita || r.url_imagem_armacao || r.imagem_tracer);
+        // observacao_lente often contains lens description; real lens descriptions come from Firebird enrichment
+        map[r.cod_os] = {
+          temReceita: hasReceita,
+          temFoto: hasImagem,
+          lenteOdDescricao: (r.observacao_lente as string) || null,
+          lenteOeDescricao: null,
+        };
+      }
+      return map;
+    }
+  } catch (err) {
+    console.warn('[fetchReceitaFotoFlags] Supabase cache error, falling back to Firebird:', err);
+  }
+
+  // 2) Fallback: Firebird (slower but complete)
+  console.log('[fetchReceitaFotoFlags] Cache empty, falling back to Firebird...');
   const records = await fetchOsHubFromFirebird({
     empresa: params.empresa,
     dataInicio: params.dataInicio,
     dataFim: params.dataFim,
   });
 
-  const map: Record<number, { temReceita: boolean; temFoto: boolean; lenteOdDescricao: string | null; lenteOeDescricao: string | null }> = {};
   for (const r of records) {
     map[r.codOs] = { temReceita: r.temReceita, temFoto: r.temImagem, lenteOdDescricao: r.lenteOdDescricao, lenteOeDescricao: r.lenteOeDescricao };
   }
