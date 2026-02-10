@@ -371,6 +371,8 @@ export type Database = {
           imagem_armacao: string | null
           imagem_receita: string | null
           imagem_tracer: string | null
+          lente_od_descricao: string | null
+          lente_oe_descricao: string | null
           numero_os: string | null
           observacao_lente: string | null
           observacao_os: string | null
@@ -421,6 +423,8 @@ export type Database = {
           imagem_armacao?: string | null
           imagem_receita?: string | null
           imagem_tracer?: string | null
+          lente_od_descricao?: string | null
+          lente_oe_descricao?: string | null
           numero_os?: string | null
           observacao_lente?: string | null
           observacao_os?: string | null
@@ -471,6 +475,8 @@ export type Database = {
           imagem_armacao?: string | null
           imagem_receita?: string | null
           imagem_tracer?: string | null
+          lente_od_descricao?: string | null
+          lente_oe_descricao?: string | null
           numero_os?: string | null
           observacao_lente?: string | null
           observacao_os?: string | null

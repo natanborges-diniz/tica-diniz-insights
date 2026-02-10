@@ -116,6 +116,8 @@ Deno.serve(async (req) => {
         observacao_os: ((r.observacao_os as string) ?? "").trim() || null,
         observacao_lente: ((r.observacao_lente as string) ?? "").trim() || null,
         observacao_pendencia: ((r.observacao_pendencia as string) ?? "").trim() || null,
+        lente_od_descricao: ((r.lente_od_descricao as string) ?? "").trim() || null,
+        lente_oe_descricao: ((r.lente_oe_descricao as string) ?? "").trim() || null,
         cache_loaded_at: new Date().toISOString(),
       }));
 

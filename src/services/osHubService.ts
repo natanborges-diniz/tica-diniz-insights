@@ -667,7 +667,7 @@ export async function fetchReceitaFotoFlags(params: {
   try {
     let query = supabase
       .from("os_hub_receitas")
-      .select("cod_os, tem_receita, tem_imagem, od_longe_esf, oe_longe_esf, url_imagem_receita, url_imagem_armacao, imagem_tracer, observacao_lente")
+      .select("cod_os, tem_receita, tem_imagem, od_longe_esf, oe_longe_esf, url_imagem_receita, url_imagem_armacao, imagem_tracer, lente_od_descricao, lente_oe_descricao")
       .gte("data_emissao", params.dataInicio)
       .lte("data_emissao", params.dataFim);
 
@@ -682,12 +682,11 @@ export async function fetchReceitaFotoFlags(params: {
       for (const r of cacheRows) {
         const hasReceita = !!(r.tem_receita || r.od_longe_esf || r.oe_longe_esf);
         const hasImagem = !!(r.tem_imagem || r.url_imagem_receita || r.url_imagem_armacao || r.imagem_tracer);
-        // observacao_lente often contains lens description; real lens descriptions come from Firebird enrichment
         map[r.cod_os] = {
           temReceita: hasReceita,
           temFoto: hasImagem,
-          lenteOdDescricao: (r.observacao_lente as string) || null,
-          lenteOeDescricao: null,
+          lenteOdDescricao: (r as Record<string, unknown>).lente_od_descricao as string | null,
+          lenteOeDescricao: (r as Record<string, unknown>).lente_oe_descricao as string | null,
         };
       }
       return map;
