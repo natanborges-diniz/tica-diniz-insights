@@ -43,8 +43,8 @@ export function useOsMonitor() {
     foto: "TODOS",
   });
 
-  // Map of codOs -> { temReceita, temFoto, lenteOdDescricao, lenteOeDescricao } from cache
-  const [receitaFotoMap, setReceitaFotoMap] = useState<Record<number, { temReceita: boolean; temFoto: boolean; lenteOdDescricao: string | null; lenteOeDescricao: string | null }>>({})
+  // Map of codOs -> { temReceita, temFoto } from cache
+  const [receitaFotoMap, setReceitaFotoMap] = useState<Record<number, { temReceita: boolean; temFoto: boolean }>>({})
 
   const [defaultEtapaApplied, setDefaultEtapaApplied] = useState(false);
 

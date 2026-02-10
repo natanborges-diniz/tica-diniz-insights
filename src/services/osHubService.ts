@@ -660,14 +660,13 @@ export async function fetchReceitaFotoFlags(params: {
   empresa: EmpresaParam;
   dataInicio: string;
   dataFim: string;
-}): Promise<Record<number, { temReceita: boolean; temFoto: boolean; lenteOdDescricao: string | null; lenteOeDescricao: string | null }>> {
-  const map: Record<number, { temReceita: boolean; temFoto: boolean; lenteOdDescricao: string | null; lenteOeDescricao: string | null }> = {};
+}): Promise<Record<number, { temReceita: boolean; temFoto: boolean }>> {
+  const map: Record<number, { temReceita: boolean; temFoto: boolean }> = {};
 
-  // 1) Try Supabase cache first (instant, no Firebird hit)
   try {
     let query = supabase
       .from("os_hub_receitas")
-      .select("cod_os, tem_receita, tem_imagem, od_longe_esf, oe_longe_esf, url_imagem_receita, url_imagem_armacao, imagem_tracer, lente_od_descricao, lente_oe_descricao")
+      .select("cod_os, tem_receita, tem_imagem, od_longe_esf, oe_longe_esf, url_imagem_receita, url_imagem_armacao, imagem_tracer")
       .gte("data_emissao", params.dataInicio)
       .lte("data_emissao", params.dataFim);
 
@@ -682,29 +681,12 @@ export async function fetchReceitaFotoFlags(params: {
       for (const r of cacheRows) {
         const hasReceita = !!(r.tem_receita || r.od_longe_esf || r.oe_longe_esf);
         const hasImagem = !!(r.tem_imagem || r.url_imagem_receita || r.url_imagem_armacao || r.imagem_tracer);
-        map[r.cod_os] = {
-          temReceita: hasReceita,
-          temFoto: hasImagem,
-          lenteOdDescricao: (r as Record<string, unknown>).lente_od_descricao as string | null,
-          lenteOeDescricao: (r as Record<string, unknown>).lente_oe_descricao as string | null,
-        };
+        map[r.cod_os] = { temReceita: hasReceita, temFoto: hasImagem };
       }
-      return map;
     }
   } catch (err) {
-    console.warn('[fetchReceitaFotoFlags] Supabase cache error, falling back to Firebird:', err);
+    console.warn('[fetchReceitaFotoFlags] Cache error:', err);
   }
 
-  // 2) Fallback: Firebird (slower but complete)
-  console.log('[fetchReceitaFotoFlags] Cache empty, falling back to Firebird...');
-  const records = await fetchOsHubFromFirebird({
-    empresa: params.empresa,
-    dataInicio: params.dataInicio,
-    dataFim: params.dataFim,
-  });
-
-  for (const r of records) {
-    map[r.codOs] = { temReceita: r.temReceita, temFoto: r.temImagem, lenteOdDescricao: r.lenteOdDescricao, lenteOeDescricao: r.lenteOeDescricao };
-  }
   return map;
 }
