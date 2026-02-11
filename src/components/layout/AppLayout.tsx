@@ -13,6 +13,7 @@ const moduleFromPath = (pathname: string): ModuleKey => {
   if (pathname.startsWith("/financeiro")) return "financeiro";
   if (pathname.startsWith("/ia")) return "ia";
   if (pathname.startsWith("/config")) return "config";
+  if (pathname.startsWith("/admin")) return "config";
   return "vendas"; // default
 };
 
