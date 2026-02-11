@@ -638,6 +638,33 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          cod_empresa: number
+          created_at: string | null
+          email: string | null
+          id: string
+          nome: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          cod_empresa?: number
+          created_at?: string | null
+          email?: string | null
+          id: string
+          nome?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          cod_empresa?: number
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          nome?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       venda: {
         Row: {
           cliente_nome: string | null
