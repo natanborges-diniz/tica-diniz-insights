@@ -1,19 +1,13 @@
 // supabase/functions/ai-central/index.ts
 // Central de IA - Análise multi-dimensional consolidada
-// Analisa: Vendas, Formas de Pagamento, Produtos/Famílias, Estoque e Orientação de Compras
+// E0.3: JWT obrigatório + rate limit (authenticated)
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { authGuard, corsHeaders } from "../_shared/authGuard.ts";
 
 interface DadosCentralIA {
   periodo: string;
   empresa?: string;
-  
-  // Dados de Vendas (agregados)
   vendas?: {
     totalFaturamento: number;
     totalDesconto: number;
@@ -35,24 +29,18 @@ interface DadosCentralIA {
       ticketMedio: number;
     }>;
   };
-  
-  // Dados de Formas de Pagamento
   formasPagamento?: Array<{
     formaPagamento: string;
     totalGeral: number;
     qtdVendas: number;
     percentualMix: number;
   }>;
-  
-  // Dados de Famílias de Produtos
   familias?: Array<{
     familia: string;
     totalVendido: number;
     qtdProdutos: number;
     percentualMix: number;
   }>;
-  
-  // Dados de Estoque
   estoque?: {
     totalItens: number;
     itensSemGiro: number;
@@ -67,8 +55,6 @@ interface DadosCentralIA {
       itensParaCompra: number;
     }>;
   };
-  
-  // Dados de Fornecedores/Marcas (análise SKU)
   fornecedoresMarcas?: Array<{
     fornecedor: string;
     marca: string;
@@ -83,8 +69,6 @@ interface DadosCentralIA {
     skusGiroRapido: number;
     recomendacaoCompra: 'PRIORIZAR' | 'MANTER' | 'EVITAR';
   }>;
-  
-  // Metas cadastradas
   metas?: any;
 }
 
@@ -149,7 +133,6 @@ const buildUserPrompt = (dados: DadosCentralIA) => {
     prompt += `Visão consolidada de todas as lojas\n\n`;
   }
   
-  // Vendas
   if (dados.vendas) {
     prompt += `## 📊 DADOS DE VENDAS\n`;
     prompt += `- Faturamento Total: R$ ${dados.vendas.totalFaturamento.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
@@ -178,7 +161,6 @@ const buildUserPrompt = (dados: DadosCentralIA) => {
     }
   }
   
-  // Formas de Pagamento
   if (dados.formasPagamento && dados.formasPagamento.length > 0) {
     prompt += `## 💳 MIX DE PAGAMENTOS\n`;
     prompt += `| Forma | Total | Qtd Vendas | % do Mix |\n`;
@@ -189,7 +171,6 @@ const buildUserPrompt = (dados: DadosCentralIA) => {
     prompt += `\n`;
   }
   
-  // Famílias de Produtos
   if (dados.familias && dados.familias.length > 0) {
     prompt += `## 📦 FAMÍLIAS DE PRODUTOS\n`;
     prompt += `| Família | Total Vendido | Qtd Produtos | % do Mix |\n`;
@@ -200,7 +181,6 @@ const buildUserPrompt = (dados: DadosCentralIA) => {
     prompt += `\n`;
   }
   
-  // Estoque
   if (dados.estoque) {
     prompt += `## 📋 SITUAÇÃO DO ESTOQUE\n`;
     prompt += `- Total de Itens: ${dados.estoque.totalItens}\n`;
@@ -221,12 +201,10 @@ const buildUserPrompt = (dados: DadosCentralIA) => {
     }
   }
   
-  // Análise de Fornecedores/Marcas (novo endpoint analise-sku)
   if (dados.fornecedoresMarcas && dados.fornecedoresMarcas.length > 0) {
     prompt += `## 🏭 ANÁLISE DE FORNECEDORES E MARCAS\n`;
     prompt += `> Dados baseados em vendas do período com análise de giro e margem\n\n`;
     
-    // Separar por recomendação
     const priorizar = dados.fornecedoresMarcas.filter(f => f.recomendacaoCompra === 'PRIORIZAR');
     const manter = dados.fornecedoresMarcas.filter(f => f.recomendacaoCompra === 'MANTER');
     const evitar = dados.fornecedoresMarcas.filter(f => f.recomendacaoCompra === 'EVITAR');
@@ -264,14 +242,12 @@ const buildUserPrompt = (dados: DadosCentralIA) => {
       prompt += `\n`;
     }
     
-    // Resumo
     const totalVendidoGeral = dados.fornecedoresMarcas.reduce((acc, f) => acc + f.totalVendido, 0);
     const totalSkus = dados.fornecedoresMarcas.reduce((acc, f) => acc + f.qtdSkus, 0);
     prompt += `**Resumo OTB:** ${totalSkus} SKUs analisados, R$ ${totalVendidoGeral.toLocaleString('pt-BR')} em vendas. `;
     prompt += `${priorizar.length} para priorizar, ${evitar.length} para evitar.\n\n`;
   }
   
-  // Metas
   if (dados.metas) {
     prompt += `## 🎯 METAS CADASTRADAS\n`;
     prompt += `${JSON.stringify(dados.metas, null, 2)}\n\n`;
@@ -290,6 +266,12 @@ serve(async (req) => {
   }
 
   try {
+    // E0.3: Auth guard — authenticated + rate limit
+    await authGuard(req, {
+      requiredRole: "authenticated",
+      rateLimitFunctionName: "ai-central",
+    });
+
     const dados: DadosCentralIA = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
@@ -298,18 +280,10 @@ serve(async (req) => {
     }
 
     console.log('[ai-central] Processando análise para período:', dados.periodo);
-    console.log('[ai-central] Dados recebidos:', {
-      temVendas: !!dados.vendas,
-      temFormasPagamento: dados.formasPagamento?.length || 0,
-      temFamilias: dados.familias?.length || 0,
-      temEstoque: !!dados.estoque,
-    });
 
     const systemPrompt = buildSystemPrompt();
     const userPrompt = buildUserPrompt(dados);
 
-    console.log('[ai-central] Enviando para Lovable AI...');
-    
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -328,37 +302,32 @@ serve(async (req) => {
     if (!response.ok) {
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns minutos." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (response.status === 402) {
         return new Response(JSON.stringify({ error: "Créditos de IA esgotados. Entre em contato com o administrador." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const errorText = await response.text();
       console.error("[ai-central] AI gateway error:", response.status, errorText);
       return new Response(JSON.stringify({ error: "Erro ao processar análise de IA" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const data = await response.json();
     const analise = data.choices?.[0]?.message?.content || "Não foi possível gerar análise.";
 
-    console.log('[ai-central] Análise gerada com sucesso');
-
     return new Response(JSON.stringify({ analise }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
+    if (error instanceof Response) return error;
     console.error("[ai-central] Error:", error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
