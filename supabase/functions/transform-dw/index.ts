@@ -1,9 +1,8 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// supabase/functions/transform-dw/index.ts
+// E0.3: JWT obrigatório + role admin
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { authGuard, corsHeaders } from '../_shared/authGuard.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -11,15 +10,15 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // E0.3: Auth guard — admin only
+    await authGuard(req, { requiredRole: "admin" });
+
     console.log('Iniciando transformação DW (stg → dw)...');
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Chamar a função SQL que faz toda a transformação
-    console.log('Executando função executar_transformacao_dw()...');
-    
     const { data, error } = await supabase.rpc('executar_transformacao_dw');
 
     if (error) {
@@ -28,30 +27,17 @@ Deno.serve(async (req) => {
     }
 
     console.log('Transformação DW concluída com sucesso!');
-    console.log('Resultados:', JSON.stringify(data));
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        message: 'Transformação DW concluída com sucesso',
-        resultados: data,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
+      JSON.stringify({ success: true, message: 'Transformação DW concluída com sucesso', resultados: data }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
   } catch (error) {
+    if (error instanceof Response) return error;
     console.error('Erro na transformação DW:', error);
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : String(error) }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });

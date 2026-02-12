@@ -1,12 +1,8 @@
 // supabase/functions/ai-sugestao-cobertura/index.ts
-// Edge function para sugestão de cobertura ideal via IA
+// E0.3: JWT obrigatório + rate limit (authenticated)
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { authGuard, corsHeaders } from "../_shared/authGuard.ts";
 
 interface DadosAnalise {
   coberturaAtualConfig: number;
@@ -48,7 +44,7 @@ RESPONDA SEMPRE no formato JSON:
       "confianca": "alta" | "media" | "baixa"
     }
   ],
-  "alertas": ["alerta 1", "alerta 2"] // avisos importantes, pode ser array vazio
+  "alertas": ["alerta 1", "alerta 2"]
 }`;
 
   let userPrompt = `DADOS DO ESTOQUE ATUAL:
@@ -84,6 +80,12 @@ serve(async (req) => {
   }
 
   try {
+    // E0.3: Auth guard — authenticated + rate limit
+    await authGuard(req, {
+      requiredRole: "authenticated",
+      rateLimitFunctionName: "ai-sugestao-cobertura",
+    });
+
     const dados: DadosAnalise = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
@@ -113,19 +115,13 @@ serve(async (req) => {
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(JSON.stringify({ 
-          error: "Limite de requisições excedido. Tente novamente em alguns minutos." 
-        }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        return new Response(JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns minutos." }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ 
-          error: "Créditos de IA esgotados. Entre em contato com o administrador." 
-        }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        return new Response(JSON.stringify({ error: "Créditos de IA esgotados. Entre em contato com o administrador." }), {
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const errorText = await response.text();
@@ -140,13 +136,11 @@ serve(async (req) => {
       throw new Error("Resposta vazia da IA");
     }
 
-    // Parse do JSON retornado pela IA
     let resultado;
     try {
       resultado = JSON.parse(content);
     } catch (parseError) {
       console.error('[ai-sugestao-cobertura] Erro ao parsear JSON:', content);
-      // Tentar extrair JSON do texto
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         resultado = JSON.parse(jsonMatch[0]);
@@ -155,18 +149,14 @@ serve(async (req) => {
       }
     }
 
-    console.log('[ai-sugestao-cobertura] Sugestão gerada:', resultado.coberturaGlobalSugerida, 'dias');
-
     return new Response(JSON.stringify(resultado), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
+    if (error instanceof Response) return error;
     console.error("[ai-sugestao-cobertura] Error:", error);
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : "Erro desconhecido" 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Erro desconhecido" }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
