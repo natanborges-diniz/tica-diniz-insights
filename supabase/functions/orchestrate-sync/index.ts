@@ -21,6 +21,8 @@ interface SyncRequest {
   maxPaginas?: number;
   limite?: number;
   maxIteracoes?: number;
+  // Audit fields for reprocessing
+  request_reason?: string;
 }
 
 interface JobResult {
@@ -152,6 +154,10 @@ Deno.serve(async (req) => {
     const maxPaginas = params.maxPaginas || 5;
     const limite = params.limite || 500;
     const maxIteracoes = params.maxIteracoes || 50;
+    const requestReason = params.request_reason || null;
+    const competencia = (modo === 'competencia' && params.competenciaAno && params.competenciaMes)
+      ? `${params.competenciaAno}-${String(params.competenciaMes).padStart(2, '0')}`
+      : null;
 
     // =====================================================
     // 0. Lock de concorrência
@@ -164,7 +170,7 @@ Deno.serve(async (req) => {
 
       // Registrar run como skipped
       await supabase.from('sync_runs').insert({
-        status: 'pending', // usando pending como "skipped" para compatibilidade com enum
+        status: 'pending',
         triggered_by: userId,
         trigger_type: triggerType,
         is_auto_triggered: isAutoTriggered,
@@ -173,6 +179,8 @@ Deno.serve(async (req) => {
         entidades,
         empresas,
         modo,
+        competencia,
+        request_reason: requestReason,
         started_at: new Date().toISOString(),
         finished_at: new Date().toISOString(),
         duracao_ms: 0,
@@ -210,6 +218,8 @@ Deno.serve(async (req) => {
         entidades,
         empresas,
         modo,
+        competencia,
+        request_reason: requestReason,
         started_at: runStartedAt,
       })
       .select('id')

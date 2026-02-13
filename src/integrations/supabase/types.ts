@@ -791,6 +791,7 @@ export type Database = {
       }
       sync_runs: {
         Row: {
+          competencia: string | null
           created_at: string
           data_fim: string
           data_inicio: string
@@ -805,6 +806,7 @@ export type Database = {
           id: string
           is_auto_triggered: boolean | null
           modo: string
+          request_reason: string | null
           started_at: string | null
           status: Database["public"]["Enums"]["sync_run_status"]
           total_erros: number | null
@@ -813,6 +815,7 @@ export type Database = {
           triggered_by: string | null
         }
         Insert: {
+          competencia?: string | null
           created_at?: string
           data_fim: string
           data_inicio: string
@@ -827,6 +830,7 @@ export type Database = {
           id?: string
           is_auto_triggered?: boolean | null
           modo?: string
+          request_reason?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["sync_run_status"]
           total_erros?: number | null
@@ -835,6 +839,7 @@ export type Database = {
           triggered_by?: string | null
         }
         Update: {
+          competencia?: string | null
           created_at?: string
           data_fim?: string
           data_inicio?: string
@@ -849,6 +854,7 @@ export type Database = {
           id?: string
           is_auto_triggered?: boolean | null
           modo?: string
+          request_reason?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["sync_run_status"]
           total_erros?: number | null

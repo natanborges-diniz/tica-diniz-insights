@@ -2,7 +2,7 @@ import { useLocation } from "react-router-dom";
 import { 
   TrendingUp, BarChart3, Layers, 
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
-  Target, Users, Brain, Eye
+  Target, Users, Brain, Eye, RefreshCw
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -84,7 +84,8 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       label: "Configurações",
       items: [
         { title: "Metas e Calendário", url: "/config/metas", icon: Target },
-        { title: "Usuários", url: "/config/usuarios", icon: Users, disabled: true },
+        { title: "Usuários", url: "/admin/usuarios", icon: Users },
+        { title: "Sync & Reprocessamento", url: "/admin/sync", icon: RefreshCw },
       ],
     },
   ],
