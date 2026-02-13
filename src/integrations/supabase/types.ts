@@ -686,6 +686,128 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_jobs: {
+        Row: {
+          cod_empresa: number | null
+          created_at: string
+          data_fim: string
+          data_inicio: string
+          duracao_ms: number | null
+          entidade: string
+          erro: string | null
+          finished_at: string | null
+          id: string
+          paginas_processadas: number | null
+          registros_deletados: number | null
+          registros_inseridos: number | null
+          registros_processados: number | null
+          run_id: string
+          started_at: string | null
+          status: Database["public"]["Enums"]["sync_run_status"]
+        }
+        Insert: {
+          cod_empresa?: number | null
+          created_at?: string
+          data_fim: string
+          data_inicio: string
+          duracao_ms?: number | null
+          entidade: string
+          erro?: string | null
+          finished_at?: string | null
+          id?: string
+          paginas_processadas?: number | null
+          registros_deletados?: number | null
+          registros_inseridos?: number | null
+          registros_processados?: number | null
+          run_id: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["sync_run_status"]
+        }
+        Update: {
+          cod_empresa?: number | null
+          created_at?: string
+          data_fim?: string
+          data_inicio?: string
+          duracao_ms?: number | null
+          entidade?: string
+          erro?: string | null
+          finished_at?: string | null
+          id?: string
+          paginas_processadas?: number | null
+          registros_deletados?: number | null
+          registros_inseridos?: number | null
+          registros_processados?: number | null
+          run_id?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["sync_run_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_jobs_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sync_runs: {
+        Row: {
+          created_at: string
+          data_fim: string
+          data_inicio: string
+          duracao_ms: number | null
+          empresas: number[] | null
+          entidades: string[]
+          erro_resumo: string | null
+          finished_at: string | null
+          id: string
+          modo: string
+          started_at: string | null
+          status: Database["public"]["Enums"]["sync_run_status"]
+          total_erros: number | null
+          total_registros: number | null
+          trigger_type: string
+          triggered_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          data_fim: string
+          data_inicio: string
+          duracao_ms?: number | null
+          empresas?: number[] | null
+          entidades?: string[]
+          erro_resumo?: string | null
+          finished_at?: string | null
+          id?: string
+          modo?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["sync_run_status"]
+          total_erros?: number | null
+          total_registros?: number | null
+          trigger_type?: string
+          triggered_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          data_fim?: string
+          data_inicio?: string
+          duracao_ms?: number | null
+          empresas?: number[] | null
+          entidades?: string[]
+          erro_resumo?: string | null
+          finished_at?: string | null
+          id?: string
+          modo?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["sync_run_status"]
+          total_erros?: number | null
+          total_registros?: number | null
+          trigger_type?: string
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -851,6 +973,12 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "gestor" | "vendedor"
+      sync_run_status:
+        | "pending"
+        | "running"
+        | "completed"
+        | "failed"
+        | "partial"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -979,6 +1107,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "gestor", "vendedor"],
+      sync_run_status: ["pending", "running", "completed", "failed", "partial"],
     },
   },
 } as const
