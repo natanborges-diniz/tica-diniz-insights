@@ -89,7 +89,7 @@ export async function apiGet<T>(
 
   // Se já tem um signal externo, usar ele; senão criar um interno com timeout
   const externalSignal = options?.signal;
-  const timeoutMs = options?.timeoutMs ?? 90000;
+  const timeoutMs = options?.timeoutMs ?? 15000;
   
   // Criar controller interno para timeout
   const internalController = new AbortController();
@@ -164,10 +164,10 @@ export async function apiGet<T>(
           throw new Error('Requisição cancelada');
         }
         console.error(`[FirebirdBridge] Timeout: ${path}`);
-        throw new Error('Timeout: O servidor não respondeu em tempo hábil');
+        throw new Error('O servidor não respondeu a tempo. Verifique se o Bridge está online em Admin > Bridge Health.');
       }
       console.error(`[FirebirdBridge] Error: ${path}`, error.message);
-      throw error;
+      throw new Error(`Erro de conexão: ${error.message}. Verifique o status do Bridge.`);
     }
     throw new Error('Erro desconhecido na requisição');
   }
