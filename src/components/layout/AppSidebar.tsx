@@ -2,7 +2,7 @@ import { useLocation } from "react-router-dom";
 import { 
   TrendingUp, BarChart3, Layers, 
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
-  Target, Users, Brain, Eye, RefreshCw
+  Target, Users, Brain, Eye, RefreshCw, Activity
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -86,6 +86,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
         { title: "Metas e Calendário", url: "/config/metas", icon: Target },
         { title: "Usuários", url: "/admin/usuarios", icon: Users },
         { title: "Sync & Reprocessamento", url: "/admin/sync", icon: RefreshCw },
+        { title: "Bridge Health", url: "/admin/health", icon: Activity },
       ],
     },
   ],
