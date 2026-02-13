@@ -1,5 +1,5 @@
 // supabase/functions/orchestrate-sync/index.ts
-// FASE 1.1: Sync Control Plane — Entry point único para pipelines de sync
+// FASE 1.2: Sync Control Plane — Lock, Observabilidade, Cron-ready
 // JWT obrigatório + role admin (E0.3)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -10,27 +10,14 @@ import { authGuard, corsHeaders } from '../_shared/authGuard.ts';
 // =====================================================
 
 interface SyncRequest {
-  // Modo de operação
   modo?: 'janela_movel' | 'competencia' | 'full';
-  
-  // Entidades a sincronizar (ordem respeitada)
   entidades?: string[];
-  
-  // Janela de dados
   dataInicio?: string;
   dataFim?: string;
-  
-  // Janela móvel (dias para trás a partir de hoje)
-  diasJanela?: number; // default 7
-  
-  // Competência (para modo 'competencia')
+  diasJanela?: number;
   competenciaAno?: number;
   competenciaMes?: number;
-  
-  // Empresas específicas (null = todas)
   empresas?: number[];
-  
-  // Paginação para sub-functions
   maxPaginas?: number;
   limite?: number;
   maxIteracoes?: number;
@@ -47,7 +34,6 @@ interface JobResult {
   erro?: string;
 }
 
-// Ordem padrão de sync (dependências respeitadas)
 const ENTIDADES_PADRAO = ['clientes', 'produtos', 'vendas', 'agregados-diarios'];
 const EMPRESAS_ATIVAS = [1, 2, 4, 6, 9, 13, 14, 15, 16, 17, 18];
 
@@ -62,18 +48,17 @@ function formatDate(date: Date): string {
 function calcularJanela(req: SyncRequest): { dataInicio: string; dataFim: string } {
   const hoje = new Date();
   const dataFim = formatDate(hoje);
-  
+
   if (req.modo === 'competencia' && req.competenciaAno && req.competenciaMes) {
     const inicio = new Date(req.competenciaAno, req.competenciaMes - 1, 1);
-    const fim = new Date(req.competenciaAno, req.competenciaMes, 0); // último dia do mês
+    const fim = new Date(req.competenciaAno, req.competenciaMes, 0);
     return { dataInicio: formatDate(inicio), dataFim: formatDate(fim) };
   }
-  
+
   if (req.dataInicio && req.dataFim) {
     return { dataInicio: req.dataInicio, dataFim: req.dataFim };
   }
-  
-  // Janela móvel padrão
+
   const dias = req.diasJanela || 7;
   const inicio = new Date(hoje);
   inicio.setDate(inicio.getDate() - dias);
@@ -87,7 +72,6 @@ async function callSyncFunction(
   body: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
   const url = `${supabaseUrl}/functions/v1/${functionName}`;
-  
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -96,12 +80,31 @@ async function callSyncFunction(
     },
     body: JSON.stringify(body),
   });
-  
   const data = await response.json();
   if (!response.ok && !data) {
     throw new Error(`HTTP ${response.status} from ${functionName}`);
   }
   return data;
+}
+
+// =====================================================
+// Lock helpers (via DB functions)
+// =====================================================
+
+async function acquireLock(supabase: any, lockKey: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('acquire_sync_lock', {
+    p_lock_key: lockKey,
+    p_timeout_minutes: 30,
+  });
+  if (error) {
+    console.error('[orchestrate-sync] Lock acquire error:', error.message);
+    return false;
+  }
+  return data === true;
+}
+
+async function releaseLock(supabase: any, lockKey: string): Promise<void> {
+  await supabase.rpc('release_sync_lock', { p_lock_key: lockKey });
 }
 
 // =====================================================
@@ -121,17 +124,18 @@ Deno.serve(async (req) => {
     // Auth guard — admin only (ou service_role para cron)
     let userId: string | null = null;
     let triggerType = 'manual';
-    
+    let isAutoTriggered = false;
+
     try {
       const auth = await authGuard(req, { requiredRole: 'admin' });
       userId = auth.userId;
     } catch (authErr) {
-      // Se o token for service_role (cron), permitir
       const authHeader = req.headers.get('Authorization') || '';
       if (authHeader === `Bearer ${serviceKey}`) {
         triggerType = 'cron';
+        isAutoTriggered = true;
       } else {
-        throw authErr; // Re-throw para 401/403
+        throw authErr;
       }
     }
 
@@ -149,29 +153,71 @@ Deno.serve(async (req) => {
     const limite = params.limite || 500;
     const maxIteracoes = params.maxIteracoes || 50;
 
-    console.log(`[orchestrate-sync] Run started: modo=${modo}, entidades=${entidades.join(',')}, janela=${dataInicio}..${dataFim}, by=${userId || 'cron'}`);
+    // =====================================================
+    // 0. Lock de concorrência
+    // =====================================================
+    const lockKey = `sync:${modo}`;
+    const lockAcquired = await acquireLock(supabase, lockKey);
 
-    // =====================================================
-    // 1. Criar sync_run
-    // =====================================================
-    const { data: run, error: runErr } = await supabase
-      .from('sync_runs')
-      .insert({
-        status: 'running',
+    if (!lockAcquired) {
+      console.log(`[orchestrate-sync] Skipped: lock "${lockKey}" already held`);
+
+      // Registrar run como skipped
+      await supabase.from('sync_runs').insert({
+        status: 'pending', // usando pending como "skipped" para compatibilidade com enum
         triggered_by: userId,
         trigger_type: triggerType,
+        is_auto_triggered: isAutoTriggered,
         data_inicio: dataInicio,
         data_fim: dataFim,
         entidades,
         empresas,
         modo,
         started_at: new Date().toISOString(),
+        finished_at: new Date().toISOString(),
+        duracao_ms: 0,
+        error_code: 'LOCK_BUSY',
+        error_message: `Outra execução de "${modo}" está em andamento. Skipped.`,
+      });
+
+      return new Response(JSON.stringify({
+        success: false,
+        skipped: true,
+        reason: 'lock_busy',
+        message: `Outra execução de "${modo}" está em andamento.`,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 409,
+      });
+    }
+
+    console.log(`[orchestrate-sync] Lock acquired: ${lockKey}`);
+    console.log(`[orchestrate-sync] Run started: modo=${modo}, entidades=${entidades.join(',')}, janela=${dataInicio}..${dataFim}, by=${userId || 'cron'}`);
+
+    // =====================================================
+    // 1. Criar sync_run
+    // =====================================================
+    const runStartedAt = new Date().toISOString();
+    const { data: run, error: runErr } = await supabase
+      .from('sync_runs')
+      .insert({
+        status: 'running',
+        triggered_by: userId,
+        trigger_type: triggerType,
+        is_auto_triggered: isAutoTriggered,
+        data_inicio: dataInicio,
+        data_fim: dataFim,
+        entidades,
+        empresas,
+        modo,
+        started_at: runStartedAt,
       })
       .select('id')
       .single();
 
     if (runErr || !run) {
       console.error('[orchestrate-sync] Failed to create sync_run:', runErr);
+      await releaseLock(supabase, lockKey);
       throw new Error('Falha ao registrar execução');
     }
 
@@ -184,11 +230,13 @@ Deno.serve(async (req) => {
     const jobResults: JobResult[] = [];
     let totalRegistros = 0;
     let totalErros = 0;
+    let lastErrorStep: string | null = null;
+    let lastErrorCode: string | null = null;
+    let lastErrorMessage: string | null = null;
 
     for (const entidade of entidades) {
       const jobStart = Date.now();
-      
-      // Criar job
+
       const { data: job } = await supabase
         .from('sync_jobs')
         .insert({
@@ -208,69 +256,45 @@ Deno.serve(async (req) => {
         let result: JobResult;
 
         if (entidade === 'agregados-diarios') {
-          // sync-agregados-diarios usa modo histórico para processar todas as empresas
           const empresasAlvo = empresas || EMPRESAS_ATIVAS;
           let totalReg = 0;
-
           for (const emp of empresasAlvo) {
             const res = await callSyncFunction('sync-agregados-diarios', supabaseUrl, serviceKey, {
-              historico: false,
-              empresa: emp,
-              dataInicio,
-              dataFim,
+              historico: false, empresa: emp, dataInicio, dataFim,
             });
             totalReg += (res.registros as number) || 0;
           }
-
           result = {
-            entidade,
-            status: 'completed',
-            registrosProcessados: totalReg,
-            registrosInseridos: totalReg,
-            paginasProcessadas: 0,
-            duracaoMs: Date.now() - jobStart,
+            entidade, status: 'completed',
+            registrosProcessados: totalReg, registrosInseridos: totalReg,
+            paginasProcessadas: 0, duracaoMs: Date.now() - jobStart,
           };
         } else {
-          // Sync paginado (clientes, produtos, vendas)
           const functionName = `sync-${entidade}`;
-          let iteracao = 0;
-          let totalReg = 0;
-          let concluido = false;
-          let paginas = 0;
-
+          let iteracao = 0, totalReg = 0, concluido = false, paginas = 0;
           const syncBody: Record<string, unknown> = { maxPaginas, limite };
           if (entidade === 'vendas') {
             syncBody.dataInicio = dataInicio;
             syncBody.dataFim = dataFim;
           }
-
           while (!concluido && iteracao < maxIteracoes) {
             iteracao++;
             const res = await callSyncFunction(functionName, supabaseUrl, serviceKey, syncBody);
-            
-            if (!res.success) {
-              throw new Error((res.error as string) || 'Erro desconhecido');
-            }
-            
+            if (!res.success) throw new Error((res.error as string) || 'Erro desconhecido');
             totalReg += (res.totalGravados as number) || 0;
             paginas += (res.paginasProcessadas as number) || 1;
             concluido = (res.concluido as boolean) || false;
           }
-
           result = {
-            entidade,
-            status: concluido ? 'completed' : 'partial',
-            registrosProcessados: totalReg,
-            registrosInseridos: totalReg,
-            paginasProcessadas: paginas,
-            duracaoMs: Date.now() - jobStart,
+            entidade, status: concluido ? 'completed' : 'partial',
+            registrosProcessados: totalReg, registrosInseridos: totalReg,
+            paginasProcessadas: paginas, duracaoMs: Date.now() - jobStart,
           };
         }
 
         jobResults.push(result);
         totalRegistros += result.registrosInseridos;
 
-        // Atualizar job
         if (jobId) {
           await supabase.from('sync_jobs').update({
             status: result.status,
@@ -283,18 +307,17 @@ Deno.serve(async (req) => {
         }
 
         console.log(`[orchestrate-sync] ${entidade}: ${result.status} (${result.registrosInseridos} registros, ${result.duracaoMs}ms)`);
-
       } catch (err) {
         const erroMsg = err instanceof Error ? err.message : String(err);
         totalErros++;
+        lastErrorStep = entidade;
+        lastErrorCode = 'SYNC_ENTITY_FAILED';
+        lastErrorMessage = erroMsg;
 
         jobResults.push({
-          entidade,
-          status: 'failed',
-          registrosProcessados: 0,
-          registrosInseridos: 0,
-          paginasProcessadas: 0,
-          duracaoMs: Date.now() - jobStart,
+          entidade, status: 'failed',
+          registrosProcessados: 0, registrosInseridos: 0,
+          paginasProcessadas: 0, duracaoMs: Date.now() - jobStart,
           erro: erroMsg,
         });
 
@@ -314,19 +337,23 @@ Deno.serve(async (req) => {
     // =====================================================
     // 3. Finalizar sync_run
     // =====================================================
-    const runStatus = totalErros === 0 ? 'completed' 
-      : totalErros === entidades.length ? 'failed' 
+    const runStatus = totalErros === 0 ? 'completed'
+      : totalErros === entidades.length ? 'failed'
       : 'partial';
 
     const finishedAt = new Date().toISOString();
+    const duracaoMs = new Date(finishedAt).getTime() - new Date(runStartedAt).getTime();
 
     await supabase.from('sync_runs').update({
       status: runStatus,
       total_registros: totalRegistros,
       total_erros: totalErros,
       finished_at: finishedAt,
-      duracao_ms: Date.now() - new Date(run.id ? finishedAt : finishedAt).getTime(), // approx
-      erro_resumo: totalErros > 0 
+      duracao_ms: duracaoMs,
+      error_code: lastErrorCode,
+      error_message: lastErrorMessage,
+      error_step: lastErrorStep,
+      erro_resumo: totalErros > 0
         ? jobResults.filter(j => j.erro).map(j => `${j.entidade}: ${j.erro}`).join('; ')
         : null,
     }).eq('id', runId);
@@ -338,7 +365,10 @@ Deno.serve(async (req) => {
       atualizado_em: finishedAt,
     }, { onConflict: 'entidade' });
 
-    console.log(`[orchestrate-sync] Run ${runId} finished: ${runStatus}, ${totalRegistros} registros, ${totalErros} erros`);
+    // Liberar lock
+    await releaseLock(supabase, lockKey);
+    console.log(`[orchestrate-sync] Lock released: ${lockKey}`);
+    console.log(`[orchestrate-sync] Run ${runId} finished: ${runStatus}, ${totalRegistros} registros, ${totalErros} erros, ${duracaoMs}ms`);
 
     return new Response(JSON.stringify({
       success: runStatus !== 'failed',
@@ -349,6 +379,7 @@ Deno.serve(async (req) => {
       entidades,
       totalRegistros,
       totalErros,
+      duracaoMs,
       jobs: jobResults,
       triggered_by: userId || 'cron',
     }), {
