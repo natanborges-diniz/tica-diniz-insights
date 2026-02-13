@@ -1,5 +1,5 @@
 // src/pages/OsDashboard.tsx
-// Monitor de Produção — manual load with date type + range selection
+// Monitor de Produção — empresa obrigatória, circuit breaker integrado
 
 import React, { useState } from "react";
 import { useOsMonitor, OsApiFilters } from "../hooks/useOsMonitor";
@@ -8,6 +8,9 @@ import { OsHubRecord, fetchSingleOsRecipe, saveToCache } from "@/services/osHubS
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { CampoDataOs } from "@/services/osService";
+import { useBridgeStatus } from "@/hooks/useBridgeStatus";
+import { useEmpresas } from "@/hooks/useEmpresas";
+import { useAuth } from "@/contexts/AuthContext";
 
 function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
   const hasReceita = !!(
@@ -91,6 +94,10 @@ function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
 }
 
 const OsDashboardPage: React.FC = () => {
+  const { isAdmin, codEmpresa } = useAuth();
+  const bridge = useBridgeStatus();
+  const { empresas, isLoading: empresasLoading } = useEmpresas();
+
   const {
     data,
     filteredData,
@@ -181,6 +188,17 @@ const OsDashboardPage: React.FC = () => {
       onOpenRecipe={handleOpenRecipe}
       onCloseRecipe={() => setSelectedHubOs(null)}
       loadingRecipeCodOs={loadingRecipeCodOs}
+      // Bridge status
+      bridgeHealth={bridge.health}
+      bridgeCircuitOpen={bridge.isCircuitOpen}
+      bridgeErrorMessage={bridge.errorMessage}
+      bridgeLastCheckedAt={bridge.lastCheckedAt}
+      onBridgeRetry={bridge.refresh}
+      // Empresa
+      empresasDisponiveis={empresas}
+      empresasLoading={empresasLoading}
+      defaultCodEmpresa={codEmpresa}
+      isAdmin={isAdmin}
     />
   );
 };

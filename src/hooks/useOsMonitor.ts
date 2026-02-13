@@ -1,6 +1,6 @@
 // src/hooks/useOsMonitor.ts
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { getOsMonitor, OsRecord, StatusAtraso, CampoDataOs } from "../services/osService";
 import { calculateOsMetrics, OsMetrics, sortOsByPriority } from "../utils/osMetrics";
 import { EmpresaParam } from "@/services/firebirdBridge";
@@ -32,7 +32,6 @@ export function useOsMonitor() {
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [lastApiFilters, setLastApiFilters] = useState<OsApiFilters | null>(null);
-  const autoLoadedRef = useRef(false);
 
   const [filters, setFilters] = useState<OsFilterState>({
     status: "TODOS",
@@ -127,7 +126,6 @@ export function useOsMonitor() {
       if (!defaultEtapaApplied) {
         setDefaultEtapaApplied(true);
         const etapas = Array.from(new Set(result.map(os => os.etapa).filter(Boolean)));
-        // Prefer exact "TRANSLADO LOJA-ESTOQUE", fallback to any TRANSLADO
         const target = etapas.find(e => e.toUpperCase() === 'TRANSLADO LOJA-ESTOQUE')
           || etapas.find(e => e.toUpperCase().includes('TRANSLADO'));
         if (target) {
@@ -154,7 +152,6 @@ export function useOsMonitor() {
       setReceitaFotoMap(map);
     } catch (err) {
       console.warn('[useOsMonitor] Failed to load receita/foto flags:', err);
-      // Non-critical: badges will just show "—"
     }
   }, []);
 
@@ -162,21 +159,7 @@ export function useOsMonitor() {
     fetchData(apiFilters);
   }, [fetchData]);
 
-  // Auto-load on mount: last 30 days, EMISSAO, all companies
-  useEffect(() => {
-    if (autoLoadedRef.current) return;
-    autoLoadedRef.current = true;
-    const hoje = new Date();
-    const inicio30 = new Date(hoje);
-    inicio30.setDate(inicio30.getDate() - 30);
-    const fmt = (d: Date) => d.toISOString().slice(0, 10);
-    fetchData({
-      empresa: "ALL",
-      dataInicio: fmt(inicio30),
-      dataFim: fmt(hoje),
-      campoData: "EMISSAO",
-    });
-  }, [fetchData]);
+  // NO auto-load on mount — user must select empresa and click "Carregar"
 
   return {
     data,

@@ -1,0 +1,68 @@
+// src/components/ui/bridge-status-banner.tsx
+// Reusable banner that warns user when Bridge is down/degraded
+
+import React from "react";
+import { AlertTriangle, WifiOff, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BridgeHealth } from "@/hooks/useBridgeStatus";
+
+interface BridgeStatusBannerProps {
+  health: BridgeHealth;
+  isCircuitOpen: boolean;
+  errorMessage?: string | null;
+  lastCheckedAt?: string | null;
+  onRetry?: () => void;
+}
+
+export const BridgeStatusBanner: React.FC<BridgeStatusBannerProps> = ({
+  health,
+  isCircuitOpen,
+  errorMessage,
+  lastCheckedAt,
+  onRetry,
+}) => {
+  if (health === "up" && !isCircuitOpen) return null;
+
+  const isDown = health === "down" || health === "timeout";
+  const formattedTime = lastCheckedAt
+    ? new Date(lastCheckedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : null;
+
+  return (
+    <div className={`flex items-start gap-3 p-4 rounded-lg border ${
+      isDown
+        ? "bg-destructive/10 border-destructive/30"
+        : isCircuitOpen
+        ? "bg-amber-500/10 border-amber-500/30"
+        : "bg-muted border-border"
+    }`}>
+      {isDown ? (
+        <WifiOff className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+      ) : (
+        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+      )}
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-medium ${isDown ? "text-destructive" : "text-amber-700"}`}>
+          {isDown
+            ? "Conexão com o servidor de dados indisponível"
+            : "Conexão instável — requisições pausadas temporariamente"
+          }
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          {errorMessage || "O sistema está sem conexão com o banco de dados do ERP."}
+          {formattedTime && ` • Último check: ${formattedTime}`}
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Verifique o status em <strong>Admin → Bridge Health</strong>.
+          {isCircuitOpen && " Novas tentativas serão permitidas em breve."}
+        </p>
+      </div>
+      {onRetry && (
+        <Button variant="outline" size="sm" onClick={onRetry} className="shrink-0">
+          <RefreshCw className="h-3.5 w-3.5 mr-1" />
+          Tentar
+        </Button>
+      )}
+    </div>
+  );
+};
