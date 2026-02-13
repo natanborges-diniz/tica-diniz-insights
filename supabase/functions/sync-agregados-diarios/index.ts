@@ -94,25 +94,48 @@ Deno.serve(async (req) => {
   
   try {
     // E0.3: Auth guard — admin only
-    await authGuard(req, { requiredRole: "admin" });
+    const { userId } = await authGuard(req, { requiredRole: "admin" });
 
+    // E0.4: Accept params from both query string (legacy) and POST body (preferred)
     const url = new URL(req.url);
-    const modoHistorico = url.searchParams.get('historico') === 'true';
-    const empresa = url.searchParams.get('empresa') || undefined;
+    let modoHistorico = url.searchParams.get('historico') === 'true';
+    let empresa: string | undefined = url.searchParams.get('empresa') || undefined;
     const hoje = formatDate(new Date());
-    const dataInicio = url.searchParams.get('dataInicio') || hoje;
-    const dataFim = url.searchParams.get('dataFim') || hoje;
+    let dataInicio = url.searchParams.get('dataInicio') || hoje;
+    let dataFim = url.searchParams.get('dataFim') || hoje;
+
+    // POST body overrides query params
+    if (req.method === 'POST') {
+      try {
+        const body = await req.json();
+        modoHistorico = body.historico ?? modoHistorico;
+        empresa = body.empresa != null ? String(body.empresa) : empresa;
+        dataInicio = body.dataInicio ?? dataInicio;
+        dataFim = body.dataFim ?? dataFim;
+      } catch {}
+    }
     
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // E0.4: Log who triggered the sync
+    console.log(`[sync-agregados-diarios] Triggered by user=${userId}, mode=${modoHistorico ? 'historico' : 'normal'}, empresa=${empresa || 'ALL'}`);
     
     if (modoHistorico) {
       // @ts-ignore
       EdgeRuntime.waitUntil(processarTodasEmpresasBackground(supabase, dataInicio, dataFim));
+
+      // E0.4: Record sync trigger in etl_controle
+      await supabase.from('etl_controle').upsert({
+        entidade: 'sync_log_diario', ultima_data: hoje,
+        pagina_atual: 0, atualizado_em: new Date().toISOString(),
+      }, { onConflict: 'entidade' });
+
       return new Response(JSON.stringify({
         success: true, modo: 'historico_background', periodo: `${dataInicio} a ${dataFim}`,
-        empresas: EMPRESAS_ATIVAS, message: `Sincronização iniciada em background.`,
+        empresas: EMPRESAS_ATIVAS, triggered_by: userId,
+        message: `Sincronização iniciada em background.`,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     } else {
       if (!empresa) {
@@ -124,7 +147,7 @@ Deno.serve(async (req) => {
       const result = await syncPeriodo(supabase, dataInicio, dataFim, empresa);
       return new Response(JSON.stringify({
         success: !result.erro, modo: 'normal', periodo: `${dataInicio} a ${dataFim}`,
-        empresa, registros: result.registros, erro: result.erro,
+        empresa, registros: result.registros, triggered_by: userId, erro: result.erro,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
   } catch (err) {
