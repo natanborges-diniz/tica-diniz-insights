@@ -69,6 +69,12 @@ export async function apiGet<T>(
   params?: Record<string, string | number | boolean | undefined | null>,
   options?: ApiGetOptions
 ): Promise<T[]> {
+  // Circuit breaker check
+  const { isBridgeCircuitOpen, recordBridgeFailure, recordBridgeSuccess } = await import('@/hooks/useBridgeStatus');
+  if (isBridgeCircuitOpen()) {
+    throw new Error('Conexão com o servidor de dados temporariamente suspensa. O sistema detectou falhas consecutivas. Aguarde alguns segundos e tente novamente.');
+  }
+
   const url = new URL(`${FIREBIRD_BRIDGE_BASE_URL}/api/v1${path}`);
 
   if (params) {
@@ -128,24 +134,28 @@ export async function apiGet<T>(
       }
       const data = result.data ?? [];
       console.log(`[FirebirdBridge] Success (envelope): ${path}`, data.length, 'records');
+      recordBridgeSuccess();
       return data;
     }
 
     // Formato legacy: { data: [...] }
     if (result.data !== undefined && Array.isArray(result.data)) {
       console.log(`[FirebirdBridge] Success (legacy data): ${path}`, result.data.length, 'records');
+      recordBridgeSuccess();
       return result.data;
     }
 
     // Formato legacy: { rows: [...] }
     if (result.rows !== undefined && Array.isArray(result.rows)) {
       console.log(`[FirebirdBridge] Success (legacy rows): ${path}`, result.rows.length, 'records');
+      recordBridgeSuccess();
       return result.rows;
     }
 
     // Array direto
     if (Array.isArray(result)) {
       console.log(`[FirebirdBridge] Success (array): ${path}`, result.length, 'records');
+      recordBridgeSuccess();
       return result;
     }
 
@@ -156,9 +166,13 @@ export async function apiGet<T>(
     clearTimeout(timeoutId);
     externalSignal?.removeEventListener('abort', abortHandler);
 
+    recordBridgeFailure();
+
     if (error instanceof Error) {
+      if (error.message.includes('temporariamente suspensa')) {
+        throw error; // re-throw circuit breaker error as-is
+      }
       if (error.name === 'AbortError') {
-        // Verificar se foi cancelado externamente ou por timeout
         if (externalSignal?.aborted) {
           console.log(`[FirebirdBridge] Request cancelled: ${path}`);
           throw new Error('Requisição cancelada');

@@ -1,5 +1,5 @@
 // src/components/os-dashboard/OsDashboardLayout.tsx
-// Layout do Monitor de Produção com carga manual e filtros de data
+// Layout do Monitor de Produção — empresa obrigatória, Bridge status banner
 
 import React, { useEffect, useState } from "react";
 import { format } from "date-fns";
@@ -12,6 +12,7 @@ import { OsExpandableRow } from "./OsExpandableRow";
 import { OsHubDetailSheet } from "@/components/os-hub/OsHubDetailSheet";
 import { OsHubRecord } from "@/services/osHubService";
 import { supabase } from "@/integrations/supabase/client";
+import { BridgeStatusBanner } from "@/components/ui/bridge-status-banner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { BridgeHealth } from "@/hooks/useBridgeStatus";
+import { Empresa } from "@/services/empresaService";
 
 const CAMPO_DATA_LABELS: Record<CampoDataOs, string> = {
   PREVISAO: "Data de Previsão",
@@ -60,6 +63,17 @@ type Props = {
   onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   onCloseRecipe: () => void;
   loadingRecipeCodOs: number | null;
+  // Bridge status
+  bridgeHealth: BridgeHealth;
+  bridgeCircuitOpen: boolean;
+  bridgeErrorMessage?: string | null;
+  bridgeLastCheckedAt?: string | null;
+  onBridgeRetry?: () => void;
+  // Empresa selection
+  empresasDisponiveis: Empresa[];
+  empresasLoading: boolean;
+  defaultCodEmpresa: number | null;
+  isAdmin: boolean;
 };
 
 function DatePickerField({ label, date, onSelect }: { label: string; date: Date; onSelect: (d: Date) => void }) {
@@ -106,8 +120,16 @@ export const OsDashboardLayout: React.FC<Props> = ({
   onOpenRecipe,
   onCloseRecipe,
   loadingRecipeCodOs,
+  bridgeHealth,
+  bridgeCircuitOpen,
+  bridgeErrorMessage,
+  bridgeLastCheckedAt,
+  onBridgeRetry,
+  empresasDisponiveis,
+  empresasLoading,
+  defaultCodEmpresa,
+  isAdmin,
 }) => {
-  // Local state for initial load filters
   const hoje = new Date();
   const inicio30 = new Date(hoje);
   inicio30.setDate(inicio30.getDate() - 30);
@@ -115,8 +137,16 @@ export const OsDashboardLayout: React.FC<Props> = ({
   const [campoData, setCampoData] = useState<CampoDataOs>("EMISSAO");
   const [dataInicio, setDataInicio] = useState<Date>(inicio30);
   const [dataFim, setDataFim] = useState<Date>(hoje);
+  const [empresaSelecionada, setEmpresaSelecionada] = useState<string>(
+    defaultCodEmpresa ? String(defaultCodEmpresa) : ""
+  );
 
-  // Auto-load is now handled by useOsMonitor hook directly
+  // Update empresa when defaultCodEmpresa loads
+  useEffect(() => {
+    if (defaultCodEmpresa && !empresaSelecionada) {
+      setEmpresaSelecionada(String(defaultCodEmpresa));
+    }
+  }, [defaultCodEmpresa]);
 
   // Pedidos de fornecedor vinculados
   const [pedidosMap, setPedidosMap] = useState<Record<number, { numero_pedido: string | null; fornecedor: string; status: string }>>(
@@ -144,9 +174,15 @@ export const OsDashboardLayout: React.FC<Props> = ({
     })();
   }, [rawData]);
 
+  const isBridgeDown = bridgeHealth === "down" || bridgeHealth === "timeout";
+  const canLoad = !!empresaSelecionada && !loading && !bridgeCircuitOpen;
+
   const handleCarregar = () => {
+    if (!empresaSelecionada) return;
+    
+    const empresa = empresaSelecionada === "ALL" ? "ALL" : empresaSelecionada;
     onLoad({
-      empresa: "ALL",
+      empresa,
       dataInicio: format(dataInicio, "yyyy-MM-dd"),
       dataFim: format(dataFim, "yyyy-MM-dd"),
       campoData,
@@ -166,22 +202,51 @@ export const OsDashboardLayout: React.FC<Props> = ({
           <p className="text-sm text-muted-foreground">
             {loaded
               ? `${CAMPO_DATA_LABELS[campoData]} — ${format(dataInicio, "dd/MM/yyyy")} a ${format(dataFim, "dd/MM/yyyy")} • ${rawData.length} OS carregadas`
-              : "Selecione o período e o tipo de data para carregar"
+              : "Selecione a empresa, período e clique em Carregar"
             }
           </p>
         </div>
         {loaded && (
-          <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading || bridgeCircuitOpen}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             Atualizar
           </Button>
         )}
       </div>
 
+      {/* Bridge Status Banner */}
+      <BridgeStatusBanner
+        health={bridgeHealth}
+        isCircuitOpen={bridgeCircuitOpen}
+        errorMessage={bridgeErrorMessage}
+        lastCheckedAt={bridgeLastCheckedAt}
+        onRetry={onBridgeRetry}
+      />
+
       {/* Barra de carga — sempre visível */}
       <Card>
         <CardContent className="py-4">
           <div className="flex flex-wrap gap-4 items-end">
+            {/* Empresa selector - obrigatório */}
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground">Empresa *</span>
+              <Select value={empresaSelecionada} onValueChange={setEmpresaSelecionada}>
+                <SelectTrigger className={cn("w-[200px]", !empresaSelecionada && "border-amber-500")}>
+                  <SelectValue placeholder="Selecione a empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {isAdmin && (
+                    <SelectItem value="ALL">⚠ Todas (admin)</SelectItem>
+                  )}
+                  {empresasDisponiveis.map((emp) => (
+                    <SelectItem key={emp.codEmpresa} value={String(emp.codEmpresa)}>
+                      {emp.nome || `Loja ${emp.codEmpresa}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex flex-col gap-1">
               <span className="text-xs font-medium text-muted-foreground">Tipo de Data</span>
               <Select value={campoData} onValueChange={(v) => setCampoData(v as CampoDataOs)}>
@@ -199,7 +264,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
             <DatePickerField label="Data Início" date={dataInicio} onSelect={setDataInicio} />
             <DatePickerField label="Data Fim" date={dataFim} onSelect={setDataFim} />
 
-            <Button onClick={handleCarregar} disabled={loading} className="h-10">
+            <Button onClick={handleCarregar} disabled={!canLoad} className="h-10">
               {loading ? (
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
               ) : (
@@ -208,16 +273,26 @@ export const OsDashboardLayout: React.FC<Props> = ({
               Carregar
             </Button>
           </div>
+          {!empresaSelecionada && (
+            <p className="text-xs text-amber-600 mt-2">
+              Selecione uma empresa para carregar as OS.
+            </p>
+          )}
         </CardContent>
       </Card>
 
       {/* Se ainda não carregou, mostrar mensagem */}
-      {!loaded && !loading && (
+      {!loaded && !loading && !error && (
         <Card>
           <CardContent className="py-12">
             <div className="flex flex-col items-center justify-center">
               <Info className="h-8 w-8 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">Selecione o período e clique em <strong>Carregar</strong> para visualizar as OS.</p>
+              <p className="text-muted-foreground">
+                {empresaSelecionada 
+                  ? "Clique em Carregar para visualizar as OS."
+                  : "Selecione a empresa e o período para começar."
+                }
+              </p>
             </div>
           </CardContent>
         </Card>
