@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      bridge_health_logs: {
+        Row: {
+          bridge_version: string | null
+          checked_at: string
+          error_message: string | null
+          id: string
+          latency_ms: number | null
+          status: string
+        }
+        Insert: {
+          bridge_version?: string | null
+          checked_at?: string
+          error_message?: string | null
+          id?: string
+          latency_ms?: number | null
+          status: string
+        }
+        Update: {
+          bridge_version?: string | null
+          checked_at?: string
+          error_message?: string | null
+          id?: string
+          latency_ms?: number | null
+          status?: string
+        }
+        Relationships: []
+      }
       calendario_feriados: {
         Row: {
           cidade: string | null
@@ -1092,6 +1119,10 @@ export type Database = {
       acquire_sync_lock: {
         Args: { p_lock_key: string; p_timeout_minutes?: number }
         Returns: boolean
+      }
+      cleanup_old_health_logs: {
+        Args: { p_retention_days?: number }
+        Returns: number
       }
       cleanup_old_sync_logs: {
         Args: { p_retention_days?: number }
