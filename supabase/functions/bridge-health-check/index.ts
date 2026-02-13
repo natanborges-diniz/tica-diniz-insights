@@ -27,7 +27,10 @@ serve(async (req) => {
     });
   }
 
-  const healthUrl = `${bridgeUrl}/api/v1/health`;
+  // Remove trailing slash to avoid double-slash in URL
+  const baseUrl = bridgeUrl.replace(/\/+$/, '');
+  const healthUrl = `${baseUrl}/api/v1/health`;
+  console.log(`[health-check] Fetching: ${healthUrl}`);
   const start = Date.now();
   let status: 'up' | 'down' | 'timeout' = 'down';
   let latencyMs = 0;
@@ -36,24 +39,39 @@ serve(async (req) => {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+    const timeout = setTimeout(() => controller.abort(), 10000);
 
     const res = await fetch(healthUrl, {
       signal: controller.signal,
       headers: { 'Accept': 'application/json' },
+      redirect: 'follow',
     });
     clearTimeout(timeout);
     latencyMs = Date.now() - start;
 
-    if (res.ok) {
-      status = 'up';
-      try {
-        const body = await res.json();
-        bridgeVersion = body.version || body.v || null;
-      } catch { /* ignore parse errors */ }
-    } else {
-      status = 'down';
-      errorMessage = `HTTP ${res.status}`;
+    console.log(`[health-check] Response status: ${res.status}, url: ${res.url}`);
+
+    // Bridge may return 503 for "degraded" status — still means it's reachable
+    try {
+      const body = await res.json();
+      bridgeVersion = body.version || body.v || null;
+      if (res.ok || body.status === 'degraded') {
+        // "degraded" means bridge is up but DB connection is down
+        status = body.status === 'degraded' ? 'down' : 'up';
+        if (body.status === 'degraded') {
+          errorMessage = body.error || 'Bridge degraded (Firebird DB disconnected)';
+        }
+      } else {
+        status = 'down';
+        errorMessage = `HTTP ${res.status}`;
+      }
+    } catch {
+      if (res.ok) {
+        status = 'up';
+      } else {
+        status = 'down';
+        errorMessage = `HTTP ${res.status}`;
+      }
     }
   } catch (err) {
     latencyMs = Date.now() - start;
