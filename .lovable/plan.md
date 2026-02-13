@@ -312,12 +312,13 @@ CREATE POLICY "Service role only rate_limits" ON public.rate_limits FOR ALL TO s
 - [ ] Nao existe Storage publico com dados sensiveis (atualmente nao ha buckets)
 - [ ] Edge Functions com service_role continuam gravando
 
-### Gate 3 (antes de E0.4)
-- [ ] Funcoes criticas retornam 401 sem token
-- [ ] Funcoes sync retornam 403 para nao-admin
-- [ ] Nao existe nenhum fetch() chamando Edge Functions sem Authorization Bearer (exceto syncCacheService.ts)
-- [ ] Todas as outras chamadas sao via supabase.functions.invoke()
-- [ ] Busca por `functions/v1/` retorna apenas syncCacheService.ts
+### Gate 3 (antes de E0.4) ✅ CONCLUÍDO
+- [x] Funcoes criticas retornam 401 sem token
+- [x] Funcoes sync retornam 403 para nao-admin
+- [x] Nao existe nenhum fetch() chamando Edge Functions sem Authorization Bearer (E0.4 refatorado)
+- [x] Todas as chamadas sao via supabase.functions.invoke()
+- [x] Busca por `functions/v1/` retorna vazio
+- [x] Sync registra user_id de quem disparou (triggered_by na resposta + console log)
 
 ---
 
@@ -332,7 +333,7 @@ CREATE POLICY "Service role only rate_limits" ON public.rate_limits FOR ALL TO s
 7. Migracao 3 (RLS ~16 tabelas)
 8. **GATE 2**
 9. Migracao 4 (rate_limits) + remover verify_jwt=false do config.toml + hardening 16 Edge Functions
-10. **GATE 3**
-11. Refatorar syncCacheService.ts (E0.4)
-12. Teste end-to-end completo
+10. **GATE 3** ✅
+11. Refatorar syncCacheService.ts (E0.4) ✅
+12. **FASE 0 CONCLUÍDA** ✅
 
