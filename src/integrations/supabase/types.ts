@@ -746,10 +746,48 @@ export type Database = {
             foreignKeyName: "sync_jobs_run_id_fkey"
             columns: ["run_id"]
             isOneToOne: false
+            referencedRelation: "sync_failures_summary"
+            referencedColumns: ["run_id"]
+          },
+          {
+            foreignKeyName: "sync_jobs_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
             referencedRelation: "sync_runs"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "sync_jobs_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_runs_recent"
+            referencedColumns: ["run_id"]
+          },
         ]
+      }
+      sync_locks: {
+        Row: {
+          acquired_at: string | null
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          lock_key: string
+        }
+        Insert: {
+          acquired_at?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          lock_key: string
+        }
+        Update: {
+          acquired_at?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          lock_key?: string
+        }
+        Relationships: []
       }
       sync_runs: {
         Row: {
@@ -760,8 +798,12 @@ export type Database = {
           empresas: number[] | null
           entidades: string[]
           erro_resumo: string | null
+          error_code: string | null
+          error_message: string | null
+          error_step: string | null
           finished_at: string | null
           id: string
+          is_auto_triggered: boolean | null
           modo: string
           started_at: string | null
           status: Database["public"]["Enums"]["sync_run_status"]
@@ -778,8 +820,12 @@ export type Database = {
           empresas?: number[] | null
           entidades?: string[]
           erro_resumo?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          error_step?: string | null
           finished_at?: string | null
           id?: string
+          is_auto_triggered?: boolean | null
           modo?: string
           started_at?: string | null
           status?: Database["public"]["Enums"]["sync_run_status"]
@@ -796,8 +842,12 @@ export type Database = {
           empresas?: number[] | null
           entidades?: string[]
           erro_resumo?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          error_step?: string | null
           finished_at?: string | null
           id?: string
+          is_auto_triggered?: boolean | null
           modo?: string
           started_at?: string | null
           status?: Database["public"]["Enums"]["sync_run_status"]
@@ -957,9 +1007,94 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      sync_failures_summary: {
+        Row: {
+          created_at: string | null
+          data_fim: string | null
+          data_inicio: string | null
+          error_code: string | null
+          error_message: string | null
+          error_step: string | null
+          failed_jobs: number | null
+          modo: string | null
+          run_id: string | null
+          status: Database["public"]["Enums"]["sync_run_status"] | null
+          total_erros: number | null
+          triggered_by: string | null
+        }
+        Relationships: []
+      }
+      sync_runs_recent: {
+        Row: {
+          created_at: string | null
+          duracao_ms: number | null
+          empresas: number[] | null
+          entidades: string[] | null
+          error_code: string | null
+          error_message: string | null
+          error_step: string | null
+          finished_at: string | null
+          is_auto_triggered: boolean | null
+          modo: string | null
+          run_id: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["sync_run_status"] | null
+          total_erros: number | null
+          total_registros: number | null
+          trigger_type: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          duracao_ms?: number | null
+          empresas?: number[] | null
+          entidades?: string[] | null
+          error_code?: string | null
+          error_message?: string | null
+          error_step?: string | null
+          finished_at?: string | null
+          is_auto_triggered?: boolean | null
+          modo?: string | null
+          run_id?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["sync_run_status"] | null
+          total_erros?: number | null
+          total_registros?: number | null
+          trigger_type?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          duracao_ms?: number | null
+          empresas?: number[] | null
+          entidades?: string[] | null
+          error_code?: string | null
+          error_message?: string | null
+          error_step?: string | null
+          finished_at?: string | null
+          is_auto_triggered?: boolean | null
+          modo?: string | null
+          run_id?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["sync_run_status"] | null
+          total_erros?: number | null
+          total_registros?: number | null
+          trigger_type?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      acquire_sync_lock: {
+        Args: { p_lock_key: string; p_timeout_minutes?: number }
+        Returns: boolean
+      }
+      cleanup_old_sync_logs: {
+        Args: { p_retention_days?: number }
+        Returns: {
+          deleted_jobs: number
+          deleted_locks: number
+          deleted_runs: number
+        }[]
+      }
       cleanup_rate_limits: { Args: never; Returns: undefined }
       executar_transformacao_dw: { Args: never; Returns: Json }
       get_user_empresa: { Args: { _user_id: string }; Returns: number }
@@ -970,6 +1105,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      release_sync_lock: { Args: { p_lock_key: string }; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "gestor" | "vendedor"
