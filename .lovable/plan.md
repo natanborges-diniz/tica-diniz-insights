@@ -337,3 +337,48 @@ CREATE POLICY "Service role only rate_limits" ON public.rate_limits FOR ALL TO s
 11. Refatorar syncCacheService.ts (E0.4) ✅
 12. **FASE 0 CONCLUÍDA** ✅
 
+---
+
+## FASE 1 — Confiabilidade de Dados (Sync e Consistência Histórica)
+
+### E1.1 — Sync Control Plane ✅
+
+**Tabelas criadas:**
+- `sync_runs`: execuções (status, janela, empresas, triggered_by, métricas, timestamps)
+- `sync_jobs`: jobs por entidade dentro de uma run (métricas granulares)
+- Enum `sync_run_status`: pending, running, completed, failed, partial
+
+**orchestrate-sync refatorado:**
+- Entry point único para sync manual e agendado
+- 3 modos: `janela_movel` (default 7d), `competencia` (mês), `full`
+- Registra sync_run + sync_jobs com métricas completas
+- Executa entidades em ordem: clientes → produtos → vendas → agregados-diarios
+- Suporta service_role (cron) e admin JWT (manual)
+- Idempotência via delete+insert nas sub-functions
+
+**Política de re-sync:**
+- Janela móvel padrão: 7 dias (configurável via `diasJanela`)
+- Reprocessamento por competência: `modo: 'competencia', competenciaAno: 2025, competenciaMes: 1`
+- Admin pode forçar janela customizada via `dataInicio/dataFim`
+
+**Cron (preparado, não ativado):**
+```sql
+-- Executar diariamente às 06:00 UTC (janela móvel 7 dias)
+select cron.schedule(
+  'sync-diario-automatico',
+  '0 6 * * *',
+  $$
+  select net.http_post(
+    url:='https://zmsfntqgxsstnbpzdled.supabase.co/functions/v1/orchestrate-sync',
+    headers:='{"Content-Type": "application/json", "Authorization": "Bearer SERVICE_ROLE_KEY"}'::jsonb,
+    body:='{"modo": "janela_movel", "diasJanela": 7}'::jsonb
+  ) as request_id;
+  $$
+);
+```
+
+### E1.2 — Próximos passos (não iniciado)
+- [ ] Padronizar outputs das sub-functions (sync-vendas, sync-clientes, sync-produtos)
+- [ ] UI de monitoramento de sync_runs para admin
+- [ ] Ativar cron após validação em produção
+
