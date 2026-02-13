@@ -377,8 +377,29 @@ select cron.schedule(
 );
 ```
 
-### E1.2 — Próximos passos (não iniciado)
+### E1.2 — Agendamento + Observabilidade ✅
+
+**Cron ativado:**
+- `sync-janela-movel-hourly`: a cada hora, `orchestrate-sync` em modo `janela_movel` (7 dias)
+- `cleanup-sync-logs-weekly`: domingos 03:00 UTC, `cleanup_old_sync_logs(90)` — retenção 90 dias
+
+**Lock de concorrência:**
+- Tabela `sync_locks` com funções `acquire_sync_lock` / `release_sync_lock`
+- Lock key = `sync:{modo}` — impede dois runs do mesmo modo simultaneamente
+- Se lock ocupado → HTTP 409, run registrado com `error_code: LOCK_BUSY`
+- Lock expira em 30 min (fallback para runs travados)
+
+**Observabilidade:**
+- Campos adicionados em `sync_runs`: `error_code`, `error_message`, `error_step`, `is_auto_triggered`
+- View `sync_failures_summary`: falhas e parciais dos últimos 7 dias com contagem de jobs falhos
+- View `sync_runs_recent`: últimos 30 dias de runs com todos os campos
+
+**Retenção:**
+- Função `cleanup_old_sync_logs(p_retention_days)` remove runs/jobs/locks > 90 dias
+- Agendada via cron semanal
+
+### E1.3 — Próximos passos (não iniciado)
 - [ ] Padronizar outputs das sub-functions (sync-vendas, sync-clientes, sync-produtos)
 - [ ] UI de monitoramento de sync_runs para admin
-- [ ] Ativar cron após validação em produção
+- [ ] Alertas push/email em caso de falhas consecutivas
 
