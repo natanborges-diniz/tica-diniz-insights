@@ -1,24 +1,30 @@
 // src/services/firebirdBridge.ts
 // Cliente HTTP centralizado para Firebird Bridge API
+// Contrato v2: envelope { ok, data, error, meta? }
 
 const FIREBIRD_BRIDGE_BASE_URL =
   import.meta.env.VITE_FIREBIRD_BRIDGE_BASE_URL ||
   'https://firebird-bridge-production.up.railway.app';
 
 // ============================================
-// TIPOS DO ENVELOPE PADRÃO DA API
+// CONTRATO V2 — ENVELOPE ÚNICO
 // ============================================
+// Sucesso: { ok: true,  data: T[],  meta?: { count, elapsed_ms, ... } }
+// Erro:    { ok: false, error: { code: string, message: string }, details?: unknown }
 
-export type ApiError = {
+export interface ApiErrorObj {
   code: string;
   message: string;
   details?: unknown;
-} | null;
+}
+
+export type ApiError = ApiErrorObj | null;
 
 export interface ApiEnvelope<T> {
   ok: boolean;
-  data: T | null;
+  data: T[] | null;
   error: ApiError;
+  meta?: Record<string, unknown>;
 }
 
 // ============================================
@@ -56,8 +62,24 @@ export interface ApiGetOptions {
   cacheTtlMs?: number;
   /** AbortSignal para cancelar a requisição */
   signal?: AbortSignal;
-  /** Timeout customizado em ms (padrão: 90000) */
+  /** Timeout customizado em ms (padrão: 15000) */
   timeoutMs?: number;
+}
+
+// ============================================
+// TRACKING DE ENDPOINTS LEGADOS (deprecação)
+// ============================================
+
+const _legacyEndpointsLogged = new Set<string>();
+
+function logLegacyFormat(path: string, format: string) {
+  if (!_legacyEndpointsLogged.has(path)) {
+    _legacyEndpointsLogged.add(path);
+    console.warn(
+      `[FirebirdBridge] ⚠️ DEPRECATED: Endpoint "${path}" retornou formato legado "${format}". ` +
+      `Migre para envelope v2 { ok, data, error }. Este suporte será removido.`
+    );
+  }
 }
 
 // ============================================
@@ -93,20 +115,17 @@ export async function apiGet<T>(
     url.searchParams.append('cacheTtlMs', String(options.cacheTtlMs));
   }
 
-  // Se já tem um signal externo, usar ele; senão criar um interno com timeout
   const externalSignal = options?.signal;
   const timeoutMs = options?.timeoutMs ?? 15000;
   
-  // Criar controller interno para timeout
   const internalController = new AbortController();
   const timeoutId = setTimeout(() => internalController.abort(), timeoutMs);
   
-  // Combinar signals: aborta se qualquer um dos dois abortar
   const abortHandler = () => internalController.abort();
   externalSignal?.addEventListener('abort', abortHandler);
 
   try {
-    console.log(`[FirebirdBridge] Fetching: ${url.toString()}`);
+    console.log(`[FirebirdBridge] GET ${path}`);
 
     const response = await fetch(url.toString(), {
       method: 'GET',
@@ -116,52 +135,74 @@ export async function apiGet<T>(
 
     clearTimeout(timeoutId);
 
+    // Tratar erros HTTP antes de parsear body
     if (!response.ok) {
+      // Tentar extrair erro estruturado do body
+      try {
+        const errorBody = await response.json();
+        if (errorBody.ok === false && errorBody.error) {
+          const err = new Error(errorBody.error.message || `HTTP ${response.status}`) as Error & { code?: string; details?: unknown };
+          err.code = errorBody.error.code;
+          err.details = errorBody.error.details;
+          throw err;
+        }
+      } catch (parseErr) {
+        if (parseErr instanceof Error && 'code' in parseErr) throw parseErr; // re-throw structured error
+      }
       throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
     }
 
     const result = await response.json();
 
-    // Formato novo: { ok, data, error }
+    // ========================================
+    // ENVELOPE V2 (formato padrão)
+    // ========================================
     if (result.ok !== undefined) {
       if (result.ok === false || result.error) {
         const errorObj = result.error;
         const errorMessage = errorObj?.message || 'Erro desconhecido na API';
-        const error = new Error(errorMessage) as Error & { code?: string; details?: unknown };
-        if (errorObj?.code) error.code = errorObj.code;
-        if (errorObj?.details) error.details = errorObj.details;
-        throw error;
+        const err = new Error(errorMessage) as Error & { code?: string; details?: unknown };
+        if (errorObj?.code) err.code = errorObj.code;
+        if (errorObj?.details) err.details = errorObj.details;
+        throw err;
       }
       const data = result.data ?? [];
-      console.log(`[FirebirdBridge] Success (envelope): ${path}`, data.length, 'records');
+      console.log(`[FirebirdBridge] ✓ ${path} → ${data.length} records`);
       recordBridgeSuccess();
       return data;
     }
 
-    // Formato legacy: { data: [...] }
+    // ========================================
+    // FORMATOS LEGADOS (suporte temporário com logging)
+    // ========================================
+
+    // Legacy: { data: [...] }
     if (result.data !== undefined && Array.isArray(result.data)) {
-      console.log(`[FirebirdBridge] Success (legacy data): ${path}`, result.data.length, 'records');
+      logLegacyFormat(path, '{ data: [...] }');
       recordBridgeSuccess();
       return result.data;
     }
 
-    // Formato legacy: { rows: [...] }
+    // Legacy: { rows: [...] }
     if (result.rows !== undefined && Array.isArray(result.rows)) {
-      console.log(`[FirebirdBridge] Success (legacy rows): ${path}`, result.rows.length, 'records');
+      logLegacyFormat(path, '{ rows: [...] }');
       recordBridgeSuccess();
       return result.rows;
     }
 
-    // Array direto
+    // Legacy: array direto [...]
     if (Array.isArray(result)) {
-      console.log(`[FirebirdBridge] Success (array): ${path}`, result.length, 'records');
+      logLegacyFormat(path, '[...] (array direto)');
       recordBridgeSuccess();
       return result;
     }
 
-    // Fallback - retorna array vazio se formato não reconhecido
-    console.warn(`[FirebirdBridge] Formato não reconhecido: ${path}`, result);
-    return [];
+    // Formato não reconhecido — falha explícita
+    console.error(`[FirebirdBridge] ❌ Formato inválido em "${path}":`, typeof result, Object.keys(result));
+    throw new Error(
+      `Resposta inválida do servidor para ${path}. ` +
+      `Formato esperado: { ok: true, data: [...] }. Contate o administrador.`
+    );
   } catch (error) {
     clearTimeout(timeoutId);
     externalSignal?.removeEventListener('abort', abortHandler);
@@ -170,7 +211,7 @@ export async function apiGet<T>(
 
     if (error instanceof Error) {
       if (error.message.includes('temporariamente suspensa')) {
-        throw error; // re-throw circuit breaker error as-is
+        throw error;
       }
       if (error.name === 'AbortError') {
         if (externalSignal?.aborted) {
@@ -178,8 +219,10 @@ export async function apiGet<T>(
           throw new Error('Requisição cancelada');
         }
         console.error(`[FirebirdBridge] Timeout: ${path}`);
-        throw new Error('O servidor não respondeu a tempo. Verifique se o Bridge está online em Admin > Bridge Health.');
+        throw new Error('O servidor não respondeu a tempo. Verifique o status em Admin > Bridge Health.');
       }
+      // Re-throw errors with code (structured API errors)
+      if ('code' in error) throw error;
       console.error(`[FirebirdBridge] Error: ${path}`, error.message);
       throw new Error(`Erro de conexão: ${error.message}. Verifique o status do Bridge.`);
     }
