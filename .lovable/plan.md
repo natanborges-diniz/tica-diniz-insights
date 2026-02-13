@@ -423,3 +423,98 @@ select cron.schedule(
 - [ ] Padronizar outputs das sub-functions (sync-vendas, sync-clientes, sync-produtos)
 - [ ] Alertas push/email em caso de falhas consecutivas
 
+---
+
+## FASE 2 — Resiliência e Padronização
+
+### E2.1 — Monitoramento Bridge Health ✅
+- Health check a cada 5 min via Edge Function
+- Tabela `bridge_health_logs` com status, latência, versão
+- Limpeza automática de logs > 30 dias
+
+### E2.2 — Degradação Controlada ✅
+- Circuit breaker no client (`useBridgeStatus.ts`): 3 falhas → bloqueia 60s
+- Monitor de OS sem `empresa=ALL` automático — exige seleção de empresa
+- `BridgeStatusBanner` reutilizável para todas as telas
+- Empresa pré-selecionada pelo perfil do usuário; "Todas" apenas para admin
+
+### E2.3 — Padronização do Contrato Bridge ✅
+
+**Contrato v2 — Envelope Único:**
+
+```
+// Sucesso (HTTP 200)
+{
+  "ok": true,
+  "data": [ ... ],
+  "meta": {                    // opcional
+    "count": 42,
+    "elapsed_ms": 230,
+    "endpoint": "/vendas/resumo-empresa-vendedor"
+  }
+}
+
+// Erro (HTTP 400/500/503)
+{
+  "ok": false,
+  "error": {
+    "code": "FIREBIRD_TIMEOUT",    // código máquina
+    "message": "Firebird não respondeu em 30s"  // mensagem humana
+  },
+  "details": { ... }              // opcional, debug
+}
+```
+
+**Códigos de erro padronizados:**
+
+| code | HTTP | Descrição |
+|------|------|-----------|
+| `VALIDATION_ERROR` | 400 | Parâmetro inválido ou ausente |
+| `FIREBIRD_TIMEOUT` | 503 | Firebird não respondeu |
+| `FIREBIRD_DISCONNECTED` | 503 | Bridge sem conexão com Firebird |
+| `QUERY_ERROR` | 500 | Erro na execução da query |
+| `INTERNAL_ERROR` | 500 | Erro genérico do servidor |
+| `NOT_FOUND` | 404 | Recurso não encontrado |
+
+**Frontend (`firebirdBridge.ts`):**
+- Aceita envelope v2 como formato principal
+- Suporte temporário a formatos legados (`{ data }`, `{ rows }`, `[...]`) com logging de deprecação
+- Formato não reconhecido → erro explícito (não retorna array vazio silenciosamente)
+- Cada endpoint legado logado uma vez por sessão no console para rastreamento
+
+**Guia de migração backend (firebird-bridge):**
+
+Cada endpoint deve ser atualizado para usar o helper:
+
+```javascript
+// helpers/response.js (novo no backend)
+function success(res, data, meta = {}) {
+  return res.json({ ok: true, data, meta: { count: data.length, ...meta } });
+}
+
+function error(res, code, message, statusCode = 500, details = null) {
+  return res.status(statusCode).json({
+    ok: false,
+    error: { code, message },
+    ...(details && { details }),
+  });
+}
+
+module.exports = { success, error };
+```
+
+**Prioridade de migração dos endpoints:**
+
+1. `/api/v1/health` — já migrado parcialmente
+2. `/api/v1/vendas/resumo-empresa-vendedor` — mais usado
+3. `/api/v1/vendas/resumo-formas-pagamento`
+4. `/api/v1/vendas/resumo-diario-simples`
+5. `/api/v1/os/monitor-ultima-etapa`
+6. `/api/v1/os/receita-completa`
+7. `/api/v1/estoque/*`
+8. `/api/v1/financeiro/*`
+9. `/api/v1/empresas`
+
+**Prazo:** Suporte legado será removido após todos os endpoints migrarem.
+O console warn identifica automaticamente quais ainda precisam migrar.
+
