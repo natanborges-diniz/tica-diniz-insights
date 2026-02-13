@@ -398,8 +398,28 @@ select cron.schedule(
 - Função `cleanup_old_sync_logs(p_retention_days)` remove runs/jobs/locks > 90 dias
 - Agendada via cron semanal
 
-### E1.3 — Próximos passos (não iniciado)
+### E1.3 — Reprocessamento por Competência + UI Admin ✅
+
+**Schema:**
+- Colunas adicionadas em `sync_runs`: `request_reason` (TEXT), `competencia` (TEXT, formato YYYY-MM)
+
+**orchestrate-sync:**
+- Grava `competencia` e `request_reason` automaticamente em sync_runs
+- Modo `competencia` calcula janela pelo mês/ano e registra auditoria
+- Lock respeitado: retorna 409 se ocupado
+
+**UI Admin (`/admin/sync`):**
+- Seletor de empresa (ou todas)
+- Seletor de competência (últimos 12 meses)
+- Campo obrigatório de motivo/justificativa
+- Diálogo de confirmação com impacto estimado
+- Tabela de histórico com status, duração, erros, motivo
+
+**Sidebar:**
+- Menu "Sync & Reprocessamento" adicionado em Config (admin only)
+- Link "Usuários" reativado (sem flag disabled)
+
+### E1.4 — Próximos passos (não iniciado)
 - [ ] Padronizar outputs das sub-functions (sync-vendas, sync-clientes, sync-produtos)
-- [ ] UI de monitoramento de sync_runs para admin
 - [ ] Alertas push/email em caso de falhas consecutivas
 

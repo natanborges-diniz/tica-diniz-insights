@@ -21,6 +21,7 @@ import InteligenciaVendasDashboard from "./pages/InteligenciaVendasDashboard";
 import MetasConfigDashboard from "./pages/MetasConfigDashboard";
 import CentralIADashboard from "./pages/CentralIADashboard";
 import AdminUsuariosPage from "./pages/AdminUsuariosPage";
+import AdminSyncPage from "./pages/AdminSyncPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -65,6 +66,7 @@ const App = () => (
 
                 {/* Admin */}
                 <Route path="/admin/usuarios" element={<AdminUsuariosPage />} />
+                <Route path="/admin/sync" element={<AdminSyncPage />} />
 
                 {/* Central de IA */}
                 <Route path="/ia" element={<CentralIADashboard />} />
