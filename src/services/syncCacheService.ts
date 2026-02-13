@@ -1,10 +1,8 @@
 // src/services/syncCacheService.ts
-// Serviço para sincronização automática do cache de vendas até D-1
+// E0.4: Serviço de sincronização via supabase.functions.invoke() (JWT automático)
+// Removido: fetch() manual, VITE_SUPABASE_PUBLISHABLE_KEY, whitelist duplicada
 
 import { supabase } from "@/integrations/supabase/client";
-
-// Empresas ativas no sistema (mesmo array da Edge Function)
-const EMPRESAS_ATIVAS = [1, 2, 4, 6, 9, 13, 14, 15, 16, 17, 18];
 
 export interface SyncStatus {
   sincronizando: boolean;
@@ -57,7 +55,6 @@ export async function getUltimaDataCache(): Promise<string | null> {
  */
 export function calcularDiasFaltando(ultimaDataCache: string | null, dataAlvo: string): number {
   if (!ultimaDataCache) {
-    // Se não tem cache, considera 30 dias para não travar
     return 30;
   }
   
@@ -100,8 +97,10 @@ export async function verificarStatusSync(): Promise<SyncStatus> {
 }
 
 /**
- * Sincroniza o cache chamando a Edge Function sync-agregados-diarios
- * Sincroniza de (ultimaDataCache + 1) até D-1
+ * E0.4: Sincroniza o cache via supabase.functions.invoke()
+ * JWT do usuário logado é propagado automaticamente.
+ * Apenas admin pode executar (validação server-side).
+ * Usa modo histórico para sincronizar todas as empresas de uma vez.
  */
 export async function sincronizarCache(
   onProgress?: (status: SyncStatus) => void
@@ -134,7 +133,6 @@ export async function sincronizarCache(
       proximoDia.setDate(proximoDia.getDate() + 1);
       dataInicio = proximoDia.toISOString().split('T')[0];
     } else {
-      // Se não tem cache, sincronizar últimos 30 dias
       const trintaDiasAtras = new Date();
       trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
       dataInicio = trintaDiasAtras.toISOString().split('T')[0];
@@ -150,82 +148,46 @@ export async function sincronizarCache(
         dataAlvo,
         diasFaltando,
         mensagem: 'Iniciando sincronização...',
-        progresso: {
-          empresaAtual: 0,
-          totalEmpresas: EMPRESAS_ATIVAS.length,
-          empresaNome: '',
-        },
       });
     }
     
-    // Sincronizar cada empresa individualmente (como requerido pela Edge Function)
-    let totalRegistros = 0;
-    let erros: string[] = [];
-    
-    for (let i = 0; i < EMPRESAS_ATIVAS.length; i++) {
-      const empresa = EMPRESAS_ATIVAS[i];
-      
-      if (onProgress) {
-        onProgress({
-          sincronizando: true,
-          ultimaDataCache,
-          dataAlvo,
-          diasFaltando,
-          mensagem: `Sincronizando empresa ${empresa}...`,
-          progresso: {
-            empresaAtual: i + 1,
-            totalEmpresas: EMPRESAS_ATIVAS.length,
-            empresaNome: `Loja ${empresa}`,
-          },
-        });
-      }
-      
-      try {
-        // Chamar Edge Function para esta empresa via fetch (supabase.functions.invoke não suporta query params)
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-agregados-diarios?empresa=${empresa}&dataInicio=${dataInicio}&dataFim=${dataAlvo}`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`[syncCacheService] Erro empresa ${empresa}:`, errorText);
-          erros.push(`Empresa ${empresa}: ${response.status}`);
-          continue;
-        }
-        
-        const result = await response.json();
-        
-        if (result.registros) {
-          totalRegistros += result.registros;
-        }
-        
-        console.log(`[syncCacheService] Empresa ${empresa}: ${result.registros || 0} registros`);
-        
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`[syncCacheService] Erro empresa ${empresa}:`, message);
-        erros.push(`Empresa ${empresa}: ${message}`);
-      }
-      
-      // Pequena pausa entre empresas para não sobrecarregar
-      await new Promise(resolve => setTimeout(resolve, 300));
-    }
+    // E0.4: Usar modo histórico — a Edge Function cuida de todas as empresas
+    const { data, error } = await supabase.functions.invoke('sync-agregados-diarios', {
+      body: {
+        historico: true,
+        dataInicio,
+        dataFim: dataAlvo,
+      },
+    });
     
     const tempoMs = Math.round(performance.now() - startTime);
     
-    console.log(`[syncCacheService] Sincronização concluída: ${totalRegistros} registros em ${tempoMs}ms`);
+    if (error) {
+      console.error('[syncCacheService] Erro na invocação:', error);
+      return {
+        success: false,
+        registrosSincronizados: 0,
+        erro: error.message || String(error),
+        tempoMs,
+      };
+    }
+    
+    console.log('[syncCacheService] Resposta:', data);
+    
+    // Notificar conclusão
+    if (onProgress) {
+      onProgress({
+        sincronizando: false,
+        ultimaDataCache: dataAlvo,
+        dataAlvo,
+        diasFaltando: 0,
+        mensagem: 'Sincronização enviada (processando em background)',
+      });
+    }
     
     return {
-      success: erros.length === 0,
-      registrosSincronizados: totalRegistros,
-      erro: erros.length > 0 ? erros.join('; ') : undefined,
+      success: data?.success ?? true,
+      registrosSincronizados: data?.registros ?? 0,
       tempoMs,
     };
     
@@ -244,7 +206,6 @@ export async function sincronizarCache(
 
 /**
  * Verifica se precisa sincronizar e dispara automaticamente se necessário
- * Retorna true se iniciou sincronização, false se cache já está atualizado
  */
 export async function sincronizarSeNecessario(
   onProgress?: (status: SyncStatus) => void
@@ -258,7 +219,6 @@ export async function sincronizarSeNecessario(
   
   console.log(`[syncCacheService] Cache desatualizado, iniciando sync (${status.diasFaltando} dias)`);
   
-  // Sincronizar em background
   sincronizarCache(onProgress).then(result => {
     if (result.success) {
       console.log(`[syncCacheService] Sync concluída: ${result.registrosSincronizados} registros`);
