@@ -569,6 +569,44 @@ export type Database = {
         }
         Relationships: []
       }
+      pedido_status_history: {
+        Row: {
+          checked_at: string
+          id: string
+          observacao: string | null
+          pedido_fornecedor_id: string
+          rastreio: string | null
+          status: string
+          status_producao: string | null
+        }
+        Insert: {
+          checked_at?: string
+          id?: string
+          observacao?: string | null
+          pedido_fornecedor_id: string
+          rastreio?: string | null
+          status: string
+          status_producao?: string | null
+        }
+        Update: {
+          checked_at?: string
+          id?: string
+          observacao?: string | null
+          pedido_fornecedor_id?: string
+          rastreio?: string | null
+          status?: string
+          status_producao?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pedido_status_history_pedido_fornecedor_id_fkey"
+            columns: ["pedido_fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos_fornecedor"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pedidos_fornecedor: {
         Row: {
           cod_empresa: number

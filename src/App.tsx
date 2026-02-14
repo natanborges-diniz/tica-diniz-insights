@@ -15,6 +15,7 @@ import AnaliseOTBPage from "./pages/estoque/AnaliseOTBPage";
 import SalesFamilyDashboard from "./pages/SalesFamilyDashboard";
 import OsDashboard from "./pages/OsDashboard";
 import PedidoFornecedorPage from "./pages/PedidoFornecedorPage";
+import HoyaTrackingPage from "./pages/HoyaTrackingPage";
 import FinanceiroDashboard from "./pages/FinanceiroDashboard";
 import FinanceiroDreDashboard from "./pages/FinanceiroDreDashboard";
 import FluxoCaixaDashboard from "./pages/FluxoCaixaDashboard";
@@ -62,6 +63,7 @@ const App = () => (
                 {/* Monitor */}
                 <Route path="/os" element={<OsDashboard />} />
                 <Route path="/os/pedido" element={<PedidoFornecedorPage />} />
+                <Route path="/os/tracking" element={<HoyaTrackingPage />} />
 
                 {/* Financeiro */}
                 <Route path="/financeiro" element={<FinanceiroDashboard />} />

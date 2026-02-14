@@ -278,6 +278,166 @@ serve(async (req) => {
       case "coloracoes":
         url = `${HOYA_BASE_URL}/coloracao`; method = "POST";
         fetchBody = JSON.stringify(params.filtros || {}); break;
+
+      // F4.5: Single tracking update
+      case "atualizar-tracking": {
+        const sbTrack = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const numeroPedido = params.numeroPedido || params.numeroPedidoHoya;
+        const pedidoFornecedorId = params.pedidoFornecedorId;
+
+        if (!numeroPedido) {
+          return new Response(JSON.stringify({ error: "numeroPedido obrigatório", code: HOYA_ERROR_CODES.API_ERROR, correlationId }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Fetch tracking from Hoya API
+        const trackUrl = `${HOYA_BASE_URL}/pedido/tracking/${numeroPedido}`;
+        const trackResp = await fetchWithRetry(
+          trackUrl,
+          { method: "GET", headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" } },
+          { action: "atualizar-tracking", correlationId }
+        );
+        const trackText = await trackResp.text();
+        let trackData: Record<string, unknown>;
+        try { trackData = JSON.parse(trackText); } catch { trackData = { rawResponse: trackText }; }
+
+        if (!trackResp.ok) {
+          return new Response(JSON.stringify({ error: "Erro ao consultar tracking", details: trackData, code: HOYA_ERROR_CODES.API_ERROR, correlationId }), {
+            status: trackResp.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const newStatus = String(trackData.status || "Desconhecido");
+        const newStatusProd = trackData.statusProducao ? String(trackData.statusProducao) : null;
+        const newRastreio = trackData.rastreio ? String(trackData.rastreio) : null;
+
+        // Find pedido_fornecedor if not provided
+        let pfId = pedidoFornecedorId;
+        if (!pfId) {
+          const { data: pfRec } = await sbTrack
+            .from("pedidos_fornecedor")
+            .select("id")
+            .eq("numero_pedido", String(numeroPedido))
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          pfId = pfRec?.id;
+        }
+
+        if (!pfId) {
+          return new Response(JSON.stringify({ tracking: trackData, saved: false, reason: "pedido_fornecedor não encontrado" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+          });
+        }
+
+        // Check last status to avoid duplicates
+        const { data: lastEntry } = await sbTrack
+          .from("pedido_status_history")
+          .select("status, status_producao, rastreio")
+          .eq("pedido_fornecedor_id", pfId)
+          .order("checked_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const statusChanged = !lastEntry || lastEntry.status !== newStatus || lastEntry.status_producao !== newStatusProd || lastEntry.rastreio !== newRastreio;
+
+        if (statusChanged) {
+          await sbTrack.from("pedido_status_history").insert({
+            pedido_fornecedor_id: pfId,
+            status: newStatus,
+            status_producao: newStatusProd,
+            rastreio: newRastreio,
+            observacao: null,
+          });
+
+          // Update pedidos_fornecedor.status
+          await sbTrack.from("pedidos_fornecedor").update({ status: newStatus }).eq("id", pfId);
+          console.log(`[hoya-proxy] [${correlationId}] Tracking updated for pedido ${numeroPedido}: ${newStatus}`);
+        } else {
+          console.log(`[hoya-proxy] [${correlationId}] Tracking unchanged for pedido ${numeroPedido}`);
+        }
+
+        // Return full timeline
+        const { data: timeline } = await sbTrack
+          .from("pedido_status_history")
+          .select("*")
+          .eq("pedido_fornecedor_id", pfId)
+          .order("checked_at", { ascending: true });
+
+        return new Response(JSON.stringify({ tracking: trackData, timeline: timeline || [], statusChanged, saved: true }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
+
+      // F4.5: Batch tracking update (for cron)
+      case "atualizar-tracking-batch": {
+        const sbBatch = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const batchLimit = params.limit || 20;
+
+        const { data: pendingPedidos } = await sbBatch
+          .from("pedidos_fornecedor")
+          .select("id, numero_pedido")
+          .eq("fornecedor", "HOYA")
+          .not("numero_pedido", "is", null)
+          .not("status", "in", '("Entregue","Cancelado","ERRO")')
+          .order("updated_at", { ascending: true })
+          .limit(batchLimit);
+
+        if (!pendingPedidos || pendingPedidos.length === 0) {
+          return new Response(JSON.stringify({ updated: 0, message: "Nenhum pedido pendente para tracking" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+          });
+        }
+
+        let updatedCount = 0;
+        const errors: string[] = [];
+
+        for (const ped of pendingPedidos) {
+          try {
+            const tUrl = `${HOYA_BASE_URL}/pedido/tracking/${ped.numero_pedido}`;
+            const tResp = await fetchWithRetry(
+              tUrl,
+              { method: "GET", headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" } },
+              { action: `batch-tracking-${ped.numero_pedido}`, correlationId, maxRetries: 1 }
+            );
+
+            if (!tResp.ok) continue;
+
+            const tData = await tResp.json();
+            const tStatus = String(tData.status || "Desconhecido");
+            const tStatusProd = tData.statusProducao ? String(tData.statusProducao) : null;
+            const tRastreio = tData.rastreio ? String(tData.rastreio) : null;
+
+            const { data: lastE } = await sbBatch
+              .from("pedido_status_history")
+              .select("status, status_producao, rastreio")
+              .eq("pedido_fornecedor_id", ped.id)
+              .order("checked_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (!lastE || lastE.status !== tStatus || lastE.status_producao !== tStatusProd || lastE.rastreio !== tRastreio) {
+              await sbBatch.from("pedido_status_history").insert({
+                pedido_fornecedor_id: ped.id,
+                status: tStatus,
+                status_producao: tStatusProd,
+                rastreio: tRastreio,
+              });
+              await sbBatch.from("pedidos_fornecedor").update({ status: tStatus }).eq("id", ped.id);
+              updatedCount++;
+            }
+          } catch (e) {
+            errors.push(`${ped.numero_pedido}: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+
+        console.log(`[hoya-proxy] [${correlationId}] Batch tracking: ${updatedCount}/${pendingPedidos.length} updated, ${errors.length} errors`);
+        return new Response(JSON.stringify({ updated: updatedCount, total: pendingPedidos.length, errors }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
+
       // E4.1: Audit history
       case "historico-pedidos": {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -302,6 +462,21 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      // F4.5: Timeline for a pedido
+      case "timeline-pedido": {
+        const sbTl = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const { data: tlData } = await sbTl
+          .from("pedido_status_history")
+          .select("*")
+          .eq("pedido_fornecedor_id", params.pedidoFornecedorId)
+          .order("checked_at", { ascending: true });
+
+        return new Response(JSON.stringify(tlData || []), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação desconhecida: ${action}`, code: HOYA_ERROR_CODES.API_ERROR, correlationId }),
