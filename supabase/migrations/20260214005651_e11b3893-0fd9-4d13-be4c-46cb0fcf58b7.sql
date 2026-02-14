@@ -1,0 +1,2 @@
+ALTER TABLE public.bridge_health_logs DROP CONSTRAINT bridge_health_logs_status_check;
+ALTER TABLE public.bridge_health_logs ADD CONSTRAINT bridge_health_logs_status_check CHECK (status IN ('up', 'down', 'degraded', 'timeout'));
