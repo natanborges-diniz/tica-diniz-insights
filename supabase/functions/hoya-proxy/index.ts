@@ -494,6 +494,61 @@ serve(async (req) => {
         });
       }
 
+      // F4.6: Consultar XML da nota fiscal
+      case "consultar-xml": {
+        const numPedidoXml = params.numeroPedido;
+        if (!numPedidoXml) {
+          return new Response(JSON.stringify({ error: "numeroPedido obrigatório", code: HOYA_ERROR_CODES.API_ERROR, correlationId }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const xmlUrl = `${HOYA_BASE_URL}/pedido/xml/${numPedidoXml}`;
+        const xmlResp = await fetchWithRetry(
+          xmlUrl,
+          { method: "GET", headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" } },
+          { action: "consultar-xml", correlationId }
+        );
+        const xmlText = await xmlResp.text();
+        if (!xmlResp.ok) {
+          return new Response(JSON.stringify({ error: "Erro ao consultar XML", details: xmlText, code: HOYA_ERROR_CODES.API_ERROR, correlationId }), {
+            status: xmlResp.status, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+          });
+        }
+        // Return XML content — could be raw XML or JSON wrapper
+        let xmlData: unknown;
+        try { xmlData = JSON.parse(xmlText); } catch { xmlData = { xml: xmlText }; }
+        return new Response(JSON.stringify(xmlData), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
+
+      // F4.6: Consultar DANFE (link PDF da nota)
+      case "consultar-danfe": {
+        const numPedidoDanfe = params.numeroPedido;
+        if (!numPedidoDanfe) {
+          return new Response(JSON.stringify({ error: "numeroPedido obrigatório", code: HOYA_ERROR_CODES.API_ERROR, correlationId }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const danfeUrl = `${HOYA_BASE_URL}/pedido/danfe/${numPedidoDanfe}`;
+        const danfeResp = await fetchWithRetry(
+          danfeUrl,
+          { method: "GET", headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" } },
+          { action: "consultar-danfe", correlationId }
+        );
+        const danfeText = await danfeResp.text();
+        if (!danfeResp.ok) {
+          return new Response(JSON.stringify({ error: "Erro ao consultar DANFE", details: danfeText, code: HOYA_ERROR_CODES.API_ERROR, correlationId }), {
+            status: danfeResp.status, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+          });
+        }
+        let danfeData: unknown;
+        try { danfeData = JSON.parse(danfeText); } catch { danfeData = { danfe: danfeText }; }
+        return new Response(JSON.stringify(danfeData), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação desconhecida: ${action}`, code: HOYA_ERROR_CODES.API_ERROR, correlationId }),

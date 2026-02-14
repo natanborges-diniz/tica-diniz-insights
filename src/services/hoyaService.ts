@@ -282,3 +282,12 @@ export async function listarMateriaisHoya(): Promise<unknown[]> {
 export async function listarTratamentosHoya(): Promise<unknown[]> {
   return callHoyaProxy<unknown[]>("tratamentos");
 }
+
+// F4.6: XML/DANFE
+export async function consultarXmlHoya(numeroPedido: string | number): Promise<{ xml?: string; [key: string]: unknown }> {
+  return callHoyaProxy<{ xml?: string; [key: string]: unknown }>("consultar-xml", { numeroPedido });
+}
+
+export async function consultarDanfeHoya(numeroPedido: string | number): Promise<{ danfe?: string; url?: string; [key: string]: unknown }> {
+  return callHoyaProxy<{ danfe?: string; url?: string; [key: string]: unknown }>("consultar-danfe", { numeroPedido });
+}

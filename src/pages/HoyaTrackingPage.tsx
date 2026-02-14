@@ -8,6 +8,8 @@ import {
   listarHistoricoPedidos,
   atualizarTrackingHoya,
   listarTimelinePedido,
+  consultarXmlHoya,
+  consultarDanfeHoya,
   StatusHistoryEntry,
 } from "@/services/hoyaService";
 import { toast } from "@/hooks/use-toast";
@@ -19,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Loader2,
   RefreshCw,
@@ -31,6 +34,8 @@ import {
   ChevronDown,
   ChevronUp,
   MapPin,
+  FileText,
+  FileCode,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -66,6 +71,8 @@ const HoyaTrackingPage: React.FC = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<StatusHistoryEntry[]>([]);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
+  const [xmlDialog, setXmlDialog] = useState<{ open: boolean; content: string; title: string }>({ open: false, content: "", title: "" });
+  const [loadingXml, setLoadingXml] = useState<string | null>(null);
 
   // Fetch pedidos
   const { data: pedidos = [], isLoading, refetch } = useQuery({
@@ -133,6 +140,38 @@ const HoyaTrackingPage: React.FC = () => {
       setTimeline([]);
     } finally {
       setLoadingTimeline(false);
+    }
+  };
+
+  // F4.6: XML handler
+  const handleXml = async (numeroPedido: string) => {
+    setLoadingXml(`xml-${numeroPedido}`);
+    try {
+      const result = await consultarXmlHoya(numeroPedido);
+      const content = result.xml || JSON.stringify(result, null, 2);
+      setXmlDialog({ open: true, content, title: `XML — Pedido #${numeroPedido}` });
+    } catch (err) {
+      toast({ title: "Erro ao consultar XML", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
+    } finally {
+      setLoadingXml(null);
+    }
+  };
+
+  // F4.6: DANFE handler
+  const handleDanfe = async (numeroPedido: string) => {
+    setLoadingXml(`danfe-${numeroPedido}`);
+    try {
+      const result = await consultarDanfeHoya(numeroPedido);
+      if (result.url) {
+        window.open(result.url, "_blank");
+      } else {
+        const content = result.danfe || JSON.stringify(result, null, 2);
+        setXmlDialog({ open: true, content, title: `DANFE — Pedido #${numeroPedido}` });
+      }
+    } catch (err) {
+      toast({ title: "Erro ao consultar DANFE", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
+    } finally {
+      setLoadingXml(null);
     }
   };
 
@@ -238,6 +277,31 @@ const HoyaTrackingPage: React.FC = () => {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 shrink-0">
+                      {/* F4.6: XML/DANFE buttons — visible for faturado/entregue */}
+                      {(ped.status || "").toLowerCase().match(/faturad|entreg|transit/) && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={loadingXml === `xml-${ped.numero_pedido}`}
+                            onClick={(e) => { e.stopPropagation(); handleXml(ped.numero_pedido!); }}
+                            title="Consultar XML"
+                          >
+                            {loadingXml === `xml-${ped.numero_pedido}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCode className="h-4 w-4" />}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={loadingXml === `danfe-${ped.numero_pedido}`}
+                            onClick={(e) => { e.stopPropagation(); handleDanfe(ped.numero_pedido!); }}
+                            title="Consultar DANFE"
+                          >
+                            {loadingXml === `danfe-${ped.numero_pedido}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                          </Button>
+                        </>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -313,6 +377,22 @@ const HoyaTrackingPage: React.FC = () => {
           })}
         </div>
       </div>
+
+      {/* F4.6: XML/DANFE Dialog */}
+      <Dialog open={xmlDialog.open} onOpenChange={(open) => setXmlDialog(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-3xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileCode className="h-4 w-4" /> {xmlDialog.title}
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh]">
+            <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto whitespace-pre-wrap font-mono">
+              {xmlDialog.content}
+            </pre>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </ScrollArea>
   );
 };
