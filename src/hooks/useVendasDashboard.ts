@@ -305,14 +305,22 @@ async function fetchWithTimeout<T>(
 }
 
 export function useVendasDashboard() {
-  const defaultPeriodo = getPeriodoComercial();
-
   const [filters, setFilters] = useState<VendasFiltersState>({
-    dataInicio: defaultPeriodo.dataIni,
-    dataFim: defaultPeriodo.dataFim,
+    dataInicio: formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
+    dataFim: formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)),
     viewMode: "loja",
     empresa: 'ALL',
   });
+
+  // Carregar período comercial do banco ao montar
+  const periodoCarregado = useRef(false);
+  useEffect(() => {
+    if (periodoCarregado.current) return;
+    periodoCarregado.current = true;
+    getPeriodoComercial().then(p => {
+      setFilters(prev => ({ ...prev, dataInicio: p.dataIni, dataFim: p.dataFim }));
+    });
+  }, []);
 
   const [dadosFormasPagamento, setDadosFormasPagamento] = useState<ResumoFormaPagamento[]>([]);
   const [loading, setLoading] = useState(false);

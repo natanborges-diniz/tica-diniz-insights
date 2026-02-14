@@ -1,7 +1,7 @@
 // src/hooks/useCentralIA.ts
 // Hook para Central de IA - gerenciamento de estado e coleta de dados
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useEmpresas } from "./useEmpresas";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { 
@@ -9,7 +9,7 @@ import {
   gerarAnaliseCentralIA, 
   DadosCentralIA 
 } from "@/services/aiCentralService";
-import { getPeriodoComercial } from "@/utils/dateValidation";
+import { getPeriodoComercial, formatLocalDate } from "@/utils/dateValidation";
 import { toast } from "@/hooks/use-toast";
 
 export interface CentralIAFilters {
@@ -31,16 +31,21 @@ export interface CentralIAState {
 export function useCentralIA() {
   const { empresas, isLoading: loadingEmpresas } = useEmpresas();
   
-  // Período comercial como default
-  const periodoDefault = getPeriodoComercial();
-  
+  const hoje = new Date();
   const [filters, setFilters] = useState<CentralIAFilters>({
     empresa: 'ALL',
-    dataInicio: periodoDefault.dataIni,
-    dataFim: periodoDefault.dataFim,
+    dataInicio: formatLocalDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1)),
+    dataFim: formatLocalDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)),
     incluirEstoque: true,
     incluirAnaliseSku: true,
   });
+
+  // Carregar período comercial do banco ao montar
+  useEffect(() => {
+    getPeriodoComercial().then(p => {
+      setFilters(prev => ({ ...prev, dataInicio: p.dataIni, dataFim: p.dataFim }));
+    });
+  }, []);
 
   const [state, setState] = useState<CentralIAState>({
     dadosColetados: null,

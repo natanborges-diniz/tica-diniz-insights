@@ -69,33 +69,35 @@ export function getDefaultPeriodoMesAtual(): { dataIni: string; dataFim: string 
 }
 
 /**
- * Retorna o período comercial baseado na data atual:
- * - Se hoje <= dia 20: período = dia 21 do mês anterior até dia 20 do mês atual
- * - Se hoje > dia 20: período = dia 21 do mês atual até dia 20 do mês seguinte
+ * Retorna o período comercial baseado na configuração do banco (metas_periodos).
+ * Se não houver config cadastrada, usa fallback: dia 1 ao último dia do mês.
+ * Esta é a ÚNICA fonte de verdade para período comercial.
  */
-export function getPeriodoComercial(): { dataIni: string; dataFim: string } {
+export async function getPeriodoComercial(): Promise<{ dataIni: string; dataFim: string }> {
   const hoje = new Date();
-  const diaAtual = hoje.getDate();
-  const mesAtual = hoje.getMonth(); // 0-indexed
   const anoAtual = hoje.getFullYear();
-  
-  if (diaAtual <= 20) {
-    // Período: dia 21 do mês anterior até dia 20 do mês atual
-    const mesAnterior = mesAtual === 0 ? 11 : mesAtual - 1;
-    const anoMesAnterior = mesAtual === 0 ? anoAtual - 1 : anoAtual;
+  const mesAtual = hoje.getMonth() + 1; // 1-indexed
+
+  try {
+    const { getMetaPeriodo, getDatasDoPeriodo } = await import('@/services/calendarioService');
+    const periodo = await getMetaPeriodo(anoAtual, mesAtual);
     
-    return {
-      dataIni: formatLocalDate(new Date(anoMesAnterior, mesAnterior, 21)),
-      dataFim: formatLocalDate(new Date(anoAtual, mesAtual, 20)),
-    };
-  } else {
-    // Período: dia 21 do mês atual até dia 20 do mês seguinte
-    const mesSeguinte = mesAtual === 11 ? 0 : mesAtual + 1;
-    const anoMesSeguinte = mesAtual === 11 ? anoAtual + 1 : anoAtual;
-    
-    return {
-      dataIni: formatLocalDate(new Date(anoAtual, mesAtual, 21)),
-      dataFim: formatLocalDate(new Date(anoMesSeguinte, mesSeguinte, 20)),
-    };
+    if (periodo) {
+      const { dataInicio, dataFim } = getDatasDoPeriodo(anoAtual, mesAtual, periodo);
+      return {
+        dataIni: formatLocalDate(dataInicio),
+        dataFim: formatLocalDate(dataFim),
+      };
+    }
+  } catch (err) {
+    console.warn('Não foi possível carregar período comercial do banco, usando fallback:', err);
   }
+
+  // Fallback: primeiro ao último dia do mês atual
+  const primeiroDia = new Date(anoAtual, mesAtual - 1, 1);
+  const ultimoDia = new Date(anoAtual, mesAtual, 0);
+  return {
+    dataIni: formatLocalDate(primeiroDia),
+    dataFim: formatLocalDate(ultimoDia),
+  };
 }
