@@ -19,6 +19,7 @@ import {
 } from "@/services/calendarioService";
 import { formatLocalDate, getPeriodoComercial } from "@/utils/dateValidation";
 import { EmpresaParam } from "@/services/firebirdBridge";
+import { useDefaultEmpresa } from "./useDefaultEmpresa";
 import { getVendasAgregado, AgregadoFormaPagamento } from "@/services/agregadosService";
 import { sincronizarCache } from "@/services/syncCacheService";
 
@@ -103,16 +104,24 @@ export function useInteligenciaVendas() {
   const anoAtual = new Date().getFullYear();
   const mesAtual = new Date().getMonth() + 1;
   const hoje = new Date();
+  const { defaultEmpresa } = useDefaultEmpresa();
 
-  // NÃO seleciona empresa por padrão (evita timeout)
+  // Default = empresa do profile (evita ALL que causa timeout)
   const [filters, setFilters] = useState<InteligenciaFilters>({
     tipoPeriodo: 'comercial',
     ano: anoAtual,
     mes: mesAtual,
     dataInicio: formatLocalDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1)),
     dataFim: formatLocalDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)),
-    empresa: '', // Vazio = não carrega automaticamente
+    empresa: '', // Será preenchido pelo useEffect abaixo
   });
+
+  // Preencher empresa do profile quando disponível
+  useEffect(() => {
+    if (defaultEmpresa && filters.empresa === '') {
+      setFilters(prev => ({ ...prev, empresa: defaultEmpresa }));
+    }
+  }, [defaultEmpresa]);
 
   // Carregar período comercial do banco ao montar
   useEffect(() => {

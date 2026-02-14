@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { getFinanceiroDre, DreLinha, calcularResumoDre, DreResumo } from "../services/financeiroDreService";
 import { EmpresaParam } from "@/services/firebirdBridge";
+import { useDefaultEmpresa } from "./useDefaultEmpresa";
 
 export interface DreFilters {
   empresa: EmpresaParam;
@@ -17,13 +18,13 @@ function formatLocalDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function getDefaultFilters(): DreFilters {
+function getDefaultFilters(defaultEmpresa: EmpresaParam): DreFilters {
   const hoje = new Date();
   const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
   return {
-    empresa: 'ALL', // Default: todas as empresas
+    empresa: defaultEmpresa || '', // Default: empresa do profile
     dataIni: formatLocalDate(primeiroDiaMes),
     dataFim: formatLocalDate(ultimoDiaMes),
   };
@@ -37,10 +38,18 @@ export interface DreCompetenciaData {
 }
 
 export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
+  const { defaultEmpresa } = useDefaultEmpresa();
   const [filters, setFilters] = useState<DreFilters>({
-    ...getDefaultFilters(),
+    ...getDefaultFilters(defaultEmpresa),
     ...initialFilters,
   });
+  
+  // Atualizar empresa quando o profile carregar
+  useEffect(() => {
+    if (defaultEmpresa && filters.empresa === '') {
+      setFilters(prev => ({ ...prev, empresa: defaultEmpresa }));
+    }
+  }, [defaultEmpresa]);
 
   const [data, setData] = useState<DreLinha[]>([]);
   const [loading, setLoading] = useState(false);

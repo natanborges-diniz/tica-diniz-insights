@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { getFinanceiroParcelas, FinanceiroParcela } from "../services/financeiroService";
 import { EmpresaParam } from "@/services/firebirdBridge";
+import { useDefaultEmpresa } from "./useDefaultEmpresa";
 
 export type TipoFilter = "TODOS" | "PAGAR" | "RECEBER";
 export type SituacaoFilter = "TODOS" | "EM ABERTO" | "EM ATRASO" | "PAGA";
@@ -39,13 +40,13 @@ function formatLocalDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function getDefaultFilters(): FinanceiroFilters {
+function getDefaultFilters(defaultEmpresa: EmpresaParam): FinanceiroFilters {
   const hoje = new Date();
   const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
   return {
-    empresa: 'ALL', // Default: todas as empresas
+    empresa: defaultEmpresa || '', // Default: empresa do profile
     dataIni: formatLocalDate(primeiroDiaMes),
     dataFim: formatLocalDate(ultimoDiaMes),
     tipo: "TODOS",
@@ -122,10 +123,19 @@ function filterByKPI(parcelas: FinanceiroParcela[], kpiFilter: KPIFilterType): F
 }
 
 export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters>) {
+  const { defaultEmpresa } = useDefaultEmpresa();
   const [filters, setFilters] = useState<FinanceiroFilters>({
-    ...getDefaultFilters(),
+    ...getDefaultFilters(defaultEmpresa),
     ...initialFilters,
   });
+  
+  // Atualizar empresa quando o profile carregar
+  const empresaInitRef = useCallback(() => {}, []);
+  useEffect(() => {
+    if (defaultEmpresa && filters.empresa === '') {
+      setFilters(prev => ({ ...prev, empresa: defaultEmpresa }));
+    }
+  }, [defaultEmpresa]);
 
   const [data, setData] = useState<FinanceiroParcela[]>([]);
   const [loading, setLoading] = useState(false);

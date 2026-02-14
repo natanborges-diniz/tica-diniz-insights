@@ -3,6 +3,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useEmpresas } from "./useEmpresas";
+import { useDefaultEmpresa } from "./useDefaultEmpresa";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { 
   coletarDadosCentralIA, 
@@ -30,15 +31,23 @@ export interface CentralIAState {
 
 export function useCentralIA() {
   const { empresas, isLoading: loadingEmpresas } = useEmpresas();
+  const { defaultEmpresa } = useDefaultEmpresa();
   
   const hoje = new Date();
   const [filters, setFilters] = useState<CentralIAFilters>({
-    empresa: 'ALL',
+    empresa: '', // Será preenchido pelo useEffect abaixo
     dataInicio: formatLocalDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1)),
     dataFim: formatLocalDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)),
     incluirEstoque: true,
     incluirAnaliseSku: true,
   });
+
+  // Preencher empresa do profile quando disponível
+  useEffect(() => {
+    if (defaultEmpresa && filters.empresa === '') {
+      setFilters(prev => ({ ...prev, empresa: defaultEmpresa }));
+    }
+  }, [defaultEmpresa]);
 
   // Carregar período comercial do banco ao montar
   useEffect(() => {

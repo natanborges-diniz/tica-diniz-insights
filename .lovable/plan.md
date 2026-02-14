@@ -630,3 +630,17 @@ O console warn identifica automaticamente quais ainda precisam migrar.
 - Rota `/vendas-familia` → `/vendas/familia` (com redirect de compatibilidade)
 - Sidebar atualizada para apontar para `/vendas/familia`
 - Todas as rotas seguem padrão `/modulo/sub`
+
+### E3.4 — Padronizar filtros de empresa/loja e comportamento default ✅
+
+- Criado `useDefaultEmpresa` hook centralizado: default = `cod_empresa` do profile, nunca `ALL`
+- `useVendasDashboard`: default empresa do profile (antes: `ALL`)
+- `useFinanceiroParcelas`: default empresa do profile (antes: `ALL`)
+- `useFinanceiroDre`: default empresa do profile (antes: `ALL`)
+- `useFluxoCaixa`: default empresa do profile (antes: `ALL`)
+- `useInteligenciaVendas`: default empresa do profile (antes: vazio)
+- `useEstoqueUnificado`: default empresa do profile (antes: `null`)
+- `useCentralIA`: default empresa do profile (antes: `ALL`)
+- `SalesFamilyDashboard`: prefere empresa do profile (antes: primeira da lista)
+- Monitor OS já exigia seleção manual — inalterado (correto)
+- Admin mantém capacidade de selecionar "Todas" nos dropdowns, mas nunca auto-carrega com ALL
