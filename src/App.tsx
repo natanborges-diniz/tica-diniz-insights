@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import LoginPage from "@/components/auth/LoginPage";
 import { AppLayout } from "@/components/layout/AppLayout";
+import HomePage from "./pages/HomePage";
 import SalesDashboard from "./pages/SalesDashboard";
 import VisaoEstoquePage from "./pages/estoque/VisaoEstoquePage";
 import OQueFazerPage from "./pages/estoque/OQueFazerPage";
@@ -41,7 +42,7 @@ const App = () => (
             {/* Protected */}
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
-                <Route path="/" element={<Navigate to="/vendas" replace />} />
+                <Route path="/" element={<HomePage />} />
 
                 {/* Vendas */}
                 <Route path="/vendas" element={<SalesDashboard />} />
