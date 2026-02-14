@@ -585,8 +585,17 @@ O console warn identifica automaticamente quais ainda precisam migrar.
   - Variáveis de ambiente documentadas
   - Plano de remoção: confirmar → remover legados → deploy → strict mode → cleanup fallbacks
 
-**Próximos passos:**
-1. ⬜ Remover 4 endpoints legados do `index.js` e fazer deploy
-2. ⬜ Ativar `bridge_strict_contract` após 7 dias estáveis
-3. ⬜ Remover fallbacks legados do `firebirdBridge.ts`
+### E2.7 — Corte Controlado do Legado (Strict Mode Permanente) ✅
+
+- Strict mode ativado permanentemente — `isBridgeStrictContract()` sempre retorna `true`
+- Código de fallback legado (`{ data }`, `{ rows }`, `[...]`) removido do `firebirdBridge.ts`
+- Contadores de legacy hits removidos (telemetria simplificada: apenas endpoints v2)
+- Feature flag `setBridgeStrictContract()` mantida como no-op para compatibilidade de imports
+- Toggle de strict mode removido do painel Admin Health (substituído por badge "Strict ON")
+- Qualquer resposta não-v2 gera `BRIDGE_CONTRACT_VIOLATION` explícito
+- Painel de telemetria mostra apenas endpoints v2 contactados na sessão
+
+**Resultado:** Frontend aceita exclusivamente envelope `{ ok, data, error }`. Código ~80 linhas mais enxuto.
+
+**Fase 2 — CONCLUÍDA ✅**
 
