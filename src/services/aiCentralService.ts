@@ -5,7 +5,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { EmpresaParam, formatEmpresaParam } from "./firebirdBridge";
 import { getResumoFormasPagamento, getAnaliseSku } from "./vendasService";
 import { getVendasAgregado } from "./agregadosService";
-import { getAnaliseEstoqueAcao } from "./estoqueService";
 import { getAnaliseFamiliaVendedor } from "./vendasService";
 
 // ============================================
@@ -338,7 +337,12 @@ async function coletarDadosEstoque(
   empresa: EmpresaParam
 ): Promise<DadosEstoqueConsolidado | null> {
   try {
-    const dados = await getAnaliseEstoqueAcao({ empresa });
+    // Usa getAnaliseSku (endpoint /vendas/analise-sku) — fonte unificada de estoque+vendas
+    const hoje = new Date();
+    const dataFim = hoje.toISOString().split('T')[0];
+    const dataInicio = new Date(hoje.getTime() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
+    const dados = await getAnaliseSku({ empresa, dataInicio, dataFim });
 
     if (!dados || dados.length === 0) {
       return null;
@@ -357,34 +361,33 @@ async function coletarDadosEstoque(
     }>();
 
     dados.forEach(d => {
-      const acao = d.acaoSugerida.toUpperCase();
+      const diasEstoque = d.diasDesdeUltimaVenda ?? 0;
       
-      if (acao.includes('SEM GIRO') || d.diasEstoque > 180) {
+      if (diasEstoque > 180) {
         itensSemGiro++;
-      } else if (acao.includes('LENTO') || (d.diasEstoque > 90 && d.diasEstoque <= 180)) {
+      } else if (diasEstoque > 90) {
         itensGiroLento++;
-      } else if (d.diasEstoque > 30 && d.diasEstoque <= 90) {
+      } else if (diasEstoque > 30) {
         itensGiroNormal++;
-      } else if (d.diasEstoque <= 30) {
+      } else {
         itensGiroRapido++;
       }
 
-      if (acao.includes('COMPRAR') || acao.includes('REPOR')) {
+      if (d.estoqueAtual <= 0 && d.qtdProdutos > 0) {
         itensParaCompra++;
       }
 
-      // Por fornecedor
       const fornecedor = d.fornecedor || 'DESCONHECIDO';
       const existente = porFornecedorMap.get(fornecedor);
       if (existente) {
         existente.qtdItens++;
-        if (acao.includes('SEM GIRO') || d.diasEstoque > 180) existente.itensSemGiro++;
-        if (acao.includes('COMPRAR') || acao.includes('REPOR')) existente.itensParaCompra++;
+        if (diasEstoque > 180) existente.itensSemGiro++;
+        if (d.estoqueAtual <= 0 && d.qtdProdutos > 0) existente.itensParaCompra++;
       } else {
         porFornecedorMap.set(fornecedor, {
           qtdItens: 1,
-          itensSemGiro: (acao.includes('SEM GIRO') || d.diasEstoque > 180) ? 1 : 0,
-          itensParaCompra: (acao.includes('COMPRAR') || acao.includes('REPOR')) ? 1 : 0,
+          itensSemGiro: diasEstoque > 180 ? 1 : 0,
+          itensParaCompra: (d.estoqueAtual <= 0 && d.qtdProdutos > 0) ? 1 : 0,
         });
       }
     });

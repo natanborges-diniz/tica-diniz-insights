@@ -7,6 +7,7 @@ import { EmpresaParam } from "@/services/firebirdBridge";
 import { getAnaliseSku, AnaliseSku } from "@/services/vendasService";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { categorizarProduto } from "@/utils/categorizarProduto";
 // ============================================
 // INTERFACES
 // ============================================
@@ -192,14 +193,10 @@ export function useOtb() {
     let armacoes = 0, lentes = 0, acessorios = 0, outros = 0;
     
     dadosBrutos.forEach(sku => {
-      const tipoNorm = (sku.tipo || '').toUpperCase().trim();
-      const isArmacao = tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || tipoNorm.includes('ARMAC') || tipoNorm.includes('ARMAÇÃO');
-      const isLente = tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || tipoNorm === 'LG' || tipoNorm === 'GC' || tipoNorm.includes('LENT');
-      const isAcessorio = tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || tipoNorm.includes('ACESS') || tipoNorm.includes('ACC');
-      
-      if (isArmacao) armacoes++;
-      else if (isLente) lentes++;
-      else if (isAcessorio) acessorios++;
+      const cat = categorizarProduto(sku.tipo);
+      if (cat === 'ARMACOES') armacoes++;
+      else if (cat === 'LENTES') lentes++;
+      else if (cat === 'ACESSORIOS') acessorios++;
       else outros++;
     });
     
@@ -223,33 +220,8 @@ export function useOtb() {
     const filtrados = filters.tipoFiltro === 'TODOS' 
       ? dadosBrutos 
       : dadosBrutos.filter(sku => {
-          const tipoNorm = (sku.tipo || '').toUpperCase().trim();
-          
-          // Lógica baseada nos tipos reais do ERP:
-          // AR = Armações, LG = Lentes de Grau, GC = Grau de Contato, etc.
-          switch (filters.tipoFiltro) {
-            case 'ARMACOES':
-              // AR no início ou contém ARMAC/ARMAÇÃO
-              return tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || 
-                     tipoNorm.includes('ARMAC') || tipoNorm.includes('ARMAÇÃO');
-            case 'LENTES':
-              // LG (lentes de grau) ou GC (grau de contato) ou contém LENT
-              return tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || 
-                     tipoNorm === 'LG' || tipoNorm === 'GC' ||
-                     tipoNorm.includes('LENT');
-            case 'ACESSORIOS':
-              // AC ou contém ACESS
-              return tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || 
-                     tipoNorm.includes('ACESS') || tipoNorm.includes('ACC');
-            case 'OUTROS':
-              // Tudo que não é armação, lente ou acessório
-              const isArmacao = tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || tipoNorm.includes('ARMAC');
-              const isLente = tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || tipoNorm === 'LG' || tipoNorm === 'GC' || tipoNorm.includes('LENT');
-              const isAcessorio = tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || tipoNorm.includes('ACESS');
-              return !isArmacao && !isLente && !isAcessorio;
-            default:
-              return true;
-          }
+          const cat = categorizarProduto(sku.tipo);
+          return cat === filters.tipoFiltro;
         });
 
     console.log('[useOtb] Após filtro:', filtrados.length, 'SKUs');
@@ -293,11 +265,7 @@ export function useOtb() {
       const curvaABC = curvaMap.get(sku.codSku) || 'C';
       
       // Buscar mínimo configurado para esta loja/categoria/curva
-      const tipoNorm = (sku.tipo || '').toUpperCase().trim();
-      const categoria = tipoNorm.startsWith('AR ') || tipoNorm === 'AR' || tipoNorm.includes('ARMAC') ? 'ARMACOES'
-        : tipoNorm.startsWith('LG ') || tipoNorm.startsWith('GC ') || tipoNorm === 'LG' || tipoNorm === 'GC' || tipoNorm.includes('LENT') ? 'LENTES'
-        : tipoNorm.startsWith('AC ') || tipoNorm === 'AC' || tipoNorm.includes('ACESS') ? 'ACESSORIOS'
-        : 'OUTROS';
+      const categoria = categorizarProduto(sku.tipo);
       
       // Encontrar configuração de mínimo (prioridade: categoria específica > TODOS)
       let estoqueMinimo = 0;

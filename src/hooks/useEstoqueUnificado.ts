@@ -11,6 +11,7 @@ import { useEmpresas } from "./useEmpresas";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getAnaliseSku, AnaliseSku } from "@/services/vendasService";
 import { getEstoqueCompleto, EstoqueCompleto, calcularMetricasEstoqueCompleto } from "@/services/estoqueCompletoService";
+import { categorizarProduto } from "@/utils/categorizarProduto";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -116,58 +117,7 @@ interface MapeamentoFornecedor {
 // FUNÇÕES AUXILIARES
 // ============================================
 
-function categorizarTipo(tipo: string): 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS' {
-  const tipoNorm = (tipo || '').toUpperCase().trim();
-  
-  // Debug: log para verificar valores vindos do backend
-  // console.log('[categorizarTipo] Input:', tipo, '-> Normalizado:', tipoNorm);
-  
-  // ARMAÇÕES: AR, ARM, ARMAÇÃO, ARMACAO, ou qualquer coisa que comece com AR
-  if (
-    tipoNorm === 'AR' ||
-    tipoNorm === 'ARM' ||
-    tipoNorm.startsWith('AR ') ||
-    tipoNorm.startsWith('AR-') ||
-    tipoNorm.startsWith('ARM ') ||
-    tipoNorm.startsWith('ARM-') ||
-    tipoNorm.includes('ARMAC') ||
-    tipoNorm.includes('ARMAÇÃO') ||
-    tipoNorm.includes('ARMA')
-  ) {
-    return 'ARMACOES';
-  }
-  
-  // LENTES: LG (lentes de grau), GC (grau de contato), LC (lentes de contato)
-  if (
-    tipoNorm === 'LG' ||
-    tipoNorm === 'GC' ||
-    tipoNorm === 'LC' ||
-    tipoNorm.startsWith('LG ') ||
-    tipoNorm.startsWith('LG-') ||
-    tipoNorm.startsWith('GC ') ||
-    tipoNorm.startsWith('GC-') ||
-    tipoNorm.startsWith('LC ') ||
-    tipoNorm.startsWith('LC-') ||
-    tipoNorm.includes('LENT') ||
-    tipoNorm.includes('GRAU') ||
-    tipoNorm.includes('CONTATO')
-  ) {
-    return 'LENTES';
-  }
-  
-  // ACESSÓRIOS: AC, ACESSÓRIO
-  if (
-    tipoNorm === 'AC' ||
-    tipoNorm.startsWith('AC ') ||
-    tipoNorm.startsWith('AC-') ||
-    tipoNorm.includes('ACESS') ||
-    tipoNorm.includes('ACC')
-  ) {
-    return 'ACESSORIOS';
-  }
-  
-  return 'OUTROS';
-}
+// Importado de @/utils/categorizarProduto — fonte única de verdade
 
 // Ação sugerida agora vem calculada do backend baseada em dias_estoque
 
@@ -310,7 +260,7 @@ export function useEstoqueUnificado() {
       // Buscar dados de vendas correspondentes
       const vendas = vendasMap.get(estoqueItem.codSku);
       
-      const categoria = categorizarTipo(estoqueItem.tipo);
+      const categoria = categorizarProduto(estoqueItem.tipo);
       // Curva ABC: do mapa de vendas ou 'C' se não tiver vendas (sem giro)
       const curvaABC = curvaMap.get(estoqueItem.codSku) || 'C';
       
@@ -483,7 +433,7 @@ export function useEstoqueUnificado() {
       dadosEstoqueCompleto.filter(item => {
         // Aplica filtro de categoria se selecionado
         if (filters.categoria !== 'TODOS') {
-          const cat = categorizarTipo(item.tipo);
+          const cat = categorizarProduto(item.tipo);
           return cat === filters.categoria;
         }
         return true;
