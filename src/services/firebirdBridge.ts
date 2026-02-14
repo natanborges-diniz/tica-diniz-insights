@@ -67,12 +67,21 @@ export interface ApiGetOptions {
 }
 
 // ============================================
-// TRACKING DE ENDPOINTS LEGADOS (deprecação)
+// TELEMETRIA DE MIGRAÇÃO v2
 // ============================================
 
+/** Rastreia quais endpoints já responderam em v2 e quais ainda são legados */
+const _v2MigrationStatus: Record<string, 'v2' | 'legacy'> = {};
+
+/** Endpoints que já foram logados como legados (evita spam) */
 const _legacyEndpointsLogged = new Set<string>();
 
+function trackEndpointFormat(path: string, format: 'v2' | 'legacy') {
+  _v2MigrationStatus[path] = format;
+}
+
 function logLegacyFormat(path: string, format: string) {
+  trackEndpointFormat(path, 'legacy');
   if (!_legacyEndpointsLogged.has(path)) {
     _legacyEndpointsLogged.add(path);
     console.warn(
@@ -81,6 +90,44 @@ function logLegacyFormat(path: string, format: string) {
     );
   }
 }
+
+/**
+ * Retorna o status de migração v2 de todos os endpoints conhecidos.
+ * Útil para acompanhar o progresso da migração.
+ */
+export function getV2MigrationStatus(): Record<string, 'v2' | 'legacy'> {
+  return { ..._v2MigrationStatus };
+}
+
+/**
+ * Retorna um resumo do progresso da migração v2.
+ */
+export function getV2MigrationSummary(): { total: number; v2: number; legacy: number; endpoints: Record<string, string> } {
+  const entries = Object.entries(_v2MigrationStatus);
+  const v2Count = entries.filter(([, s]) => s === 'v2').length;
+  const legacyCount = entries.filter(([, s]) => s === 'legacy').length;
+  return {
+    total: entries.length,
+    v2: v2Count,
+    legacy: legacyCount,
+    endpoints: { ..._v2MigrationStatus }
+  };
+}
+
+// ============================================
+// CÓDIGOS DE ERRO PADRONIZADOS
+// ============================================
+
+export type BridgeErrorCode =
+  | 'VALIDATION_ERROR'
+  | 'FIREBIRD_TIMEOUT'
+  | 'FIREBIRD_DISCONNECTED'
+  | 'QUERY_ERROR'
+  | 'INTERNAL_ERROR'
+  | 'NOT_FOUND'
+  | 'CIRCUIT_OPEN'
+  | 'REQUEST_CANCELLED'
+  | 'CLIENT_TIMEOUT';
 
 // ============================================
 // FUNÇÃO GENÉRICA DE REQUISIÇÃO
@@ -94,7 +141,10 @@ export async function apiGet<T>(
   // Circuit breaker check
   const { isBridgeCircuitOpen, recordBridgeFailure, recordBridgeSuccess } = await import('@/hooks/useBridgeStatus');
   if (isBridgeCircuitOpen()) {
-    throw new Error('Conexão com o servidor de dados temporariamente suspensa. O sistema detectou falhas consecutivas. Aguarde alguns segundos e tente novamente.');
+    throw Object.assign(
+      new Error('Conexão com o servidor de dados temporariamente suspensa. O sistema detectou falhas consecutivas. Aguarde alguns segundos e tente novamente.'),
+      { code: 'CIRCUIT_OPEN' as BridgeErrorCode }
+    );
   }
 
   const url = new URL(`${FIREBIRD_BRIDGE_BASE_URL}/api/v1${path}`);
@@ -137,13 +187,14 @@ export async function apiGet<T>(
 
     // Tratar erros HTTP antes de parsear body
     if (!response.ok) {
-      // Tentar extrair erro estruturado do body
+      // Tentar extrair erro estruturado do body (v2)
       try {
         const errorBody = await response.json();
         if (errorBody.ok === false && errorBody.error) {
+          trackEndpointFormat(path, 'v2'); // Erro v2 é ainda v2
           const err = new Error(errorBody.error.message || `HTTP ${response.status}`) as Error & { code?: string; details?: unknown };
           err.code = errorBody.error.code;
-          err.details = errorBody.error.details;
+          err.details = errorBody.error.details || errorBody.details;
           throw err;
         }
       } catch (parseErr) {
@@ -159,6 +210,7 @@ export async function apiGet<T>(
     // ========================================
     if (result.ok !== undefined) {
       if (result.ok === false || result.error) {
+        trackEndpointFormat(path, 'v2');
         const errorObj = result.error;
         const errorMessage = errorObj?.message || 'Erro desconhecido na API';
         const err = new Error(errorMessage) as Error & { code?: string; details?: unknown };
@@ -167,7 +219,13 @@ export async function apiGet<T>(
         throw err;
       }
       const data = result.data ?? [];
-      console.log(`[FirebirdBridge] ✓ ${path} → ${data.length} records`);
+      trackEndpointFormat(path, 'v2');
+      const meta = result.meta;
+      if (meta?.elapsed_ms) {
+        console.log(`[FirebirdBridge] ✓ ${path} → ${data.length} records (${meta.elapsed_ms}ms)`);
+      } else {
+        console.log(`[FirebirdBridge] ✓ ${path} → ${data.length} records`);
+      }
       recordBridgeSuccess();
       return data;
     }
@@ -210,21 +268,26 @@ export async function apiGet<T>(
     recordBridgeFailure();
 
     if (error instanceof Error) {
-      if (error.message.includes('temporariamente suspensa')) {
+      // Preservar erros com código estruturado (circuit breaker, API errors)
+      if ('code' in error) {
         throw error;
       }
       if (error.name === 'AbortError') {
         if (externalSignal?.aborted) {
           console.log(`[FirebirdBridge] Request cancelled: ${path}`);
-          throw new Error('Requisição cancelada');
+          throw Object.assign(new Error('Requisição cancelada'), { code: 'REQUEST_CANCELLED' as BridgeErrorCode });
         }
         console.error(`[FirebirdBridge] Timeout: ${path}`);
-        throw new Error('O servidor não respondeu a tempo. Verifique o status em Admin > Bridge Health.');
+        throw Object.assign(
+          new Error('O servidor não respondeu a tempo. Verifique o status em Admin > Bridge Health.'),
+          { code: 'CLIENT_TIMEOUT' as BridgeErrorCode }
+        );
       }
-      // Re-throw errors with code (structured API errors)
-      if ('code' in error) throw error;
       console.error(`[FirebirdBridge] Error: ${path}`, error.message);
-      throw new Error(`Erro de conexão: ${error.message}. Verifique o status do Bridge.`);
+      throw Object.assign(
+        new Error(`Erro de conexão: ${error.message}. Verifique o status do Bridge.`),
+        { code: 'INTERNAL_ERROR' as BridgeErrorCode }
+      );
     }
     throw new Error('Erro desconhecido na requisição');
   }

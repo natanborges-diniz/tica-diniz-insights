@@ -518,3 +518,50 @@ module.exports = { success, error };
 **Prazo:** Suporte legado será removido após todos os endpoints migrarem.
 O console warn identifica automaticamente quais ainda precisam migrar.
 
+### E2.4 — Migração Incremental para Envelope v2 ✅
+
+**Escopo concluído:**
+
+**Backend (`firebird-bridge/index.js` v2.4.0):**
+- Helpers `success()` e `error()` substituem `apiResponse()` genérico
+- `classifyError()` mapeia erros Firebird para códigos padronizados:
+  - `FIREBIRD_TIMEOUT` (503): timeout, econnreset, epipe
+  - `FIREBIRD_DISCONNECTED` (503): econnrefused, connection refused
+  - `QUERY_ERROR` (500): dynamic sql error, dsql, token unknown
+  - `VALIDATION_ERROR` (400): parâmetros ausentes/inválidos
+  - `INTERNAL_ERROR` (500): fallback genérico
+- `executeQuery()` agora tem timeout configurável via `QUERY_TIMEOUT_MS` (default 30s)
+- Todos os 8 endpoints `/api/v1/*` migrados para `success()`/`error()` com `meta.elapsed_ms`
+- `/api/v1/health` retorna envelope v2 completo com status, latency, version
+- `BRIDGE_VERSION` exportada para telemetria (`2.4.0`)
+
+**Endpoints migrados (8/9):**
+
+| # | Endpoint | Status | Formato |
+|---|----------|--------|---------|
+| 1 | `/api/v1/health` | ✅ | v2 + meta |
+| 2 | `/api/v1/vendas/resumo-empresa-vendedor` | ✅ | v2 + meta |
+| 3 | `/api/v1/vendas/resumo-formas-pagamento` | ✅ | v2 + meta |
+| 4 | `/api/v1/vendas/resumo-diario-simples` | ✅ | v2 + meta |
+| 5 | `/api/v1/vendas/analise-sku` | ✅ | v2 + meta |
+| 6 | `/api/v1/estoque/analise-acao` | ✅ | v2 + meta |
+| 7 | `/api/v1/financeiro/parcelas` | ✅ | v2 + meta |
+| 8 | `/api/v1/financeiro/dre` | ✅ | v2 + meta |
+| 9 | `/api/v1/empresas` | ✅ | v2 + meta |
+
+**Endpoints legados (NÃO migrados — serão removidos):**
+- `/api/kpis` — formato objeto simples
+- `/api/vendas-por-dia` — array direto
+- `/api/vendas-por-loja` — array direto
+- `/api/empresas` — array direto
+
+**Frontend (`firebirdBridge.ts`):**
+- Telemetria de migração: `getV2MigrationStatus()` e `getV2MigrationSummary()` rastreiam formato por endpoint
+- `BridgeErrorCode` type exportado para tratamento tipado de erros
+- Erros agora carregam `code` padronizado: `CIRCUIT_OPEN`, `CLIENT_TIMEOUT`, `REQUEST_CANCELLED`
+- `meta.elapsed_ms` do backend logado no console para monitoramento de performance
+
+**Ação necessária:**
+- Fazer deploy do `firebird-bridge/index.js` no Railway
+- Após deploy, todos os warnings de formato legado devem cessar no console do frontend
+
