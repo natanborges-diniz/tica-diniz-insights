@@ -154,9 +154,53 @@ serve(async (req) => {
       case "listar-produtos": url = `${HOYA_BASE_URL}/produto`; break;
       case "consultar-produto": url = `${HOYA_BASE_URL}/produto/${params.codigoProduto}`; break;
       case "consultar-produto-sku": url = `${HOYA_BASE_URL}/produto/sku/${params.sku}`; break;
-      case "criar-pedido":
+      case "criar-pedido": {
         url = `${HOYA_BASE_URL}/pedido`; method = "POST";
-        fetchBody = JSON.stringify(params.pedido); break;
+        fetchBody = JSON.stringify(params.pedido);
+
+        // F4.2: Idempotency check
+        const hoyaEnvForKey = detectHoyaEnvironment();
+        const payloadHash = await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode(fetchBody)
+        );
+        const hashHex = Array.from(new Uint8Array(payloadHash))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("")
+          .slice(0, 16);
+        const idempotencyKey = `HOYA_${params.codEmpresa || 0}_${params.codOs || 0}_${hoyaEnvForKey}_${hashHex}`;
+
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const sbIdem = createClient(supabaseUrl, supabaseKey);
+
+        const { data: existing } = await sbIdem
+          .from("pedidos_fornecedor")
+          .select("*")
+          .eq("idempotency_key", idempotencyKey)
+          .neq("status", "ERRO")
+          .maybeSingle();
+
+        if (existing) {
+          console.log(`[hoya-proxy] [${correlationId}] Idempotency HIT: ${idempotencyKey}`);
+          return new Response(
+            JSON.stringify({
+              numeroPedido: existing.numero_pedido,
+              status: existing.status,
+              idempotencyHit: true,
+              message: "Pedido já enviado para esta OS/empresa/ambiente.",
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId, "X-Idempotency-Key": idempotencyKey },
+            }
+          );
+        }
+
+        // Store key for later audit insert
+        (params as Record<string, unknown>).__idempotencyKey = idempotencyKey;
+        break;
+      }
       case "consultar-pedido": url = `${HOYA_BASE_URL}/pedido/tracking/${params.numeroPedido}`; break;
       case "consultar-pedidos":
         url = `${HOYA_BASE_URL}/pedido/consultar`; method = "POST";
@@ -238,6 +282,7 @@ serve(async (req) => {
           requested_by: user?.userId || null,
           requested_at: new Date().toISOString(),
           hoya_environment: hoyaEnv,
+          idempotency_key: (params as Record<string, unknown>).__idempotencyKey || null,
         });
         console.log(`[hoya-proxy] [${correlationId}] Order audit saved. User: ${user?.userId} Env: ${hoyaEnv} Success: ${hoyaResp.ok}`);
       } catch (dbErr) {

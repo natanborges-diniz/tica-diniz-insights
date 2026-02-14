@@ -550,6 +550,7 @@ export type Database = {
           fornecedor: string
           hoya_environment: string | null
           id: string
+          idempotency_key: string | null
           numero_pedido: string | null
           payload: Json | null
           requested_at: string | null
@@ -565,6 +566,7 @@ export type Database = {
           fornecedor?: string
           hoya_environment?: string | null
           id?: string
+          idempotency_key?: string | null
           numero_pedido?: string | null
           payload?: Json | null
           requested_at?: string | null
@@ -580,6 +582,7 @@ export type Database = {
           fornecedor?: string
           hoya_environment?: string | null
           id?: string
+          idempotency_key?: string | null
           numero_pedido?: string | null
           payload?: Json | null
           requested_at?: string | null
