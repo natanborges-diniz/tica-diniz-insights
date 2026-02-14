@@ -80,15 +80,21 @@ export default function AdminHealthPage() {
 
       {/* Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+        <Card className={isUp ? 'border-green-500/30' : isDegraded ? 'border-yellow-500/30 bg-yellow-500/5' : latest ? 'border-destructive/30 bg-destructive/5' : ''}>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               {isUp ? <Wifi className="h-8 w-8 text-green-500" /> : isDegraded ? <Wifi className="h-8 w-8 text-yellow-500" /> : <WifiOff className="h-8 w-8 text-destructive" />}
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-sm text-muted-foreground">Status Atual</p>
                 <p className={`text-xl font-bold ${isUp ? 'text-green-500' : isDegraded ? 'text-yellow-500' : 'text-destructive'}`}>
                   {latest ? (isUp ? 'Online' : isDegraded ? 'Degradado' : latest.status === 'timeout' ? 'Timeout' : 'Offline') : '—'}
                 </p>
+                {isDegraded && (
+                  <p className="text-xs text-yellow-600 mt-1">Processo OK, banco Firebird desconectado</p>
+                )}
+                {latest && !isUp && !isDegraded && latest.error_message && (
+                  <p className="text-xs text-destructive mt-1 truncate" title={latest.error_message}>{latest.error_message}</p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -120,12 +126,42 @@ export default function AdminHealthPage() {
         <Card>
           <CardContent className="pt-6">
             <div>
-              <p className="text-sm text-muted-foreground">Latência Média</p>
-              <p className="text-xl font-bold">{avgLatency !== null ? `${avgLatency}ms` : '—'}</p>
+              <p className="text-sm text-muted-foreground">Último Check</p>
+              <p className="text-xl font-bold">
+                {latest?.checked_at
+                  ? new Date(latest.checked_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+                  : '—'}
+              </p>
+              {latest?.bridge_version && (
+                <p className="text-xs text-muted-foreground mt-1">Bridge v{latest.bridge_version}</p>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Degraded detail banner */}
+      {isDegraded && latest?.error_message && (
+        <Card className="border-yellow-500/30 bg-yellow-500/5">
+          <CardContent className="pt-6 pb-4">
+            <div className="flex items-start gap-3">
+              <Wifi className="h-5 w-5 text-yellow-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-yellow-700">Bridge parcialmente disponível</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  O processo Node.js está ativo, mas a conexão com o banco Firebird falhou.
+                </p>
+                <code className="text-xs bg-yellow-500/10 px-2 py-1 rounded mt-2 inline-block font-mono">
+                  {latest.error_message}
+                </code>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Verifique a variável <strong>HEALTH_DB_TIMEOUT_MS</strong> no Railway (padrão: 600–800ms) para reduzir falsos negativos.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recent Failures */}
       {recentFailures.length > 0 && (
