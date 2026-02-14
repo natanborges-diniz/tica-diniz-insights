@@ -9,6 +9,7 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useEmpresas } from "./useEmpresas";
 import { EmpresaParam } from "@/services/firebirdBridge";
+import { useDefaultEmpresa } from "./useDefaultEmpresa";
 import { getAnaliseSku, AnaliseSku } from "@/services/vendasService";
 import { getEstoqueCompleto, EstoqueCompleto, calcularMetricasEstoqueCompleto } from "@/services/estoqueCompletoService";
 import { categorizarProduto } from "@/utils/categorizarProduto";
@@ -127,6 +128,7 @@ interface MapeamentoFornecedor {
 
 export function useEstoqueUnificado() {
   const { empresas, isLoading: loadingEmpresas } = useEmpresas();
+  const { defaultEmpresa } = useDefaultEmpresa();
   
   // Período padrão: últimos 180 dias
   const hoje = new Date();
@@ -134,7 +136,7 @@ export function useEstoqueUnificado() {
   const dataInicio = new Date(hoje.getTime() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
   const [filters, setFilters] = useState<EstoqueFilters>({
-    empresa: null,
+    empresa: null, // Será preenchido pelo useEffect abaixo
     dataInicio,
     dataFim,
     categoria: 'TODOS',
@@ -144,6 +146,13 @@ export function useEstoqueUnificado() {
     acao: 'TODAS',
     busca: '',
   });
+
+  // Preencher empresa do profile quando disponível
+  useEffect(() => {
+    if (defaultEmpresa && !filters.empresa) {
+      setFilters(prev => ({ ...prev, empresa: defaultEmpresa }));
+    }
+  }, [defaultEmpresa]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

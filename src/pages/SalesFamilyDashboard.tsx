@@ -4,6 +4,7 @@ import { ArrowLeft, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useEmpresas } from '@/hooks/useEmpresas';
+import { useDefaultEmpresa } from '@/hooks/useDefaultEmpresa';
 import { useAnaliseVendasFamilia } from '@/hooks/useAnaliseVendasFamilia';
 import { SalesFamilyFilters } from '@/components/sales-family/SalesFamilyFilters';
 import { SalesFamilyKPICards } from '@/components/sales-family/SalesFamilyKPICards';
@@ -23,11 +24,13 @@ function getToday(): string {
 }
 
 export default function SalesFamilyDashboard() {
-  // Estado de empresa
+  // Estado de empresa — default do profile
+  const { codEmpresa: profileEmpresa } = useDefaultEmpresa();
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<number | null>(null);
+
   const { empresas, isLoading: loadingEmpresas, error: errorEmpresas } = useEmpresas();
 
-  // Estado de datas
+  // Selecionar empresa do profile quando disponível
   const [dataInicio, setDataInicio] = useState(getFirstDayOfMonth);
   const [dataFim, setDataFim] = useState(getToday);
 
@@ -36,12 +39,14 @@ export default function SalesFamilyDashboard() {
   const [filtroFamilia, setFiltroFamilia] = useState('TODAS');
   const [filtroBuscaTexto, setFiltroBuscaTexto] = useState('');
 
-  // Selecionar primeira empresa quando carregar a lista
+  // Selecionar empresa do profile (ou primeira disponível como fallback)
   useEffect(() => {
     if (!loadingEmpresas && !errorEmpresas && empresas.length > 0 && selectedEmpresaId === null) {
-      setSelectedEmpresaId(empresas[0].codEmpresa);
+      // Prefere empresa do profile
+      const profileMatch = profileEmpresa ? empresas.find(e => e.codEmpresa === profileEmpresa) : null;
+      setSelectedEmpresaId(profileMatch ? profileMatch.codEmpresa : empresas[0].codEmpresa);
     }
-  }, [empresas, loadingEmpresas, errorEmpresas, selectedEmpresaId]);
+  }, [empresas, loadingEmpresas, errorEmpresas, selectedEmpresaId, profileEmpresa]);
 
   // Limpar filtros ao trocar de empresa ou datas
   useEffect(() => {

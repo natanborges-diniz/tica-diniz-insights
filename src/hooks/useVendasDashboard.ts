@@ -15,6 +15,7 @@ import { EmpresaParam } from "@/services/firebirdBridge";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
 import { separarPeriodo } from "@/services/agregadosService";
+import { useDefaultEmpresa } from "./useDefaultEmpresa";
 
 // Tipo para progresso (mantido para compatibilidade com UI)
 export interface ProgressoPaginacao {
@@ -305,12 +306,24 @@ async function fetchWithTimeout<T>(
 }
 
 export function useVendasDashboard() {
+  // Importar empresa padrão do profile — nunca ALL por default
+  const { defaultEmpresa } = useDefaultEmpresa();
+  
   const [filters, setFilters] = useState<VendasFiltersState>({
     dataInicio: formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
     dataFim: formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)),
     viewMode: "loja",
-    empresa: 'ALL',
+    empresa: '', // Será preenchido pelo useEffect abaixo
   });
+
+  // Preencher empresa do profile quando disponível
+  const empresaInicializada = useRef(false);
+  useEffect(() => {
+    if (defaultEmpresa && !empresaInicializada.current) {
+      empresaInicializada.current = true;
+      setFilters(prev => ({ ...prev, empresa: defaultEmpresa }));
+    }
+  }, [defaultEmpresa]);
 
   // Carregar período comercial do banco ao montar
   const periodoCarregado = useRef(false);
