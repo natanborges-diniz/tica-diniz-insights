@@ -1,7 +1,7 @@
 // src/pages/PedidoFornecedorPage.tsx
-// Tela de criação de pedido para fornecedor (Hoya) — com matching inteligente + validação + auditoria
+// Tela de criação de pedido para fornecedor (Hoya) — com matching inteligente + validação + auditoria + auto-fill FASE 5
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { OsHubRecord, fetchSingleOsRecipe } from "@/services/osHubService";
 import {
@@ -50,6 +50,8 @@ import {
   Zap,
   ShieldCheck,
   XCircle,
+  CheckCircle2,
+  Pencil,
 } from "lucide-react";
 
 // ============================================
@@ -66,6 +68,22 @@ function scoreLabel(score: number): { text: string; color: string } {
   if (score >= 60) return { text: "Alta", color: "text-emerald-600 bg-emerald-500/15 border-emerald-300" };
   if (score >= 35) return { text: "Média", color: "text-amber-600 bg-amber-500/15 border-amber-300" };
   return { text: "Baixa", color: "text-red-600 bg-red-500/15 border-red-300" };
+}
+
+// Auto-fill source labels
+type AutoFillSource = "depara" | "match" | "manual" | null;
+
+function autoFillSourceLabel(source: AutoFillSource): { text: string; icon: React.ReactNode; color: string } | null {
+  switch (source) {
+    case "depara":
+      return { text: "DE/PARA automático", icon: <Zap className="h-3.5 w-3.5" />, color: "text-emerald-700 bg-emerald-500/15 border-emerald-300" };
+    case "match":
+      return { text: "Match inteligente", icon: <Sparkles className="h-3.5 w-3.5" />, color: "text-primary bg-primary/10 border-primary/30" };
+    case "manual":
+      return { text: "Seleção manual", icon: <Search className="h-3.5 w-3.5" />, color: "text-muted-foreground bg-muted border-border" };
+    default:
+      return null;
+  }
 }
 
 // ============================================
@@ -126,6 +144,26 @@ const PedidoFornecedorPage: React.FC = () => {
   // Validation state
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
+  // ============================================
+  // FASE 5: Auto-fill confirmation states
+  // ============================================
+  const [confirmedProduct, setConfirmedProduct] = useState(false);
+  const [confirmedPrescription, setConfirmedPrescription] = useState(false);
+  const [autoFillSource, setAutoFillSource] = useState<AutoFillSource>(null);
+  const [prescriptionAutoFilled, setPrescriptionAutoFilled] = useState(false);
+
+  // Reset confirmation when product changes
+  const handleProductChange = useCallback((produto: HoyaProduto | null, source: AutoFillSource) => {
+    setProdutoSelecionado(produto);
+    setAutoFillSource(source);
+    // Manual selection = auto-confirmed
+    if (source === "manual") {
+      setConfirmedProduct(true);
+    } else {
+      setConfirmedProduct(false);
+    }
+  }, []);
+
   // ---- Load OS data ----
   useEffect(() => {
     if (!codOs) return;
@@ -137,6 +175,11 @@ const PedidoFornecedorPage: React.FC = () => {
           setOs(found);
           // Map prismas from OS
           const prismas = mapPrismasFromOs(found);
+
+          const hasAnyPrescData = found.odLongeEsf != null || found.odLongeCil != null ||
+            found.oeLongeEsf != null || found.oeLongeCil != null ||
+            found.odDnp != null || found.oeDnp != null;
+
           setPrescOd({
             esferico: found.odLongeEsf != null ? String(found.odLongeEsf) : "",
             cilindrico: found.odLongeCil != null ? String(found.odLongeCil) : "",
@@ -167,6 +210,12 @@ const PedidoFornecedorPage: React.FC = () => {
             ponteLente: found.ponte != null ? String(found.ponte) : "",
           });
           setUsuarioFinal(found.cliente || "");
+
+          // FASE 5: Mark prescription as auto-filled if data exists
+          if (hasAnyPrescData) {
+            setPrescriptionAutoFilled(true);
+            setConfirmedPrescription(false);
+          }
         }
       } catch (err) {
         console.error("[PedidoFornecedor] Error loading OS:", err);
@@ -215,7 +264,40 @@ const PedidoFornecedorPage: React.FC = () => {
       if (depara?.codigo_fornecedor) {
         const match = produtos.find(p => p.codigoProduto === depara.codigo_fornecedor);
         if (match) {
-          setProdutoSelecionado(match);
+          // FASE 5: DE/PARA auto-selects product + syncs group selects
+          handleProductChange(match, "depara");
+
+          // Also run matching to populate group selects for visual consistency
+          const result = matchProducts(produtos, descricao, {
+            esfericoOd: os.odLongeEsf,
+            esfericoOe: os.oeLongeEsf,
+            cilindricoOd: os.odLongeCil,
+            cilindricoOe: os.oeLongeCil,
+            adicaoOd: os.odAdicao,
+            adicaoOe: os.oeAdicao,
+          });
+          setMatchResult(result);
+
+          // Find the group that contains this product and sync selects
+          const matchingGroup = result.groups.find(g =>
+            g.produtos.some(p => p.codigoProduto === match.codigoProduto)
+          );
+          if (matchingGroup) {
+            setSelectedGroup(matchingGroup);
+            // Sync altura
+            if (match.codigoAltura != null) {
+              setSelectedAltura(String(match.codigoAltura));
+            }
+            // Sync tratamento
+            const hasCor = match.nome.toUpperCase().includes(" COR");
+            setSelectedTratamento(`${match.codigoTratamento}_${hasCor}`);
+            setIsCor(hasCor);
+            // Sync fotossensivel
+            if (match.codigoFotossensivel != null) {
+              setSelectedFotossensivel(String(match.codigoFotossensivel));
+            }
+          }
+
           toast({ title: "Produto encontrado via DE/PARA", description: match.nome });
           return;
         }
@@ -234,6 +316,7 @@ const PedidoFornecedorPage: React.FC = () => {
 
       if (result.bestGroup) {
         setSelectedGroup(result.bestGroup);
+        setAutoFillSource("match");
         // Pre-select based on parsed data
         if (result.parsed.tratamento) {
           const matchTrat = result.bestGroup.tratamentosDisponiveis.find(t =>
@@ -253,7 +336,7 @@ const PedidoFornecedorPage: React.FC = () => {
         });
       }
     })();
-  }, [os, produtos]);
+  }, [os, produtos, handleProductChange]);
 
   // ---- Resolve exact product from selections ----
   useEffect(() => {
@@ -274,7 +357,20 @@ const PedidoFornecedorPage: React.FC = () => {
       codFoto,
       corFlag
     );
-    setProdutoSelecionado(exact);
+
+    if (exact) {
+      // Only update if different from current (avoid resetting confirmation on DE/PARA sync)
+      if (exact.codigoProduto !== produtoSelecionado?.codigoProduto) {
+        setProdutoSelecionado(exact);
+        if (autoFillSource !== "depara") {
+          setAutoFillSource("match");
+          setConfirmedProduct(false);
+        }
+      }
+    } else {
+      setProdutoSelecionado(null);
+      setConfirmedProduct(false);
+    }
     // F4.4: Reset campos complementares when product changes
     setCamposComplementaresValues({});
   }, [selectedGroup, selectedAltura, selectedTratamento, selectedFotossensivel]);
@@ -293,10 +389,21 @@ const PedidoFornecedorPage: React.FC = () => {
       )
     : produtos.slice(0, 50);
 
+  // FASE 5: Check if both confirmations are done
+  const isReadyToSubmit = confirmedProduct && confirmedPrescription && !!produtoSelecionado;
+
   // ---- Submit order ----
   const handleEnviarPedido = async () => {
     if (!os || !produtoSelecionado) {
       toast({ title: "Selecione um produto Hoya", variant: "destructive" });
+      return;
+    }
+    if (!isReadyToSubmit) {
+      toast({
+        title: "Confirme o produto e a prescrição",
+        description: "Revise e confirme os dados auto-preenchidos antes de enviar.",
+        variant: "destructive",
+      });
       return;
     }
     if (enviandoCooldown) {
@@ -409,7 +516,7 @@ const PedidoFornecedorPage: React.FC = () => {
 
       setPedidoEnviado(resp);
 
-      // Save DE/PARA
+      // Save DE/PARA (persist for future auto-fill)
       const descricao = os.lenteOdDescricao || os.lenteOeDescricao;
       if (descricao && produtoSelecionado) {
         await supabase.from("fornecedor_produto_depara").upsert(
@@ -437,6 +544,61 @@ const PedidoFornecedorPage: React.FC = () => {
     } finally {
       setEnviando(false);
     }
+  };
+
+  // ============================================
+  // FASE 5: Confirmation Banner Component
+  // ============================================
+
+  const AutoFillConfirmBanner: React.FC<{
+    type: "product" | "prescription";
+    confirmed: boolean;
+    onConfirm: () => void;
+    onEdit: () => void;
+    source?: AutoFillSource;
+  }> = ({ type, confirmed, onConfirm, onEdit, source }) => {
+    if (confirmed) {
+      return (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-500/10 px-3 py-2">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+          <span className="text-sm text-emerald-700 font-medium">
+            {type === "product" ? "Produto confirmado" : "Prescrição confirmada"}
+          </span>
+          <Button variant="ghost" size="sm" className="ml-auto h-7 text-xs text-muted-foreground" onClick={onEdit}>
+            <Pencil className="h-3 w-3 mr-1" /> Editar
+          </Button>
+        </div>
+      );
+    }
+
+    const sourceInfo = source ? autoFillSourceLabel(source) : null;
+
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-500/10 px-3 py-2">
+        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <span className="text-sm text-amber-800 font-medium">
+            {type === "product" ? "Produto pré-selecionado" : "Prescrição pré-preenchida"}
+          </span>
+          {sourceInfo && (
+            <Badge variant="outline" className={`ml-2 text-[10px] h-5 ${sourceInfo.color}`}>
+              {sourceInfo.icon}
+              <span className="ml-1">{sourceInfo.text}</span>
+            </Badge>
+          )}
+          <p className="text-xs text-amber-700 mt-0.5">
+            Revise os dados e confirme antes de enviar.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          className="shrink-0 h-8 gap-1 bg-amber-600 hover:bg-amber-700 text-white"
+          onClick={onConfirm}
+        >
+          <Check className="h-3.5 w-3.5" /> Confirmar
+        </Button>
+      </div>
+    );
   };
 
   // ---- RENDER ----
@@ -506,6 +668,30 @@ const PedidoFornecedorPage: React.FC = () => {
         </div>
 
         <Separator />
+
+        {/* FASE 5: Confirmation status summary */}
+        {(produtoSelecionado || prescriptionAutoFilled) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {produtoSelecionado && autoFillSource && autoFillSource !== "manual" && (
+              <AutoFillConfirmBanner
+                type="product"
+                confirmed={confirmedProduct}
+                source={autoFillSource}
+                onConfirm={() => setConfirmedProduct(true)}
+                onEdit={() => setConfirmedProduct(false)}
+              />
+            )}
+            {prescriptionAutoFilled && (
+              <AutoFillConfirmBanner
+                type="prescription"
+                confirmed={confirmedPrescription}
+                source="depara"
+                onConfirm={() => setConfirmedPrescription(true)}
+                onEdit={() => setConfirmedPrescription(false)}
+              />
+            )}
+          </div>
+        )}
 
         {/* Lentes da OS */}
         {(os.lenteOdDescricao || os.lenteOeDescricao) && (
@@ -597,6 +783,8 @@ const PedidoFornecedorPage: React.FC = () => {
                       setSelectedFotossensivel("none");
                       setSelectedColoracao("none");
                       setProdutoSelecionado(null);
+                      setAutoFillSource("manual");
+                      setConfirmedProduct(false);
                     }
                   }}
                 >
@@ -634,7 +822,11 @@ const PedidoFornecedorPage: React.FC = () => {
                       <Label className="text-[10px] uppercase mb-1 block">
                         Altura <span className="text-destructive">*</span>
                       </Label>
-                      <Select value={selectedAltura} onValueChange={setSelectedAltura}>
+                      <Select value={selectedAltura} onValueChange={(v) => {
+                        setSelectedAltura(v);
+                        setAutoFillSource("manual");
+                        setConfirmedProduct(true);
+                      }}>
                         <SelectTrigger className="h-9">
                           <SelectValue placeholder="Escolha..." />
                         </SelectTrigger>
@@ -659,6 +851,8 @@ const PedidoFornecedorPage: React.FC = () => {
                       const [, cor] = v.split("_");
                       setIsCor(cor === "true");
                       setSelectedColoracao("none");
+                      setAutoFillSource("manual");
+                      setConfirmedProduct(true);
                     }}>
                       <SelectTrigger className="h-9">
                         <SelectValue placeholder="Escolha..." />
@@ -677,7 +871,11 @@ const PedidoFornecedorPage: React.FC = () => {
                   {selectedGroup.fotossensiveisDisponiveis.length > 0 && (
                     <div>
                       <Label className="text-[10px] uppercase mb-1 block">Fotossensível</Label>
-                      <Select value={selectedFotossensivel} onValueChange={setSelectedFotossensivel}>
+                      <Select value={selectedFotossensivel} onValueChange={(v) => {
+                        setSelectedFotossensivel(v);
+                        setAutoFillSource("manual");
+                        setConfirmedProduct(true);
+                      }}>
                         <SelectTrigger className="h-9">
                           <SelectValue placeholder="Nenhum" />
                         </SelectTrigger>
@@ -823,7 +1021,7 @@ const PedidoFornecedorPage: React.FC = () => {
                           produtoSelecionado?.codigoProduto === p.codigoProduto ? "bg-primary/5 border-l-2 border-primary" : ""
                         }`}
                         onClick={() => {
-                          setProdutoSelecionado(p);
+                          handleProductChange(p, "manual");
                           setSelectedGroup(null);
                           setMatchResult(null);
                         }}
@@ -849,6 +1047,16 @@ const PedidoFornecedorPage: React.FC = () => {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
               <Eye className="h-4 w-4" /> Prescrição
+              {prescriptionAutoFilled && !confirmedPrescription && (
+                <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-300 ml-2">
+                  Pré-preenchida da OS
+                </Badge>
+              )}
+              {confirmedPrescription && (
+                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 border-emerald-300 ml-2">
+                  <CheckCircle2 className="h-3 w-3 mr-1" /> Confirmada
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -864,7 +1072,11 @@ const PedidoFornecedorPage: React.FC = () => {
                     <Label className="text-[10px] uppercase">{field === "dnpLonge" ? "DNP" : field === "alturaPupilar" ? "Altura" : field}</Label>
                     <Input
                       value={prescOd[field]}
-                      onChange={(e) => setPrescOd(prev => ({ ...prev, [field]: e.target.value }))}
+                      onChange={(e) => {
+                        setPrescOd(prev => ({ ...prev, [field]: e.target.value }));
+                        // Any manual edit auto-confirms prescription
+                        if (prescriptionAutoFilled) setConfirmedPrescription(true);
+                      }}
                       className="h-8 text-sm font-mono"
                     />
                   </div>
@@ -917,7 +1129,10 @@ const PedidoFornecedorPage: React.FC = () => {
                     <Label className="text-[10px] uppercase">{field === "dnpLonge" ? "DNP" : field === "alturaPupilar" ? "Altura" : field}</Label>
                     <Input
                       value={prescOe[field]}
-                      onChange={(e) => setPrescOe(prev => ({ ...prev, [field]: e.target.value }))}
+                      onChange={(e) => {
+                        setPrescOe(prev => ({ ...prev, [field]: e.target.value }));
+                        if (prescriptionAutoFilled) setConfirmedPrescription(true);
+                      }}
                       className="h-8 text-sm font-mono"
                     />
                   </div>
@@ -1054,10 +1269,28 @@ const PedidoFornecedorPage: React.FC = () => {
           </Alert>
         )}
 
+        {/* FASE 5: Missing confirmations warning */}
+        {produtoSelecionado && !isReadyToSubmit && (
+          <Alert className="border-primary/30 bg-primary/5">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <AlertDescription>
+              <p className="text-sm font-medium text-primary">Confirmação necessária antes de enviar:</p>
+              <ul className="list-disc list-inside text-xs space-y-0.5 text-muted-foreground mt-1">
+                {!confirmedProduct && autoFillSource !== "manual" && <li>Confirme o <strong>produto</strong> pré-selecionado</li>}
+                {!confirmedPrescription && prescriptionAutoFilled && <li>Confirme a <strong>prescrição</strong> pré-preenchida</li>}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Submit */}
         <div className="flex justify-end gap-3 pb-8">
           <Button variant="outline" onClick={() => navigate("/os")}>Cancelar</Button>
-          <Button onClick={handleEnviarPedido} disabled={enviando || enviandoCooldown || !produtoSelecionado} className="gap-2">
+          <Button
+            onClick={handleEnviarPedido}
+            disabled={enviando || enviandoCooldown || !produtoSelecionado || !isReadyToSubmit}
+            className="gap-2"
+          >
             {enviando ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Enviando...</>
             ) : (
