@@ -3,6 +3,7 @@
 // Diferente de /vendas/analise-sku que retorna apenas SKUs com vendas no período
 
 import { apiGet, EmpresaParam, formatEmpresaParam, ApiGetOptions } from './firebirdBridge';
+import { categorizarPorDescricao } from '@/utils/categorizarProduto';
 
 // ============================================
 // INTERFACES - Campos do backend (snake_case)
@@ -30,42 +31,7 @@ interface EstoqueCompletoRaw {
   acao_sugerida?: string | null;
 }
 
-/**
- * Extrai o tipo/categoria do produto a partir do prefixo da descrição
- * Ex: "AR TIGO 047" -> "AR", "LG HOYA 1.60" -> "LG", "AC ESTOJO" -> "AC"
- */
-function extrairTipoDeDescricao(descricao: string): string {
-  if (!descricao) return 'OUTROS';
-  
-  const desc = descricao.trim().toUpperCase();
-  
-  // Pega as primeiras 2-3 letras antes do primeiro espaço
-  const primeiroEspaco = desc.indexOf(' ');
-  const prefixo = primeiroEspaco > 0 ? desc.substring(0, primeiroEspaco) : desc.substring(0, 3);
-  
-  // Armações: AR, ARM, OC (óculos)
-  if (prefixo === 'AR' || prefixo === 'ARM' || prefixo === 'OC') {
-    return 'AR';
-  }
-  
-  // Lentes: LG (lentes de grau), GC (grau contato), LC (lentes contato)
-  if (prefixo === 'LG' || prefixo === 'GC' || prefixo === 'LC') {
-    return 'LG';
-  }
-  
-  // Acessórios: AC, EST (estojo), CORD (cordão), etc
-  if (prefixo === 'AC' || prefixo === 'EST' || prefixo.startsWith('CORD')) {
-    return 'AC';
-  }
-  
-  // Solar: SOL, OS (óculos solar)
-  if (prefixo === 'SOL' || prefixo === 'OS') {
-    return 'SOL';
-  }
-  
-  console.log('[estoqueCompletoService] Tipo não reconhecido:', prefixo, 'de:', descricao.substring(0, 30));
-  return 'OUTROS';
-}
+// Categorização de tipo agora é feita por categorizarPorDescricao de @/utils/categorizarProduto
 
 // ============================================
 // INTERFACE NORMALIZADA (camelCase)
@@ -128,7 +94,7 @@ export async function getEstoqueCompleto(
     
     // Tipo: extrair do prefixo da descrição se não vier do backend
     const tipoBackend = r.tipo?.trim();
-    const tipo = tipoBackend && tipoBackend !== '' ? tipoBackend : extrairTipoDeDescricao(descricao);
+    const tipo = tipoBackend && tipoBackend !== '' ? tipoBackend : categorizarPorDescricao(descricao);
     
     // Dias em estoque: preferir dias_estoque do backend, senão calcular
     // Fallback 1: data_ultima_entrada, Fallback 2: dias_sem_venda
