@@ -231,6 +231,42 @@ export async function consultarPedidoHoya(numeroPedido: string | number): Promis
   return callHoyaProxy<HoyaPedidoTracking>("consultar-pedido", { numeroPedido });
 }
 
+// F4.5: Tracking update
+export interface TrackingUpdateResult {
+  tracking: HoyaPedidoTracking;
+  timeline: StatusHistoryEntry[];
+  statusChanged: boolean;
+  saved: boolean;
+}
+
+export interface StatusHistoryEntry {
+  id: string;
+  pedido_fornecedor_id: string;
+  status: string;
+  status_producao: string | null;
+  rastreio: string | null;
+  observacao: string | null;
+  checked_at: string;
+}
+
+export async function atualizarTrackingHoya(
+  numeroPedido: string | number,
+  pedidoFornecedorId?: string
+): Promise<TrackingUpdateResult> {
+  return callHoyaProxy<TrackingUpdateResult>("atualizar-tracking", {
+    numeroPedido,
+    pedidoFornecedorId,
+  });
+}
+
+export async function atualizarTrackingBatchHoya(limit = 20): Promise<{ updated: number; total: number; errors: string[] }> {
+  return callHoyaProxy<{ updated: number; total: number; errors: string[] }>("atualizar-tracking-batch", { limit });
+}
+
+export async function listarTimelinePedido(pedidoFornecedorId: string): Promise<StatusHistoryEntry[]> {
+  return callHoyaProxy<StatusHistoryEntry[]>("timeline-pedido", { pedidoFornecedorId });
+}
+
 export async function listarTiposArmacaoHoya(): Promise<unknown[]> {
   return callHoyaProxy<unknown[]>("tipos-armacao");
 }

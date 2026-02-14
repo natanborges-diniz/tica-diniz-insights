@@ -2,7 +2,7 @@ import { useLocation } from "react-router-dom";
 import { 
   TrendingUp, BarChart3, Layers, 
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
-  Target, Users, Brain, Eye, RefreshCw, Activity
+  Target, Users, Brain, Eye, RefreshCw, Activity, Truck
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -60,7 +60,14 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       ],
     },
   ],
-  monitor: [],
+  monitor: [
+    {
+      label: "Acompanhamento",
+      items: [
+        { title: "Tracking Hoya", url: "/os/tracking", icon: Truck },
+      ],
+    },
+  ],
   financeiro: [
     {
       label: "Análises",
