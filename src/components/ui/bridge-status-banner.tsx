@@ -12,6 +12,7 @@ interface BridgeStatusBannerProps {
   errorMessage?: string | null;
   lastCheckedAt?: string | null;
   onRetry?: () => void;
+  retrying?: boolean;
 }
 
 export const BridgeStatusBanner: React.FC<BridgeStatusBannerProps> = ({
@@ -20,6 +21,7 @@ export const BridgeStatusBanner: React.FC<BridgeStatusBannerProps> = ({
   errorMessage,
   lastCheckedAt,
   onRetry,
+  retrying,
 }) => {
   if (health === "up" && !isCircuitOpen) return null;
 
@@ -63,9 +65,9 @@ export const BridgeStatusBanner: React.FC<BridgeStatusBannerProps> = ({
         </p>
       </div>
       {onRetry && (
-        <Button variant="outline" size="sm" onClick={onRetry} className="shrink-0">
-          <RefreshCw className="h-3.5 w-3.5 mr-1" />
-          Tentar
+        <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying} className="shrink-0">
+          <RefreshCw className={`h-3.5 w-3.5 mr-1 ${retrying ? 'animate-spin' : ''}`} />
+          {retrying ? 'Verificando…' : 'Tentar'}
         </Button>
       )}
     </div>
