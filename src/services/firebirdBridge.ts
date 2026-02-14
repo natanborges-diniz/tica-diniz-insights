@@ -67,50 +67,61 @@ export interface ApiGetOptions {
 }
 
 // ============================================
-// TELEMETRIA DE MIGRAÇÃO v2
+// FEATURE FLAG — MODO ESTRITO
 // ============================================
 
-/** Rastreia quais endpoints já responderam em v2 e quais ainda são legados */
-const _v2MigrationStatus: Record<string, 'v2' | 'legacy'> = {};
+let _bridgeStrictContract = false;
 
-/** Endpoints que já foram logados como legados (evita spam) */
-const _legacyEndpointsLogged = new Set<string>();
-
-function trackEndpointFormat(path: string, format: 'v2' | 'legacy') {
-  _v2MigrationStatus[path] = format;
+/** Ativa o modo estrito: rejeita qualquer resposta que não seja envelope v2 */
+export function setBridgeStrictContract(enabled: boolean) {
+  _bridgeStrictContract = enabled;
+  console.log(`[FirebirdBridge] Modo estrito ${enabled ? 'ATIVADO' : 'DESATIVADO'}`);
 }
 
-function logLegacyFormat(path: string, format: string) {
-  trackEndpointFormat(path, 'legacy');
-  if (!_legacyEndpointsLogged.has(path)) {
-    _legacyEndpointsLogged.add(path);
-    console.warn(
-      `[FirebirdBridge] ⚠️ DEPRECATED: Endpoint "${path}" retornou formato legado "${format}". ` +
-      `Migre para envelope v2 { ok, data, error }. Este suporte será removido.`
-    );
+export function isBridgeStrictContract(): boolean {
+  return _bridgeStrictContract;
+}
+
+// ============================================
+// TELEMETRIA DE LEGADO — CONTADORES SILENCIOSOS
+// ============================================
+
+interface LegacyHit {
+  count: number;
+  format: string;
+  lastSeen: number;
+}
+
+const _legacyCounters: Record<string, LegacyHit> = {};
+const _v2Endpoints = new Set<string>();
+
+function recordV2(path: string) {
+  _v2Endpoints.add(path);
+}
+
+function recordLegacy(path: string, format: string) {
+  const existing = _legacyCounters[path];
+  if (existing) {
+    existing.count++;
+    existing.format = format;
+    existing.lastSeen = Date.now();
+  } else {
+    _legacyCounters[path] = { count: 1, format, lastSeen: Date.now() };
   }
 }
 
-/**
- * Retorna o status de migração v2 de todos os endpoints conhecidos.
- * Útil para acompanhar o progresso da migração.
- */
-export function getV2MigrationStatus(): Record<string, 'v2' | 'legacy'> {
-  return { ..._v2MigrationStatus };
-}
-
-/**
- * Retorna um resumo do progresso da migração v2.
- */
-export function getV2MigrationSummary(): { total: number; v2: number; legacy: number; endpoints: Record<string, string> } {
-  const entries = Object.entries(_v2MigrationStatus);
-  const v2Count = entries.filter(([, s]) => s === 'v2').length;
-  const legacyCount = entries.filter(([, s]) => s === 'legacy').length;
+/** Retorna telemetria de migração v2 para exibição no Admin */
+export function getBridgeTelemetry(): {
+  v2Endpoints: string[];
+  legacyEndpoints: Array<{ path: string; count: number; format: string; lastSeen: number }>;
+  strictMode: boolean;
+} {
   return {
-    total: entries.length,
-    v2: v2Count,
-    legacy: legacyCount,
-    endpoints: { ..._v2MigrationStatus }
+    v2Endpoints: Array.from(_v2Endpoints).sort(),
+    legacyEndpoints: Object.entries(_legacyCounters)
+      .map(([path, hit]) => ({ path, ...hit }))
+      .sort((a, b) => b.count - a.count),
+    strictMode: _bridgeStrictContract,
   };
 }
 
@@ -127,7 +138,8 @@ export type BridgeErrorCode =
   | 'NOT_FOUND'
   | 'CIRCUIT_OPEN'
   | 'REQUEST_CANCELLED'
-  | 'CLIENT_TIMEOUT';
+  | 'CLIENT_TIMEOUT'
+  | 'BRIDGE_CONTRACT_VIOLATION';
 
 // ============================================
 // FUNÇÃO GENÉRICA DE REQUISIÇÃO
@@ -157,7 +169,6 @@ export async function apiGet<T>(
     });
   }
 
-  // Adicionar parâmetros de cache se especificados
   if (options?.cache === false) {
     url.searchParams.append('cache', '0');
   }
@@ -187,18 +198,17 @@ export async function apiGet<T>(
 
     // Tratar erros HTTP antes de parsear body
     if (!response.ok) {
-      // Tentar extrair erro estruturado do body (v2)
       try {
         const errorBody = await response.json();
         if (errorBody.ok === false && errorBody.error) {
-          trackEndpointFormat(path, 'v2'); // Erro v2 é ainda v2
+          recordV2(path);
           const err = new Error(errorBody.error.message || `HTTP ${response.status}`) as Error & { code?: string; details?: unknown };
           err.code = errorBody.error.code;
           err.details = errorBody.error.details || errorBody.details;
           throw err;
         }
       } catch (parseErr) {
-        if (parseErr instanceof Error && 'code' in parseErr) throw parseErr; // re-throw structured error
+        if (parseErr instanceof Error && 'code' in parseErr) throw parseErr;
       }
       throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
     }
@@ -210,7 +220,7 @@ export async function apiGet<T>(
     // ========================================
     if (result.ok !== undefined) {
       if (result.ok === false || result.error) {
-        trackEndpointFormat(path, 'v2');
+        recordV2(path);
         const errorObj = result.error;
         const errorMessage = errorObj?.message || 'Erro desconhecido na API';
         const err = new Error(errorMessage) as Error & { code?: string; details?: unknown };
@@ -219,47 +229,61 @@ export async function apiGet<T>(
         throw err;
       }
       const data = result.data ?? [];
-      trackEndpointFormat(path, 'v2');
+      recordV2(path);
       const meta = result.meta;
       if (meta?.elapsed_ms) {
-        console.log(`[FirebirdBridge] ✓ ${path} → ${data.length} records (${meta.elapsed_ms}ms)`);
+        console.log(`[FirebirdBridge] ✓ ${path} → ${data.length} rows (${meta.elapsed_ms}ms)`);
       } else {
-        console.log(`[FirebirdBridge] ✓ ${path} → ${data.length} records`);
+        console.log(`[FirebirdBridge] ✓ ${path} → ${data.length} rows`);
       }
       recordBridgeSuccess();
       return data;
     }
 
     // ========================================
-    // FORMATOS LEGADOS (suporte temporário com logging)
+    // MODO ESTRITO — rejeitar qualquer legado
+    // ========================================
+    if (_bridgeStrictContract) {
+      throw Object.assign(
+        new Error(
+          `Endpoint "${path}" retornou formato legado. Modo estrito ativo — apenas envelope v2 { ok, data, error } é aceito.`
+        ),
+        { code: 'BRIDGE_CONTRACT_VIOLATION' as BridgeErrorCode }
+      );
+    }
+
+    // ========================================
+    // FALLBACKS LEGADOS (silenciosos com contagem)
     // ========================================
 
     // Legacy: { data: [...] }
     if (result.data !== undefined && Array.isArray(result.data)) {
-      logLegacyFormat(path, '{ data: [...] }');
+      recordLegacy(path, '{ data: [...] }');
       recordBridgeSuccess();
       return result.data;
     }
 
     // Legacy: { rows: [...] }
     if (result.rows !== undefined && Array.isArray(result.rows)) {
-      logLegacyFormat(path, '{ rows: [...] }');
+      recordLegacy(path, '{ rows: [...] }');
       recordBridgeSuccess();
       return result.rows;
     }
 
     // Legacy: array direto [...]
     if (Array.isArray(result)) {
-      logLegacyFormat(path, '[...] (array direto)');
+      recordLegacy(path, '[...] (array direto)');
       recordBridgeSuccess();
       return result;
     }
 
-    // Formato não reconhecido — falha explícita
-    console.error(`[FirebirdBridge] ❌ Formato inválido em "${path}":`, typeof result, Object.keys(result));
-    throw new Error(
-      `Resposta inválida do servidor para ${path}. ` +
-      `Formato esperado: { ok: true, data: [...] }. Contate o administrador.`
+    // Formato totalmente desconhecido — falha explícita
+    throw Object.assign(
+      new Error(
+        `Resposta inválida do servidor para "${path}". ` +
+        `Formato esperado: { ok: true, data: [...] }. Contate o administrador.`
+      ),
+      { code: 'BRIDGE_CONTRACT_VIOLATION' as BridgeErrorCode }
     );
   } catch (error) {
     clearTimeout(timeoutId);
@@ -268,10 +292,7 @@ export async function apiGet<T>(
     recordBridgeFailure();
 
     if (error instanceof Error) {
-      // Preservar erros com código estruturado (circuit breaker, API errors)
-      if ('code' in error) {
-        throw error;
-      }
+      if ('code' in error) throw error;
       if (error.name === 'AbortError') {
         if (externalSignal?.aborted) {
           console.log(`[FirebirdBridge] Request cancelled: ${path}`);
@@ -303,5 +324,4 @@ export function formatEmpresaParam(empresa: EmpresaParam): string | undefined {
   return String(empresa);
 }
 
-// Exporta a URL base para referência
 export { FIREBIRD_BRIDGE_BASE_URL };
