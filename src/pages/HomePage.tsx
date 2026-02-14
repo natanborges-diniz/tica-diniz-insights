@@ -1,9 +1,11 @@
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { BridgeStatusBanner } from "@/components/ui/bridge-status-banner";
 import { useBridgeStatus } from "@/hooks/useBridgeStatus";
+import { supabase } from "@/integrations/supabase/client";
 
 const modules = [
   {
@@ -54,6 +56,18 @@ export default function HomePage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const bridgeStatus = useBridgeStatus();
+  const [retrying, setRetrying] = useState(false);
+
+  const handleRetry = useCallback(async () => {
+    setRetrying(true);
+    try {
+      await supabase.functions.invoke("bridge-health-check");
+      await new Promise(r => setTimeout(r, 1500));
+      await bridgeStatus.refresh();
+    } finally {
+      setRetrying(false);
+    }
+  }, [bridgeStatus]);
 
   const firstName = profile?.nome?.split(" ")[0] ?? profile?.email?.split("@")[0] ?? "Usuário";
 
@@ -74,7 +88,8 @@ export default function HomePage() {
           isCircuitOpen={bridgeStatus.isCircuitOpen}
           errorMessage={bridgeStatus.errorMessage}
           lastCheckedAt={bridgeStatus.lastCheckedAt}
-          onRetry={bridgeStatus.refresh}
+          onRetry={handleRetry}
+          retrying={retrying}
         />
       )}
 
