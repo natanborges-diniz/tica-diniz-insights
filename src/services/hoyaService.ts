@@ -136,6 +136,21 @@ export interface HoyaPedidoTracking {
 // API CALLS
 // ============================================
 
+// F4.1: Standardized error codes from hoya-proxy
+const HOYA_ERROR_MESSAGES: Record<string, string> = {
+  HOYA_TIMEOUT: "A API do laboratório não respondeu a tempo. Tente novamente em alguns instantes.",
+  HOYA_RATE_LIMITED: "Limite de requisições atingido no laboratório. Aguarde alguns minutos.",
+  HOYA_UNAVAILABLE: "O serviço do laboratório está temporariamente indisponível.",
+  HOYA_API_ERROR: "Erro na comunicação com o laboratório.",
+  HOYA_CONFIG_ERROR: "Configuração do laboratório incompleta. Contate o administrador.",
+};
+
+export interface HoyaProxyError {
+  code: string;
+  message: string;
+  correlationId?: string;
+}
+
 async function callHoyaProxy<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
   const { data, error } = await supabase.functions.invoke("hoya-proxy", {
     body: { action, ...params },
@@ -146,9 +161,17 @@ async function callHoyaProxy<T>(action: string, params: Record<string, unknown> 
     throw new Error(error.message || "Erro ao chamar proxy Hoya");
   }
 
-  // Check if the response contains an error from Hoya
+  // F4.1: Handle standardized error codes from hoya-proxy
   if (data?.error) {
-    throw new Error(data.error);
+    const code = data.code as string | undefined;
+    const friendlyMessage = (code && HOYA_ERROR_MESSAGES[code]) || data.error;
+    const proxyError: HoyaProxyError = {
+      code: code || "HOYA_API_ERROR",
+      message: friendlyMessage,
+      correlationId: data.correlationId,
+    };
+    console.error(`[hoyaService] Hoya error [${proxyError.code}]:`, proxyError.message, proxyError.correlationId ? `(${proxyError.correlationId})` : "");
+    throw proxyError;
   }
 
   return data as T;
