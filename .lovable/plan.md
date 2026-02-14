@@ -620,3 +620,13 @@ O console warn identifica automaticamente quais ainda precisam migrar.
 - Todos os consumidores (`useVendasDashboard`, `useCentralIA`, `useInteligenciaVendas`) atualizados para período async
 - Hardcode `21-20` eliminado
 
+### E3.3 — Higienizar rotas e páginas órfãs + padronizar rotas ✅
+
+- Páginas órfãs removidas do bundle: `OsHubPage.tsx`, `OtbDashboard.tsx`, `StockDashboard.tsx`
+- `SalesDashboardLayout.tsx` removido (layout legado não utilizado)
+- `OsHubListPage.tsx` removido (órfão)
+- `useOsHub.ts` removido (hook órfão, sem importação)
+- `OsHubDetailSheet.tsx` recriado (era usado ativamente por `OsDashboardLayout`)
+- Rota `/vendas-familia` → `/vendas/familia` (com redirect de compatibilidade)
+- Sidebar atualizada para apontar para `/vendas/familia`
+- Todas as rotas seguem padrão `/modulo/sub`
