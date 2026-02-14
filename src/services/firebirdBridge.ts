@@ -1,6 +1,7 @@
 // src/services/firebirdBridge.ts
 // Cliente HTTP centralizado para Firebird Bridge API
-// Contrato v2: envelope { ok, data, error, meta? }
+// Contrato v2 ONLY: envelope { ok, data, error, meta? }
+// Fase 2.7: strict mode permanente — fallbacks legados removidos
 
 const FIREBIRD_BRIDGE_BASE_URL =
   import.meta.env.VITE_FIREBIRD_BRIDGE_BASE_URL ||
@@ -67,65 +68,6 @@ export interface ApiGetOptions {
 }
 
 // ============================================
-// FEATURE FLAG — MODO ESTRITO
-// ============================================
-
-let _bridgeStrictContract = false;
-
-/** Ativa o modo estrito: rejeita qualquer resposta que não seja envelope v2 */
-export function setBridgeStrictContract(enabled: boolean) {
-  _bridgeStrictContract = enabled;
-  console.log(`[FirebirdBridge] Modo estrito ${enabled ? 'ATIVADO' : 'DESATIVADO'}`);
-}
-
-export function isBridgeStrictContract(): boolean {
-  return _bridgeStrictContract;
-}
-
-// ============================================
-// TELEMETRIA DE LEGADO — CONTADORES SILENCIOSOS
-// ============================================
-
-interface LegacyHit {
-  count: number;
-  format: string;
-  lastSeen: number;
-}
-
-const _legacyCounters: Record<string, LegacyHit> = {};
-const _v2Endpoints = new Set<string>();
-
-function recordV2(path: string) {
-  _v2Endpoints.add(path);
-}
-
-function recordLegacy(path: string, format: string) {
-  const existing = _legacyCounters[path];
-  if (existing) {
-    existing.count++;
-    existing.format = format;
-    existing.lastSeen = Date.now();
-  } else {
-    _legacyCounters[path] = { count: 1, format, lastSeen: Date.now() };
-  }
-}
-
-/** Retorna telemetria de migração v2 para exibição no Admin */
-export function getBridgeTelemetry(): {
-  v2Endpoints: string[];
-  legacyEndpoints: Array<{ path: string; count: number; format: string; lastSeen: number }>;
-  strictMode: boolean;
-} {
-  return {
-    v2Endpoints: Array.from(_v2Endpoints).sort(),
-    legacyEndpoints: Object.entries(_legacyCounters)
-      .map(([path, hit]) => ({ path, ...hit }))
-      .sort((a, b) => b.count - a.count),
-    strictMode: _bridgeStrictContract,
-  };
-}
-
-// ============================================
 // CÓDIGOS DE ERRO PADRONIZADOS
 // ============================================
 
@@ -142,7 +84,41 @@ export type BridgeErrorCode =
   | 'BRIDGE_CONTRACT_VIOLATION';
 
 // ============================================
-// FUNÇÃO GENÉRICA DE REQUISIÇÃO
+// TELEMETRIA V2 (somente contagem de sucesso)
+// ============================================
+
+const _v2Endpoints = new Set<string>();
+
+function recordV2(path: string) {
+  _v2Endpoints.add(path);
+}
+
+/** Retorna lista de endpoints v2 contactados nesta sessão */
+export function getBridgeTelemetry(): {
+  v2Endpoints: string[];
+  legacyEndpoints: Array<{ path: string; count: number; format: string; lastSeen: number }>;
+  strictMode: boolean;
+} {
+  return {
+    v2Endpoints: Array.from(_v2Endpoints).sort(),
+    legacyEndpoints: [], // Legado removido na Fase 2.7
+    strictMode: true,    // Sempre strict
+  };
+}
+
+// Compat stubs — mantidos para não quebrar AdminHealthPage imports
+/** @deprecated Strict mode é permanente desde a Fase 2.7 */
+export function setBridgeStrictContract(_enabled: boolean) {
+  // no-op: strict mode is always on
+}
+
+/** @deprecated Sempre retorna true desde a Fase 2.7 */
+export function isBridgeStrictContract(): boolean {
+  return true;
+}
+
+// ============================================
+// FUNÇÃO GENÉRICA DE REQUISIÇÃO (V2 ONLY)
 // ============================================
 
 export async function apiGet<T>(
@@ -216,7 +192,7 @@ export async function apiGet<T>(
     const result = await response.json();
 
     // ========================================
-    // ENVELOPE V2 (formato padrão)
+    // ENVELOPE V2 (único formato aceito)
     // ========================================
     if (result.ok !== undefined) {
       if (result.ok === false || result.error) {
@@ -241,47 +217,12 @@ export async function apiGet<T>(
     }
 
     // ========================================
-    // MODO ESTRITO — rejeitar qualquer legado
+    // QUALQUER OUTRO FORMATO → VIOLAÇÃO
     // ========================================
-    if (_bridgeStrictContract) {
-      throw Object.assign(
-        new Error(
-          `Endpoint "${path}" retornou formato legado. Modo estrito ativo — apenas envelope v2 { ok, data, error } é aceito.`
-        ),
-        { code: 'BRIDGE_CONTRACT_VIOLATION' as BridgeErrorCode }
-      );
-    }
-
-    // ========================================
-    // FALLBACKS LEGADOS (silenciosos com contagem)
-    // ========================================
-
-    // Legacy: { data: [...] }
-    if (result.data !== undefined && Array.isArray(result.data)) {
-      recordLegacy(path, '{ data: [...] }');
-      recordBridgeSuccess();
-      return result.data;
-    }
-
-    // Legacy: { rows: [...] }
-    if (result.rows !== undefined && Array.isArray(result.rows)) {
-      recordLegacy(path, '{ rows: [...] }');
-      recordBridgeSuccess();
-      return result.rows;
-    }
-
-    // Legacy: array direto [...]
-    if (Array.isArray(result)) {
-      recordLegacy(path, '[...] (array direto)');
-      recordBridgeSuccess();
-      return result;
-    }
-
-    // Formato totalmente desconhecido — falha explícita
     throw Object.assign(
       new Error(
-        `Resposta inválida do servidor para "${path}". ` +
-        `Formato esperado: { ok: true, data: [...] }. Contate o administrador.`
+        `Endpoint "${path}" retornou formato não-v2. Apenas envelope { ok, data, error } é aceito. ` +
+        `Verifique se o backend está atualizado (CONTRACT.md v2.4.0).`
       ),
       { code: 'BRIDGE_CONTRACT_VIOLATION' as BridgeErrorCode }
     );
