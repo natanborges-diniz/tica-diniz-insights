@@ -11,7 +11,7 @@ import { Navigate } from "react-router-dom";
 interface HealthLog {
   id: string;
   checked_at: string;
-  status: 'up' | 'down' | 'timeout';
+  status: 'up' | 'degraded' | 'down' | 'timeout';
   latency_ms: number | null;
   error_message: string | null;
   bridge_version: string | null;
@@ -56,8 +56,9 @@ export default function AdminHealthPage() {
 
   const latest = logs[0];
   const isUp = latest?.status === 'up';
+  const isDegraded = latest?.status === 'degraded';
   const uptime24h = logs.length > 0
-    ? Math.round((logs.filter(l => l.status === 'up').length / logs.length) * 100)
+    ? Math.round((logs.filter(l => l.status === 'up' || l.status === 'degraded').length / logs.length) * 100)
     : null;
   const avgLatency = logs.length > 0
     ? Math.round(logs.filter(l => l.latency_ms).reduce((s, l) => s + (l.latency_ms || 0), 0) / Math.max(1, logs.filter(l => l.latency_ms).length))
@@ -82,11 +83,11 @@ export default function AdminHealthPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              {isUp ? <Wifi className="h-8 w-8 text-green-500" /> : <WifiOff className="h-8 w-8 text-destructive" />}
+              {isUp ? <Wifi className="h-8 w-8 text-green-500" /> : isDegraded ? <Wifi className="h-8 w-8 text-yellow-500" /> : <WifiOff className="h-8 w-8 text-destructive" />}
               <div>
                 <p className="text-sm text-muted-foreground">Status Atual</p>
-                <p className={`text-xl font-bold ${isUp ? 'text-green-500' : 'text-destructive'}`}>
-                  {latest ? (isUp ? 'Online' : latest.status === 'timeout' ? 'Timeout' : 'Offline') : '—'}
+                <p className={`text-xl font-bold ${isUp ? 'text-green-500' : isDegraded ? 'text-yellow-500' : 'text-destructive'}`}>
+                  {latest ? (isUp ? 'Online' : isDegraded ? 'Degradado' : latest.status === 'timeout' ? 'Timeout' : 'Offline') : '—'}
                 </p>
               </div>
             </div>
@@ -183,8 +184,11 @@ export default function AdminHealthPage() {
                   {logs.map(log => (
                     <TableRow key={log.id}>
                       <TableCell>
-                        <Badge variant={log.status === 'up' ? 'default' : 'destructive'} className="text-xs">
-                          {log.status}
+                        <Badge
+                          variant={log.status === 'up' ? 'default' : log.status === 'degraded' ? 'outline' : 'destructive'}
+                          className={`text-xs ${log.status === 'degraded' ? 'border-yellow-500 text-yellow-600' : ''}`}
+                        >
+                          {log.status === 'degraded' ? 'degraded' : log.status}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs font-mono">{log.latency_ms ? `${log.latency_ms}ms` : '—'}</TableCell>

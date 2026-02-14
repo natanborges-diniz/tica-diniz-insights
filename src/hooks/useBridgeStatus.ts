@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-export type BridgeHealth = "up" | "down" | "timeout" | "unknown";
+export type BridgeHealth = "up" | "degraded" | "down" | "timeout" | "unknown";
 
 interface BridgeStatusState {
   health: BridgeHealth;
@@ -72,7 +72,10 @@ export function useBridgeStatus() {
         return;
       }
 
-      const health: BridgeHealth = data.status === "up" ? "up" : data.status === "timeout" ? "timeout" : "down";
+      const health: BridgeHealth =
+        data.status === "up" ? "up" :
+        data.status === "degraded" ? "degraded" :
+        data.status === "timeout" ? "timeout" : "down";
 
       setState({
         health,

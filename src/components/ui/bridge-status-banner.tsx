@@ -24,6 +24,7 @@ export const BridgeStatusBanner: React.FC<BridgeStatusBannerProps> = ({
   if (health === "up" && !isCircuitOpen) return null;
 
   const isDown = health === "down" || health === "timeout";
+  const isDegraded = health === "degraded";
   const formattedTime = lastCheckedAt
     ? new Date(lastCheckedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     : null;
@@ -32,6 +33,8 @@ export const BridgeStatusBanner: React.FC<BridgeStatusBannerProps> = ({
     <div className={`flex items-start gap-3 p-4 rounded-lg border ${
       isDown
         ? "bg-destructive/10 border-destructive/30"
+        : isDegraded
+        ? "bg-yellow-500/10 border-yellow-500/30"
         : isCircuitOpen
         ? "bg-amber-500/10 border-amber-500/30"
         : "bg-muted border-border"
@@ -39,12 +42,14 @@ export const BridgeStatusBanner: React.FC<BridgeStatusBannerProps> = ({
       {isDown ? (
         <WifiOff className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
       ) : (
-        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+        <AlertTriangle className={`h-5 w-5 mt-0.5 shrink-0 ${isDegraded ? "text-yellow-600" : "text-amber-600"}`} />
       )}
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium ${isDown ? "text-destructive" : "text-amber-700"}`}>
+        <p className={`text-sm font-medium ${isDown ? "text-destructive" : isDegraded ? "text-yellow-700" : "text-amber-700"}`}>
           {isDown
             ? "Conexão com o servidor de dados indisponível"
+            : isDegraded
+            ? "Serviço online, mas sem conexão com o banco Firebird"
             : "Conexão instável — requisições pausadas temporariamente"
           }
         </p>
