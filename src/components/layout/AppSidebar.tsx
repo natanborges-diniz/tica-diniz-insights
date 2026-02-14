@@ -40,7 +40,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       label: "Análises",
       items: [
         { title: "Dashboard de Vendas", url: "/vendas", icon: BarChart3 },
-        { title: "Vendas por Família", url: "/vendas-familia", icon: Layers },
+        { title: "Vendas por Família", url: "/vendas/familia", icon: Layers },
       ],
     },
     {

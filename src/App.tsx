@@ -49,7 +49,8 @@ const App = () => (
 
                 {/* Vendas */}
                 <Route path="/vendas" element={<SalesDashboard />} />
-                <Route path="/vendas-familia" element={<SalesFamilyDashboard />} />
+                <Route path="/vendas/familia" element={<SalesFamilyDashboard />} />
+                <Route path="/vendas-familia" element={<Navigate to="/vendas/familia" replace />} />
                 <Route path="/vendas/inteligencia" element={<InteligenciaVendasDashboard />} />
 
                 {/* Estoque */}
