@@ -2,12 +2,22 @@
 // Proxy seguro para API Hoya Lab
 // E0.3: JWT obrigatório + role mínima: gestor
 // E4.1: Auditoria completa + validação de ambiente + requested_by
+// F4.1: fetchWithRetry (15s timeout, 3 retries, exponential backoff) + standardized error codes
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authGuard, corsHeaders } from "../_shared/authGuard.ts";
 
 const HOYA_BASE_URL = Deno.env.get("HOYA_BASE_URL") || "https://hoyalab.com.br/api/customer";
+
+// F4.1: Standardized error codes
+const HOYA_ERROR_CODES = {
+  TIMEOUT: "HOYA_TIMEOUT",
+  RATE_LIMITED: "HOYA_RATE_LIMITED",
+  UNAVAILABLE: "HOYA_UNAVAILABLE",
+  API_ERROR: "HOYA_API_ERROR",
+  CONFIG_ERROR: "HOYA_CONFIG_ERROR",
+} as const;
 
 // Detect environment from base URL
 function detectHoyaEnvironment(): string {
@@ -18,10 +28,105 @@ function detectHoyaEnvironment(): string {
   return "production";
 }
 
+// F4.1: Generate correlation ID for request tracing
+function generateCorrelationId(): string {
+  return crypto.randomUUID().slice(0, 8);
+}
+
+// F4.1: fetchWithRetry — 15s timeout, 3 retries with exponential backoff
+interface FetchRetryOptions {
+  timeout?: number;
+  maxRetries?: number;
+  backoffMs?: number;
+  action?: string;
+  correlationId?: string;
+}
+
+async function fetchWithRetry(
+  url: string,
+  fetchOptions: RequestInit,
+  retryOpts: FetchRetryOptions = {}
+): Promise<Response> {
+  const {
+    timeout = 15000,
+    maxRetries = 3,
+    backoffMs = 1000,
+    action = "unknown",
+    correlationId = "n/a",
+  } = retryOpts;
+
+  let lastError: Error | null = null;
+  let lastStatus: number | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = backoffMs * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+      console.log(`[hoya-proxy] [${correlationId}] Retry ${attempt}/${maxRetries} for ${action} after ${delay}ms`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    const start = Date.now();
+
+    try {
+      const resp = await fetch(url, { ...fetchOptions, signal: controller.signal });
+      clearTimeout(timer);
+      const elapsed = Date.now() - start;
+
+      console.log(`[hoya-proxy] [${correlationId}] ${action} -> ${resp.status} (${elapsed}ms)`);
+
+      // Retry on 429 or 503
+      if ((resp.status === 429 || resp.status === 503) && attempt < maxRetries) {
+        lastStatus = resp.status;
+        lastError = new Error(`HTTP ${resp.status}`);
+        continue;
+      }
+
+      return resp;
+    } catch (err) {
+      clearTimeout(timer);
+      const elapsed = Date.now() - start;
+      const isTimeout = err instanceof DOMException && err.name === "AbortError";
+
+      console.error(`[hoya-proxy] [${correlationId}] ${action} FAILED (${elapsed}ms): ${isTimeout ? "TIMEOUT" : err}`);
+
+      lastError = err instanceof Error ? err : new Error(String(err));
+      lastStatus = isTimeout ? 408 : null;
+
+      if (attempt >= maxRetries) break;
+      // Retry on timeout or network error
+    }
+  }
+
+  // All retries exhausted — throw standardized error
+  const code =
+    lastStatus === 429
+      ? HOYA_ERROR_CODES.RATE_LIMITED
+      : lastStatus === 503
+      ? HOYA_ERROR_CODES.UNAVAILABLE
+      : lastStatus === 408 || (lastError instanceof DOMException && lastError.name === "AbortError")
+      ? HOYA_ERROR_CODES.TIMEOUT
+      : HOYA_ERROR_CODES.API_ERROR;
+
+  const message =
+    code === HOYA_ERROR_CODES.TIMEOUT
+      ? "API Hoya não respondeu dentro do tempo limite (15s)"
+      : code === HOYA_ERROR_CODES.RATE_LIMITED
+      ? "API Hoya retornou limite de requisições (429) após retentativas"
+      : code === HOYA_ERROR_CODES.UNAVAILABLE
+      ? "API Hoya indisponível (503) após retentativas"
+      : `Erro de comunicação com API Hoya: ${lastError?.message || "desconhecido"}`;
+
+  throw { code, message, correlationId };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  const correlationId = generateCorrelationId();
 
   try {
     // E0.3: Auth guard — gestor ou admin
@@ -30,7 +135,7 @@ serve(async (req) => {
     const HOYA_API_KEY = Deno.env.get("HOYA_API_KEY");
     if (!HOYA_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "HOYA_API_KEY não configurada." }),
+        JSON.stringify({ error: "HOYA_API_KEY não configurada.", code: HOYA_ERROR_CODES.CONFIG_ERROR, correlationId }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -39,7 +144,7 @@ serve(async (req) => {
     const { action, ...params } = body;
 
     const hoyaEnv = detectHoyaEnvironment();
-    console.log("[hoya-proxy] Action:", action, "| Env:", hoyaEnv, "| User:", user?.id);
+    console.log(`[hoya-proxy] [${correlationId}] Action: ${action} | Env: ${hoyaEnv} | User: ${user?.userId}`);
 
     let url: string;
     let method = "GET";
@@ -91,16 +196,21 @@ serve(async (req) => {
       }
       default:
         return new Response(
-          JSON.stringify({ error: `Ação desconhecida: ${action}` }),
+          JSON.stringify({ error: `Ação desconhecida: ${action}`, code: HOYA_ERROR_CODES.API_ERROR, correlationId }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
     }
 
-    const hoyaResp = await fetch(url, {
-      method,
-      headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" },
-      body: method !== "GET" ? fetchBody : undefined,
-    });
+    // F4.1: Use fetchWithRetry instead of direct fetch
+    const hoyaResp = await fetchWithRetry(
+      url,
+      {
+        method,
+        headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" },
+        body: method !== "GET" ? fetchBody : undefined,
+      },
+      { action, correlationId }
+    );
 
     const respText = await hoyaResp.text();
     let respData: unknown;
@@ -125,26 +235,41 @@ serve(async (req) => {
             : "ERRO",
           payload: params.pedido,
           response: respData,
-          requested_by: user?.id || null,
+          requested_by: user?.userId || null,
           requested_at: new Date().toISOString(),
           hoya_environment: hoyaEnv,
         });
-        console.log("[hoya-proxy] Order audit saved. User:", user?.id, "Env:", hoyaEnv, "Success:", hoyaResp.ok);
+        console.log(`[hoya-proxy] [${correlationId}] Order audit saved. User: ${user?.userId} Env: ${hoyaEnv} Success: ${hoyaResp.ok}`);
       } catch (dbErr) {
-        console.error("[hoya-proxy] Failed to save order audit to DB:", dbErr);
+        console.error(`[hoya-proxy] [${correlationId}] Failed to save order audit:`, dbErr);
       }
     }
 
     return new Response(JSON.stringify(respData), {
       status: hoyaResp.status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
     });
   } catch (err) {
     if (err instanceof Response) return err;
-    console.error("[hoya-proxy] Error:", err);
+
+    // F4.1: Handle standardized error objects from fetchWithRetry
+    if (typeof err === "object" && err !== null && "code" in err && "message" in err) {
+      const hoyaErr = err as { code: string; message: string; correlationId?: string };
+      const status =
+        hoyaErr.code === HOYA_ERROR_CODES.TIMEOUT ? 504
+        : hoyaErr.code === HOYA_ERROR_CODES.RATE_LIMITED ? 429
+        : hoyaErr.code === HOYA_ERROR_CODES.UNAVAILABLE ? 503
+        : 502;
+      return new Response(
+        JSON.stringify({ error: hoyaErr.message, code: hoyaErr.code, correlationId: hoyaErr.correlationId || correlationId }),
+        { status, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId } }
+      );
+    }
+
+    console.error(`[hoya-proxy] [${correlationId}] Error:`, err);
     return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Erro desconhecido" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: err instanceof Error ? err.message : "Erro desconhecido", code: HOYA_ERROR_CODES.API_ERROR, correlationId }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId } }
     );
   }
 });
