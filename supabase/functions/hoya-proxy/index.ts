@@ -129,8 +129,28 @@ serve(async (req) => {
   const correlationId = generateCorrelationId();
 
   try {
-    // E0.3: Auth guard — gestor ou admin
-    const user = await authGuard(req, { requiredRole: "gestor" });
+    const body = await req.json();
+    const { action, ...params } = body;
+
+    let user: { userId: string; email?: string } | null = null;
+
+    // F4.5: Batch tracking called by cron (anon key) — bypass user auth
+    if (action === "atualizar-tracking-batch") {
+      const authHeader = req.headers.get("Authorization") || "";
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+      const token = authHeader.replace("Bearer ", "");
+      if (token !== anonKey && token !== serviceKey) {
+        throw new Response(
+          JSON.stringify({ error: "Unauthorized — batch tracking requer chave válida" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      user = { userId: "cron" };
+    } else {
+      // E0.3: Auth guard — gestor ou admin
+      user = await authGuard(req, { requiredRole: "gestor" });
+    }
 
     const HOYA_API_KEY = Deno.env.get("HOYA_API_KEY");
     if (!HOYA_API_KEY) {
@@ -139,9 +159,6 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const body = await req.json();
-    const { action, ...params } = body;
 
     const hoyaEnv = detectHoyaEnvironment();
     console.log(`[hoya-proxy] [${correlationId}] Action: ${action} | Env: ${hoyaEnv} | User: ${user?.userId}`);
