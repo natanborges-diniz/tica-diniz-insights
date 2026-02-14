@@ -83,8 +83,17 @@ export function FluxoCaixaChart({ data }: Props) {
               dataKey="saldo"
               name="Saldo"
               stroke="hsl(217, 91%, 60%)"
-              strokeWidth={3}
+              strokeWidth={2}
               dot={{ fill: "hsl(217, 91%, 60%)" }}
+            />
+            <Line
+              type="monotone"
+              dataKey="saldoAcumulado"
+              name="Saldo Acumulado"
+              stroke="hsl(280, 70%, 55%)"
+              strokeWidth={3}
+              strokeDasharray="5 3"
+              dot={{ fill: "hsl(280, 70%, 55%)" }}
             />
           </ComposedChart>
         </ResponsiveContainer>

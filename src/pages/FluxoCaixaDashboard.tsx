@@ -68,7 +68,7 @@ export default function FluxoCaixaDashboard() {
           </Alert>
         )}
 
-        <FluxoCaixaResumoCards resumo={resumo} />
+        <FluxoCaixaResumoCards resumo={resumo} fluxoAgrupado={fluxoAgrupado} />
         <FluxoCaixaChart data={fluxoAgrupado} />
       </main>
     </div>
