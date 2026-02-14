@@ -41,8 +41,11 @@ const App = () => (
 
             {/* Protected */}
             <Route element={<ProtectedRoute />}>
+              {/* Home Hub — sem sidebar/topbar */}
+              <Route path="/home" element={<HomePage />} />
+
               <Route element={<AppLayout />}>
-                <Route path="/" element={<HomePage />} />
+                <Route path="/" element={<Navigate to="/home" replace />} />
 
                 {/* Vendas */}
                 <Route path="/vendas" element={<SalesDashboard />} />
