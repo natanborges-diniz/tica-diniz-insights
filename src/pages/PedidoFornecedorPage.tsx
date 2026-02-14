@@ -99,6 +99,9 @@ const PedidoFornecedorPage: React.FC = () => {
   const [selectedColoracao, setSelectedColoracao] = useState<string>("none");
   const [isCor, setIsCor] = useState(false);
 
+  // Campos complementares dinâmicos (F4.4)
+  const [camposComplementaresValues, setCamposComplementaresValues] = useState<Record<number, string>>({});
+
   // Form state
   const [tipoServico, setTipoServico] = useState(4);
   const [tipoArmacao, setTipoArmacao] = useState(1);
@@ -272,6 +275,8 @@ const PedidoFornecedorPage: React.FC = () => {
       corFlag
     );
     setProdutoSelecionado(exact);
+    // F4.4: Reset campos complementares when product changes
+    setCamposComplementaresValues({});
   }, [selectedGroup, selectedAltura, selectedTratamento, selectedFotossensivel]);
 
   // ---- Available colorações for selected product ----
@@ -363,10 +368,21 @@ const PedidoFornecedorPage: React.FC = () => {
           usuarioFinal: usuarioFinal || os.cliente || "",
           inicialUsuario: "",
         },
+        // F4.4: Campos complementares
+        camposComplementares: produtoSelecionado.camposComplementares?.length
+          ? produtoSelecionado.camposComplementares.map(c => ({
+              codigo: c.codigo,
+              valor: camposComplementaresValues[c.codigo] ?? String(c.valorPadrao ?? ""),
+            }))
+          : undefined,
       };
 
-      // E4.1: Validate before sending
-      const validation = validateHoyaPayload(payload);
+      // E4.1: Validate before sending (F4.4: pass campos complementares)
+      const validation = validateHoyaPayload(
+        payload,
+        produtoSelecionado.camposComplementares,
+        camposComplementaresValues,
+      );
       setValidationResult(validation);
 
       if (!validation.valid) {
@@ -723,6 +739,41 @@ const PedidoFornecedorPage: React.FC = () => {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* F4.4: Campos Complementares Dinâmicos */}
+              {produtoSelecionado?.camposComplementares && produtoSelecionado.camposComplementares.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase text-muted-foreground block">Campos Complementares</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {produtoSelecionado.camposComplementares.map(campo => (
+                      <div key={campo.codigo}>
+                        <Label className="text-[10px] uppercase mb-1 block">
+                          {campo.nome}
+                          {campo.obrigatorio && <span className="text-destructive ml-0.5">*</span>}
+                        </Label>
+                        <Input
+                          value={camposComplementaresValues[campo.codigo] ?? String(campo.valorPadrao ?? "")}
+                          onChange={(e) =>
+                            setCamposComplementaresValues(prev => ({
+                              ...prev,
+                              [campo.codigo]: e.target.value,
+                            }))
+                          }
+                          placeholder={`${campo.rangeMinimo} — ${campo.rangeMaximo}`}
+                          className="h-8 text-sm font-mono"
+                          type="number"
+                          step={campo.incremento || "any"}
+                          min={campo.rangeMinimo}
+                          max={campo.rangeMaximo}
+                        />
+                        <span className="text-[9px] text-muted-foreground">
+                          Range: {campo.rangeMinimo} – {campo.rangeMaximo}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

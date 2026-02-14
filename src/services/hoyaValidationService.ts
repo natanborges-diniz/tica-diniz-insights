@@ -52,7 +52,11 @@ function validatePrescricaoOlho(
   return errors;
 }
 
-export function validateHoyaPayload(payload: HoyaPedidoPayload): ValidationResult {
+export function validateHoyaPayload(
+  payload: HoyaPedidoPayload,
+  produtoCamposComplementares?: { codigo: number; nome: string; obrigatorio: boolean; rangeMinimo: number; rangeMaximo: number }[],
+  camposValues?: Record<number, string>,
+): ValidationResult {
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
 
@@ -96,6 +100,31 @@ export function validateHoyaPayload(payload: HoyaPedidoPayload): ValidationResul
   // Garantia
   if (!payload.garantia?.usuarioFinal) {
     warnings.push({ field: "garantia.usuarioFinal", message: "Nome do usuário final não informado (garantia)", severity: "warning" });
+  }
+
+  // F4.4: Campos complementares obrigatórios
+  if (produtoCamposComplementares && camposValues) {
+    for (const campo of produtoCamposComplementares) {
+      if (campo.obrigatorio) {
+        const val = camposValues[campo.codigo];
+        if (!val || val.trim() === "") {
+          errors.push({
+            field: `camposComplementares.${campo.codigo}`,
+            message: `Campo complementar "${campo.nome}" é obrigatório`,
+            severity: "error",
+          });
+          continue;
+        }
+        const numVal = Number(val);
+        if (!isNaN(numVal) && (numVal < campo.rangeMinimo || numVal > campo.rangeMaximo)) {
+          errors.push({
+            field: `camposComplementares.${campo.codigo}`,
+            message: `"${campo.nome}" deve estar entre ${campo.rangeMinimo} e ${campo.rangeMaximo}`,
+            severity: "error",
+          });
+        }
+      }
+    }
   }
 
   return {
