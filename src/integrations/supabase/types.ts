@@ -548,9 +548,12 @@ export type Database = {
           cod_os: number
           created_at: string
           fornecedor: string
+          hoya_environment: string | null
           id: string
           numero_pedido: string | null
           payload: Json | null
+          requested_at: string | null
+          requested_by: string | null
           response: Json | null
           status: string | null
           updated_at: string
@@ -560,9 +563,12 @@ export type Database = {
           cod_os: number
           created_at?: string
           fornecedor?: string
+          hoya_environment?: string | null
           id?: string
           numero_pedido?: string | null
           payload?: Json | null
+          requested_at?: string | null
+          requested_by?: string | null
           response?: Json | null
           status?: string | null
           updated_at?: string
@@ -572,9 +578,12 @@ export type Database = {
           cod_os?: number
           created_at?: string
           fornecedor?: string
+          hoya_environment?: string | null
           id?: string
           numero_pedido?: string | null
           payload?: Json | null
+          requested_at?: string | null
+          requested_by?: string | null
           response?: Json | null
           status?: string | null
           updated_at?: string

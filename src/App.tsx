@@ -24,6 +24,7 @@ import CentralIADashboard from "./pages/CentralIADashboard";
 import AdminUsuariosPage from "./pages/AdminUsuariosPage";
 import AdminSyncPage from "./pages/AdminSyncPage";
 import AdminHealthPage from "./pages/AdminHealthPage";
+import AdminPedidosAuditoriaPage from "./pages/AdminPedidosAuditoriaPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -74,6 +75,7 @@ const App = () => (
                 <Route path="/admin/usuarios" element={<AdminUsuariosPage />} />
                 <Route path="/admin/sync" element={<AdminSyncPage />} />
                 <Route path="/admin/health" element={<AdminHealthPage />} />
+                <Route path="/admin/pedidos" element={<AdminPedidosAuditoriaPage />} />
 
                 {/* Central de IA */}
                 <Route path="/ia" element={<CentralIADashboard />} />

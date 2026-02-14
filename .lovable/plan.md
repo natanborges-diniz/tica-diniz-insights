@@ -652,3 +652,14 @@ O console warn identifica automaticamente quais ainda precisam migrar.
 - **Fluxo de Caixa — Saldo acumulado:** Campo `saldoAcumulado` adicionado à interface `FluxoCaixaItem`, calculado sequencialmente após ordenação por período
 - **Fluxo de Caixa — UI:** Novo card "Saldo Acumulado" nos resumos + linha tracejada roxa no gráfico mostrando evolução do saldo acumulado
 - Mudança de convenção de sinal no backend não quebra DRE silenciosamente (proteção ativa)
+
+## Fase 4 — Robustez de Integrações
+
+### E4.1 — Robustez e auditoria da integração Hoya ✅
+
+- **Ambientes:** `detectHoyaEnvironment()` no edge function identifica staging/produção pela URL base; campo `hoya_environment` gravado em cada pedido
+- **Validação clínica:** `hoyaValidationService.ts` valida campos obrigatórios (esf/cil/eixo/DNP) antes do envio; bloqueia pedido se incompleto com lista de campos faltantes
+- **Prismas:** Mapeamento completo de prismas da OS para payload Hoya via `mapPrismasFromOs()`; campos de prisma H/V com base editáveis na UI
+- **Auditoria:** Colunas `requested_by`, `requested_at`, `hoya_environment` adicionadas a `pedidos_fornecedor`; edge function grava user_id do solicitante; pedidos com erro também são registrados (status "ERRO")
+- **UI Admin:** Nova página `/admin/pedidos` com tabela de auditoria (data, OS, empresa, nº pedido, status, ambiente, solicitante); filtro por empresa
+- **RLS:** Policies adicionais para admin e gestor visualizarem pedidos

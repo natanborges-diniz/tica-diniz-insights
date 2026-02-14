@@ -174,6 +174,32 @@ export async function criarPedidoHoya(
   });
 }
 
+export interface PedidoFornecedorRecord {
+  id: string;
+  cod_os: number;
+  cod_empresa: number;
+  fornecedor: string;
+  numero_pedido: string | null;
+  status: string | null;
+  payload: unknown;
+  response: unknown;
+  requested_by: string | null;
+  requested_at: string | null;
+  hoya_environment: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listarHistoricoPedidos(
+  codEmpresa?: number | string,
+  limit = 50
+): Promise<PedidoFornecedorRecord[]> {
+  return callHoyaProxy<PedidoFornecedorRecord[]>("historico-pedidos", {
+    codEmpresa: codEmpresa || "ALL",
+    limit,
+  });
+}
+
 export async function consultarPedidoHoya(numeroPedido: string | number): Promise<HoyaPedidoTracking> {
   return callHoyaProxy<HoyaPedidoTracking>("consultar-pedido", { numeroPedido });
 }
