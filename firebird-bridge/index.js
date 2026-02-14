@@ -25,24 +25,111 @@ const firebaseConfig = {
 // Empresas que não devem aparecer nos filtros (lixo ou sem operação)
 const EMPRESAS_EXCLUIDAS = [3, 5, 7, 8, 10, 11, 12];
 
-// Empresas unificadas - DESATIVADO (mantendo nomes do legado)
-// const EMPRESAS_UNIFICADAS = { 18: 13 };
-
 // Helper para obter cláusula WHERE de empresas ativas
 function getWhereEmpresasAtivas(alias = 'e') {
   return `${alias}.codempresa NOT IN (${EMPRESAS_EXCLUIDAS.join(',')})`;
 }
 
-// Helper para executar queries
+// ============================================
+// HELPERS DE RESPOSTA v2 — ENVELOPE PADRONIZADO
+// ============================================
+
+/**
+ * Retorna resposta de sucesso no formato envelope v2
+ * @param {Response} res - Express response
+ * @param {Array} data - Array de dados
+ * @param {Object} meta - Metadados opcionais (elapsed_ms, endpoint, etc.)
+ */
+function success(res, data, meta = {}) {
+  return res.json({
+    ok: true,
+    data: data,
+    error: null,
+    meta: { count: data.length, ...meta }
+  });
+}
+
+/**
+ * Retorna resposta de erro no formato envelope v2
+ * @param {Response} res - Express response
+ * @param {string} code - Código de erro padronizado (VALIDATION_ERROR, FIREBIRD_TIMEOUT, etc.)
+ * @param {string} message - Mensagem legível para o usuário
+ * @param {number} statusCode - HTTP status code
+ * @param {*} details - Detalhes adicionais de debug (opcional)
+ */
+function error(res, code, message, statusCode = 500, details = null) {
+  return res.status(statusCode).json({
+    ok: false,
+    data: null,
+    error: { code, message },
+    ...(details && { details })
+  });
+}
+
+/**
+ * Classifica um erro do Firebird/Node em código padronizado
+ * @param {Error} err - O erro capturado
+ * @returns {{ code: string, statusCode: number, message: string }}
+ */
+function classifyError(err) {
+  const msg = (err.message || '').toLowerCase();
+
+  // Timeout do Firebird
+  if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('econnreset') || msg.includes('epipe')) {
+    return {
+      code: 'FIREBIRD_TIMEOUT',
+      statusCode: 503,
+      message: 'Firebird não respondeu a tempo. Tente novamente em alguns segundos.'
+    };
+  }
+
+  // Conexão recusada / Firebird offline
+  if (msg.includes('econnrefused') || msg.includes('connection refused') || msg.includes('unable to complete')) {
+    return {
+      code: 'FIREBIRD_DISCONNECTED',
+      statusCode: 503,
+      message: 'Sem conexão com o banco de dados Firebird. Verifique o status do servidor.'
+    };
+  }
+
+  // Erro de query SQL
+  if (msg.includes('dynamic sql error') || msg.includes('dsql') || msg.includes('token unknown') || msg.includes('column unknown')) {
+    return {
+      code: 'QUERY_ERROR',
+      statusCode: 500,
+      message: 'Erro na execução da consulta SQL.'
+    };
+  }
+
+  // Fallback genérico
+  return {
+    code: 'INTERNAL_ERROR',
+    statusCode: 500,
+    message: err.message || 'Erro inesperado no servidor.'
+  };
+}
+
+// Variável para rastrear versão da bridge
+const BRIDGE_VERSION = '2.4.0';
+
+// Helper para executar queries com timeout
+const QUERY_TIMEOUT_MS = parseInt(process.env.QUERY_TIMEOUT_MS || '30000');
+
 function executeQuery(sql, params = []) {
   return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('Firebird query timeout: operação excedeu ' + QUERY_TIMEOUT_MS + 'ms'));
+    }, QUERY_TIMEOUT_MS);
+
     Firebird.attach(firebaseConfig, (err, db) => {
       if (err) {
+        clearTimeout(timer);
         console.error('Erro conexão:', err);
         return reject(err);
       }
       
       db.query(sql, params, (err, result) => {
+        clearTimeout(timer);
         db.detach();
         if (err) {
           console.error('Erro query:', err);
@@ -54,30 +141,50 @@ function executeQuery(sql, params = []) {
   });
 }
 
-// Função para criar resposta padronizada
-function apiResponse(res, data, error = null) {
-  if (error) {
-    console.error('API Error:', error);
-    return res.status(500).json({
-      ok: false,
-      data: null,
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: error.message || 'Erro inesperado no servidor',
-        details: null
-      }
+// ============================================
+// Health check — formato v2
+// ============================================
+app.get('/health', (req, res) => {
+  // Liveness check simples (processo Node está rodando)
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: BRIDGE_VERSION });
+});
+
+app.get('/api/v1/health', async (req, res) => {
+  const start = Date.now();
+  const dbTimeoutMs = parseInt(process.env.HEALTH_DB_TIMEOUT_MS || '800');
+
+  try {
+    // Readiness check: tenta query simples no Firebird
+    const testPromise = executeQuery('SELECT 1 AS TEST_VAL FROM RDB$DATABASE');
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Health check timeout')), dbTimeoutMs)
+    );
+
+    await Promise.race([testPromise, timeoutPromise]);
+    const elapsed = Date.now() - start;
+
+    return success(res, [{
+      status: 'up',
+      firebird: 'connected',
+      latency_ms: elapsed,
+      version: BRIDGE_VERSION
+    }], { elapsed_ms: elapsed, endpoint: '/api/v1/health' });
+  } catch (err) {
+    const elapsed = Date.now() - start;
+    // Bridge está online mas Firebird inacessível = degraded
+    return res.status(503).json({
+      ok: true, // Bridge process is running
+      data: [{
+        status: 'degraded',
+        firebird: 'disconnected',
+        latency_ms: elapsed,
+        version: BRIDGE_VERSION,
+        error_detail: err.message
+      }],
+      error: null,
+      meta: { elapsed_ms: elapsed, endpoint: '/api/v1/health' }
     });
   }
-  return res.json({
-    ok: true,
-    data: data,
-    error: null
-  });
-}
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // ============================================
@@ -85,6 +192,7 @@ app.get('/health', (req, res) => {
 // ============================================
 app.get('/api/v1/empresas', async (req, res) => {
   try {
+    const start = Date.now();
     const sql = `
       SELECT 
         CODEMPRESA AS cod_empresa, 
@@ -100,7 +208,6 @@ app.get('/api/v1/empresas', async (req, res) => {
     console.log('[API] GET /api/v1/empresas');
     const rows = await executeQuery(sql);
     
-    // Retornar empresas diretamente do Firebird (sem unificação, nomes do legado)
     const empresas = rows.map(row => ({
       cod_empresa: row.COD_EMPRESA,
       empresa_nome: row.EMPRESA_NOME,
@@ -110,9 +217,10 @@ app.get('/api/v1/empresas', async (req, res) => {
       a.empresa_nome.localeCompare(b.empresa_nome)
     );
     
-    return apiResponse(res, empresas);
-  } catch (error) {
-    return apiResponse(res, null, error);
+    return success(res, empresas, { elapsed_ms: Date.now() - start, endpoint: '/api/v1/empresas' });
+  } catch (err) {
+    const classified = classifyError(err);
+    return error(res, classified.code, classified.message, classified.statusCode, { original: err.message });
   }
 });
 
@@ -121,14 +229,11 @@ app.get('/api/v1/empresas', async (req, res) => {
 // ============================================
 app.get('/api/v1/financeiro/parcelas', async (req, res) => {
   try {
+    const start = Date.now();
     const { dataInicio, dataFim, empresa, tipo, situacao, campoData } = req.query;
 
     if (!dataInicio || !dataFim) {
-      return res.status(400).json({ 
-        ok: false, 
-        data: null,
-        error: { code: 'INVALID_PARAMS', message: 'Parâmetros obrigatórios: dataInicio, dataFim' }
-      });
+      return error(res, 'VALIDATION_ERROR', 'Parâmetros obrigatórios: dataInicio, dataFim', 400);
     }
 
     // Determinar campo de data para filtro
@@ -213,9 +318,10 @@ app.get('/api/v1/financeiro/parcelas', async (req, res) => {
 
     console.log('[API] GET /api/v1/financeiro/parcelas', { empresa: empresa || 'TODAS', dataInicio, dataFim });
     const rows = await executeQuery(sql);
-    return apiResponse(res, rows);
-  } catch (error) {
-    return apiResponse(res, null, error);
+    return success(res, rows, { elapsed_ms: Date.now() - start, endpoint: '/api/v1/financeiro/parcelas' });
+  } catch (err) {
+    const classified = classifyError(err);
+    return error(res, classified.code, classified.message, classified.statusCode, { original: err.message });
   }
 });
 
@@ -224,14 +330,11 @@ app.get('/api/v1/financeiro/parcelas', async (req, res) => {
 // ============================================
 app.get('/api/v1/financeiro/dre', async (req, res) => {
   try {
+    const start = Date.now();
     const { dataInicio, dataFim, empresa } = req.query;
 
     if (!dataInicio || !dataFim) {
-      return res.status(400).json({ 
-        ok: false, 
-        data: null,
-        error: { code: 'INVALID_PARAMS', message: 'Parâmetros obrigatórios: dataInicio, dataFim' }
-      });
+      return error(res, 'VALIDATION_ERROR', 'Parâmetros obrigatórios: dataInicio, dataFim', 400);
     }
 
     // Montar WHERE
@@ -241,7 +344,6 @@ app.get('/api/v1/financeiro/dre', async (req, res) => {
       getWhereEmpresasAtivas('e')
     ];
 
-    // Filtro de empresa (se informado e não for "null", "TODAS" ou vazio)
     if (empresa && empresa !== 'null' && empresa !== 'TODAS' && empresa !== '') {
       whereClauses.push(`e.codempresa = ${parseInt(empresa)}`);
     }
@@ -271,9 +373,10 @@ app.get('/api/v1/financeiro/dre', async (req, res) => {
 
     console.log('[API] GET /api/v1/financeiro/dre', { empresa: empresa || 'TODAS', dataInicio, dataFim });
     const rows = await executeQuery(sql);
-    return apiResponse(res, rows);
-  } catch (error) {
-    return apiResponse(res, null, error);
+    return success(res, rows, { elapsed_ms: Date.now() - start, endpoint: '/api/v1/financeiro/dre' });
+  } catch (err) {
+    const classified = classifyError(err);
+    return error(res, classified.code, classified.message, classified.statusCode, { original: err.message });
   }
 });
 
@@ -283,14 +386,11 @@ app.get('/api/v1/financeiro/dre', async (req, res) => {
 // ============================================
 app.get('/api/v1/vendas/resumo-empresa-vendedor', async (req, res) => {
   try {
+    const start = Date.now();
     const { dataInicio, dataFim, empresa, excluirCreditos } = req.query;
 
     if (!dataInicio || !dataFim) {
-      return res.status(400).json({ 
-        ok: false, 
-        data: null,
-        error: { code: 'INVALID_PARAMS', message: 'Parâmetros obrigatórios: dataInicio, dataFim' }
-      });
+      return error(res, 'VALIDATION_ERROR', 'Parâmetros obrigatórios: dataInicio, dataFim', 400);
     }
 
     // Determinar código da empresa para parâmetros
@@ -459,9 +559,10 @@ app.get('/api/v1/vendas/resumo-empresa-vendedor', async (req, res) => {
 
     console.log('[API] GET /api/v1/vendas/resumo-empresa-vendedor', { empresa: empresa || 'ALL', dataInicio, dataFim, excluirCreditos: pExcluiCreditos });
     const rows = await executeQuery(sql);
-    return apiResponse(res, rows);
-  } catch (error) {
-    return apiResponse(res, null, error);
+    return success(res, rows, { elapsed_ms: Date.now() - start, endpoint: '/api/v1/vendas/resumo-empresa-vendedor' });
+  } catch (err) {
+    const classified = classifyError(err);
+    return error(res, classified.code, classified.message, classified.statusCode, { original: err.message });
   }
 });
 
@@ -471,14 +572,11 @@ app.get('/api/v1/vendas/resumo-empresa-vendedor', async (req, res) => {
 // ============================================
 app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
   try {
+    const start = Date.now();
     const { dataInicio, dataFim, empresa, excluirCreditos, incluirDevolucoes } = req.query;
 
     if (!dataInicio || !dataFim) {
-      return res.status(400).json({ 
-        ok: false, 
-        data: null,
-        error: { code: 'INVALID_PARAMS', message: 'Parâmetros obrigatórios: dataInicio, dataFim' }
-      });
+      return error(res, 'VALIDATION_ERROR', 'Parâmetros obrigatórios: dataInicio, dataFim', 400);
     }
 
     // Determinar código da empresa para parâmetros
@@ -714,9 +812,10 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
 
     console.log('[API] GET /api/v1/vendas/resumo-formas-pagamento', { empresa: empresa || 'ALL', dataInicio, dataFim, excluirCreditos: pExcluiCreditos, incluirDevolucoes: pIncluiDevolucoes });
     const rows = await executeQuery(sql);
-    return apiResponse(res, rows);
-  } catch (error) {
-    return apiResponse(res, null, error);
+    return success(res, rows, { elapsed_ms: Date.now() - start, endpoint: '/api/v1/vendas/resumo-formas-pagamento' });
+  } catch (err) {
+    const classified = classifyError(err);
+    return error(res, classified.code, classified.message, classified.statusCode, { original: err.message });
   }
 });
 
@@ -726,14 +825,11 @@ app.get('/api/v1/vendas/resumo-formas-pagamento', async (req, res) => {
 // ============================================
 app.get('/api/v1/vendas/resumo-diario-simples', async (req, res) => {
   try {
+    const start = Date.now();
     const { dataInicio, dataFim, empresa, excluirCreditos } = req.query;
 
     if (!dataInicio || !dataFim) {
-      return res.status(400).json({ 
-        ok: false, 
-        data: null,
-        error: { code: 'INVALID_PARAMS', message: 'Parâmetros obrigatórios: dataInicio, dataFim' }
-      });
+      return error(res, 'VALIDATION_ERROR', 'Parâmetros obrigatórios: dataInicio, dataFim', 400);
     }
 
     const codEmpresa = (!empresa || empresa === 'ALL' || empresa === 'null' || empresa === '') 
@@ -848,14 +944,16 @@ app.get('/api/v1/vendas/resumo-diario-simples', async (req, res) => {
 
     console.log('[API] GET /api/v1/vendas/resumo-diario-simples', { empresa: empresa || 'ALL', dataInicio, dataFim, excluirCreditos: pExcluiCreditos });
     const rows = await executeQuery(sql);
-    return apiResponse(res, rows);
-  } catch (error) {
-    return apiResponse(res, null, error);
+    return success(res, rows, { elapsed_ms: Date.now() - start, endpoint: '/api/v1/vendas/resumo-diario-simples' });
+  } catch (err) {
+    const classified = classifyError(err);
+    return error(res, classified.code, classified.message, classified.statusCode, { original: err.message });
   }
 });
 
 // ============================================
 // ENDPOINTS LEGADOS (mantidos para compatibilidade)
+// Estes endpoints NÃO usam envelope v2 — serão removidos após migração completa
 // ============================================
 
 // KPIs do Dashboard - replica a query original
@@ -898,9 +996,9 @@ app.get('/api/kpis', async (req, res) => {
       ticketMedio: quantidadeVendas > 0 ? faturamentoTotal / quantidadeVendas : 0,
       lojasAtivas: parseInt(row.LOJAS_ATIVAS || 0)
     });
-  } catch (error) {
-    console.error('Erro /api/kpis:', error);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error('Erro /api/kpis:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -939,9 +1037,9 @@ app.get('/api/vendas-por-dia', async (req, res) => {
       data: row.DATA,
       faturamento: parseFloat(row.FATURAMENTO || 0)
     })));
-  } catch (error) {
-    console.error('Erro /api/vendas-por-dia:', error);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error('Erro /api/vendas-por-dia:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -986,9 +1084,9 @@ app.get('/api/vendas-por-loja', async (req, res) => {
         percentual: totalGeral > 0 ? (faturamento / totalGeral) * 100 : 0
       };
     }));
-  } catch (error) {
-    console.error('Erro /api/vendas-por-loja:', error);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error('Erro /api/vendas-por-loja:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1009,9 +1107,9 @@ app.get('/api/empresas', async (req, res) => {
       cidade: row.CIDADE,
       uf: row.UF
     })));
-  } catch (error) {
-    console.error('Erro /api/empresas:', error);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error('Erro /api/empresas:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1021,14 +1119,11 @@ app.get('/api/empresas', async (req, res) => {
 // ============================================
 app.get('/api/v1/vendas/analise-sku', async (req, res) => {
   try {
+    const start = Date.now();
     const { dataInicio, dataFim, empresa } = req.query;
 
     if (!dataInicio || !dataFim) {
-      return res.status(400).json({ 
-        ok: false, 
-        data: null,
-        error: { code: 'INVALID_PARAMS', message: 'Parâmetros obrigatórios: dataInicio, dataFim' }
-      });
+      return error(res, 'VALIDATION_ERROR', 'Parâmetros obrigatórios: dataInicio, dataFim', 400);
     }
 
     // Filtro de empresa
@@ -1036,8 +1131,6 @@ app.get('/api/v1/vendas/analise-sku', async (req, res) => {
       ? 0 
       : parseInt(empresa);
 
-    // Query completa para análise de SKU - SEM FILTRO DE TIPO
-    // Retorna armações, lentes, acessórios e todos os outros produtos
     const sql = `
       WITH
       empresas_filtradas AS (
@@ -1111,7 +1204,6 @@ app.get('/api/v1/vendas/analise-sku', async (req, res) => {
     console.log('[API] GET /api/v1/vendas/analise-sku', { empresa: empresa || 'ALL', dataInicio, dataFim });
     const rows = await executeQuery(sql);
     
-    // Normalizar campos para snake_case (padrão do frontend)
     const normalized = rows.map(row => ({
       cod_sku: row.COD_SKU,
       descricao_item: row.DESCRICAO_ITEM,
@@ -1128,9 +1220,10 @@ app.get('/api/v1/vendas/analise-sku', async (req, res) => {
       total_vendido: parseFloat(row.TOTAL_VENDIDO || 0)
     }));
     
-    return apiResponse(res, normalized);
-  } catch (error) {
-    return apiResponse(res, null, error);
+    return success(res, normalized, { elapsed_ms: Date.now() - start, endpoint: '/api/v1/vendas/analise-sku' });
+  } catch (err) {
+    const classified = classifyError(err);
+    return error(res, classified.code, classified.message, classified.statusCode, { original: err.message });
   }
 });
 
@@ -1142,20 +1235,15 @@ app.get('/api/v1/vendas/analise-sku', async (req, res) => {
 // ============================================
 app.get('/api/v1/estoque/analise-acao', async (req, res) => {
   try {
+    const start = Date.now();
     const { empresa } = req.query;
 
     if (!empresa || empresa === 'ALL' || empresa === 'null' || empresa === '') {
-      return res.status(400).json({ 
-        ok: false, 
-        data: null,
-        error: { code: 'INVALID_PARAMS', message: 'Parâmetro obrigatório: empresa (código específico)' }
-      });
+      return error(res, 'VALIDATION_ERROR', 'Parâmetro obrigatório: empresa (código específico)', 400);
     }
 
     const codEmpresa = parseInt(empresa);
 
-    // Query para análise de estoque - MESMA FONTE de estoque do /vendas/analise-sku
-    // Retorna todos os SKUs com estoque > 0 na empresa selecionada
     const sql = `
       WITH
       estoque_empresa AS (
@@ -1225,7 +1313,6 @@ app.get('/api/v1/estoque/analise-acao', async (req, res) => {
     console.log('[API] GET /api/v1/estoque/analise-acao', { empresa: codEmpresa });
     const rows = await executeQuery(sql);
     
-    // Normalizar campos para snake_case (padrão do frontend)
     const normalized = rows.map(row => ({
       empresa_nome: row.EMPRESA_NOME,
       fornecedor_cod_pessoa: row.FORNECEDOR_COD_PESSOA,
@@ -1241,14 +1328,15 @@ app.get('/api/v1/estoque/analise-acao', async (req, res) => {
     }));
     
     console.log('[API] /estoque/analise-acao retornou', normalized.length, 'SKUs');
-    return apiResponse(res, normalized);
-  } catch (error) {
-    return apiResponse(res, null, error);
+    return success(res, normalized, { elapsed_ms: Date.now() - start, endpoint: '/api/v1/estoque/analise-acao' });
+  } catch (err) {
+    const classified = classifyError(err);
+    return error(res, classified.code, classified.message, classified.statusCode, { original: err.message });
   }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Firebird Bridge rodando na porta ${PORT}`);
+  console.log(`Firebird Bridge v${BRIDGE_VERSION} rodando na porta ${PORT}`);
   console.log(`Empresas excluídas: ${EMPRESAS_EXCLUIDAS.join(', ')}`);
 });
