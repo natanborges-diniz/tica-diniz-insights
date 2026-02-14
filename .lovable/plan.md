@@ -565,3 +565,28 @@ O console warn identifica automaticamente quais ainda precisam migrar.
 - Fazer deploy do `firebird-bridge/index.js` no Railway
 - Após deploy, todos os warnings de formato legado devem cessar no console do frontend
 
+### E2.5 — Compatibilidade Controlada + Telemetria ✅
+
+- Frontend aceita envelope v2 como formato principal
+- Fallback silencioso para formatos legados (sem spam de console)
+- Contagem por sessão de hits v2 vs legado (`getV2MigrationSummary()`)
+- Feature flag `bridge_strict_contract` (default OFF): quando ON, rejeita legados com `BRIDGE_CONTRACT_VIOLATION`
+- Painel "Telemetria de Contrato v2" na página Admin Health
+- Health classificado corretamente: 200→UP, 503→DEGRADED, falha de rede→DOWN
+
+### E2.6 — Contrato Oficial Versionado ✅
+
+- Documento `firebird-bridge/CONTRACT.md` (v2.4.0) com:
+  - Envelope padrão (sucesso + erro) com regras de campos
+  - Tabela oficial de `error.code` (6 códigos)
+  - Política de `meta.elapsed_ms`: sempre presente
+  - 9 endpoints v2 documentados com request/response shapes
+  - 4 endpoints legados listados com prazo de remoção
+  - Variáveis de ambiente documentadas
+  - Plano de remoção: confirmar → remover legados → deploy → strict mode → cleanup fallbacks
+
+**Próximos passos:**
+1. ⬜ Remover 4 endpoints legados do `index.js` e fazer deploy
+2. ⬜ Ativar `bridge_strict_contract` após 7 dias estáveis
+3. ⬜ Remover fallbacks legados do `firebirdBridge.ts`
+
