@@ -5,8 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Activity, Wifi, WifiOff, Clock, RefreshCw } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Loader2, Activity, Wifi, WifiOff, Clock, RefreshCw, FileCode2 } from "lucide-react";
 import { Navigate } from "react-router-dom";
+import { getBridgeTelemetry, setBridgeStrictContract, isBridgeStrictContract } from "@/services/firebirdBridge";
 
 interface HealthLog {
   id: string;
@@ -243,6 +245,104 @@ export default function AdminHealthPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Bridge Contract Telemetry */}
+      <BridgeTelemetryPanel />
     </div>
+  );
+}
+
+function BridgeTelemetryPanel() {
+  const [telemetry, setTelemetry] = useState(getBridgeTelemetry());
+  const [strict, setStrict] = useState(isBridgeStrictContract());
+
+  const refresh = () => setTelemetry(getBridgeTelemetry());
+
+  const toggleStrict = (checked: boolean) => {
+    setBridgeStrictContract(checked);
+    setStrict(checked);
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FileCode2 className="h-5 w-5 text-muted-foreground" />
+          <div>
+            <CardTitle className="text-lg">Telemetria de Contrato v2</CardTitle>
+            <CardDescription>Endpoints v2 vs legados nesta sessão</CardDescription>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Modo estrito</span>
+            <Switch checked={strict} onCheckedChange={toggleStrict} />
+          </div>
+          <Button variant="outline" size="sm" onClick={refresh}>
+            <RefreshCw className="h-4 w-4 mr-1" />
+            Atualizar
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div className="text-center p-3 rounded-lg bg-muted/50">
+            <p className="text-2xl font-bold text-primary">{telemetry.v2Endpoints.length}</p>
+            <p className="text-xs text-muted-foreground">Endpoints v2</p>
+          </div>
+          <div className="text-center p-3 rounded-lg bg-muted/50">
+            <p className="text-2xl font-bold text-amber-500">{telemetry.legacyEndpoints.length}</p>
+            <p className="text-xs text-muted-foreground">Endpoints legados</p>
+          </div>
+          <div className="text-center p-3 rounded-lg bg-muted/50">
+            <p className="text-2xl font-bold">
+              {telemetry.legacyEndpoints.reduce((s, e) => s + e.count, 0)}
+            </p>
+            <p className="text-xs text-muted-foreground">Hits legados total</p>
+          </div>
+        </div>
+
+        {telemetry.v2Endpoints.length > 0 && (
+          <div className="mb-3">
+            <p className="text-xs font-medium text-muted-foreground mb-1">✓ Endpoints v2</p>
+            <div className="flex flex-wrap gap-1">
+              {telemetry.v2Endpoints.map(ep => (
+                <Badge key={ep} variant="secondary" className="text-xs font-mono">{ep}</Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {telemetry.legacyEndpoints.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">⚠ Endpoints legados</p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Endpoint</TableHead>
+                  <TableHead>Formato</TableHead>
+                  <TableHead className="text-right">Hits</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {telemetry.legacyEndpoints.map(ep => (
+                  <TableRow key={ep.path}>
+                    <TableCell className="font-mono text-xs">{ep.path}</TableCell>
+                    <TableCell className="text-xs">{ep.format}</TableCell>
+                    <TableCell className="text-right text-xs font-bold">{ep.count}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        {telemetry.v2Endpoints.length === 0 && telemetry.legacyEndpoints.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            Nenhuma requisição ao Bridge registrada nesta sessão.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
