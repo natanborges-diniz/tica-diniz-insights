@@ -151,7 +151,71 @@ serve(async (req) => {
     let fetchBody: string | undefined;
 
     switch (action) {
-      case "listar-produtos": url = `${HOYA_BASE_URL}/produto`; break;
+      case "listar-produtos": {
+        // F4.3: Cache with 24h TTL
+        const cacheEnv = detectHoyaEnvironment();
+        const forceRefresh = params.forceRefresh === true;
+        const sbCache = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+        if (!forceRefresh) {
+          const { data: cached } = await sbCache
+            .from("hoya_catalogo_cache")
+            .select("data, fetched_at, produto_count")
+            .eq("hoya_environment", cacheEnv)
+            .gt("expires_at", new Date().toISOString())
+            .maybeSingle();
+
+          if (cached) {
+            console.log(`[hoya-proxy] [${correlationId}] Catalog cache HIT (${cached.produto_count} products, env: ${cacheEnv})`);
+            return new Response(JSON.stringify(cached.data), {
+              status: 200,
+              headers: { ...corsHeaders, "Content-Type": "application/json", "X-Hoya-Cache": "HIT", "X-Correlation-Id": correlationId },
+            });
+          }
+        }
+
+        // Cache MISS or forced refresh — fetch from Hoya API
+        url = `${HOYA_BASE_URL}/produto`;
+        const catalogResp = await fetchWithRetry(
+          url,
+          { method: "GET", headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" } },
+          { action: "listar-produtos", correlationId }
+        );
+        const catalogText = await catalogResp.text();
+        let catalogData: unknown;
+        try { catalogData = JSON.parse(catalogText); } catch { catalogData = { rawResponse: catalogText }; }
+
+        // Save to cache (upsert by environment)
+        if (catalogResp.ok && Array.isArray(catalogData)) {
+          await sbCache.from("hoya_catalogo_cache").upsert(
+            {
+              hoya_environment: cacheEnv,
+              data: catalogData,
+              fetched_at: new Date().toISOString(),
+              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+              produto_count: catalogData.length,
+            },
+            { onConflict: "hoya_environment" }
+          );
+          console.log(`[hoya-proxy] [${correlationId}] Catalog cache MISS — saved ${catalogData.length} products (env: ${cacheEnv})`);
+        }
+
+        return new Response(JSON.stringify(catalogData), {
+          status: catalogResp.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Hoya-Cache": "MISS", "X-Correlation-Id": correlationId },
+        });
+      }
+      case "invalidar-cache": {
+        // F4.3: Force cache invalidation (admin only)
+        const sbInv = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const invEnv = detectHoyaEnvironment();
+        await sbInv.from("hoya_catalogo_cache").delete().eq("hoya_environment", invEnv);
+        console.log(`[hoya-proxy] [${correlationId}] Cache invalidated for env: ${invEnv}`);
+        return new Response(JSON.stringify({ success: true, environment: invEnv }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
       case "consultar-produto": url = `${HOYA_BASE_URL}/produto/${params.codigoProduto}`; break;
       case "consultar-produto-sku": url = `${HOYA_BASE_URL}/produto/sku/${params.sku}`; break;
       case "criar-pedido": {

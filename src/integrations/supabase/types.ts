@@ -224,6 +224,33 @@ export type Database = {
         }
         Relationships: []
       }
+      hoya_catalogo_cache: {
+        Row: {
+          data: Json
+          expires_at: string
+          fetched_at: string
+          hoya_environment: string
+          id: string
+          produto_count: number | null
+        }
+        Insert: {
+          data: Json
+          expires_at?: string
+          fetched_at?: string
+          hoya_environment: string
+          id?: string
+          produto_count?: number | null
+        }
+        Update: {
+          data?: Json
+          expires_at?: string
+          fetched_at?: string
+          hoya_environment?: string
+          id?: string
+          produto_count?: number | null
+        }
+        Relationships: []
+      }
       lojas_configuracao: {
         Row: {
           abre_domingo: boolean | null

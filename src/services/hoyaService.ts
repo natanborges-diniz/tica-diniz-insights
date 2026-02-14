@@ -177,8 +177,12 @@ async function callHoyaProxy<T>(action: string, params: Record<string, unknown> 
   return data as T;
 }
 
-export async function listarProdutosHoya(): Promise<HoyaProduto[]> {
-  return callHoyaProxy<HoyaProduto[]>("listar-produtos");
+export async function listarProdutosHoya(forceRefresh = false): Promise<HoyaProduto[]> {
+  return callHoyaProxy<HoyaProduto[]>("listar-produtos", { forceRefresh });
+}
+
+export async function invalidarCacheHoya(): Promise<{ success: boolean }> {
+  return callHoyaProxy<{ success: boolean }>("invalidar-cache");
 }
 
 export async function consultarProdutoHoya(codigoProduto: number): Promise<HoyaProduto> {
