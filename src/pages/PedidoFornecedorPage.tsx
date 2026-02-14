@@ -1,5 +1,5 @@
 // src/pages/PedidoFornecedorPage.tsx
-// Tela de criação de pedido para fornecedor (Hoya) — com matching inteligente
+// Tela de criação de pedido para fornecedor (Hoya) — com matching inteligente + validação + auditoria
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -18,6 +18,11 @@ import {
   findExactProduct,
   ParsedLensDescription,
 } from "@/services/hoyaMatchingService";
+import {
+  validateHoyaPayload,
+  mapPrismasFromOs,
+  ValidationResult,
+} from "@/services/hoyaValidationService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ArrowLeft,
@@ -42,6 +48,8 @@ import {
   ChevronDown,
   ChevronUp,
   Zap,
+  ShieldCheck,
+  XCircle,
 } from "lucide-react";
 
 // ============================================
@@ -99,15 +107,20 @@ const PedidoFornecedorPage: React.FC = () => {
   // Prescrição editável
   const [prescOd, setPrescOd] = useState({
     esferico: "", cilindrico: "", eixo: "", adicao: "", dnpLonge: "", alturaPupilar: "",
+    prismaH: "", basePrismaH: "", prismaV: "", basePrismaV: "",
   });
   const [prescOe, setPrescOe] = useState({
     esferico: "", cilindrico: "", eixo: "", adicao: "", dnpLonge: "", alturaPupilar: "",
+    prismaH: "", basePrismaH: "", prismaV: "", basePrismaV: "",
   });
 
   // Armação editável
   const [armacao, setArmacao] = useState({
     larguraLente: "", alturaLente: "", ponteLente: "",
   });
+
+  // Validation state
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
 
   // ---- Load OS data ----
   useEffect(() => {
@@ -118,6 +131,8 @@ const PedidoFornecedorPage: React.FC = () => {
         const found = await fetchSingleOsRecipe(codOs, codEmpresa);
         if (found) {
           setOs(found);
+          // Map prismas from OS
+          const prismas = mapPrismasFromOs(found);
           setPrescOd({
             esferico: found.odLongeEsf != null ? String(found.odLongeEsf) : "",
             cilindrico: found.odLongeCil != null ? String(found.odLongeCil) : "",
@@ -125,6 +140,10 @@ const PedidoFornecedorPage: React.FC = () => {
             adicao: found.odAdicao != null ? String(found.odAdicao) : "",
             dnpLonge: found.odDnp != null ? String(found.odDnp) : "",
             alturaPupilar: found.odAltura != null ? String(found.odAltura) : "",
+            prismaH: prismas.odPrismaH != null ? String(prismas.odPrismaH) : "",
+            basePrismaH: prismas.odBasePRPrismaH || "",
+            prismaV: prismas.odPrismaV != null ? String(prismas.odPrismaV) : "",
+            basePrismaV: prismas.odBasePRPrismaV || "",
           });
           setPrescOe({
             esferico: found.oeLongeEsf != null ? String(found.oeLongeEsf) : "",
@@ -133,6 +152,10 @@ const PedidoFornecedorPage: React.FC = () => {
             adicao: found.oeAdicao != null ? String(found.oeAdicao) : "",
             dnpLonge: found.oeDnp != null ? String(found.oeDnp) : "",
             alturaPupilar: found.oeAltura != null ? String(found.oeAltura) : "",
+            prismaH: prismas.oePrismaH != null ? String(prismas.oePrismaH) : "",
+            basePrismaH: prismas.oeBasePRPrismaH || "",
+            prismaV: prismas.oePrismaV != null ? String(prismas.oePrismaV) : "",
+            basePrismaV: prismas.oeBasePRPrismaV || "",
           });
           setArmacao({
             larguraLente: found.caHorizontal != null ? String(found.caHorizontal) : "",
@@ -271,6 +294,9 @@ const PedidoFornecedorPage: React.FC = () => {
       return;
     }
 
+    const hasPrismaOd = !!(prescOd.prismaH || prescOd.prismaV);
+    const hasPrismaOe = !!(prescOe.prismaH || prescOe.prismaV);
+
     setEnviando(true);
     try {
       const payload: HoyaPedidoPayload = {
@@ -292,7 +318,10 @@ const PedidoFornecedorPage: React.FC = () => {
             cilindrico: prescOd.cilindrico ? Number(prescOd.cilindrico) : null,
             eixo: prescOd.eixo ? Number(prescOd.eixo) : null,
             adicao: prescOd.adicao ? Number(prescOd.adicao) : null,
-            prismaH: null, basePRPrismaH: null, prismaV: null, basePRPrismaV: null,
+            prismaH: prescOd.prismaH ? Number(prescOd.prismaH) : null,
+            basePRPrismaH: prescOd.basePrismaH || null,
+            prismaV: prescOd.prismaV ? Number(prescOd.prismaV) : null,
+            basePRPrismaV: prescOd.basePrismaV || null,
             dnpLonge: prescOd.dnpLonge ? Number(prescOd.dnpLonge) : null,
             dnpPerto: null,
             alturaPupilar: prescOd.alturaPupilar ? Number(prescOd.alturaPupilar) : null,
@@ -302,12 +331,15 @@ const PedidoFornecedorPage: React.FC = () => {
             cilindrico: prescOe.cilindrico ? Number(prescOe.cilindrico) : null,
             eixo: prescOe.eixo ? Number(prescOe.eixo) : null,
             adicao: prescOe.adicao ? Number(prescOe.adicao) : null,
-            prismaH: null, basePRPrismaH: null, prismaV: null, basePRPrismaV: null,
+            prismaH: prescOe.prismaH ? Number(prescOe.prismaH) : null,
+            basePRPrismaH: prescOe.basePrismaH || null,
+            prismaV: prescOe.prismaV ? Number(prescOe.prismaV) : null,
+            basePRPrismaV: prescOe.basePrismaV || null,
             dnpLonge: prescOe.dnpLonge ? Number(prescOe.dnpLonge) : null,
             dnpPerto: null,
             alturaPupilar: prescOe.alturaPupilar ? Number(prescOe.alturaPupilar) : null,
           },
-          afinamentoPrismatico: false,
+          afinamentoPrismatico: hasPrismaOd || hasPrismaOe,
           equilibrioLente: false,
         },
         dadosMedida: {
@@ -326,7 +358,19 @@ const PedidoFornecedorPage: React.FC = () => {
         },
       };
 
-      console.log("[PedidoFornecedor] Sending payload:", JSON.stringify(payload, null, 2));
+      // E4.1: Validate before sending
+      const validation = validateHoyaPayload(payload);
+      setValidationResult(validation);
+
+      if (!validation.valid) {
+        toast({
+          title: "Validação falhou",
+          description: `${validation.errors.length} campo(s) obrigatório(s) faltando`,
+          variant: "destructive",
+        });
+        setEnviando(false);
+        return;
+      }
 
       const resp = await criarPedidoHoya(payload, os.codOs, os.codEmpresa);
       setPedidoEnviado(resp);
@@ -757,6 +801,39 @@ const PedidoFornecedorPage: React.FC = () => {
                   </div>
                 ))}
               </div>
+              {/* Prismas OD */}
+              <div className="grid grid-cols-4 gap-2 mt-2">
+                <div>
+                  <Label className="text-[10px] uppercase">Prisma H</Label>
+                  <Input value={prescOd.prismaH} onChange={(e) => setPrescOd(prev => ({ ...prev, prismaH: e.target.value }))} className="h-8 text-sm font-mono" placeholder="0.00" />
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase">Base H</Label>
+                  <Select value={prescOd.basePrismaH || "none"} onValueChange={(v) => setPrescOd(prev => ({ ...prev, basePrismaH: v === "none" ? "" : v }))}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">—</SelectItem>
+                      <SelectItem value="IN">IN (Nasal)</SelectItem>
+                      <SelectItem value="OUT">OUT (Temporal)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase">Prisma V</Label>
+                  <Input value={prescOd.prismaV} onChange={(e) => setPrescOd(prev => ({ ...prev, prismaV: e.target.value }))} className="h-8 text-sm font-mono" placeholder="0.00" />
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase">Base V</Label>
+                  <Select value={prescOd.basePrismaV || "none"} onValueChange={(v) => setPrescOd(prev => ({ ...prev, basePrismaV: v === "none" ? "" : v }))}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">—</SelectItem>
+                      <SelectItem value="UP">UP (Superior)</SelectItem>
+                      <SelectItem value="DOWN">DOWN (Inferior)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
             <Separator />
             {/* OE */}
@@ -776,6 +853,39 @@ const PedidoFornecedorPage: React.FC = () => {
                     />
                   </div>
                 ))}
+              </div>
+              {/* Prismas OE */}
+              <div className="grid grid-cols-4 gap-2 mt-2">
+                <div>
+                  <Label className="text-[10px] uppercase">Prisma H</Label>
+                  <Input value={prescOe.prismaH} onChange={(e) => setPrescOe(prev => ({ ...prev, prismaH: e.target.value }))} className="h-8 text-sm font-mono" placeholder="0.00" />
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase">Base H</Label>
+                  <Select value={prescOe.basePrismaH || "none"} onValueChange={(v) => setPrescOe(prev => ({ ...prev, basePrismaH: v === "none" ? "" : v }))}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">—</SelectItem>
+                      <SelectItem value="IN">IN (Nasal)</SelectItem>
+                      <SelectItem value="OUT">OUT (Temporal)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase">Prisma V</Label>
+                  <Input value={prescOe.prismaV} onChange={(e) => setPrescOe(prev => ({ ...prev, prismaV: e.target.value }))} className="h-8 text-sm font-mono" placeholder="0.00" />
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase">Base V</Label>
+                  <Select value={prescOe.basePrismaV || "none"} onValueChange={(v) => setPrescOe(prev => ({ ...prev, basePrismaV: v === "none" ? "" : v }))}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="—" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">—</SelectItem>
+                      <SelectItem value="UP">UP (Superior)</SelectItem>
+                      <SelectItem value="DOWN">DOWN (Inferior)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -845,6 +955,35 @@ const PedidoFornecedorPage: React.FC = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Validation Results */}
+        {validationResult && !validationResult.valid && (
+          <Alert variant="destructive">
+            <XCircle className="h-4 w-4" />
+            <AlertDescription>
+              <p className="font-medium mb-1">Campos obrigatórios faltando:</p>
+              <ul className="list-disc list-inside text-xs space-y-0.5">
+                {validationResult.errors.map((e, i) => (
+                  <li key={i}>{e.message}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {validationResult && validationResult.warnings.length > 0 && (
+          <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+            <AlertTriangle className="h-4 w-4 text-yellow-600" />
+            <AlertDescription>
+              <p className="font-medium mb-1 text-yellow-800 dark:text-yellow-200">Avisos:</p>
+              <ul className="list-disc list-inside text-xs space-y-0.5 text-yellow-700 dark:text-yellow-300">
+                {validationResult.warnings.map((w, i) => (
+                  <li key={i}>{w.message}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Submit */}
         <div className="flex justify-end gap-3 pb-8">
