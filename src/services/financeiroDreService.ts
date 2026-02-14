@@ -38,7 +38,34 @@ export interface GetDreParams {
   dataFim: string;
 }
 
+// Grupos cuja convenção de sinal deve ser NEGATIVA (saídas)
+const GRUPOS_SINAL_NEGATIVO = new Set<string>([
+  'DEDUCOES',
+  'CUSTO_MERCADORIA',
+  'DESPESAS_OPERACIONAIS',
+  'OUTRAS_DESPESAS',
+]);
+
+/**
+ * Normaliza o sinal do valor conforme convenção contábil:
+ * - Receitas: sempre positivo
+ * - Deduções/Custos/Despesas: sempre negativo
+ * Isso protege contra inconsistência silenciosa se o backend mudar a convenção.
+ */
+function normalizarSinalDre(valor: number, grupo: string): number {
+  if (GRUPOS_SINAL_NEGATIVO.has(grupo)) {
+    return valor > 0 ? -valor : valor; // garante negativo
+  }
+  // Receitas devem ser positivas
+  if (grupo === 'RECEITA_BRUTA' || grupo === 'OUTRAS_RECEITAS') {
+    return valor < 0 ? -valor : valor; // garante positivo
+  }
+  return valor; // grupos desconhecidos: sem alteração
+}
+
 function mapDreLinhaRaw(r: DreLinhaRaw): DreLinha {
+  const grupo = r.GRUPO ?? '';
+  const valorBruto = r.VALOR_TOTAL ?? r.VALOR ?? 0;
   return {
     competencia: r.COMPETENCIA ?? '',
     codEmpresa: r.COD_EMPRESA ?? 0,
@@ -46,8 +73,8 @@ function mapDreLinhaRaw(r: DreLinhaRaw): DreLinha {
     contaclaCodigo: r.CONTACLA_CODIGO ?? null,
     contaclaNumero: r.CONTACLA_NUMERO ?? null,
     contaclaDescricao: r.CONTACLA_DESCRICAO ?? null,
-    valorTotal: r.VALOR_TOTAL ?? r.VALOR ?? 0,
-    grupo: r.GRUPO ?? '',
+    valorTotal: normalizarSinalDre(valorBruto, grupo),
+    grupo,
     subgrupo: r.SUBGRUPO ?? null,
   };
 }

@@ -644,3 +644,11 @@ O console warn identifica automaticamente quais ainda precisam migrar.
 - `SalesFamilyDashboard`: prefere empresa do profile (antes: primeira da lista)
 - Monitor OS já exigia seleção manual — inalterado (correto)
 - Admin mantém capacidade de selecionar "Todas" nos dropdowns, mas nunca auto-carrega com ALL
+
+### E3.5 — Padronização e segurança de cálculo no Financeiro ✅
+
+- **DRE — Normalização de sinais:** Função `normalizarSinalDre()` garante convenção contábil (deduções/custos/despesas sempre negativos, receitas sempre positivas) independente do sinal recebido do backend
+- **DRE — Mapping central:** `mapDreLinhaRaw()` continua como ponto único de conversão UPPERCASE→camelCase com normalização de sinais integrada
+- **Fluxo de Caixa — Saldo acumulado:** Campo `saldoAcumulado` adicionado à interface `FluxoCaixaItem`, calculado sequencialmente após ordenação por período
+- **Fluxo de Caixa — UI:** Novo card "Saldo Acumulado" nos resumos + linha tracejada roxa no gráfico mostrando evolução do saldo acumulado
+- Mudança de convenção de sinal no backend não quebra DRE silenciosamente (proteção ativa)

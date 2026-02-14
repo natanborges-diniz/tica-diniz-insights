@@ -19,6 +19,7 @@ export interface FluxoCaixaItem {
   totalReceber: number;
   totalPagar: number;
   saldo: number;
+  saldoAcumulado: number;
 }
 
 export interface FluxoCaixaResumo {
@@ -130,10 +131,19 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
         totalReceber: valores.receber,
         totalPagar: valores.pagar,
         saldo: valores.receber - valores.pagar,
+        saldoAcumulado: 0, // será calculado após ordenação
       });
     }
 
-    return result.sort((a, b) => a.periodo.localeCompare(b.periodo));
+    // Ordenar e calcular saldo acumulado
+    result.sort((a, b) => a.periodo.localeCompare(b.periodo));
+    let acumulado = 0;
+    for (const item of result) {
+      acumulado += item.saldo;
+      item.saldoAcumulado = acumulado;
+    }
+
+    return result;
   }, [data, filters.granularidade]);
 
   const resumo = useMemo<FluxoCaixaResumo>(() => {
