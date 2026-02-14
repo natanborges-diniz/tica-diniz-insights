@@ -76,6 +76,7 @@ export type Database = {
       }
       empresa: {
         Row: {
+          ativa: boolean
           cidade: string | null
           cnpj: string | null
           cod_empresa: number
@@ -87,6 +88,7 @@ export type Database = {
           uf: string | null
         }
         Insert: {
+          ativa?: boolean
           cidade?: string | null
           cnpj?: string | null
           cod_empresa: number
@@ -98,6 +100,7 @@ export type Database = {
           uf?: string | null
         }
         Update: {
+          ativa?: boolean
           cidade?: string | null
           cnpj?: string | null
           cod_empresa?: number

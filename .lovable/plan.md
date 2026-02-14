@@ -599,3 +599,24 @@ O console warn identifica automaticamente quais ainda precisam migrar.
 
 **Fase 2 — CONCLUÍDA ✅**
 
+---
+
+## Fase 3 — Refatoração e Unificação
+
+### E3.1 — Unificar Estoque (services/hooks) e categorização ✅
+
+- `useEstoqueUnificado` é o hook oficial; `estoqueCompletoService.ts` + `vendasService.getAnaliseSku` é o service oficial
+- `categorizarProduto.ts` é fonte única de categorização (AR/LG/AC)
+- Hooks e services duplicados removidos
+
+### E3.2 — Fonte de verdade única para empresas e período comercial ✅
+
+- Coluna `ativa` adicionada à tabela `empresa` (Loja 10 marcada como `ativa = false`)
+- Removida whitelist `EMPRESAS_ATIVAS = [1,2,4,6,9,13,14,15,16,17,18]` do `empresaService.ts`
+- Removida blacklist `EMPRESAS_INATIVAS = [10]` do `useEmpresas.ts`
+- `getEmpresas()` agora filtra por `ativa = true` direto no banco — adicionar/remover empresa é operação de banco, sem deploy
+- `getPeriodoComercial()` agora é `async` e busca config de `metas_periodos` via `getMetaPeriodo()`
+- Fallback seguro: se não houver config no banco, usa primeiro/último dia do mês
+- Todos os consumidores (`useVendasDashboard`, `useCentralIA`, `useInteligenciaVendas`) atualizados para período async
+- Hardcode `21-20` eliminado
+

@@ -100,19 +100,26 @@ interface DadoProcessado {
 // ========================
 
 export function useInteligenciaVendas() {
-  const defaultPeriodo = getPeriodoComercial();
   const anoAtual = new Date().getFullYear();
   const mesAtual = new Date().getMonth() + 1;
+  const hoje = new Date();
 
   // NÃO seleciona empresa por padrão (evita timeout)
   const [filters, setFilters] = useState<InteligenciaFilters>({
     tipoPeriodo: 'comercial',
     ano: anoAtual,
     mes: mesAtual,
-    dataInicio: defaultPeriodo.dataIni,
-    dataFim: defaultPeriodo.dataFim,
+    dataInicio: formatLocalDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1)),
+    dataFim: formatLocalDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)),
     empresa: '', // Vazio = não carrega automaticamente
   });
+
+  // Carregar período comercial do banco ao montar
+  useEffect(() => {
+    getPeriodoComercial().then(p => {
+      setFilters(prev => ({ ...prev, dataInicio: p.dataIni, dataFim: p.dataFim }));
+    });
+  }, []);
 
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>('visao-geral');
 
