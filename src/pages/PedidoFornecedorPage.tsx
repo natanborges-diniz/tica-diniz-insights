@@ -86,6 +86,7 @@ const PedidoFornecedorPage: React.FC = () => {
   const [produtoSelecionado, setProdutoSelecionado] = useState<HoyaProduto | null>(null);
   const [buscaProduto, setBuscaProduto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [enviandoCooldown, setEnviandoCooldown] = useState(false);
   const [pedidoEnviado, setPedidoEnviado] = useState<HoyaPedidoResponse | null>(null);
   const [showManualSearch, setShowManualSearch] = useState(false);
 
@@ -293,11 +294,17 @@ const PedidoFornecedorPage: React.FC = () => {
       toast({ title: "Selecione um produto Hoya", variant: "destructive" });
       return;
     }
+    if (enviandoCooldown) {
+      toast({ title: "Aguarde antes de enviar novamente", variant: "destructive" });
+      return;
+    }
 
     const hasPrismaOd = !!(prescOd.prismaH || prescOd.prismaV);
     const hasPrismaOe = !!(prescOe.prismaH || prescOe.prismaV);
 
     setEnviando(true);
+    setEnviandoCooldown(true);
+    setTimeout(() => setEnviandoCooldown(false), 3000);
     try {
       const payload: HoyaPedidoPayload = {
         os: String(os.numeroOs || os.codOs),
@@ -373,6 +380,17 @@ const PedidoFornecedorPage: React.FC = () => {
       }
 
       const resp = await criarPedidoHoya(payload, os.codOs, os.codEmpresa);
+
+      // F4.2: Check idempotency hit
+      if ((resp as any).idempotencyHit) {
+        toast({
+          title: "Pedido já enviado para esta OS",
+          description: `Nº ${resp.numeroPedido} — Este pedido já foi registrado anteriormente.`,
+        });
+        setPedidoEnviado(resp);
+        return;
+      }
+
       setPedidoEnviado(resp);
 
       // Save DE/PARA
@@ -988,7 +1006,7 @@ const PedidoFornecedorPage: React.FC = () => {
         {/* Submit */}
         <div className="flex justify-end gap-3 pb-8">
           <Button variant="outline" onClick={() => navigate("/os")}>Cancelar</Button>
-          <Button onClick={handleEnviarPedido} disabled={enviando || !produtoSelecionado} className="gap-2">
+          <Button onClick={handleEnviarPedido} disabled={enviando || enviandoCooldown || !produtoSelecionado} className="gap-2">
             {enviando ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Enviando...</>
             ) : (
