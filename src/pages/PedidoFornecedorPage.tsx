@@ -261,8 +261,21 @@ const PedidoFornecedorPage: React.FC = () => {
         .eq("descricao_local", descricao)
         .maybeSingle();
 
-      if (depara?.codigo_fornecedor) {
-        const match = produtos.find(p => p.codigoProduto === depara.codigo_fornecedor);
+      if (depara) {
+        // Try matching by codigo_fornecedor first, then by nome_fornecedor
+        let match: HoyaProduto | undefined;
+        if (depara.codigo_fornecedor) {
+          match = produtos.find(p => p.codigoProduto === depara.codigo_fornecedor);
+        }
+        if (!match && depara.nome_fornecedor) {
+          // Fallback: match by product name in catalog
+          const nomeLower = depara.nome_fornecedor.toLowerCase();
+          match = produtos.find(p => p.nome.toLowerCase() === nomeLower);
+          if (!match) {
+            // Fuzzy: check if catalog name contains the DE/PARA name
+            match = produtos.find(p => p.nome.toLowerCase().includes(nomeLower) || nomeLower.includes(p.nome.toLowerCase()));
+          }
+        }
         if (match) {
           // FASE 5: DE/PARA auto-selects product + syncs group selects
           handleProductChange(match, "depara");
@@ -280,7 +293,7 @@ const PedidoFornecedorPage: React.FC = () => {
 
           // Find the group that contains this product and sync selects
           const matchingGroup = result.groups.find(g =>
-            g.produtos.some(p => p.codigoProduto === match.codigoProduto)
+            g.produtos.some(p => p.codigoProduto === match!.codigoProduto)
           );
           if (matchingGroup) {
             setSelectedGroup(matchingGroup);
