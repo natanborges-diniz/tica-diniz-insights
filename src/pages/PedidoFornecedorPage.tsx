@@ -390,7 +390,8 @@ const PedidoFornecedorPage: React.FC = () => {
     : produtos.slice(0, 50);
 
   // FASE 5: Check if both confirmations are done
-  const isReadyToSubmit = confirmedProduct && confirmedPrescription && !!produtoSelecionado;
+  // If prescription was NOT auto-filled, no confirmation needed; if it was, user must confirm
+  const isReadyToSubmit = confirmedProduct && (confirmedPrescription || !prescriptionAutoFilled) && !!produtoSelecionado;
 
   // ---- Submit order ----
   const handleEnviarPedido = async () => {
@@ -578,7 +579,7 @@ const PedidoFornecedorPage: React.FC = () => {
         <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
         <div className="flex-1 min-w-0">
           <span className="text-sm text-amber-800 font-medium">
-            {type === "product" ? "Produto pré-selecionado" : "Prescrição pré-preenchida"}
+            {type === "product" ? "Produto pré-selecionado" : "Prescrição pré-preenchida da OS"}
           </span>
           {sourceInfo && (
             <Badge variant="outline" className={`ml-2 text-[10px] h-5 ${sourceInfo.color}`}>
@@ -685,7 +686,7 @@ const PedidoFornecedorPage: React.FC = () => {
               <AutoFillConfirmBanner
                 type="prescription"
                 confirmed={confirmedPrescription}
-                source="depara"
+                source={null}
                 onConfirm={() => setConfirmedPrescription(true)}
                 onEdit={() => setConfirmedPrescription(false)}
               />
