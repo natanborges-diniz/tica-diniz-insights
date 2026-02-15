@@ -1334,6 +1334,166 @@ app.get('/api/v1/estoque/analise-acao', async (req, res) => {
     return error(res, classified.code, classified.message, classified.statusCode, { original: err.message });
   }
 });
+// ============================================
+// API v1 - OS Hub Receitas (para sincronização de cache)
+// Retorna OS com dados de receita, lentes e imagens
+// F5.2: Inclui JOIN com ITEM para lente_od/oe_descricao
+// ============================================
+app.get('/api/v1/os/hub-receitas', async (req, res) => {
+  try {
+    const start = Date.now();
+    const { dataInicio, dataFim, codEmpresa, os: codOsParam } = req.query;
+
+    if (!dataInicio || !dataFim) {
+      return error(res, 'VALIDATION_ERROR', 'Parâmetros obrigatórios: dataInicio, dataFim', 400);
+    }
+
+    const empresa = (!codEmpresa || codEmpresa === 'ALL' || codEmpresa === 'null' || codEmpresa === '')
+      ? 0
+      : parseInt(codEmpresa);
+
+    // Build OS filter
+    const osFilter = codOsParam ? `AND os.COD_ORDEMSERVICO = ${parseInt(codOsParam)}` : '';
+
+    // Map internal empresa IDs to ERP origin codes
+    // (internal monitor IDs like 599 map to origin 9)
+    const empresaFilter = empresa === 0
+      ? `AND e.COD_EMPRESA NOT IN (${EMPRESAS_EXCLUIDAS.join(',')})`
+      : `AND (e.COD_EMPRESA = ${empresa} OR e.EMPRESA_COD_LOGICO = ${empresa})`;
+
+    const sql = \`
+      SELECT
+        os.COD_ORDEMSERVICO AS COD_OS,
+        os.NUMERO AS NUMERO_OS,
+        e.COD_EMPRESA AS CODEMPRESA,
+        emp.NOMEFANTASIA AS EMPRESA,
+        cli.NOME AS CLIENTE,
+        os.COD_CLIENTE,
+        cli.TELEFONE,
+        COALESCE(ose.DESCRICAO, '') AS ETAPA,
+        CASE
+          WHEN os.DATAPREVISAO IS NULL THEN 'SEM_DATA'
+          WHEN os.DATAPREVISAO < CURRENT_DATE AND os.DATAHORASAIDA IS NULL THEN 'ATRASADA'
+          WHEN os.DATAPREVISAO = CURRENT_DATE THEN 'HOJE'
+          ELSE 'NO_PRAZO'
+        END AS STATUS_ATRASO,
+        CASE
+          WHEN os.DATAPREVISAO IS NULL THEN 0
+          WHEN os.DATAHORASAIDA IS NOT NULL THEN 0
+          ELSE DATEDIFF(DAY, os.DATAPREVISAO, CURRENT_DATE)
+        END AS ATRASO_DIAS,
+        os.DATAEMISSAO,
+        os.DATAPREVISAO,
+        os.DATAHORAENTRADA,
+        os.DATAHORASAIDA,
+        os.TOTAL,
+        usu.NOME AS USUARIO,
+        /* OD longe */
+        os.OD_LONGE_ESF, os.OD_LONGE_CIL, os.OD_LONGE_EIXO,
+        os.OD_PERTO_ESF, os.OD_PERTO_CIL, os.OD_PERTO_EIXO,
+        os.OD_ADICAO, os.OD_DNP, os.OD_ALTURA,
+        /* OE longe */
+        os.OE_LONGE_ESF, os.OE_LONGE_CIL, os.OE_LONGE_EIXO,
+        os.OE_PERTO_ESF, os.OE_PERTO_CIL, os.OE_PERTO_EIXO,
+        os.OE_ADICAO, os.OE_DNP, os.OE_ALTURA,
+        /* Prisma */
+        os.PRISMA, os.PRISMA1,
+        /* Imagens */
+        os.IMAGEM_RECEITA, os.URL_IMAGEM_RECEITA,
+        os.IMAGEM_ARMACAO, os.URL_IMAGEM_ARMACAO,
+        os.IMAGEM_TRACER,
+        /* Observações */
+        os.OBSERVACAO AS OBSERVACAO_OS,
+        os.OBSERVACAO_LENTE,
+        os.OBSERVACAO_PENDENCIA,
+        /* F5.2: Lens descriptions from item join */
+        item_od.DESCRICAO AS LENTE_OD_DESCRICAO,
+        item_oe.DESCRICAO AS LENTE_OE_DESCRICAO
+      FROM ORDEMSERVICO os
+      JOIN EMPRESA e ON e.COD_EMPRESA = os.COD_EMPRESA
+      JOIN PESSOA emp ON emp.COD_PESSOA = e.COD_EMPRESA
+      LEFT JOIN PESSOA cli ON cli.COD_PESSOA = os.COD_CLIENTE
+      LEFT JOIN PESSOA usu ON usu.COD_PESSOA = os.COD_USUARIO
+      LEFT JOIN ORDEMSERVICOETAPA ose ON ose.COD_ORDEMSERVICOETAPA = os.COD_ORDEMSERVICOETAPA
+      /* F5.2: Join for lens OD description */
+      LEFT JOIN ORDEMSERVICOCAIXA osc ON osc.COD_ORDEMSERVICO = os.COD_ORDEMSERVICO
+        AND osc.COD_EMPRESA = os.COD_EMPRESA
+      LEFT JOIN TRANSACAO_ITEM ti_od ON ti_od.COD_TRANSACAO = osc.COD_TRANSACAO
+        AND ti_od.COD_EMPRESA = osc.COD_EMPRESA
+        AND ti_od.SEQ = 1
+      LEFT JOIN PRODUTO item_od ON item_od.COD_PRODUTO = ti_od.COD_PRODUTO
+        AND item_od.DESCRICAO LIKE 'LG%'
+      /* F5.2: Join for lens OE description (2nd item) */
+      LEFT JOIN TRANSACAO_ITEM ti_oe ON ti_oe.COD_TRANSACAO = osc.COD_TRANSACAO
+        AND ti_oe.COD_EMPRESA = osc.COD_EMPRESA
+        AND ti_oe.SEQ = 2
+      LEFT JOIN PRODUTO item_oe ON item_oe.COD_PRODUTO = ti_oe.COD_PRODUTO
+        AND item_oe.DESCRICAO LIKE 'LG%'
+      WHERE os.DATAEMISSAO BETWEEN '\${dataInicio}' AND '\${dataFim}'
+        \${empresaFilter}
+        \${osFilter}
+      ORDER BY os.DATAEMISSAO DESC
+    \`;
+
+    console.log('[API] GET /api/v1/os/hub-receitas', { empresa: codEmpresa || 'ALL', dataInicio, dataFim, os: codOsParam || 'ALL' });
+    const rows = await executeQuery(sql);
+
+    const normalized = rows.map(row => ({
+      cod_os: row.COD_OS,
+      numero_os: row.NUMERO_OS,
+      codempresa: row.CODEMPRESA,
+      empresa: (row.EMPRESA || '').trim(),
+      cliente: (row.CLIENTE || '').trim(),
+      cod_cliente: row.COD_CLIENTE,
+      telefone: (row.TELEFONE || '').trim(),
+      etapa: (row.ETAPA || '').trim(),
+      status_atraso: row.STATUS_ATRASO,
+      atraso_dias: row.ATRASO_DIAS || 0,
+      dataemissao: row.DATAEMISSAO,
+      dataprevisao: row.DATAPREVISAO,
+      datahoraentrada: row.DATAHORAENTRADA,
+      datahorasaida: row.DATAHORASAIDA,
+      total: row.TOTAL || 0,
+      usuario: (row.USUARIO || '').trim(),
+      od_longe_esf: row.OD_LONGE_ESF,
+      od_longe_cil: row.OD_LONGE_CIL,
+      od_longe_eixo: row.OD_LONGE_EIXO,
+      od_perto_esf: row.OD_PERTO_ESF,
+      od_perto_cil: row.OD_PERTO_CIL,
+      od_perto_eixo: row.OD_PERTO_EIXO,
+      od_adicao: row.OD_ADICAO,
+      od_dnp: row.OD_DNP,
+      od_altura: row.OD_ALTURA,
+      oe_longe_esf: row.OE_LONGE_ESF,
+      oe_longe_cil: row.OE_LONGE_CIL,
+      oe_longe_eixo: row.OE_LONGE_EIXO,
+      oe_perto_esf: row.OE_PERTO_ESF,
+      oe_perto_cil: row.OE_PERTO_CIL,
+      oe_perto_eixo: row.OE_PERTO_EIXO,
+      oe_adicao: row.OE_ADICAO,
+      oe_dnp: row.OE_DNP,
+      oe_altura: row.OE_ALTURA,
+      prisma: (row.PRISMA || '').trim(),
+      prisma1: (row.PRISMA1 || '').trim(),
+      imagem_receita: (row.IMAGEM_RECEITA || '').trim(),
+      url_imagem_receita: (row.URL_IMAGEM_RECEITA || '').trim(),
+      imagem_armacao: (row.IMAGEM_ARMACAO || '').trim(),
+      url_imagem_armacao: (row.URL_IMAGEM_ARMACAO || '').trim(),
+      imagem_tracer: (row.IMAGEM_TRACER || '').trim(),
+      observacao_os: (row.OBSERVACAO_OS || '').trim(),
+      observacao_lente: (row.OBSERVACAO_LENTE || '').trim(),
+      observacao_pendencia: (row.OBSERVACAO_PENDENCIA || '').trim(),
+      lente_od_descricao: (row.LENTE_OD_DESCRICAO || '').trim(),
+      lente_oe_descricao: (row.LENTE_OE_DESCRICAO || '').trim(),
+    }));
+
+    console.log('[API] /os/hub-receitas retornou', normalized.length, 'registros');
+    return success(res, normalized, { elapsed_ms: Date.now() - start, endpoint: '/api/v1/os/hub-receitas' });
+  } catch (err) {
+    const classified = classifyError(err);
+    return error(res, classified.code, classified.message, classified.statusCode, { original: err.message });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
