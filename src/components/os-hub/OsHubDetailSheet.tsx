@@ -9,22 +9,24 @@ import { Separator } from "@/components/ui/separator";
 import { Send } from "lucide-react";
 
 const FORMA_ARO_LABELS: Record<number, string> = {
-  1: "Redonda", 2: "Quadrada", 3: "Aviador", 4: "Retangular", 5: "Oval", 6: "Gatinho", 7: "Outra",
+  1: "Arredondado", 2: "Oval", 3: "Gota", 4: "Retangular arredondado",
+  5: "Triangular", 6: "Oval largo", 7: "Redondo", 8: "Oval inclinado",
 };
 
 function FormaAroIcon({ codigo }: { codigo: number }) {
   const size = 32;
   const s = size;
   const paths: Record<number, string> = {
-    1: `M${s/2},4 A${s/2-4},${s/2-4} 0 1,1 ${s/2},${s-4} A${s/2-4},${s/2-4} 0 1,1 ${s/2},4Z`, // circle
-    2: `M4,${s/2} L${s/4},4 L${s*3/4},4 L${s-4},${s/2} L${s*3/4},${s-4} L${s/4},${s-4}Z`, // diamond-ish square
-    3: `M4,8 Q${s/2},2 ${s-4},8 L${s-6},${s-6} Q${s/2},${s-2} 6,${s-6}Z`, // aviator teardrop
-    4: `M6,6 H${s-6} V${s-6} H6Z`, // rectangle
-    5: `M${s/2},4 A${s/2-4},${s/3} 0 1,1 ${s/2},${s-4} A${s/2-4},${s/3} 0 1,1 ${s/2},4Z`, // oval
-    6: `M4,${s-6} Q4,4 ${s/2},6 Q${s-4},4 ${s-4},${s-6} Q${s/2},${s*0.7} 4,${s-6}Z`, // cat-eye
-    7: `M${s/2},4 L${s-4},${s/3} L${s-6},${s-4} L6,${s-4} L4,${s/3}Z`, // pentagon/other
+    1: `M8,5 Q4,5 4,10 L4,${s-10} Q4,${s-5} 8,${s-5} L${s-8},${s-5} Q${s-4},${s-5} ${s-4},${s-10} L${s-4},10 Q${s-4},5 ${s-8},5Z`, // rounded rect
+    2: `M${s/2},4 A${s/2-4},${s/2-4} 0 1,1 ${s/2},${s-4} A${s/2-4},${s/2-4} 0 1,1 ${s/2},4Z`, // oval
+    3: `M4,8 Q${s/2},2 ${s-4},8 L${s-6},${s-6} Q${s/2},${s-2} 6,${s-6}Z`, // teardrop/gota
+    4: `M8,6 Q5,6 5,9 L5,${s-9} Q5,${s-6} 8,${s-6} L${s-8},${s-6} Q${s-5},${s-6} ${s-5},${s-9} L${s-5},9 Q${s-5},6 ${s-8},6Z`, // rounded rect smaller
+    5: `M6,${s-8} Q4,6 ${s/2},4 Q${s-4},6 ${s-6},${s-8} Q${s/2},${s-4} 6,${s-8}Z`, // triangular
+    6: `M${s/2},5 A${s/2-4},${s/3} 0 1,1 ${s/2},${s-5} A${s/2-4},${s/3} 0 1,1 ${s/2},5Z`, // oval wide
+    7: `M${s/2},4 A${s/2-5},${s/2-5} 0 1,1 ${s/2},${s-4} A${s/2-5},${s/2-5} 0 1,1 ${s/2},4Z`, // round
+    8: `M6,${s/2+2} A${s/2-4},${s/3} 0 1,1 ${s-6},${s/2-2} A${s/2-4},${s/3} 0 1,1 6,${s/2+2}Z`, // oval tilted
   };
-  const d = paths[codigo] ?? paths[7];
+  const d = paths[codigo] ?? paths[1];
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="text-foreground">
       <path d={d} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
