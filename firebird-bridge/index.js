@@ -1495,6 +1495,59 @@ app.get('/api/v1/os/hub-receitas', async (req, res) => {
   }
 });
 
+// ============================================
+// Debug: Schema discovery — lista colunas de uma tabela Firebird
+// ============================================
+app.get('/api/debug/schema', async (req, res) => {
+  try {
+    const start = Date.now();
+    const { table } = req.query;
+    if (!table) {
+      return error(res, 'VALIDATION_ERROR', 'Parâmetro obrigatório: table', 400);
+    }
+
+    const sql = `
+      SELECT
+        rf.RDB$FIELD_POSITION AS POSITION,
+        TRIM(rf.RDB$FIELD_NAME) AS FIELD_NAME,
+        CASE f.RDB$FIELD_TYPE
+          WHEN 7 THEN 'SMALLINT'
+          WHEN 8 THEN 'INTEGER'
+          WHEN 10 THEN 'FLOAT'
+          WHEN 12 THEN 'DATE'
+          WHEN 13 THEN 'TIME'
+          WHEN 14 THEN 'CHAR'
+          WHEN 16 THEN 'BIGINT'
+          WHEN 27 THEN 'DOUBLE'
+          WHEN 35 THEN 'TIMESTAMP'
+          WHEN 37 THEN 'VARCHAR'
+          WHEN 261 THEN 'BLOB'
+          ELSE 'OTHER(' || f.RDB$FIELD_TYPE || ')'
+        END AS FIELD_TYPE,
+        f.RDB$FIELD_LENGTH AS FIELD_LENGTH,
+        rf.RDB$NULL_FLAG AS NOT_NULL
+      FROM RDB$RELATION_FIELDS rf
+      JOIN RDB$FIELDS f ON f.RDB$FIELD_NAME = rf.RDB$FIELD_SOURCE
+      WHERE rf.RDB$RELATION_NAME = '${table.toUpperCase()}'
+      ORDER BY rf.RDB$FIELD_POSITION
+    `;
+
+    const rows = await executeQuery(sql);
+    const fields = rows.map(r => ({
+      position: r.POSITION,
+      name: (r.FIELD_NAME || '').trim(),
+      type: (r.FIELD_TYPE || '').trim(),
+      length: r.FIELD_LENGTH,
+      not_null: r.NOT_NULL === 1,
+    }));
+
+    return success(res, fields, { table: table.toUpperCase(), elapsed_ms: Date.now() - start, endpoint: '/api/debug/schema' });
+  } catch (err) {
+    const classified = classifyError(err);
+    return error(res, classified.code, classified.message, classified.statusCode, { original: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Firebird Bridge v${BRIDGE_VERSION} rodando na porta ${PORT}`);
