@@ -159,6 +159,12 @@ interface OsHubRaw {
   // Imagem documento
   imagem_documento?: string;
   url_imagem_documento?: string;
+  // Formato do aro / armação (from bridge hub-receitas)
+  cod_formato_aro?: number;
+  otoi_cod_formatoaro?: number;
+  ocr_cod_formatoaro?: number;
+  descricao_armacao?: string;
+  referencia_armacao?: string;
 }
 
 export interface OsHubRecord {
@@ -236,6 +242,10 @@ export interface OsHubRecord {
   // Lens product descriptions
   lenteOdDescricao: string | null;
   lenteOeDescricao: string | null;
+  // Formato do aro / armação
+  codFormatoAro: number | null;
+  descricaoArmacao: string | null;
+  referenciaArmacao: string | null;
   // Flags
   temReceita: boolean;
   temImagem: boolean;
@@ -382,6 +392,9 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     observacaoReceita: r.observacao_receita?.trim() ?? r.cliente_observacao_receita?.trim() ?? null,
     lenteOdDescricao: r.lente_od_descricao?.trim() ?? r.ocrl_od_descricaolente?.trim() ?? null,
     lenteOeDescricao: r.lente_oe_descricao?.trim() ?? r.ocrl_oe_descricaolente?.trim() ?? null,
+    codFormatoAro: coalesce(r.cod_formato_aro, r.otoi_cod_formatoaro, r.ocr_cod_formatoaro),
+    descricaoArmacao: r.descricao_armacao?.trim() ?? null,
+    referenciaArmacao: r.referencia_armacao?.trim() ?? null,
     temReceita: hasReceita,
     temImagem: hasImagem,
   };
@@ -623,6 +636,9 @@ export async function loadFromCache(params: {
     observacaoReceita: null,
     lenteOdDescricao: null,
     lenteOeDescricao: null,
+    codFormatoAro: null,
+    descricaoArmacao: null,
+    referenciaArmacao: null,
     temReceita: (r.tem_receita as boolean) ?? false,
     temImagem: (r.tem_imagem as boolean) ?? false,
     cacheLoadedAt: (r.cache_loaded_at as string) ?? undefined,
