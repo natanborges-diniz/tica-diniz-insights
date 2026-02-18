@@ -486,6 +486,7 @@ const PedidoFornecedorPage: React.FC = () => {
           tipoArmacao,
           comPolimento: false,
           formaArmacao,
+          valorMontagemSemTriangulacao: 0,
         },
         garantia: {
           usuarioFinal: usuarioFinal || os.cliente || "",
