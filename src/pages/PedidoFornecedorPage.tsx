@@ -486,8 +486,8 @@ const PedidoFornecedorPage: React.FC = () => {
           tipoArmacao,
           comPolimento: false,
           formaArmacao,
-          valorMontagemSemTriangulacao: 0,
         },
+        valorMontagemSemTriangulacao: 0,
         garantia: {
           usuarioFinal: usuarioFinal || os.cliente || "",
           inicialUsuario: (usuarioFinal || os.cliente || "").split(/\s+/).map((w: string) => w.charAt(0)).join("").substring(0, 2).toUpperCase() || "US",
