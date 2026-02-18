@@ -99,6 +99,20 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                 adicao={os.oeAdicao} dnp={os.oeDnp} altura={os.oeAltura}
               />
 
+              {/* Armação */}
+              {(os.descricaoArmacao || os.codFormatoAro != null) && (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase">Armação</p>
+                  <Field label="Descrição" value={os.descricaoArmacao} />
+                  <Field label="Referência" value={os.referenciaArmacao} />
+                  <Field label="Formato do Aro" value={os.codFormatoAro != null ? (
+                    <Badge variant="outline">
+                      {os.codFormatoAro === 1 ? "Aro Fechado" : os.codFormatoAro === 2 ? "Nylon" : os.codFormatoAro === 3 ? "Parafusado" : `Código ${os.codFormatoAro}`}
+                    </Badge>
+                  ) : null} />
+                </div>
+              )}
+
               {/* Lentes */}
               <div className="space-y-1">
                 <Field label="Lente OD" value={os.lenteOdDescricao} />
