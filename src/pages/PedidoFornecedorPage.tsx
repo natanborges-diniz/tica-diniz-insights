@@ -489,7 +489,7 @@ const PedidoFornecedorPage: React.FC = () => {
         },
         garantia: {
           usuarioFinal: usuarioFinal || os.cliente || "",
-          inicialUsuario: (usuarioFinal || os.cliente || "").split(/\s+/).map((w: string) => w.charAt(0)).join("").substring(0, 3).toUpperCase() || "USR",
+          inicialUsuario: (usuarioFinal || os.cliente || "").split(/\s+/).map((w: string) => w.charAt(0)).join("").substring(0, 2).toUpperCase() || "US",
         },
         // F4.4: Campos complementares
         camposComplementares: produtoSelecionado.camposComplementares?.length
