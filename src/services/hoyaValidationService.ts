@@ -97,6 +97,12 @@ export function validateHoyaPayload(
     warnings.push({ field: "dadosMedida.larguraLente", message: "Largura da lente não informada", severity: "warning" });
   }
 
+  if (!payload.dadosMedida?.alturaLente) {
+    errors.push({ field: "dadosMedida.alturaLente", message: "Altura da lente obrigatória (18–52mm)", severity: "error" });
+  } else if (payload.dadosMedida.alturaLente < 18 || payload.dadosMedida.alturaLente > 52) {
+    errors.push({ field: "dadosMedida.alturaLente", message: "Altura da lente deve ser entre 18 e 52mm", severity: "error" });
+  }
+
   // Garantia
   if (!payload.garantia?.usuarioFinal) {
     warnings.push({ field: "garantia.usuarioFinal", message: "Nome do usuário final não informado (garantia)", severity: "warning" });
