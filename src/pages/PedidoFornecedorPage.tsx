@@ -123,6 +123,7 @@ const PedidoFornecedorPage: React.FC = () => {
   // Form state
   const [tipoServico, setTipoServico] = useState(4);
   const [tipoArmacao, setTipoArmacao] = useState(1);
+  const [formaArmacao, setFormaArmacao] = useState(1);
   const [observacao, setObservacao] = useState("");
   const [usuarioFinal, setUsuarioFinal] = useState("");
 
@@ -484,6 +485,7 @@ const PedidoFornecedorPage: React.FC = () => {
         armacao: {
           tipoArmacao,
           comPolimento: false,
+          formaArmacao,
         },
         garantia: {
           usuarioFinal: usuarioFinal || os.cliente || "",
@@ -1219,6 +1221,21 @@ const PedidoFornecedorPage: React.FC = () => {
                     <SelectItem value="2">Metal</SelectItem>
                     <SelectItem value="5">Balgrif (3 Peças)</SelectItem>
                     <SelectItem value="6">Nylon</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-[10px] uppercase">Forma da Armação</Label>
+                <Select value={String(formaArmacao)} onValueChange={(v) => setFormaArmacao(Number(v))}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Redonda</SelectItem>
+                    <SelectItem value="2">Quadrada</SelectItem>
+                    <SelectItem value="3">Aviador</SelectItem>
+                    <SelectItem value="4">Retangular</SelectItem>
+                    <SelectItem value="5">Oval</SelectItem>
+                    <SelectItem value="6">Gatinho</SelectItem>
+                    <SelectItem value="7">Outra</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
