@@ -206,7 +206,7 @@ const PedidoFornecedorPage: React.FC = () => {
             basePrismaV: prismas.oeBasePRPrismaV || "",
           });
           setArmacao({
-            larguraLente: found.caHorizontal != null ? String(found.caHorizontal) : "",
+            larguraLente: found.caHorizontal != null ? String(found.caHorizontal) : found.ta != null ? String(found.ta) : "",
             alturaLente: found.aaVertical != null ? String(found.aaVertical) : "",
             ponteLente: found.ponte != null ? String(found.ponte) : "",
           });
