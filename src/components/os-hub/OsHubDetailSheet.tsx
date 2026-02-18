@@ -100,7 +100,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
               />
 
               {/* Armação */}
-              {(os.descricaoArmacao || os.codFormatoAro != null) && (
+              {(os.descricaoArmacao || os.codFormatoAro != null || os.ponte || os.aaVertical || os.ta) && (
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-muted-foreground uppercase">Armação</p>
                   <Field label="Descrição" value={os.descricaoArmacao} />
@@ -110,6 +110,16 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                       {os.codFormatoAro === 1 ? "Aro Fechado" : os.codFormatoAro === 2 ? "Nylon" : os.codFormatoAro === 3 ? "Parafusado" : `Código ${os.codFormatoAro}`}
                     </Badge>
                   ) : null} />
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <Field label="Ponte" value={os.ponte} />
+                    <Field label="Aro (V)" value={os.aaVertical} />
+                    <Field label="Diâmetro" value={os.diametro} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <Field label="TA" value={os.ta} />
+                    <Field label="Largura (H)" value={os.caHorizontal} />
+                    <Field label="MD" value={os.md} />
+                  </div>
                 </div>
               )}
 
