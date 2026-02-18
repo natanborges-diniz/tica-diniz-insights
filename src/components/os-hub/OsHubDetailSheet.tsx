@@ -1,8 +1,12 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { OsHubRecord } from "@/services/osHubService";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Send } from "lucide-react";
 
 interface Props {
   os: OsHubRecord | null;
@@ -43,6 +47,14 @@ function RxField({ label, esf, cil, eixo, adicao, dnp, altura }: {
 }
 
 export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
+  const navigate = useNavigate();
+
+  const handleGerarPedido = () => {
+    if (!os) return;
+    onClose();
+    navigate(`/os/pedido?codOs=${os.codOs}&codEmpresa=${os.codEmpresa}`);
+  };
+
   return (
     <Sheet open={!!os} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="w-full sm:max-w-lg">
@@ -106,6 +118,13 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                   <p className="text-sm bg-muted/50 p-2 rounded">{os.observacaoLente}</p>
                 </div>
               )}
+
+              {/* Gerar Pedido */}
+              <Separator />
+              <Button onClick={handleGerarPedido} className="w-full gap-2">
+                <Send className="h-4 w-4" />
+                Gerar Pedido Hoya
+              </Button>
             </div>
           </ScrollArea>
         )}

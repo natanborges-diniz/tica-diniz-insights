@@ -65,6 +65,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       label: "Acompanhamento",
       items: [
         { title: "Tracking Hoya", url: "/os/tracking", icon: Truck },
+        { title: "Pedido Fornecedor", url: "/os/pedido", icon: ClipboardList },
       ],
     },
   ],
