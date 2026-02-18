@@ -8,6 +8,30 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Send } from "lucide-react";
 
+const FORMA_ARO_LABELS: Record<number, string> = {
+  1: "Redonda", 2: "Quadrada", 3: "Aviador", 4: "Retangular", 5: "Oval", 6: "Gatinho", 7: "Outra",
+};
+
+function FormaAroIcon({ codigo }: { codigo: number }) {
+  const size = 32;
+  const s = size;
+  const paths: Record<number, string> = {
+    1: `M${s/2},4 A${s/2-4},${s/2-4} 0 1,1 ${s/2},${s-4} A${s/2-4},${s/2-4} 0 1,1 ${s/2},4Z`, // circle
+    2: `M4,${s/2} L${s/4},4 L${s*3/4},4 L${s-4},${s/2} L${s*3/4},${s-4} L${s/4},${s-4}Z`, // diamond-ish square
+    3: `M4,8 Q${s/2},2 ${s-4},8 L${s-6},${s-6} Q${s/2},${s-2} 6,${s-6}Z`, // aviator teardrop
+    4: `M6,6 H${s-6} V${s-6} H6Z`, // rectangle
+    5: `M${s/2},4 A${s/2-4},${s/3} 0 1,1 ${s/2},${s-4} A${s/2-4},${s/3} 0 1,1 ${s/2},4Z`, // oval
+    6: `M4,${s-6} Q4,4 ${s/2},6 Q${s-4},4 ${s-4},${s-6} Q${s/2},${s*0.7} 4,${s-6}Z`, // cat-eye
+    7: `M${s/2},4 L${s-4},${s/3} L${s-6},${s-4} L6,${s-4} L4,${s/3}Z`, // pentagon/other
+  };
+  const d = paths[codigo] ?? paths[7];
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="text-foreground">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 interface Props {
   os: OsHubRecord | null;
   onClose: () => void;
@@ -105,11 +129,17 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                   <p className="text-xs font-semibold text-muted-foreground uppercase">Armação</p>
                   <Field label="Descrição" value={os.descricaoArmacao} />
                   <Field label="Referência" value={os.referenciaArmacao} />
-                  <Field label="Formato do Aro" value={os.codFormatoAro != null ? (
-                    <Badge variant="outline">
-                      {os.codFormatoAro === 1 ? "Aro Fechado" : os.codFormatoAro === 2 ? "Nylon" : os.codFormatoAro === 3 ? "Parafusado" : `Código ${os.codFormatoAro}`}
-                    </Badge>
-                  ) : null} />
+                  {os.codFormatoAro != null && (
+                    <div className="flex items-center gap-2 py-1 border-b border-border/40">
+                      <span className="text-muted-foreground text-sm">Formato do Aro</span>
+                      <div className="flex items-center gap-2 ml-auto">
+                        <FormaAroIcon codigo={os.codFormatoAro} />
+                        <span className="text-xs text-muted-foreground">
+                          {FORMA_ARO_LABELS[os.codFormatoAro] ?? `Código ${os.codFormatoAro}`}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     <Field label="Ponte" value={os.ponte} />
                     <Field label="Aro (V)" value={os.aaVertical} />
