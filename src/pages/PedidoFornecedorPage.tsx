@@ -210,6 +210,10 @@ const PedidoFornecedorPage: React.FC = () => {
             alturaLente: found.aaVertical != null ? String(found.aaVertical) : "",
             ponteLente: found.ponte != null ? String(found.ponte) : "",
           });
+          // Auto-fill forma da armação from OS (cod_formato_aro)
+          if (found.codFormatoAro != null && found.codFormatoAro > 0) {
+            setFormaArmacao(found.codFormatoAro);
+          }
           setUsuarioFinal(found.cliente || "");
 
           // FASE 5: Mark prescription as auto-filled if data exists
@@ -1213,6 +1217,13 @@ const PedidoFornecedorPage: React.FC = () => {
                   <Input value={armacao.ponteLente} onChange={(e) => setArmacao(p => ({ ...p, ponteLente: e.target.value }))} className="h-8 text-sm" />
                 </div>
               </div>
+              {os?.descricaoArmacao && (
+                <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2 mb-2">
+                  <span className="font-medium">Armação ERP:</span> {os.descricaoArmacao}
+                  {os.referenciaArmacao && <span className="ml-2 text-[10px]">({os.referenciaArmacao})</span>}
+                  {os.codFormatoAro != null && <Badge variant="outline" className="ml-2 text-[10px]">Formato: {os.codFormatoAro}</Badge>}
+                </div>
+              )}
               <div>
                 <Label className="text-[10px] uppercase">Tipo de Armação</Label>
                 <Select value={String(tipoArmacao)} onValueChange={(v) => setTipoArmacao(Number(v))}>
