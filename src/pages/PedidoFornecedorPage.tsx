@@ -10,6 +10,7 @@ import {
   HoyaPedidoResponse,
   listarProdutosHoya,
   criarPedidoHoya,
+  recuperarPedidoPorOs,
 } from "@/services/hoyaService";
 import {
   matchProducts,
@@ -111,6 +112,7 @@ const PedidoFornecedorPage: React.FC = () => {
   const [showManualSearch, setShowManualSearch] = useState(false);
   // Pedido já existente no banco para esta OS (bloqueio de duplicidade)
   const [pedidoExistente, setPedidoExistente] = useState<{ numero_pedido: string | null; status: string; fornecedor: string } | null>(null);
+  const [recuperando, setRecuperando] = useState(false);
 
   // Matching state
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
@@ -613,6 +615,37 @@ const PedidoFornecedorPage: React.FC = () => {
     }
   };
 
+  // Handler para recuperar pedido que foi processado pela Hoya mas não salvo corretamente
+  const handleRecuperarPedido = async () => {
+    if (!os) return;
+    try {
+      setRecuperando(true);
+      toast({ title: "Consultando Hoya...", description: "Buscando pedido pelo número da OS." });
+      const result = await recuperarPedidoPorOs(
+        os.numeroOs || String(os.codOs),
+        os.codOs,
+        os.codEmpresa
+      );
+      // Atualiza cache e estado local
+      registrarPedidoNoCache(os.codOs, result.numeroPedido, "HOYA", result.status);
+      setPedidoExistente({ numero_pedido: result.numeroPedido, status: result.status, fornecedor: "HOYA" });
+      toast({
+        title: "Pedido recuperado!",
+        description: `Nº ${result.numeroPedido} encontrado na Hoya e registrado com sucesso.`,
+      });
+    } catch (err) {
+      console.error("[PedidoFornecedor] Recover error:", err);
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message || "Erro ao consultar Hoya";
+      toast({
+        title: "Não foi possível recuperar o pedido",
+        description: msg,
+        variant: "destructive",
+      });
+    } finally {
+      setRecuperando(false);
+    }
+  };
+
   // ============================================
   // FASE 5: Confirmation Banner Component
   // ============================================
@@ -713,6 +746,47 @@ const PedidoFornecedorPage: React.FC = () => {
       </div>
     );
   }
+
+  // Só erros no banco + a Hoya rejeita como duplicata — oferece recuperação
+  if (pedidoExistente && !pedidoExistente.numero_pedido && os) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-6 p-8 max-w-md mx-auto text-center">
+        <div className="flex items-center justify-center h-16 w-16 rounded-full bg-destructive/10">
+          <AlertTriangle className="h-8 w-8 text-destructive" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold mb-1">Tentativas com erro registradas</h2>
+          <p className="text-muted-foreground text-sm">
+            Esta OS possui {""} tentativas anteriores que falharam. Se a Hoya informar que a OS já foi usada, é possível que o pedido tenha sido processado mas não registrado aqui.
+          </p>
+        </div>
+        <div className="w-full rounded-lg border bg-card p-4 space-y-3">
+          <p className="text-sm font-medium">Recuperar pedido da Hoya</p>
+          <p className="text-xs text-muted-foreground">
+            Clique abaixo para consultar diretamente na Hoya pelo número da OS <strong>{os.numeroOs || os.codOs}</strong>. Se encontrado, o número do protocolo será registrado automaticamente.
+          </p>
+          <Button
+            className="w-full"
+            onClick={handleRecuperarPedido}
+            disabled={recuperando}
+          >
+            {recuperando ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Consultando Hoya...</>
+            ) : (
+              <><Search className="h-4 w-4 mr-2" /> Buscar pedido na Hoya</>
+            )}
+          </Button>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => setPedidoExistente(null)}>
+          Ignorar e tentar enviar novamente
+        </Button>
+        <Button variant="outline" onClick={() => navigate("/os")}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar ao Monitor
+        </Button>
+      </div>
+    );
+  }
+
 
   if (pedidoEnviado) {
     return (

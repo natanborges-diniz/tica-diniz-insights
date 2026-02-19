@@ -329,6 +329,94 @@ serve(async (req) => {
         break;
       }
       case "consultar-pedido": url = `${HOYA_BASE_URL}/pedido/tracking/${params.numeroPedido}`; break;
+
+      // Recupera pedido Hoya pelo número da OS (para casos onde o pedido foi criado mas não registrado)
+      case "recuperar-pedido-por-os": {
+        const sbRec = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const osNumero = String(params.osNumero || params.os || "");
+        const codOsRec = Number(params.codOs) || 0;
+        const codEmpresaRec = Number(params.codEmpresa) || 0;
+
+        if (!osNumero) {
+          return new Response(
+            JSON.stringify({ error: "osNumero obrigatório", code: HOYA_ERROR_CODES.API_ERROR, correlationId }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Consulta Hoya pelo número da OS
+        const recUrl = `${HOYA_BASE_URL.replace(/\/+$/, "")}/pedido/consultar`;
+        console.log(`[hoya-proxy] [${correlationId}] recuperar-pedido-por-os: consultando OS ${osNumero}`);
+        const recResp = await fetchWithRetry(
+          recUrl,
+          {
+            method: "POST",
+            headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" },
+            body: JSON.stringify({ os: osNumero }),
+          },
+          { action: "recuperar-pedido-por-os", correlationId }
+        );
+
+        const recText = await recResp.text();
+        let recData: unknown;
+        try { recData = JSON.parse(recText); } catch { recData = { rawResponse: recText }; }
+
+        if (!recResp.ok) {
+          return new Response(JSON.stringify({ error: "Hoya não encontrou pedido para esta OS", raw: recData, code: HOYA_ERROR_CODES.API_ERROR, correlationId }), {
+            status: recResp.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // recData pode ser array ou objeto único
+        const recArr = Array.isArray(recData) ? recData : [recData];
+        const pedidoHoya = recArr[0] as Record<string, unknown> | undefined;
+
+        if (!pedidoHoya || !pedidoHoya.numeroPedido) {
+          return new Response(JSON.stringify({ error: "Nenhum pedido encontrado na Hoya para esta OS", code: HOYA_ERROR_CODES.API_ERROR, correlationId }), {
+            status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const numeroPedidoRec = String(pedidoHoya.numeroPedido);
+
+        // Atualiza o registro mais recente com ERRO (sem numero_pedido) para refletir o sucesso
+        const { data: erroRows } = await sbRec
+          .from("pedidos_fornecedor")
+          .select("id")
+          .eq("cod_os", codOsRec)
+          .is("numero_pedido", null)
+          .eq("hoya_environment", detectHoyaEnvironment())
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        const erroId = erroRows?.[0]?.id;
+        if (erroId) {
+          await sbRec.from("pedidos_fornecedor").update({
+            numero_pedido: numeroPedidoRec,
+            status: "CONFIRMADO",
+            response: pedidoHoya,
+            updated_at: new Date().toISOString(),
+          }).eq("id", erroId);
+          console.log(`[hoya-proxy] [${correlationId}] Registro ${erroId} atualizado com numeroPedido=${numeroPedidoRec}`);
+        } else {
+          // Cria novo registro se não havia nenhum com erro
+          await sbRec.from("pedidos_fornecedor").insert({
+            cod_os: codOsRec,
+            cod_empresa: codEmpresaRec,
+            fornecedor: "HOYA",
+            numero_pedido: numeroPedidoRec,
+            status: "CONFIRMADO",
+            response: pedidoHoya,
+            requested_by: user?.userId || null,
+            hoya_environment: detectHoyaEnvironment(),
+          });
+          console.log(`[hoya-proxy] [${correlationId}] Novo registro criado com numeroPedido=${numeroPedidoRec}`);
+        }
+
+        return new Response(JSON.stringify({ numeroPedido: numeroPedidoRec, status: "CONFIRMADO", pedido: pedidoHoya, recovered: true }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
       case "consultar-pedidos":
         url = `${HOYA_BASE_URL}/pedido/consultar`; method = "POST";
         fetchBody = JSON.stringify(params.filtros || {}); break;
