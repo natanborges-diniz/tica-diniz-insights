@@ -239,10 +239,20 @@ serve(async (req) => {
         method = "POST";
         const pedidoPayload = params.pedido || {};
         
-        // 1) Remove undocumented field valorMontagemSemTriangulacao (not in API contract)
+        // 1) Legacy param required by HOYA SQL Server backend (@ValorMontagemSemTriangulacao)
+        //    Not documented in API contract, but backend stored procedure requires it.
+        const valorMontagem = Number(
+          pedidoPayload.valorMontagemSemTriangulacao ??
+          pedidoPayload.ValorMontagemSemTriangulacao ??
+          pedidoPayload.ValorMontagem ??
+          0
+        ) || 0;
         delete pedidoPayload.valorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagem;
+        // Send both variants to cover legacy binder (@key) and DTO binder (PascalCase)
+        pedidoPayload["@ValorMontagemSemTriangulacao"] = valorMontagem;
+        pedidoPayload.ValorMontagemSemTriangulacao = valorMontagem;
         
         // 2) When codigoProduto is present, remove alternative characteristic fields
         //    (API mode A = codigoProduto only; mode B = characteristics without codigoProduto)
