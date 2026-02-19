@@ -239,18 +239,15 @@ serve(async (req) => {
         method = "POST";
         const pedidoPayload = params.pedido || {};
         
-        // Extract valor montagem value
+        // Extract valor montagem value — must be sent as QUERY PARAMETER, not in JSON body
         const valorMontagem = Number(pedidoPayload.valorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagemSemTriangulacao ?? 0) || 0;
-        // Remove ALL variants to avoid duplicate-key issues in .NET deserialization
+        // Remove ALL variants from JSON body
         delete pedidoPayload.valorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagem;
-        // Set ONLY PascalCase (matches .NET property convention) — having both casings
-        // can cause System.Text.Json to throw or silently skip on case-insensitive duplicate detection
-        pedidoPayload.ValorMontagemSemTriangulacao = valorMontagem;
         
         const baseUrl = HOYA_BASE_URL.replace(/\/+$/, '');
-        url = `${baseUrl}/pedido`;
+        url = `${baseUrl}/pedido?ValorMontagemSemTriangulacao=${valorMontagem}`;
         
         // Ensure all expected nullable fields are present (Hoya .NET deserializer requires explicit nulls)
         pedidoPayload.observacao = pedidoPayload.observacao ?? null;
