@@ -239,23 +239,13 @@ serve(async (req) => {
         method = "POST";
         const pedidoPayload = params.pedido || {};
         
-        // Extract valor montagem and move to camposComplementares (codigo 1)
+        // Extract valor montagem — send as top-level field (API contract)
         const valorMontagem = Number(pedidoPayload.valorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagem ?? 0) || 0;
-        // Remove all loose variants from payload
+        // Normalize to the exact casing the .NET API expects
         delete pedidoPayload.valorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagem;
-        
-        // Inject into camposComplementares (codigo 1 = ValorMontagemSemTriangulacao)
-        if (!Array.isArray(pedidoPayload.camposComplementares)) {
-          pedidoPayload.camposComplementares = [];
-        }
-        const codigoMontagem = 1;
-        const valorStr = String(valorMontagem).replace(".", ",");
-        const idx = pedidoPayload.camposComplementares.findIndex((x: any) => Number(x?.codigo) === codigoMontagem);
-        const itemMontagem = { codigo: codigoMontagem, valor: valorStr };
-        if (idx >= 0) pedidoPayload.camposComplementares[idx] = itemMontagem;
-        else pedidoPayload.camposComplementares.push(itemMontagem);
+        pedidoPayload.valorMontagemSemTriangulacao = valorMontagem;
         
         const baseUrl = HOYA_BASE_URL.replace(/\/+$/, '');
         url = `${baseUrl}/pedido`;
