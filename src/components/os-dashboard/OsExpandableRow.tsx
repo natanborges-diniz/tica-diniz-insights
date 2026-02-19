@@ -90,8 +90,9 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                           <PackageCheck className="h-3.5 w-3.5 text-green-600 shrink-0 hover:scale-110 transition-transform" />
                         </span>
                       </TooltipTrigger>
-                      <TooltipContent side="right" className="text-xs space-y-0.5">
-                        <p className="font-mono font-semibold">{pedidoFornecedor!.numero_pedido}</p>
+                      <TooltipContent side="right" className="text-xs space-y-1">
+                        <p className="font-semibold text-foreground">{pedidoFornecedor!.fornecedor}</p>
+                        <p className="font-mono">{pedidoFornecedor!.numero_pedido}</p>
                         {pedidoFornecedor!.created_at && (
                           <p className="text-muted-foreground">
                             {new Date(pedidoFornecedor!.created_at).toLocaleString("pt-BR")}
