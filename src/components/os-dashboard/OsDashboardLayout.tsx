@@ -37,7 +37,7 @@ import {
 import { BridgeHealth } from "@/hooks/useBridgeStatus";
 import { Empresa } from "@/services/empresaService";
 
-// Debounced search input to avoid re-filtering on every keystroke
+// Debounced search input — Enter immediately applies
 function DebouncedSearchInput({ value, onChange, className, placeholder }: {
   value: string; onChange: (v: string) => void; className?: string; placeholder?: string;
 }) {
@@ -46,6 +46,11 @@ function DebouncedSearchInput({ value, onChange, className, placeholder }: {
 
   useEffect(() => { setLocal(value); }, [value]);
 
+  const flush = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    onChange(local);
+  }, [local, onChange]);
+
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
     setLocal(v);
@@ -53,7 +58,11 @@ function DebouncedSearchInput({ value, onChange, className, placeholder }: {
     timerRef.current = setTimeout(() => onChange(v), 400);
   }, [onChange]);
 
-  return <Input value={local} onChange={handleChange} className={className} placeholder={placeholder} />;
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter") { e.preventDefault(); flush(); }
+  }, [flush]);
+
+  return <Input value={local} onChange={handleChange} onKeyDown={handleKeyDown} className={className} placeholder={placeholder} />;
 }
 
 const CAMPO_DATA_LABELS: Record<CampoDataOs, string> = {
@@ -94,6 +103,14 @@ type Props = {
   defaultCodEmpresa: number | null;
   isAdmin: boolean;
 };
+
+// Module-level cache for layout selections — survives navigation
+let _layoutCache: {
+  campoData?: CampoDataOs;
+  dataInicio?: Date;
+  dataFim?: Date;
+  empresa?: string;
+} = {};
 
 function DatePickerField({ label, date, onSelect }: { label: string; date: Date; onSelect: (d: Date) => void }) {
   return (
@@ -153,14 +170,26 @@ export const OsDashboardLayout: React.FC<Props> = ({
   const inicio30 = new Date(hoje);
   inicio30.setDate(inicio30.getDate() - 30);
 
-  const [campoData, setCampoData] = useState<CampoDataOs>("EMISSAO");
-  const [dataInicio, setDataInicio] = useState<Date>(inicio30);
-  const [dataFim, setDataFim] = useState<Date>(hoje);
+  const [campoData, setCampoData] = useState<CampoDataOs>(_layoutCache.campoData ?? "EMISSAO");
+  const [dataInicio, setDataInicio] = useState<Date>(_layoutCache.dataInicio ?? inicio30);
+  const [dataFim, setDataFim] = useState<Date>(_layoutCache.dataFim ?? hoje);
   const [empresaSelecionada, setEmpresaSelecionada] = useState<string>(
-    isAdmin ? "ALL" : (defaultCodEmpresa ? String(defaultCodEmpresa) : "")
+    _layoutCache.empresa ?? (isAdmin ? "ALL" : (defaultCodEmpresa ? String(defaultCodEmpresa) : ""))
   );
 
-  // Update empresa when defaultCodEmpresa loads
+  // Pagination
+  const PAGE_SIZE = 100;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  // Sync layout state to module cache
+  useEffect(() => {
+    _layoutCache = { campoData, dataInicio, dataFim, empresa: empresaSelecionada };
+  }, [campoData, dataInicio, dataFim, empresaSelecionada]);
+
+  // Reset pagination when filtered data changes
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [data]);
+
+
   useEffect(() => {
     if (defaultCodEmpresa && !empresaSelecionada) {
       setEmpresaSelecionada(String(defaultCodEmpresa));
@@ -457,7 +486,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.map((os) => (
+                      {data.slice(0, visibleCount).map((os) => (
                         <OsExpandableRow
                           key={os.codOs}
                           os={os}
@@ -469,6 +498,13 @@ export const OsDashboardLayout: React.FC<Props> = ({
                     </TableBody>
                   </Table>
                 </div>
+                {data.length > visibleCount && (
+                  <div className="flex justify-center py-4 border-t">
+                    <Button variant="outline" size="sm" onClick={() => setVisibleCount(c => c + PAGE_SIZE)}>
+                      Carregar mais ({data.length - visibleCount} restantes)
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -488,7 +524,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
           {/* Rodapé */}
           {data.length > 0 && (
             <p className="text-sm text-muted-foreground text-center">
-              Exibindo {data.length} de {rawData.length} OS
+              Exibindo {Math.min(visibleCount, data.length)} de {data.length} filtradas ({rawData.length} total)
             </p>
           )}
         </>
