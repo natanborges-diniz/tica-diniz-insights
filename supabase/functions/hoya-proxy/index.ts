@@ -241,10 +241,11 @@ serve(async (req) => {
         
         // Extract valor montagem value — must be sent as QUERY PARAMETER, not in JSON body
         const valorMontagem = Number(pedidoPayload.valorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagemSemTriangulacao ?? 0) || 0;
-        // Remove ALL variants from JSON body
+        // Remove camelCase variants, keep PascalCase in body for .NET
         delete pedidoPayload.valorMontagemSemTriangulacao;
-        delete pedidoPayload.ValorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagem;
+        // Tira-teima: send in BOTH query string AND JSON body
+        pedidoPayload.ValorMontagemSemTriangulacao = valorMontagem;
         
         const baseUrl = HOYA_BASE_URL.replace(/\/+$/, '');
         url = `${baseUrl}/pedido?ValorMontagemSemTriangulacao=${valorMontagem}`;
