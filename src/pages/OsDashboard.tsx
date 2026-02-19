@@ -1,9 +1,9 @@
 // src/pages/OsDashboard.tsx
 // Monitor de Produção — empresa obrigatória, circuit breaker integrado, module-level cache
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useOsMonitor, OsApiFilters } from "../hooks/useOsMonitor";
-import { OsDashboardLayout } from "../components/os-dashboard/OsDashboardLayout";
+import { OsDashboardLayout, PedidoFornecedorInfo } from "../components/os-dashboard/OsDashboardLayout";
 import { OsHubRecord, fetchSingleOsRecipe, saveToCache } from "@/services/osHubService";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -11,6 +11,12 @@ import { CampoDataOs } from "@/services/osService";
 import { useBridgeStatus } from "@/hooks/useBridgeStatus";
 import { useEmpresas } from "@/hooks/useEmpresas";
 import { useAuth } from "@/contexts/AuthContext";
+
+// ============================================================
+// Module-level pedidos cache — sobrevive à navegação
+// ============================================================
+let _pedidosMapCache: Record<number, PedidoFornecedorInfo> = {};
+let _pedidosMapDataKey = ""; // fingerprint dos cod_os do rawData
 
 function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
   const hasReceita = !!(
@@ -120,6 +126,51 @@ const OsDashboardPage: React.FC = () => {
   const [selectedHubOs, setSelectedHubOs] = useState<OsHubRecord | null>(null);
   const [loadingRecipeCodOs, setLoadingRecipeCodOs] = useState<number | null>(null);
 
+  // ============================================================
+  // Pedidos map — module-level cache, só rebusca quando rawData muda
+  // ============================================================
+  const [pedidosMap, setPedidosMap] = useState<Record<number, PedidoFornecedorInfo>>(_pedidosMapCache);
+
+  useEffect(() => {
+    if (data.length === 0) return;
+    const newKey = data.map(os => os.codOs).sort().join(",");
+    if (newKey === _pedidosMapDataKey && Object.keys(_pedidosMapCache).length > 0) {
+      // Mesmo conjunto de OS — reutiliza cache sem bater no banco
+      setPedidosMap(_pedidosMapCache);
+      return;
+    }
+    _pedidosMapDataKey = newKey;
+    const codOsList = data.map(os => os.codOs);
+    (async () => {
+      const map: Record<number, PedidoFornecedorInfo> = {};
+      for (let i = 0; i < codOsList.length; i += 100) {
+        const batch = codOsList.slice(i, i + 100);
+        const { data: rows } = await supabase
+          .from("pedidos_fornecedor")
+          .select("cod_os, numero_pedido, fornecedor, status")
+          .in("cod_os", batch);
+        if (rows) {
+          for (const r of rows) {
+            map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "" };
+          }
+        }
+      }
+      _pedidosMapCache = map;
+      setPedidosMap(map);
+    })();
+  }, [data]);
+
+  /** Atualiza badge de pedido na linha sem rebuscar Firebird ou banco */
+  const registrarPedidoEnviado = useCallback((codOs: number, numeroPedido: string, fornecedor: string, status: string) => {
+    setPedidosMap(prev => {
+      const next = { ...prev, [codOs]: { numero_pedido: numeroPedido, fornecedor, status } };
+      _pedidosMapCache = next;
+      return next;
+    });
+  }, []);
+
+  // ============================================================
+
   const handleLoad = (apiFilters: OsApiFilters) => {
     reload(apiFilters);
   };
@@ -185,6 +236,7 @@ const OsDashboardPage: React.FC = () => {
       onRefresh={() => lastApiFilters && reload(lastApiFilters)}
       empresasUnicas={empresasUnicas}
       etapasUnicas={etapasUnicas}
+      pedidosMap={pedidosMap}
       selectedHubOs={selectedHubOs}
       onOpenRecipe={handleOpenRecipe}
       onCloseRecipe={() => setSelectedHubOs(null)}
