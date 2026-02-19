@@ -53,6 +53,7 @@ import {
   XCircle,
   CheckCircle2,
   Pencil,
+  PackageCheck,
 } from "lucide-react";
 
 // ============================================
@@ -108,6 +109,8 @@ const PedidoFornecedorPage: React.FC = () => {
   const [enviandoCooldown, setEnviandoCooldown] = useState(false);
   const [pedidoEnviado, setPedidoEnviado] = useState<HoyaPedidoResponse | null>(null);
   const [showManualSearch, setShowManualSearch] = useState(false);
+  // Pedido já existente no banco para esta OS (bloqueio de duplicidade)
+  const [pedidoExistente, setPedidoExistente] = useState<{ numero_pedido: string | null; status: string; fornecedor: string } | null>(null);
 
   // Matching state
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
@@ -233,6 +236,28 @@ const PedidoFornecedorPage: React.FC = () => {
       }
     })();
   }, [codOs, codEmpresa]);
+
+  // ---- Verificar se já existe pedido confirmado para esta OS (bloquear duplicidade) ----
+  useEffect(() => {
+    if (!codOs) return;
+    (async () => {
+      const { data: rows } = await supabase
+        .from("pedidos_fornecedor")
+        .select("numero_pedido, status, fornecedor, created_at")
+        .eq("cod_os", codOs)
+        .order("created_at", { ascending: false });
+      if (rows && rows.length > 0) {
+        // Prioriza o registro com número de pedido confirmado
+        const confirmado = rows.find(r => r.numero_pedido);
+        if (confirmado) {
+          setPedidoExistente({ numero_pedido: confirmado.numero_pedido, status: confirmado.status || "", fornecedor: confirmado.fornecedor });
+        } else {
+          // Só erros — não bloqueia, mas informa
+          setPedidoExistente({ numero_pedido: null, status: rows[0].status || "ERRO", fornecedor: rows[0].fornecedor });
+        }
+      }
+    })();
+  }, [codOs]);
 
   // ---- Auto-load Hoya products on mount ----
   useEffect(() => {
@@ -666,11 +691,34 @@ const PedidoFornecedorPage: React.FC = () => {
     );
   }
 
+  // Pedido já confirmado no banco — bloqueia nova tentativa
+  if (pedidoExistente?.numero_pedido) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
+        <div className="flex items-center justify-center h-16 w-16 rounded-full bg-primary/10">
+          <PackageCheck className="h-8 w-8 text-primary" />
+        </div>
+        <h2 className="text-2xl font-bold">Pedido já enviado</h2>
+        <div className="text-center space-y-2">
+          <p className="text-lg">
+            Nº Pedido {pedidoExistente.fornecedor}:{" "}
+            <span className="font-mono font-bold text-primary">{pedidoExistente.numero_pedido}</span>
+          </p>
+          <p className="text-muted-foreground">Status: {pedidoExistente.status}</p>
+          <p className="text-sm text-muted-foreground">Esta OS já possui pedido confirmado. Não é possível enviar um segundo pedido.</p>
+        </div>
+        <Button variant="outline" onClick={() => navigate("/os")}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar ao Monitor
+        </Button>
+      </div>
+    );
+  }
+
   if (pedidoEnviado) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
-        <div className="flex items-center justify-center h-16 w-16 rounded-full bg-emerald-500/15">
-          <Check className="h-8 w-8 text-emerald-600" />
+        <div className="flex items-center justify-center h-16 w-16 rounded-full bg-primary/10">
+          <Check className="h-8 w-8 text-primary" />
         </div>
         <h2 className="text-2xl font-bold">Pedido Enviado!</h2>
         <div className="text-center space-y-2">

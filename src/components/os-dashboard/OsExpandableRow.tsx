@@ -23,6 +23,7 @@ import {
   Phone,
   Clock,
   PackageCheck,
+  PackageX,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -44,7 +45,11 @@ function formatCurrency(value: number) {
 
 export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingRecipe, pedidoFornecedor }) => {
   const [open, setOpen] = useState(false);
-  const hasPedido = !!pedidoFornecedor?.numero_pedido;
+  // pedido confirmado = tem numero_pedido preenchido
+  const hasPedidoConfirmado = !!pedidoFornecedor?.numero_pedido;
+  // tentativa com erro = existe registro mas sem número de pedido
+  const hasPedidoErro = !!pedidoFornecedor && !hasPedidoConfirmado && pedidoFornecedor.status === "ERRO";
+
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -65,7 +70,7 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
               <TableCell className="font-mono font-semibold text-primary">
                 <div className="flex items-center gap-1.5">
                   {os.os || os.codOs}
-                  {hasPedido && (
+                  {hasPedidoConfirmado && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span onClick={(e) => e.stopPropagation()}>
@@ -78,6 +83,19 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                         {pedidoFornecedor!.status && (
                           <p className="capitalize text-muted-foreground">{pedidoFornecedor!.status}</p>
                         )}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {hasPedidoErro && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span onClick={(e) => e.stopPropagation()}>
+                          <PackageX className="h-3.5 w-3.5 text-destructive shrink-0" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="text-xs space-y-0.5 max-w-[240px]">
+                        <p className="font-semibold text-destructive">{pedidoFornecedor!.fornecedor} — Erro no envio</p>
+                        <p className="text-muted-foreground">Pedido não confirmado. Verifique e tente novamente.</p>
                       </TooltipContent>
                     </Tooltip>
                   )}
