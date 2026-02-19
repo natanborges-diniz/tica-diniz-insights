@@ -239,13 +239,20 @@ serve(async (req) => {
         method = "POST";
         const pedidoPayload = params.pedido || {};
         
-        // Extract valor montagem — send as top-level field (API contract)
-        const valorMontagem = Number(pedidoPayload.valorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagem ?? 0) || 0;
-        // Normalize to the exact casing the .NET API expects
+        // 1) Remove undocumented field valorMontagemSemTriangulacao (not in API contract)
         delete pedidoPayload.valorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagem;
-        pedidoPayload.valorMontagemSemTriangulacao = valorMontagem;
+        
+        // 2) When codigoProduto is present, remove alternative characteristic fields
+        //    (API mode A = codigoProduto only; mode B = characteristics without codigoProduto)
+        if (pedidoPayload?.especificacoes?.codigoProduto) {
+          delete pedidoPayload.especificacoes.codigoDesenho;
+          delete pedidoPayload.especificacoes.codigoAltura;
+          delete pedidoPayload.especificacoes.codigoMaterial;
+          delete pedidoPayload.especificacoes.codigoTratamento;
+          delete pedidoPayload.especificacoes.codigoFotossensivel;
+        }
         
         const baseUrl = HOYA_BASE_URL.replace(/\/+$/, '');
         url = `${baseUrl}/pedido`;
