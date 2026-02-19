@@ -11,7 +11,6 @@ import { OsKpiCards } from "./OsKpiCards";
 import { OsExpandableRow } from "./OsExpandableRow";
 import { OsHubDetailSheet } from "@/components/os-hub/OsHubDetailSheet";
 import { OsHubRecord } from "@/services/osHubService";
-import { supabase } from "@/integrations/supabase/client";
 import { BridgeStatusBanner } from "@/components/ui/bridge-status-banner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +35,15 @@ import {
 } from "@/components/ui/table";
 import { BridgeHealth } from "@/hooks/useBridgeStatus";
 import { Empresa } from "@/services/empresaService";
+
+// ============================================================
+// Tipo para o mapa de pedidos de fornecedor
+// ============================================================
+export type PedidoFornecedorInfo = {
+  numero_pedido: string | null;
+  fornecedor: string;
+  status: string;
+};
 
 // Debounced search input — Enter immediately applies
 function DebouncedSearchInput({ value, onChange, className, placeholder }: {
@@ -86,7 +94,8 @@ type Props = {
   onRefresh: () => void;
   empresasUnicas: string[];
   etapasUnicas: string[];
-  
+  /** Mapa cod_os → info do pedido de fornecedor (gerenciado pelo pai) */
+  pedidosMap: Record<number, PedidoFornecedorInfo>;
   selectedHubOs: OsHubRecord | null;
   onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   onCloseRecipe: () => void;
@@ -104,7 +113,7 @@ type Props = {
   isAdmin: boolean;
 };
 
-// Module-level cache for layout selections — survives navigation
+// Module-level cache para seleções de layout — sobrevive à navegação
 let _layoutCache: {
   campoData?: CampoDataOs;
   dataInicio?: Date;
@@ -151,7 +160,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
   onRefresh,
   empresasUnicas,
   etapasUnicas,
-  
+  pedidosMap,
   selectedHubOs,
   onOpenRecipe,
   onCloseRecipe,
@@ -189,45 +198,17 @@ export const OsDashboardLayout: React.FC<Props> = ({
   // Reset pagination when filtered data changes
   useEffect(() => { setVisibleCount(PAGE_SIZE); }, [data]);
 
-
   useEffect(() => {
     if (defaultCodEmpresa && !empresaSelecionada) {
       setEmpresaSelecionada(String(defaultCodEmpresa));
     }
   }, [defaultCodEmpresa]);
 
-  // Pedidos de fornecedor vinculados
-  const [pedidosMap, setPedidosMap] = useState<Record<number, { numero_pedido: string | null; fornecedor: string; status: string }>>(
-    {}
-  );
-
-  useEffect(() => {
-    if (rawData.length === 0) return;
-    const codOsList = rawData.map(os => os.codOs);
-    (async () => {
-      const map: typeof pedidosMap = {};
-      for (let i = 0; i < codOsList.length; i += 100) {
-        const batch = codOsList.slice(i, i + 100);
-        const { data: rows } = await supabase
-          .from("pedidos_fornecedor")
-          .select("cod_os, numero_pedido, fornecedor, status")
-          .in("cod_os", batch);
-        if (rows) {
-          for (const r of rows) {
-            map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "" };
-          }
-        }
-      }
-      setPedidosMap(map);
-    })();
-  }, [rawData]);
-
   const isBridgeDown = bridgeHealth === "down" || bridgeHealth === "timeout";
   const canLoad = !!empresaSelecionada && !loading && !bridgeCircuitOpen;
 
   const handleCarregar = () => {
     if (!empresaSelecionada) return;
-    
     const empresa = empresaSelecionada === "ALL" ? "ALL" : empresaSelecionada;
     onLoad({
       empresa,
@@ -336,7 +317,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
             <div className="flex flex-col items-center justify-center">
               <Info className="h-8 w-8 text-muted-foreground mb-4" />
               <p className="text-muted-foreground">
-                {empresaSelecionada 
+                {empresaSelecionada
                   ? "Clique em Carregar para visualizar as OS."
                   : "Selecione a empresa e o período para começar."
                 }
@@ -461,7 +442,6 @@ export const OsDashboardLayout: React.FC<Props> = ({
                     <SelectItem value="ENTREGUE">Entregue</SelectItem>
                   </SelectContent>
                 </Select>
-
               </div>
             </CardContent>
           </Card>
@@ -482,7 +462,6 @@ export const OsDashboardLayout: React.FC<Props> = ({
                         <TableHead>Status</TableHead>
                         <TableHead className="text-center">Atraso</TableHead>
                         <TableHead className="text-right">Total</TableHead>
-                        <TableHead className="text-right">Total</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -492,7 +471,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
                           os={os}
                           onOpenRecipe={onOpenRecipe}
                           loadingRecipe={loadingRecipeCodOs === os.codOs}
-                          pedidoFornecedor={pedidosMap[os.codOs] || null}
+                          pedidoFornecedor={pedidosMap[os.codOs] ?? null}
                         />
                       ))}
                     </TableBody>
