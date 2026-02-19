@@ -237,7 +237,13 @@ serve(async (req) => {
       case "consultar-produto-sku": url = `${HOYA_BASE_URL}/produto/sku/${params.sku}`; break;
       case "criar-pedido": {
         url = `${HOYA_BASE_URL}/pedido`; method = "POST";
-        fetchBody = JSON.stringify(params.pedido);
+        // Ensure valorMontagemSemTriangulacao is always present (Hoya API requires it)
+        const pedidoPayload = params.pedido || {};
+        if (pedidoPayload.valorMontagemSemTriangulacao === undefined || pedidoPayload.valorMontagemSemTriangulacao === null) {
+          pedidoPayload.valorMontagemSemTriangulacao = 0;
+        }
+        fetchBody = JSON.stringify(pedidoPayload);
+        console.log(`[hoya-proxy] [${correlationId}] criar-pedido payload keys: ${Object.keys(pedidoPayload).join(", ")}, valorMontagem: ${pedidoPayload.valorMontagemSemTriangulacao}`);
 
         // F4.2: Idempotency check
         const hoyaEnvForKey = detectHoyaEnvironment();

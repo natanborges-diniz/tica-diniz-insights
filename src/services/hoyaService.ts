@@ -87,7 +87,7 @@ export interface HoyaPedidoPayload {
     cor?: string | null;
     formaArmacao?: number;
   };
-  valorMontagemSemTriangulacao?: number;
+  valorMontagemSemTriangulacao: number;
   garantia?: {
     usuarioFinal?: string;
     inicialUsuario?: string;

@@ -126,6 +126,7 @@ const PedidoFornecedorPage: React.FC = () => {
   const [formaArmacao, setFormaArmacao] = useState(1);
   const [observacao, setObservacao] = useState("");
   const [usuarioFinal, setUsuarioFinal] = useState("");
+  const [valorMontagem, setValorMontagem] = useState(0);
 
   // Prescrição editável
   const [prescOd, setPrescOd] = useState({
@@ -491,7 +492,7 @@ const PedidoFornecedorPage: React.FC = () => {
           comPolimento: false,
           formaArmacao,
         },
-        valorMontagemSemTriangulacao: 0,
+        valorMontagemSemTriangulacao: valorMontagem,
         garantia: {
           usuarioFinal: usuarioFinal || os.cliente || "",
           inicialUsuario: (usuarioFinal || os.cliente || "").split(/\s+/).map((w: string) => w.charAt(0)).join("").substring(0, 2).toUpperCase() || "US",
@@ -1270,6 +1271,18 @@ const PedidoFornecedorPage: React.FC = () => {
                     <SelectItem value="5">Somente corte com tracer</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <Label className="text-[10px] uppercase">Valor Montagem (s/ triangulação)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={valorMontagem}
+                  onChange={(e) => setValorMontagem(Number(e.target.value) || 0)}
+                  className="h-8 text-sm"
+                  placeholder="0.00"
+                />
               </div>
               <div>
                 <Label className="text-[10px] uppercase">Observação</Label>
