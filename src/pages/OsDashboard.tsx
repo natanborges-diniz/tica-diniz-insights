@@ -11,12 +11,13 @@ import { CampoDataOs } from "@/services/osService";
 import { useBridgeStatus } from "@/hooks/useBridgeStatus";
 import { useEmpresas } from "@/hooks/useEmpresas";
 import { useAuth } from "@/contexts/AuthContext";
-
-// ============================================================
-// Module-level pedidos cache — sobrevive à navegação
-// ============================================================
-let _pedidosMapCache: Record<number, PedidoFornecedorInfo> = {};
-let _pedidosMapDataKey = ""; // fingerprint dos cod_os do rawData
+import {
+  pedidosMapCache,
+  pedidosMapDataKey,
+  setPedidosMapCache,
+  setPedidosMapDataKey,
+  registrarPedidoNoCache,
+} from "@/utils/pedidosMapCache";
 
 function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
   const hasReceita = !!(
@@ -127,19 +128,24 @@ const OsDashboardPage: React.FC = () => {
   const [loadingRecipeCodOs, setLoadingRecipeCodOs] = useState<number | null>(null);
 
   // ============================================================
-  // Pedidos map — module-level cache, só rebusca quando rawData muda
+  // Pedidos map — cache singleton compartilhado, só rebusca quando rawData muda
   // ============================================================
-  const [pedidosMap, setPedidosMap] = useState<Record<number, PedidoFornecedorInfo>>(_pedidosMapCache);
+  const [pedidosMap, setPedidosMap] = useState<Record<number, PedidoFornecedorInfo>>(() => ({ ...pedidosMapCache }));
+
+  // Ao montar (ex: voltando da tela de pedido), sincroniza o cache singleton → estado local
+  useEffect(() => {
+    setPedidosMap({ ...pedidosMapCache });
+  }, []);
 
   useEffect(() => {
     if (data.length === 0) return;
     const newKey = data.map(os => os.codOs).sort().join(",");
-    if (newKey === _pedidosMapDataKey && Object.keys(_pedidosMapCache).length > 0) {
+    if (newKey === pedidosMapDataKey && Object.keys(pedidosMapCache).length > 0) {
       // Mesmo conjunto de OS — reutiliza cache sem bater no banco
-      setPedidosMap(_pedidosMapCache);
+      setPedidosMap({ ...pedidosMapCache });
       return;
     }
-    _pedidosMapDataKey = newKey;
+    setPedidosMapDataKey(newKey);
     const codOsList = data.map(os => os.codOs);
     (async () => {
       const map: Record<number, PedidoFornecedorInfo> = {};
@@ -155,19 +161,10 @@ const OsDashboardPage: React.FC = () => {
           }
         }
       }
-      _pedidosMapCache = map;
+      setPedidosMapCache(map);
       setPedidosMap(map);
     })();
   }, [data]);
-
-  /** Atualiza badge de pedido na linha sem rebuscar Firebird ou banco */
-  const registrarPedidoEnviado = useCallback((codOs: number, numeroPedido: string, fornecedor: string, status: string) => {
-    setPedidosMap(prev => {
-      const next = { ...prev, [codOs]: { numero_pedido: numeroPedido, fornecedor, status } };
-      _pedidosMapCache = next;
-      return next;
-    });
-  }, []);
 
   // ============================================================
 

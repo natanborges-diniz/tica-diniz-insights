@@ -23,6 +23,7 @@ import {
   mapPrismasFromOs,
   ValidationResult,
 } from "@/services/hoyaValidationService";
+import { registrarPedidoNoCache } from "@/utils/pedidosMapCache";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -548,6 +549,14 @@ const PedidoFornecedorPage: React.FC = () => {
       }
 
       setPedidoEnviado(resp);
+
+      // Atualiza o cache compartilhado para o badge aparecer imediatamente no monitor
+      registrarPedidoNoCache(
+        os.codOs,
+        String(resp.numeroPedido),
+        "HOYA",
+        resp.status || "enviado"
+      );
 
       // Save DE/PARA (persist for future auto-fill)
       const descricao = os.lenteOdDescricao || os.lenteOeDescricao;
