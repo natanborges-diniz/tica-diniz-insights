@@ -239,15 +239,19 @@ serve(async (req) => {
         method = "POST";
         const pedidoPayload = params.pedido || {};
         
-        // Extract valor montagem - Hoya API reads from query string via [FromQuery] .NET binding
+        // Extract valor montagem
         const valorMontagem = Number(pedidoPayload.valorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagemSemTriangulacao ?? 0) || 0;
-        // Remove ALL variants from body (doc example doesn't include it in JSON)
+        // Normalize: remove all variants and set BOTH casings in body
         delete pedidoPayload.valorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagem;
+        // Include in body with BOTH casings to satisfy .NET model binding
+        pedidoPayload.valorMontagemSemTriangulacao = valorMontagem;
+        pedidoPayload.ValorMontagemSemTriangulacao = valorMontagem;
         
-        // Send as query parameter in both casings to cover .NET binding conventions
-        url = `${HOYA_BASE_URL}/pedido?valorMontagemSemTriangulacao=${valorMontagem}&ValorMontagemSemTriangulacao=${valorMontagem}`;
+        // Also include as query parameter for [FromQuery] binding
+        const baseUrl = HOYA_BASE_URL.replace(/\/+$/, '');
+        url = `${baseUrl}/pedido?valorMontagemSemTriangulacao=${valorMontagem}&ValorMontagemSemTriangulacao=${valorMontagem}`;
         
         // Ensure all expected nullable fields are present (Hoya .NET deserializer requires explicit nulls)
         pedidoPayload.observacao = pedidoPayload.observacao ?? null;
