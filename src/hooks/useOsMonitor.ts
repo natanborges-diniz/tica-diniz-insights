@@ -14,15 +14,11 @@ export interface OsApiFilters {
   campoData: CampoDataOs;
 }
 
-export type OsReceitaFotoFilter = "TODOS" | "COM" | "SEM";
-
 export interface OsFilterState {
   status: OsStatusFilter;
   empresaVisual: string | null;
   etapa: string | null;
   busca: string;
-  receita: OsReceitaFotoFilter;
-  foto: OsReceitaFotoFilter;
 }
 
 export function useOsMonitor() {
@@ -37,8 +33,6 @@ export function useOsMonitor() {
     empresaVisual: null,
     etapa: null,
     busca: "",
-    receita: "COM",
-    foto: "TODOS",
   });
 
   const [defaultEtapaApplied, setDefaultEtapaApplied] = useState(false);
@@ -67,18 +61,6 @@ export function useOsMonitor() {
         os.os.toLowerCase().includes(termo) ||
         os.cliente.toLowerCase().includes(termo)
       );
-    }
-
-    // Filtro receita — usa campo temReceita do endpoint
-    if (filters.receita !== "TODOS") {
-      const has = filters.receita === "COM";
-      result = result.filter(os => has ? os.temReceita : !os.temReceita);
-    }
-
-    // Filtro foto (mantém via receitaFotoMap legado se necessário, mas agora não bloqueia)
-    // TODO: quando bridge retornar tem_foto, usar os.temFoto
-    if (filters.foto !== "TODOS") {
-      // Sem campo tem_foto no endpoint ainda — filtro desabilitado silenciosamente
     }
 
     return sortOsByPriority(result);
