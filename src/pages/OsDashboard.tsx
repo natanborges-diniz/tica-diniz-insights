@@ -1,5 +1,5 @@
 // src/pages/OsDashboard.tsx
-// Monitor de Produção — empresa obrigatória, circuit breaker integrado
+// Monitor de Produção — empresa obrigatória, circuit breaker integrado, module-level cache
 
 import React, { useState } from "react";
 import { useOsMonitor, OsApiFilters } from "../hooks/useOsMonitor";
