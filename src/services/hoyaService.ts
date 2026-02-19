@@ -232,6 +232,17 @@ export async function consultarPedidoHoya(numeroPedido: string | number): Promis
   return callHoyaProxy<HoyaPedidoTracking>("consultar-pedido", { numeroPedido });
 }
 
+export async function recuperarPedidoPorOs(
+  osNumero: string,
+  codOs: number,
+  codEmpresa: number
+): Promise<{ numeroPedido: string; status: string; recovered: boolean }> {
+  return callHoyaProxy<{ numeroPedido: string; status: string; recovered: boolean }>(
+    "recuperar-pedido-por-os",
+    { osNumero, codOs, codEmpresa }
+  );
+}
+
 // F4.5: Tracking update
 export interface TrackingUpdateResult {
   tracking: HoyaPedidoTracking;
