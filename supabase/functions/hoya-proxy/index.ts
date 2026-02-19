@@ -236,14 +236,19 @@ serve(async (req) => {
       case "consultar-produto": url = `${HOYA_BASE_URL}/produto/${params.codigoProduto}`; break;
       case "consultar-produto-sku": url = `${HOYA_BASE_URL}/produto/sku/${params.sku}`; break;
       case "criar-pedido": {
-        url = `${HOYA_BASE_URL}/pedido`; method = "POST";
+        method = "POST";
         const pedidoPayload = params.pedido || {};
         
-        // Normalize valorMontagemSemTriangulacao: ensure present in body as camelCase
+        // Extract valor montagem - send BOTH in query param AND body (PascalCase) to satisfy .NET mapper
         const valorMontagem = Number(pedidoPayload.valorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagemSemTriangulacao ?? 0) || 0;
+        delete pedidoPayload.valorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagem;
-        pedidoPayload.valorMontagemSemTriangulacao = valorMontagem;
+        // Include in body as PascalCase (matching SQL param @ValorMontagemSemTriangulacao)
+        pedidoPayload.ValorMontagemSemTriangulacao = valorMontagem;
+        
+        // Also send as query parameter as fallback
+        url = `${HOYA_BASE_URL}/pedido?ValorMontagemSemTriangulacao=${valorMontagem}`;
         
         // Ensure all expected nullable fields are present (Hoya .NET deserializer requires explicit nulls)
         pedidoPayload.observacao = pedidoPayload.observacao ?? null;
