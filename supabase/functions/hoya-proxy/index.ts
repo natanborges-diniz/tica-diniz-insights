@@ -237,14 +237,13 @@ serve(async (req) => {
       case "consultar-produto-sku": url = `${HOYA_BASE_URL}/produto/sku/${params.sku}`; break;
       case "criar-pedido": {
         url = `${HOYA_BASE_URL}/pedido`; method = "POST";
-        // Ensure ValorMontagemSemTriangulacao is always present with PascalCase (Hoya API requires it)
+        // Ensure valorMontagemSemTriangulacao is always present (Hoya API requires it, camelCase like all other fields)
         const pedidoPayload = params.pedido || {};
-        // Normalize: accept camelCase from frontend, send PascalCase to Hoya API
-        const valorMontagem = pedidoPayload.ValorMontagemSemTriangulacao ?? pedidoPayload.valorMontagemSemTriangulacao ?? 0;
-        delete pedidoPayload.valorMontagemSemTriangulacao;
-        // Also ensure ValorMontagem is present (some Hoya endpoints require both)
-        pedidoPayload.ValorMontagemSemTriangulacao = Number(valorMontagem) || 0;
-        pedidoPayload.ValorMontagem = Number(valorMontagem) || 0;
+        // Normalize: remove PascalCase variant if present, always send camelCase to match API convention
+        const valorMontagem = pedidoPayload.valorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagemSemTriangulacao ?? 0;
+        delete pedidoPayload.ValorMontagemSemTriangulacao;
+        delete pedidoPayload.ValorMontagem;
+        pedidoPayload.valorMontagemSemTriangulacao = Number(valorMontagem) || 0;
         fetchBody = JSON.stringify(pedidoPayload);
         console.log(`[hoya-proxy] [${correlationId}] criar-pedido payload keys: ${Object.keys(pedidoPayload).join(", ")}, ValorMontagem: ${pedidoPayload.ValorMontagemSemTriangulacao}`);
         console.log(`[hoya-proxy] [${correlationId}] criar-pedido FULL BODY: ${fetchBody.substring(0, 2000)}`);
