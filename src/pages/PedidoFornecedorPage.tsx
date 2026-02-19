@@ -582,7 +582,8 @@ const PedidoFornecedorPage: React.FC = () => {
         os.codOs,
         String(resp.numeroPedido),
         "HOYA",
-        resp.status || "enviado"
+        resp.status || "enviado",
+        new Date().toISOString()
       );
 
       // Save DE/PARA (persist for future auto-fill)
@@ -627,7 +628,7 @@ const PedidoFornecedorPage: React.FC = () => {
         os.codEmpresa
       );
       // Atualiza cache e estado local
-      registrarPedidoNoCache(os.codOs, result.numeroPedido, "HOYA", result.status);
+      registrarPedidoNoCache(os.codOs, result.numeroPedido, "HOYA", result.status, new Date().toISOString());
       setPedidoExistente({ numero_pedido: result.numeroPedido, status: result.status, fornecedor: "HOYA" });
       toast({
         title: "Pedido recuperado!",
