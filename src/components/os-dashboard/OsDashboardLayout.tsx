@@ -43,6 +43,7 @@ export type PedidoFornecedorInfo = {
   numero_pedido: string | null;
   fornecedor: string;
   status: string;
+  created_at?: string | null;
 };
 
 // Debounced search input — Enter immediately applies
