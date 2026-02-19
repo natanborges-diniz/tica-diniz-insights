@@ -338,52 +338,148 @@ const HoyaTrackingPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Expanded timeline */}
+                  {/* Expanded content */}
                   {isExpanded && (
-                    <div className="mt-4 pt-4 border-t">
-                      {loadingTimeline ? (
-                        <div className="flex items-center gap-2 justify-center py-4">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span className="text-sm text-muted-foreground">Carregando histórico...</span>
-                        </div>
-                      ) : timeline.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          Nenhum histórico — clique em <RefreshCw className="h-3 w-3 inline" /> para buscar o status atual
-                        </p>
-                      ) : (
-                        <div className="relative pl-6 space-y-4">
-                          {/* Timeline line */}
-                          <div className="absolute left-[11px] top-1 bottom-1 w-0.5 bg-border" />
-                          {timeline.map((entry, i) => {
-                            const esb = statusBadge(entry.status);
-                            const EntryIcon = esb.icon;
-                            return (
-                              <div key={entry.id} className="relative">
-                                <div className={`absolute -left-6 top-0.5 h-5 w-5 rounded-full flex items-center justify-center ${esb.color} border`}>
-                                  <EntryIcon className="h-3 w-3" />
+                    <div className="mt-4 pt-4 border-t space-y-4">
+                      {/* Dados do Pedido */}
+                      {ped.payload && (() => {
+                        const p = ped.payload as Record<string, unknown>;
+                        const presc = p.prescricao as Record<string, Record<string, unknown>> | undefined;
+                        const espec = p.especificacoes as Record<string, unknown> | undefined;
+                        const armacao = p.armacao as Record<string, unknown> | undefined;
+                        const medida = p.dadosMedida as Record<string, unknown> | undefined;
+                        const garantia = p.garantia as Record<string, unknown> | undefined;
+
+                        const fmtOlho = (olho: Record<string, unknown> | undefined) => {
+                          if (!olho) return "—";
+                          const parts: string[] = [];
+                          if (olho.esferico != null) parts.push(`ESF ${olho.esferico}`);
+                          if (olho.cilindrico != null) parts.push(`CIL ${olho.cilindrico}`);
+                          if (olho.eixo != null) parts.push(`EIX ${olho.eixo}°`);
+                          if (olho.adicao != null) parts.push(`AD ${olho.adicao}`);
+                          if (olho.dnpLonge != null) parts.push(`DNP ${olho.dnpLonge}`);
+                          if (olho.alturaPupilar != null) parts.push(`ALT ${olho.alturaPupilar}`);
+                          return parts.join(" | ") || "—";
+                        };
+
+                        return (
+                          <div className="rounded-md bg-muted/50 p-3 space-y-3 text-xs">
+                            <p className="font-semibold text-sm">Dados do Pedido</p>
+
+                            {/* Paciente */}
+                            {garantia?.usuarioFinal && (
+                              <div>
+                                <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Paciente</span>
+                                <p className="font-medium mt-0.5">{garantia.usuarioFinal as string}</p>
+                              </div>
+                            )}
+
+                            {/* Produto */}
+                            {espec?.codigoProduto && (
+                              <div>
+                                <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Produto</span>
+                                <p className="font-mono mt-0.5">Cód. {String(espec.codigoProduto)}{espec.codigoColoracao ? ` | Coloração ${espec.codigoColoracao}` : ""}</p>
+                              </div>
+                            )}
+
+                            {/* Prescrição */}
+                            {presc && (
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">OD (Direito)</span>
+                                  <p className="font-mono mt-0.5">{fmtOlho(presc.direito)}</p>
                                 </div>
                                 <div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium text-sm">{entry.status}</span>
-                                    {entry.status_producao && (
-                                      <Badge variant="secondary" className="text-[10px]">{entry.status_producao}</Badge>
-                                    )}
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">{formatDate(entry.checked_at)}</p>
-                                  {entry.rastreio && (
-                                    <p className="text-xs mt-0.5 flex items-center gap-1">
-                                      <MapPin className="h-3 w-3" /> {entry.rastreio}
-                                    </p>
-                                  )}
-                                  {entry.observacao && (
-                                    <p className="text-xs text-muted-foreground mt-0.5">{entry.observacao}</p>
-                                  )}
+                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">OE (Esquerdo)</span>
+                                  <p className="font-mono mt-0.5">{fmtOlho(presc.esquerdo)}</p>
                                 </div>
                               </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                            )}
+
+                            {/* Medidas & Armação */}
+                            <div className="grid grid-cols-2 gap-2">
+                              {medida && (
+                                <div>
+                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Medidas</span>
+                                  <p className="font-mono mt-0.5">
+                                    {[
+                                      medida.larguraLente != null && `L ${medida.larguraLente}`,
+                                      medida.alturaLente != null && `A ${medida.alturaLente}`,
+                                      medida.ponteLente != null && `P ${medida.ponteLente}`,
+                                    ].filter(Boolean).join(" | ") || "—"}
+                                  </p>
+                                </div>
+                              )}
+                              {armacao && (
+                                <div>
+                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Armação</span>
+                                  <p className="font-mono mt-0.5">
+                                    Tipo {String(armacao.tipoArmacao || "—")}
+                                    {armacao.comPolimento ? " + Polimento" : ""}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* OS obs */}
+                            {p.observacao && (
+                              <div>
+                                <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Observação</span>
+                                <p className="mt-0.5">{String(p.observacao)}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      <Separator />
+
+                      {/* Timeline */}
+                      <div>
+                        <p className="font-semibold text-sm mb-3">Histórico de Status</p>
+                        {loadingTimeline ? (
+                          <div className="flex items-center gap-2 justify-center py-4">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="text-sm text-muted-foreground">Carregando histórico...</span>
+                          </div>
+                        ) : timeline.length === 0 ? (
+                          <p className="text-sm text-muted-foreground text-center py-4">
+                            Nenhum histórico — clique em <RefreshCw className="h-3 w-3 inline" /> para buscar o status atual
+                          </p>
+                        ) : (
+                          <div className="relative pl-6 space-y-4">
+                            <div className="absolute left-[11px] top-1 bottom-1 w-0.5 bg-border" />
+                            {timeline.map((entry) => {
+                              const esb = statusBadge(entry.status);
+                              const EntryIcon = esb.icon;
+                              return (
+                                <div key={entry.id} className="relative">
+                                  <div className={`absolute -left-6 top-0.5 h-5 w-5 rounded-full flex items-center justify-center ${esb.color} border`}>
+                                    <EntryIcon className="h-3 w-3" />
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium text-sm">{entry.status}</span>
+                                      {entry.status_producao && (
+                                        <Badge variant="secondary" className="text-[10px]">{entry.status_producao}</Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">{formatDate(entry.checked_at)}</p>
+                                    {entry.rastreio && (
+                                      <p className="text-xs mt-0.5 flex items-center gap-1">
+                                        <MapPin className="h-3 w-3" /> {entry.rastreio}
+                                      </p>
+                                    )}
+                                    {entry.observacao && (
+                                      <p className="text-xs text-muted-foreground mt-0.5">{entry.observacao}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </CardContent>
