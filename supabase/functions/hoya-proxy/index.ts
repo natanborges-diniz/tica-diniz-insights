@@ -239,16 +239,15 @@ serve(async (req) => {
         method = "POST";
         const pedidoPayload = params.pedido || {};
         
-        // Extract valor montagem - send BOTH in query param AND body (PascalCase) to satisfy .NET mapper
+        // Extract valor montagem - Hoya API reads from query string via [FromQuery] .NET binding
         const valorMontagem = Number(pedidoPayload.valorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagemSemTriangulacao ?? 0) || 0;
+        // Remove ALL variants from body (doc example doesn't include it in JSON)
         delete pedidoPayload.valorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagem;
-        // Include in body as PascalCase (matching SQL param @ValorMontagemSemTriangulacao)
-        pedidoPayload.ValorMontagemSemTriangulacao = valorMontagem;
         
-        // Also send as query parameter as fallback
-        url = `${HOYA_BASE_URL}/pedido?ValorMontagemSemTriangulacao=${valorMontagem}`;
+        // Send as query parameter in both casings to cover .NET binding conventions
+        url = `${HOYA_BASE_URL}/pedido?valorMontagemSemTriangulacao=${valorMontagem}&ValorMontagemSemTriangulacao=${valorMontagem}`;
         
         // Ensure all expected nullable fields are present (Hoya .NET deserializer requires explicit nulls)
         pedidoPayload.observacao = pedidoPayload.observacao ?? null;
@@ -265,6 +264,7 @@ serve(async (req) => {
         }
         
         fetchBody = JSON.stringify(pedidoPayload);
+        console.log(`[hoya-proxy] [${correlationId}] criar-pedido URL: ${url}`);
         console.log(`[hoya-proxy] [${correlationId}] criar-pedido BODY: ${fetchBody.substring(0, 2000)}`);
 
         // F4.2: Idempotency check
