@@ -56,6 +56,7 @@ export function validateHoyaPayload(
   payload: HoyaPedidoPayload,
   produtoCamposComplementares?: { codigo: number; nome: string; obrigatorio: boolean; rangeMinimo: number; rangeMaximo: number; valorPadrao?: number | string | null }[],
   camposValues?: Record<number, string>,
+  produtoRanges?: { alturaPupilarMinima: number; alturaPupilarMaxima: number; esfericoMinimo: number; esfericoMaximo: number; cilindricoMinimo: number; cilindricoMaximo: number; adicaoMinima: number; adicaoMaxima: number },
 ): ValidationResult {
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
@@ -83,13 +84,33 @@ export function validateHoyaPayload(
     });
   }
 
-  // Altura pupilar (warning)
+  // Altura pupilar — validate against product range
   if (payload.prescricao.direito.alturaPupilar === null && payload.prescricao.esquerdo.alturaPupilar === null) {
     warnings.push({
       field: "prescricao.alturaPupilar",
       message: "Sem altura pupilar — recomendado para progressivas",
       severity: "warning",
     });
+  } else if (produtoRanges) {
+    const { alturaPupilarMinima: apMin, alturaPupilarMaxima: apMax } = produtoRanges;
+    if (payload.prescricao.direito.alturaPupilar != null) {
+      if (payload.prescricao.direito.alturaPupilar < apMin || payload.prescricao.direito.alturaPupilar > apMax) {
+        errors.push({
+          field: "prescricao.direito.alturaPupilar",
+          message: `OD: Altura pupilar (${payload.prescricao.direito.alturaPupilar}) fora do range do produto (${apMin}–${apMax})`,
+          severity: "error",
+        });
+      }
+    }
+    if (payload.prescricao.esquerdo.alturaPupilar != null) {
+      if (payload.prescricao.esquerdo.alturaPupilar < apMin || payload.prescricao.esquerdo.alturaPupilar > apMax) {
+        errors.push({
+          field: "prescricao.esquerdo.alturaPupilar",
+          message: `OE: Altura pupilar (${payload.prescricao.esquerdo.alturaPupilar}) fora do range do produto (${apMin}–${apMax})`,
+          severity: "error",
+        });
+      }
+    }
   }
 
   // Frame measurements
