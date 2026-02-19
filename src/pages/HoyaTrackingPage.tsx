@@ -6,9 +6,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
   PedidoFornecedorRecord,
+  HoyaPedidoTracking,
   listarHistoricoPedidos,
   atualizarTrackingHoya,
   listarTimelinePedido,
+  consultarPedidoHoya,
   consultarXmlHoya,
   consultarDanfeHoya,
   StatusHistoryEntry,
@@ -75,6 +77,8 @@ const HoyaTrackingPage: React.FC = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<StatusHistoryEntry[]>([]);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
+  const [pedidoApiData, setPedidoApiData] = useState<Record<string, HoyaPedidoTracking>>({});
+  const [loadingPedidoData, setLoadingPedidoData] = useState<string | null>(null);
   const [xmlDialog, setXmlDialog] = useState<{ open: boolean; content: string; title: string }>({ open: false, content: "", title: "" });
   const [loadingXml, setLoadingXml] = useState<string | null>(null);
 
@@ -91,7 +95,7 @@ const HoyaTrackingPage: React.FC = () => {
     const found = pedidos.find(p => p.numero_pedido === pedidoParam);
     if (found) {
       setExpandedId(found.id);
-      handleExpand(found.id);
+      handleExpand(found.id, found.numero_pedido);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedidoParam, pedidos]);
@@ -140,22 +144,32 @@ const HoyaTrackingPage: React.FC = () => {
     },
   });
 
-  // Load timeline when expanding
-  const handleExpand = async (pedidoId: string) => {
+  // Load timeline + API data when expanding
+  const handleExpand = async (pedidoId: string, numeroPedido?: string | null) => {
     if (expandedId === pedidoId) {
       setExpandedId(null);
       return;
     }
     setExpandedId(pedidoId);
     setLoadingTimeline(true);
-    try {
-      const tl = await listarTimelinePedido(pedidoId);
-      setTimeline(tl);
-    } catch {
-      setTimeline([]);
-    } finally {
-      setLoadingTimeline(false);
+
+    // Fetch timeline and Hoya API data in parallel
+    const promises: Promise<void>[] = [
+      listarTimelinePedido(pedidoId).then(setTimeline).catch(() => setTimeline([])),
+    ];
+
+    if (numeroPedido && !pedidoApiData[pedidoId]) {
+      setLoadingPedidoData(pedidoId);
+      promises.push(
+        consultarPedidoHoya(numeroPedido)
+          .then((data) => setPedidoApiData((prev) => ({ ...prev, [pedidoId]: data })))
+          .catch(() => {/* silently ignore — payload fallback will be shown */})
+          .finally(() => setLoadingPedidoData(null))
+      );
     }
+
+    await Promise.all(promises);
+    setLoadingTimeline(false);
   };
 
   // F4.6: XML handler
@@ -331,7 +345,7 @@ const HoyaTrackingPage: React.FC = () => {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => handleExpand(ped.id)}
+                        onClick={() => handleExpand(ped.id, ped.numero_pedido)}
                       >
                         {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                       </Button>
@@ -341,14 +355,21 @@ const HoyaTrackingPage: React.FC = () => {
                   {/* Expanded content */}
                   {isExpanded && (
                     <div className="mt-4 pt-4 border-t space-y-4">
-                      {/* Dados do Pedido */}
-                      {ped.payload && (() => {
-                        const p = ped.payload as Record<string, unknown>;
-                        const presc = p.prescricao as Record<string, Record<string, unknown>> | undefined;
-                        const espec = p.especificacoes as Record<string, unknown> | undefined;
-                        const armacao = p.armacao as Record<string, unknown> | undefined;
-                        const medida = p.dadosMedida as Record<string, unknown> | undefined;
-                        const garantia = p.garantia as Record<string, unknown> | undefined;
+                      {/* Dados do Pedido — vindos da API Hoya */}
+                      {(() => {
+                        const apiData = pedidoApiData[ped.id];
+                        const isLoading = loadingPedidoData === ped.id;
+
+                        if (isLoading) {
+                          return (
+                            <div className="flex items-center gap-2 justify-center py-4 rounded-md bg-muted/50">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span className="text-sm text-muted-foreground">Buscando dados na Hoya...</span>
+                            </div>
+                          );
+                        }
+
+                        if (!apiData) return null;
 
                         const fmtOlho = (olho: Record<string, unknown> | undefined) => {
                           if (!olho) return "—";
@@ -362,70 +383,70 @@ const HoyaTrackingPage: React.FC = () => {
                           return parts.join(" | ") || "—";
                         };
 
+                        const od = apiData.prescricao?.direito as Record<string, unknown> | undefined;
+                        const oe = apiData.prescricao?.esquerdo as Record<string, unknown> | undefined;
+
                         return (
                           <div className="rounded-md bg-muted/50 p-3 space-y-3 text-xs">
-                            <p className="font-semibold text-sm">Dados do Pedido</p>
+                            <p className="font-semibold text-sm">Dados do Pedido <span className="text-[10px] font-normal text-muted-foreground">(Hoya)</span></p>
 
-                            {/* Paciente */}
-                            {garantia?.usuarioFinal && (
-                              <div>
-                                <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Paciente</span>
-                                <p className="font-medium mt-0.5">{garantia.usuarioFinal as string}</p>
-                              </div>
-                            )}
-
-                            {/* Produto */}
-                            {espec?.codigoProduto && (
-                              <div>
-                                <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Produto</span>
-                                <p className="font-mono mt-0.5">Cód. {String(espec.codigoProduto)}{espec.codigoColoracao ? ` | Coloração ${espec.codigoColoracao}` : ""}</p>
-                              </div>
-                            )}
-
-                            {/* Prescrição */}
-                            {presc && (
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">OD (Direito)</span>
-                                  <p className="font-mono mt-0.5">{fmtOlho(presc.direito)}</p>
-                                </div>
-                                <div>
-                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">OE (Esquerdo)</span>
-                                  <p className="font-mono mt-0.5">{fmtOlho(presc.esquerdo)}</p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Medidas & Armação */}
+                            {/* OS Cliente + Produto */}
                             <div className="grid grid-cols-2 gap-2">
-                              {medida && (
+                              {apiData.osCliente && (
                                 <div>
-                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Medidas</span>
-                                  <p className="font-mono mt-0.5">
-                                    {[
-                                      medida.larguraLente != null && `L ${medida.larguraLente}`,
-                                      medida.alturaLente != null && `A ${medida.alturaLente}`,
-                                      medida.ponteLente != null && `P ${medida.ponteLente}`,
-                                    ].filter(Boolean).join(" | ") || "—"}
-                                  </p>
+                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">OS</span>
+                                  <p className="font-mono mt-0.5">{apiData.osCliente}</p>
                                 </div>
                               )}
-                              {armacao && (
+                              {apiData.produto && (
                                 <div>
-                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Armação</span>
-                                  <p className="font-mono mt-0.5">
-                                    Tipo {String(armacao.tipoArmacao || "—")}
-                                    {armacao.comPolimento ? " + Polimento" : ""}
-                                  </p>
+                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Produto</span>
+                                  <p className="font-medium mt-0.5">{apiData.produto}</p>
+                                </div>
+                              )}
+                              {apiData.tratamento && (
+                                <div>
+                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Tratamento</span>
+                                  <p className="font-medium mt-0.5">{apiData.tratamento}</p>
+                                </div>
+                              )}
+                              {apiData.statusProducao && (
+                                <div>
+                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Status Produção</span>
+                                  <p className="font-medium mt-0.5">{apiData.statusProducao}</p>
                                 </div>
                               )}
                             </div>
 
-                            {/* OS obs */}
-                            {p.observacao && (
+                            {/* Prescrição */}
+                            {(od || oe) && (
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">OD (Direito)</span>
+                                  <p className="font-mono mt-0.5">{fmtOlho(od)}</p>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground uppercase tracking-wide text-[10px]">OE (Esquerdo)</span>
+                                  <p className="font-mono mt-0.5">{fmtOlho(oe)}</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Rastreio */}
+                            {apiData.rastreio && (
                               <div>
-                                <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Observação</span>
-                                <p className="mt-0.5">{String(p.observacao)}</p>
+                                <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Rastreio</span>
+                                <p className="font-mono mt-0.5 flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" /> {apiData.rastreio}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Data inclusão */}
+                            {apiData.dataInclusao && (
+                              <div>
+                                <span className="text-muted-foreground uppercase tracking-wide text-[10px]">Data do Pedido</span>
+                                <p className="mt-0.5">{formatDate(apiData.dataInclusao)}</p>
                               </div>
                             )}
                           </div>
