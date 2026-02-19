@@ -237,13 +237,14 @@ serve(async (req) => {
       case "consultar-produto-sku": url = `${HOYA_BASE_URL}/produto/sku/${params.sku}`; break;
       case "criar-pedido": {
         url = `${HOYA_BASE_URL}/pedido`; method = "POST";
-        // Ensure valorMontagemSemTriangulacao is always present (Hoya API requires it)
+        // Ensure ValorMontagemSemTriangulacao is always present with PascalCase (Hoya API requires it)
         const pedidoPayload = params.pedido || {};
-        if (pedidoPayload.valorMontagemSemTriangulacao === undefined || pedidoPayload.valorMontagemSemTriangulacao === null) {
-          pedidoPayload.valorMontagemSemTriangulacao = 0;
-        }
+        // Normalize: accept camelCase from frontend, send PascalCase to Hoya API
+        const valorMontagem = pedidoPayload.ValorMontagemSemTriangulacao ?? pedidoPayload.valorMontagemSemTriangulacao ?? 0;
+        delete pedidoPayload.valorMontagemSemTriangulacao;
+        pedidoPayload.ValorMontagemSemTriangulacao = valorMontagem;
         fetchBody = JSON.stringify(pedidoPayload);
-        console.log(`[hoya-proxy] [${correlationId}] criar-pedido payload keys: ${Object.keys(pedidoPayload).join(", ")}, valorMontagem: ${pedidoPayload.valorMontagemSemTriangulacao}`);
+        console.log(`[hoya-proxy] [${correlationId}] criar-pedido payload keys: ${Object.keys(pedidoPayload).join(", ")}, ValorMontagem: ${pedidoPayload.ValorMontagemSemTriangulacao}`);
 
         // F4.2: Idempotency check
         const hoyaEnvForKey = detectHoyaEnvironment();
