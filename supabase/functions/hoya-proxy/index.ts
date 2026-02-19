@@ -242,9 +242,12 @@ serve(async (req) => {
         // Normalize: accept camelCase from frontend, send PascalCase to Hoya API
         const valorMontagem = pedidoPayload.ValorMontagemSemTriangulacao ?? pedidoPayload.valorMontagemSemTriangulacao ?? 0;
         delete pedidoPayload.valorMontagemSemTriangulacao;
-        pedidoPayload.ValorMontagemSemTriangulacao = valorMontagem;
+        // Also ensure ValorMontagem is present (some Hoya endpoints require both)
+        pedidoPayload.ValorMontagemSemTriangulacao = Number(valorMontagem) || 0;
+        pedidoPayload.ValorMontagem = Number(valorMontagem) || 0;
         fetchBody = JSON.stringify(pedidoPayload);
         console.log(`[hoya-proxy] [${correlationId}] criar-pedido payload keys: ${Object.keys(pedidoPayload).join(", ")}, ValorMontagem: ${pedidoPayload.ValorMontagemSemTriangulacao}`);
+        console.log(`[hoya-proxy] [${correlationId}] criar-pedido FULL BODY: ${fetchBody.substring(0, 2000)}`);
 
         // F4.2: Idempotency check
         const hoyaEnvForKey = detectHoyaEnvironment();
