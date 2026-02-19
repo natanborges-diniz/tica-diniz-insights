@@ -1,7 +1,7 @@
 // src/components/os-dashboard/OsDashboardLayout.tsx
 // Layout do Monitor de Produção — empresa obrigatória, Bridge status banner
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { format } from "date-fns";
 import { OsRecord } from "@/services/osService";
 import { CampoDataOs } from "@/services/osService";
@@ -36,6 +36,25 @@ import {
 } from "@/components/ui/table";
 import { BridgeHealth } from "@/hooks/useBridgeStatus";
 import { Empresa } from "@/services/empresaService";
+
+// Debounced search input to avoid re-filtering on every keystroke
+function DebouncedSearchInput({ value, onChange, className, placeholder }: {
+  value: string; onChange: (v: string) => void; className?: string; placeholder?: string;
+}) {
+  const [local, setLocal] = useState(value);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { setLocal(value); }, [value]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setLocal(v);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => onChange(v), 400);
+  }, [onChange]);
+
+  return <Input value={local} onChange={handleChange} className={className} placeholder={placeholder} />;
+}
 
 const CAMPO_DATA_LABELS: Record<CampoDataOs, string> = {
   PREVISAO: "Data de Previsão",
@@ -358,10 +377,10 @@ export const OsDashboardLayout: React.FC<Props> = ({
               <div className="flex flex-wrap gap-4 items-center">
                 <div className="relative flex-1 min-w-[200px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
+                  <DebouncedSearchInput
                     placeholder="Buscar por OS ou Cliente..."
                     value={filters.busca}
-                    onChange={(e) => onChangeFilters({ busca: e.target.value })}
+                    onChange={(value) => onChangeFilters({ busca: value })}
                     className="pl-9"
                   />
                 </div>
