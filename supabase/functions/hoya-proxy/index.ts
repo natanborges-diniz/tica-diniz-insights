@@ -236,19 +236,31 @@ serve(async (req) => {
       case "consultar-produto": url = `${HOYA_BASE_URL}/produto/${params.codigoProduto}`; break;
       case "consultar-produto-sku": url = `${HOYA_BASE_URL}/produto/sku/${params.sku}`; break;
       case "criar-pedido": {
-        // Extract valorMontagemSemTriangulacao - Hoya API expects it as a query parameter, NOT in body
+        url = `${HOYA_BASE_URL}/pedido`; method = "POST";
         const pedidoPayload = params.pedido || {};
+        
+        // Normalize valorMontagemSemTriangulacao: ensure present in body as camelCase
         const valorMontagem = Number(pedidoPayload.valorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagemSemTriangulacao ?? 0) || 0;
-        // Remove from body (not expected there per Hoya docs)
-        delete pedidoPayload.valorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagem;
-        // Send as query parameter
-        url = `${HOYA_BASE_URL}/pedido?ValorMontagemSemTriangulacao=${valorMontagem}`;
-        method = "POST";
+        pedidoPayload.valorMontagemSemTriangulacao = valorMontagem;
+        
+        // Ensure all expected nullable fields are present (Hoya .NET deserializer requires explicit nulls)
+        pedidoPayload.observacao = pedidoPayload.observacao ?? null;
+        pedidoPayload.codigoCliente = pedidoPayload.codigoCliente ?? null;
+        pedidoPayload.voucher = pedidoPayload.voucher ?? null;
+        if (pedidoPayload.armacao) {
+          pedidoPayload.armacao.marca = pedidoPayload.armacao.marca ?? null;
+          pedidoPayload.armacao.modelo = pedidoPayload.armacao.modelo ?? null;
+          pedidoPayload.armacao.cor = pedidoPayload.armacao.cor ?? null;
+        }
+        if (pedidoPayload.garantia) {
+          pedidoPayload.garantia.nomeMedico = pedidoPayload.garantia.nomeMedico ?? null;
+          pedidoPayload.garantia.crmMedico = pedidoPayload.garantia.crmMedico ?? null;
+        }
+        
         fetchBody = JSON.stringify(pedidoPayload);
-        console.log(`[hoya-proxy] [${correlationId}] criar-pedido URL: ${url}`);
-        console.log(`[hoya-proxy] [${correlationId}] criar-pedido BODY keys: ${Object.keys(pedidoPayload).join(", ")}`);
+        console.log(`[hoya-proxy] [${correlationId}] criar-pedido BODY: ${fetchBody.substring(0, 2000)}`);
 
         // F4.2: Idempotency check
         const hoyaEnvForKey = detectHoyaEnvironment();
