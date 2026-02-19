@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
   PedidoFornecedorRecord,
   listarHistoricoPedidos,
@@ -66,8 +67,11 @@ function formatDate(d: string | null) {
 
 const HoyaTrackingPage: React.FC = () => {
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const pedidoParam = searchParams.get("pedido");
+
   const [statusFilter, setStatusFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(pedidoParam || "");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<StatusHistoryEntry[]>([]);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
@@ -80,6 +84,17 @@ const HoyaTrackingPage: React.FC = () => {
     queryFn: () => listarHistoricoPedidos(undefined, 100),
     staleTime: 30_000,
   });
+
+  // Auto-expand e pre-preenche busca quando vindo do monitor com ?pedido=XXXX
+  useEffect(() => {
+    if (!pedidoParam || pedidos.length === 0) return;
+    const found = pedidos.find(p => p.numero_pedido === pedidoParam);
+    if (found) {
+      setExpandedId(found.id);
+      handleExpand(found.id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedidoParam, pedidos]);
 
   // Filter pedidos
   const filtered = useMemo(() => {
