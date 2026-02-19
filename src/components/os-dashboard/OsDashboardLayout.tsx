@@ -157,7 +157,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
   const [dataInicio, setDataInicio] = useState<Date>(inicio30);
   const [dataFim, setDataFim] = useState<Date>(hoje);
   const [empresaSelecionada, setEmpresaSelecionada] = useState<string>(
-    defaultCodEmpresa ? String(defaultCodEmpresa) : ""
+    isAdmin ? "ALL" : (defaultCodEmpresa ? String(defaultCodEmpresa) : "")
   );
 
   // Update empresa when defaultCodEmpresa loads
