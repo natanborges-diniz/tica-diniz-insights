@@ -1,6 +1,6 @@
 // src/hooks/useOsMonitor.ts
 
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { getOsMonitor, OsRecord, StatusAtraso, CampoDataOs } from "../services/osService";
 import { calculateOsMetrics, OsMetrics, sortOsByPriority } from "../utils/osMetrics";
 import { EmpresaParam } from "@/services/firebirdBridge";
@@ -21,21 +21,32 @@ export interface OsFilterState {
   busca: string;
 }
 
+// ============================================
+// Module-level cache — survives navigation
+// ============================================
+let cachedData: OsRecord[] = [];
+let cachedApiFilters: OsApiFilters | null = null;
+let cachedLoaded = false;
+let cachedFilters: OsFilterState = {
+  status: "TODOS",
+  empresaVisual: null,
+  etapa: null,
+  busca: "",
+};
+
 export function useOsMonitor() {
-  const [data, setData] = useState<OsRecord[]>([]);
+  const [data, setData] = useState<OsRecord[]>(cachedData);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [lastApiFilters, setLastApiFilters] = useState<OsApiFilters | null>(null);
+  const [loaded, setLoaded] = useState(cachedLoaded);
+  const [lastApiFilters, setLastApiFilters] = useState<OsApiFilters | null>(cachedApiFilters);
 
-  const [filters, setFilters] = useState<OsFilterState>({
-    status: "TODOS",
-    empresaVisual: null,
-    etapa: null,
-    busca: "",
-  });
+  const [filters, setFilters] = useState<OsFilterState>(cachedFilters);
 
-  const [defaultEtapaApplied, setDefaultEtapaApplied] = useState(false);
+  // Sync to module cache when state changes
+  useEffect(() => { cachedData = data; cachedLoaded = loaded; }, [data, loaded]);
+  useEffect(() => { cachedApiFilters = lastApiFilters; }, [lastApiFilters]);
+  useEffect(() => { cachedFilters = filters; }, [filters]);
 
   // Filtrar dados client-side
   const filteredData = useMemo(() => {
@@ -90,31 +101,19 @@ export function useOsMonitor() {
       });
       setData(result);
       setLoaded(true);
-
-      // Apply default etapa filter on first load
-      if (!defaultEtapaApplied) {
-        setDefaultEtapaApplied(true);
-        const etapas = Array.from(new Set(result.map(os => os.etapa).filter(Boolean)));
-        const target = etapas.find(e => e.toUpperCase() === 'TRANSLADO LOJA-ESTOQUE')
-          || etapas.find(e => e.toUpperCase().includes('TRANSLADO'));
-        if (target) {
-          setFilters(prev => ({ ...prev, etapa: target }));
-        }
-      }
+      // No default etapa filter — show all etapas by default
     } catch (err: unknown) {
       console.error('[useOsMonitor] Error:', err);
       setError(err instanceof Error ? err.message : "Erro ao carregar monitor de OS");
     } finally {
       setLoading(false);
     }
-  }, [defaultEtapaApplied]);
+  }, []);
 
 
   const reload = useCallback((apiFilters: OsApiFilters) => {
     fetchData(apiFilters);
   }, [fetchData]);
-
-  // NO auto-load on mount — user must select empresa and click "Carregar"
 
   return {
     data,

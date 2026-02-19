@@ -54,7 +54,7 @@ function validatePrescricaoOlho(
 
 export function validateHoyaPayload(
   payload: HoyaPedidoPayload,
-  produtoCamposComplementares?: { codigo: number; nome: string; obrigatorio: boolean; rangeMinimo: number; rangeMaximo: number }[],
+  produtoCamposComplementares?: { codigo: number; nome: string; obrigatorio: boolean; rangeMinimo: number; rangeMaximo: number; valorPadrao?: number | string | null }[],
   camposValues?: Record<number, string>,
 ): ValidationResult {
   const errors: ValidationError[] = [];
@@ -112,7 +112,8 @@ export function validateHoyaPayload(
   if (produtoCamposComplementares && camposValues) {
     for (const campo of produtoCamposComplementares) {
       if (campo.obrigatorio) {
-        const val = camposValues[campo.codigo];
+        // Use user value OR fall back to valorPadrao (matches payload builder logic)
+        const val = camposValues[campo.codigo] ?? String(campo.valorPadrao ?? "");
         if (!val || val.trim() === "") {
           errors.push({
             field: `camposComplementares.${campo.codigo}`,
