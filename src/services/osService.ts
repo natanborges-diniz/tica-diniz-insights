@@ -106,7 +106,7 @@ export async function getOsMonitor(params: GetOsMonitorParams): Promise<OsRecord
   
   console.log('[osService] Calling /os/monitor-ultima-etapa with:', queryParams);
   
-  const raw = await apiGet<OsRecordRaw>('/os/monitor-ultima-etapa', queryParams, { timeoutMs: 45000 });
+  const raw = await apiGet<OsRecordRaw>('/os/monitor-ultima-etapa', queryParams, { timeoutMs: 90000 });
 
   console.log('[osService] Raw data count:', raw.length);
   if (raw.length > 0) {
