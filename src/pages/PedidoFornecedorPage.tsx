@@ -507,11 +507,21 @@ const PedidoFornecedorPage: React.FC = () => {
           : undefined,
       };
 
-      // E4.1: Validate before sending (F4.4: pass campos complementares)
+      // E4.1: Validate before sending (F4.4: pass campos complementares + product ranges)
       const validation = validateHoyaPayload(
         payload,
         produtoSelecionado.camposComplementares,
         camposComplementaresValues,
+        {
+          alturaPupilarMinima: produtoSelecionado.alturaPupilarMinima,
+          alturaPupilarMaxima: produtoSelecionado.alturaPupilarMaxima,
+          esfericoMinimo: produtoSelecionado.esfericoMinimo,
+          esfericoMaximo: produtoSelecionado.esfericoMaximo,
+          cilindricoMinimo: produtoSelecionado.cilindricoMinimo,
+          cilindricoMaximo: produtoSelecionado.cilindricoMaximo,
+          adicaoMinima: produtoSelecionado.adicaoMinima,
+          adicaoMaxima: produtoSelecionado.adicaoMaxima,
+        },
       );
       setValidationResult(validation);
 
