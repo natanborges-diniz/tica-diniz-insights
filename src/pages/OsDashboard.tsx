@@ -161,10 +161,9 @@ const OsDashboardPage: React.FC = () => {
             const existing = map[r.cod_os];
             // Prioridade: pedido confirmado (com número) > qualquer outro
             if (!existing) {
-              map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "" };
+              map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "", created_at: r.created_at };
             } else if (!existing.numero_pedido && r.numero_pedido) {
-              // Substitui registro de erro pelo confirmado
-              map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "" };
+              map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "", created_at: r.created_at };
             }
             // Se já tem confirmado, ignora os demais
           }
