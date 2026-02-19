@@ -25,6 +25,7 @@ interface OsRecordRaw {
   usuario?: string;
   vendedor?: string;
   telefone?: string;
+  tem_receita?: number | boolean;
 }
 
 export type StatusAtraso = 'ENTREGUE' | 'NO_PRAZO' | 'ATRASO_LEVE' | 'ATRASO' | 'SEM_DATA';
@@ -46,6 +47,7 @@ export interface OsRecord {
   usuario: string;
   vendedor: string;
   telefone: string | null;
+  temReceita: boolean;
 }
 
 export type CampoDataOs = 'PREVISAO' | 'EMISSAO' | 'ENTRADA' | 'SAIDA';
@@ -81,6 +83,7 @@ function mapOsRecordRaw(r: OsRecordRaw): OsRecord {
     usuario: r.usuario?.trim() ?? '',
     vendedor: r.vendedor?.trim() ?? '',
     telefone: r.telefone?.trim() ?? null,
+    temReceita: !!(r.tem_receita),
   };
 }
 

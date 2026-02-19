@@ -58,7 +58,7 @@ type Props = {
   onRefresh: () => void;
   empresasUnicas: string[];
   etapasUnicas: string[];
-  receitaFotoMap: Record<number, { temReceita: boolean; temFoto: boolean }>;
+  
   selectedHubOs: OsHubRecord | null;
   onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   onCloseRecipe: () => void;
@@ -115,7 +115,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
   onRefresh,
   empresasUnicas,
   etapasUnicas,
-  receitaFotoMap,
+  
   selectedHubOs,
   onOpenRecipe,
   onCloseRecipe,
@@ -472,7 +472,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
                           onOpenRecipe={onOpenRecipe}
                           loadingRecipe={loadingRecipeCodOs === os.codOs}
                           pedidoFornecedor={pedidosMap[os.codOs] || null}
-                          receitaFotoInfo={receitaFotoMap[os.codOs] || null}
+                          receitaFotoInfo={{ temReceita: os.temReceita, temFoto: false }}
                         />
                       ))}
                     </TableBody>

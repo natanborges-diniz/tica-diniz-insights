@@ -4,7 +4,6 @@ import { useState, useMemo, useCallback, useRef } from "react";
 import { getOsMonitor, OsRecord, StatusAtraso, CampoDataOs } from "../services/osService";
 import { calculateOsMetrics, OsMetrics, sortOsByPriority } from "../utils/osMetrics";
 import { EmpresaParam } from "@/services/firebirdBridge";
-import { fetchReceitaFotoFlags } from "@/services/osHubService";
 
 export type OsStatusFilter = "TODOS" | StatusAtraso | "ATRASADAS";
 
@@ -42,9 +41,6 @@ export function useOsMonitor() {
     foto: "TODOS",
   });
 
-  // Map of codOs -> { temReceita, temFoto } from cache
-  const [receitaFotoMap, setReceitaFotoMap] = useState<Record<number, { temReceita: boolean; temFoto: boolean }>>({})
-
   const [defaultEtapaApplied, setDefaultEtapaApplied] = useState(false);
 
   // Filtrar dados client-side
@@ -73,26 +69,20 @@ export function useOsMonitor() {
       );
     }
 
-    // Filtro receita
+    // Filtro receita — usa campo temReceita do endpoint
     if (filters.receita !== "TODOS") {
       const has = filters.receita === "COM";
-      result = result.filter(os => {
-        const info = receitaFotoMap[os.codOs];
-        return has ? info?.temReceita === true : !info?.temReceita;
-      });
+      result = result.filter(os => has ? os.temReceita : !os.temReceita);
     }
 
-    // Filtro foto
+    // Filtro foto (mantém via receitaFotoMap legado se necessário, mas agora não bloqueia)
+    // TODO: quando bridge retornar tem_foto, usar os.temFoto
     if (filters.foto !== "TODOS") {
-      const has = filters.foto === "COM";
-      result = result.filter(os => {
-        const info = receitaFotoMap[os.codOs];
-        return has ? info?.temFoto === true : !info?.temFoto;
-      });
+      // Sem campo tem_foto no endpoint ainda — filtro desabilitado silenciosamente
     }
 
     return sortOsByPriority(result);
-  }, [data, filters, receitaFotoMap]);
+  }, [data, filters]);
 
   const metrics: OsMetrics = useMemo(() => calculateOsMetrics(data), [data]);
   const filteredMetrics: OsMetrics = useMemo(() => calculateOsMetrics(filteredData), [filteredData]);
@@ -119,9 +109,6 @@ export function useOsMonitor() {
       setData(result);
       setLoaded(true);
 
-      // Enrich with receita/foto flags from Firebird (same date range)
-      _loadReceitaFotoFlags(f);
-
       // Apply default etapa filter on first load
       if (!defaultEtapaApplied) {
         setDefaultEtapaApplied(true);
@@ -140,20 +127,6 @@ export function useOsMonitor() {
     }
   }, [defaultEtapaApplied]);
 
-  const _loadReceitaFotoFlags = useCallback(async (apiFilters: OsApiFilters) => {
-    try {
-      console.log('[useOsMonitor] Loading receita/foto flags from Firebird...');
-      const map = await fetchReceitaFotoFlags({
-        empresa: apiFilters.empresa,
-        dataInicio: apiFilters.dataInicio,
-        dataFim: apiFilters.dataFim,
-      });
-      console.log('[useOsMonitor] Receita/foto flags loaded:', Object.keys(map).length, 'entries');
-      setReceitaFotoMap(map);
-    } catch (err) {
-      console.warn('[useOsMonitor] Failed to load receita/foto flags:', err);
-    }
-  }, []);
 
   const reload = useCallback((apiFilters: OsApiFilters) => {
     fetchData(apiFilters);
@@ -174,7 +147,6 @@ export function useOsMonitor() {
     filteredMetrics,
     empresasUnicas,
     etapasUnicas,
-    receitaFotoMap,
     reload,
   };
 }

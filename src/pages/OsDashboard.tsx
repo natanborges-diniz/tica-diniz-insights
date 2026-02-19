@@ -114,7 +114,6 @@ const OsDashboardPage: React.FC = () => {
     setFilters,
     empresasUnicas,
     etapasUnicas,
-    receitaFotoMap,
     reload,
   } = useOsMonitor();
 
@@ -186,7 +185,6 @@ const OsDashboardPage: React.FC = () => {
       onRefresh={() => lastApiFilters && reload(lastApiFilters)}
       empresasUnicas={empresasUnicas}
       etapasUnicas={etapasUnicas}
-      receitaFotoMap={receitaFotoMap}
       selectedHubOs={selectedHubOs}
       onOpenRecipe={handleOpenRecipe}
       onCloseRecipe={() => setSelectedHubOs(null)}
