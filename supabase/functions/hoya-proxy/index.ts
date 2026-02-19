@@ -247,7 +247,7 @@ serve(async (req) => {
         delete pedidoPayload.ValorMontagem;
         
         const baseUrl = HOYA_BASE_URL.replace(/\/+$/, '');
-        url = `${baseUrl}/pedido?ValorMontagemSemTriangulacao=${valorMontagem}`;
+        url = `${baseUrl}/pedido?@ValorMontagemSemTriangulacao=${encodeURIComponent(String(valorMontagem))}`;
         
         // Ensure all expected nullable fields are present (Hoya .NET deserializer requires explicit nulls)
         pedidoPayload.observacao = pedidoPayload.observacao ?? null;
