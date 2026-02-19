@@ -239,16 +239,26 @@ serve(async (req) => {
         method = "POST";
         const pedidoPayload = params.pedido || {};
         
-        // Extract valor montagem value — must be sent as QUERY PARAMETER, not in JSON body
-        const valorMontagem = Number(pedidoPayload.valorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagemSemTriangulacao ?? 0) || 0;
-        // Remove camelCase variants, keep PascalCase in body for .NET
+        // Extract valor montagem and move to camposComplementares (codigo 1)
+        const valorMontagem = Number(pedidoPayload.valorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagemSemTriangulacao ?? pedidoPayload.ValorMontagem ?? 0) || 0;
+        // Remove all loose variants from payload
         delete pedidoPayload.valorMontagemSemTriangulacao;
+        delete pedidoPayload.ValorMontagemSemTriangulacao;
         delete pedidoPayload.ValorMontagem;
-        // Tira-teima: send in BOTH query string AND JSON body
-        pedidoPayload.ValorMontagemSemTriangulacao = valorMontagem;
+        
+        // Inject into camposComplementares (codigo 1 = ValorMontagemSemTriangulacao)
+        if (!Array.isArray(pedidoPayload.camposComplementares)) {
+          pedidoPayload.camposComplementares = [];
+        }
+        const codigoMontagem = 1;
+        const valorStr = String(valorMontagem).replace(".", ",");
+        const idx = pedidoPayload.camposComplementares.findIndex((x: any) => Number(x?.codigo) === codigoMontagem);
+        const itemMontagem = { codigo: codigoMontagem, valor: valorStr };
+        if (idx >= 0) pedidoPayload.camposComplementares[idx] = itemMontagem;
+        else pedidoPayload.camposComplementares.push(itemMontagem);
         
         const baseUrl = HOYA_BASE_URL.replace(/\/+$/, '');
-        url = `${baseUrl}/pedido?ValorMontagemSemTriangulacao=${valorMontagem}`;
+        url = `${baseUrl}/pedido`;
         
         // Ensure all expected nullable fields are present (Hoya .NET deserializer requires explicit nulls)
         pedidoPayload.observacao = pedidoPayload.observacao ?? null;
