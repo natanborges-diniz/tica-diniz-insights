@@ -19,10 +19,11 @@ export function registrarPedidoNoCache(
   codOs: number,
   numeroPedido: string,
   fornecedor: string,
-  status: string
+  status: string,
+  created_at?: string | null
 ) {
   pedidosMapCache = {
     ...pedidosMapCache,
-    [codOs]: { numero_pedido: numeroPedido, fornecedor, status },
+    [codOs]: { numero_pedido: numeroPedido, fornecedor, status, created_at: created_at ?? new Date().toISOString() },
   };
 }
