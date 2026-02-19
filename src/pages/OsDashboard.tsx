@@ -153,11 +153,20 @@ const OsDashboardPage: React.FC = () => {
         const batch = codOsList.slice(i, i + 100);
         const { data: rows } = await supabase
           .from("pedidos_fornecedor")
-          .select("cod_os, numero_pedido, fornecedor, status")
-          .in("cod_os", batch);
+          .select("cod_os, numero_pedido, fornecedor, status, created_at")
+          .in("cod_os", batch)
+          .order("created_at", { ascending: false }); // mais recente primeiro
         if (rows) {
           for (const r of rows) {
-            map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "" };
+            const existing = map[r.cod_os];
+            // Prioridade: pedido confirmado (com número) > qualquer outro
+            if (!existing) {
+              map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "" };
+            } else if (!existing.numero_pedido && r.numero_pedido) {
+              // Substitui registro de erro pelo confirmado
+              map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "" };
+            }
+            // Se já tem confirmado, ignora os demais
           }
         }
       }
