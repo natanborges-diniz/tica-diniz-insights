@@ -26,6 +26,7 @@ import {
   PackageX,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useNavigate } from "react-router-dom";
 
 interface Props {
   os: OsRecord;
@@ -45,6 +46,7 @@ function formatCurrency(value: number) {
 
 export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingRecipe, pedidoFornecedor }) => {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
   // pedido confirmado = tem numero_pedido preenchido
   const hasPedidoConfirmado = !!pedidoFornecedor?.numero_pedido;
   // tentativa com erro = existe registro mas sem número de pedido
@@ -73,8 +75,19 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                   {hasPedidoConfirmado && (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span onClick={(e) => e.stopPropagation()}>
-                          <PackageCheck className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/os/tracking?pedido=${pedidoFornecedor!.numero_pedido}`);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") navigate(`/os/tracking?pedido=${pedidoFornecedor!.numero_pedido}`);
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <PackageCheck className="h-3.5 w-3.5 text-green-600 shrink-0 hover:scale-110 transition-transform" />
                         </span>
                       </TooltipTrigger>
                       <TooltipContent side="right" className="text-xs space-y-0.5 max-w-[220px]">
@@ -83,6 +96,7 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                         {pedidoFornecedor!.status && (
                           <p className="capitalize text-muted-foreground">{pedidoFornecedor!.status}</p>
                         )}
+                        <p className="text-primary font-medium">Clique para ver tracking →</p>
                       </TooltipContent>
                     </Tooltip>
                   )}
