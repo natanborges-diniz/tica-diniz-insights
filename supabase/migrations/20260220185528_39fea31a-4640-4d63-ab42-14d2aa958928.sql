@@ -1,0 +1,1 @@
+ALTER TABLE public.hoya_empresa_config ALTER COLUMN cod_cliente_hoya TYPE text USING cod_cliente_hoya::text;

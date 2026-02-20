@@ -292,7 +292,7 @@ export type Database = {
           alias: string | null
           ativo: boolean
           cnpj: string | null
-          cod_cliente_hoya: number | null
+          cod_cliente_hoya: string | null
           cod_empresa: number
           created_at: string
           id: string
@@ -302,7 +302,7 @@ export type Database = {
           alias?: string | null
           ativo?: boolean
           cnpj?: string | null
-          cod_cliente_hoya?: number | null
+          cod_cliente_hoya?: string | null
           cod_empresa: number
           created_at?: string
           id?: string
@@ -312,7 +312,7 @@ export type Database = {
           alias?: string | null
           ativo?: boolean
           cnpj?: string | null
-          cod_cliente_hoya?: number | null
+          cod_cliente_hoya?: string | null
           cod_empresa?: number
           created_at?: string
           id?: string
