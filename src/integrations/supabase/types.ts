@@ -251,6 +251,39 @@ export type Database = {
         }
         Relationships: []
       }
+      hoya_empresa_config: {
+        Row: {
+          alias: string | null
+          ativo: boolean
+          cnpj: string | null
+          cod_cliente_hoya: number | null
+          cod_empresa: number
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          alias?: string | null
+          ativo?: boolean
+          cnpj?: string | null
+          cod_cliente_hoya?: number | null
+          cod_empresa: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          alias?: string | null
+          ativo?: boolean
+          cnpj?: string | null
+          cod_cliente_hoya?: number | null
+          cod_empresa?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       lojas_configuracao: {
         Row: {
           abre_domingo: boolean | null
