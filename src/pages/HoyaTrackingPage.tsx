@@ -162,8 +162,17 @@ const HoyaTrackingPage: React.FC = () => {
       setLoadingPedidoData(pedidoId);
       promises.push(
         consultarPedidoHoya(numeroPedido)
-          .then((data) => setPedidoApiData((prev) => ({ ...prev, [pedidoId]: data })))
-          .catch(() => {/* silently ignore — payload fallback will be shown */})
+          .then((data) => {
+            // Edge function retorna { error } com status 200 quando Hoya retorna 404
+            if ((data as unknown as { error?: string }).error) {
+              setPedidoApiData((prev) => ({ ...prev, [pedidoId]: null as unknown as HoyaPedidoTracking }));
+            } else {
+              setPedidoApiData((prev) => ({ ...prev, [pedidoId]: data }));
+            }
+          })
+          .catch(() => {
+            setPedidoApiData((prev) => ({ ...prev, [pedidoId]: null as unknown as HoyaPedidoTracking }));
+          })
           .finally(() => setLoadingPedidoData(null))
       );
     }
@@ -369,7 +378,17 @@ const HoyaTrackingPage: React.FC = () => {
                           );
                         }
 
-                        if (!apiData) return null;
+                        if (!apiData) {
+                          // Só mostra aviso se já tentamos buscar (pedidoApiData tem a chave, mas null)
+                          const tried = ped.id in pedidoApiData;
+                          if (!tried) return null;
+                          return (
+                            <div className="rounded-md bg-muted/30 border border-dashed p-3 text-xs text-muted-foreground flex items-center gap-2">
+                              <Clock className="h-4 w-4 shrink-0" />
+                              <span>Dados do pedido ainda não disponíveis na Hoya. O pedido pode estar sendo processado — tente atualizar o tracking em alguns instantes.</span>
+                            </div>
+                          );
+                        }
 
                         const fmtOlho = (olho: Record<string, unknown> | undefined) => {
                           if (!olho) return "—";
