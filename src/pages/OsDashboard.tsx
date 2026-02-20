@@ -11,6 +11,7 @@ import { CampoDataOs } from "@/services/osService";
 import { useBridgeStatus } from "@/hooks/useBridgeStatus";
 import { useEmpresas } from "@/hooks/useEmpresas";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSearchParams } from "react-router-dom";
 import {
   pedidosMapCache,
   pedidosMapDataKey,
@@ -107,6 +108,7 @@ const OsDashboardPage: React.FC = () => {
   const { isAdmin, codEmpresa } = useAuth();
   const bridge = useBridgeStatus();
   const { empresas, isLoading: empresasLoading } = useEmpresas();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const {
     data,
@@ -126,6 +128,23 @@ const OsDashboardPage: React.FC = () => {
 
   const [selectedHubOs, setSelectedHubOs] = useState<OsHubRecord | null>(null);
   const [loadingRecipeCodOs, setLoadingRecipeCodOs] = useState<number | null>(null);
+
+  // Reabrir sheet ao voltar da tela de pedido (?openOs=X&codEmpresa=Y)
+  useEffect(() => {
+    const openOs = searchParams.get("openOs");
+    const openCodEmpresa = searchParams.get("codEmpresa");
+    if (openOs && openCodEmpresa) {
+      handleOpenRecipe(Number(openOs), Number(openCodEmpresa));
+      // Limpa os params da URL sem recarregar a página
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.delete("openOs");
+        next.delete("codEmpresa");
+        return next;
+      }, { replace: true });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ============================================================
   // Pedidos map — cache singleton compartilhado, só rebusca quando rawData muda
