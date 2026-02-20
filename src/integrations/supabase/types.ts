@@ -171,6 +171,8 @@ export type Database = {
         Row: {
           ambiente: string
           api_key: string | null
+          api_key_production: string | null
+          api_key_staging: string | null
           ativo: boolean
           base_url_production: string | null
           base_url_staging: string | null
@@ -182,6 +184,8 @@ export type Database = {
         Insert: {
           ambiente?: string
           api_key?: string | null
+          api_key_production?: string | null
+          api_key_staging?: string | null
           ativo?: boolean
           base_url_production?: string | null
           base_url_staging?: string | null
@@ -193,6 +197,8 @@ export type Database = {
         Update: {
           ambiente?: string
           api_key?: string | null
+          api_key_production?: string | null
+          api_key_staging?: string | null
           ativo?: boolean
           base_url_production?: string | null
           base_url_staging?: string | null
