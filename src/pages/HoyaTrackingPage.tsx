@@ -1,9 +1,10 @@
 // src/pages/HoyaTrackingPage.tsx
 // F4.5: Página de acompanhamento de pedidos Hoya com timeline de status
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
+import { useEmpresas } from "@/hooks/useEmpresas";
 import {
   PedidoFornecedorRecord,
   HoyaPedidoTracking,
@@ -90,6 +91,15 @@ const HoyaTrackingPage: React.FC = () => {
   const [consultaAvulsaError, setConsultaAvulsaError] = useState<string | null>(null);
   const [consultaAvulsaNumero, setConsultaAvulsaNumero] = useState<string | null>(null);
   const [consultaAvulsaXmlLoading, setConsultaAvulsaXmlLoading] = useState<"xml" | "danfe" | null>(null);
+
+  // Empresas lookup
+  const { empresas } = useEmpresas();
+  const empresaNameMap = useMemo(() => {
+    const map = new Map<number, string>();
+    empresas.forEach(e => map.set(e.codEmpresa, e.nome));
+    return map;
+  }, [empresas]);
+  const getEmpresaNome = useCallback((cod: number) => empresaNameMap.get(cod) || `Loja ${cod}`, [empresaNameMap]);
 
   // Fetch pedidos
   const { data: pedidos = [], isLoading, refetch } = useQuery({
@@ -481,7 +491,7 @@ const HoyaTrackingPage: React.FC = () => {
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Empresa {ped.cod_empresa} • {formatDate(ped.requested_at || ped.created_at)}
+                        {getEmpresaNome(ped.cod_empresa)} • {formatDate(ped.requested_at || ped.created_at)}
                       </p>
                     </div>
 
