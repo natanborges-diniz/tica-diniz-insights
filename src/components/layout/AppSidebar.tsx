@@ -92,7 +92,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       items: [
         { title: "Metas e Calendário", url: "/config/metas", icon: Target },
         { title: "Usuários", url: "/admin/usuarios", icon: Users },
-        { title: "Config. Hoya", url: "/admin/hoya-config", icon: FlaskConical },
+        { title: "Fornecedores", url: "/admin/fornecedores", icon: FlaskConical },
         { title: "Sync & Reprocessamento", url: "/admin/sync", icon: RefreshCw },
         { title: "Bridge Health", url: "/admin/health", icon: Activity },
       ],

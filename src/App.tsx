@@ -27,6 +27,7 @@ import AdminSyncPage from "./pages/AdminSyncPage";
 import AdminHealthPage from "./pages/AdminHealthPage";
 import AdminPedidosAuditoriaPage from "./pages/AdminPedidosAuditoriaPage";
 import AdminHoyaConfigPage from "./pages/AdminHoyaConfigPage";
+import AdminFornecedoresPage from "./pages/AdminFornecedoresPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -80,6 +81,7 @@ const App = () => (
                 <Route path="/admin/health" element={<AdminHealthPage />} />
                 <Route path="/admin/pedidos" element={<AdminPedidosAuditoriaPage />} />
                 <Route path="/admin/hoya-config" element={<AdminHoyaConfigPage />} />
+                <Route path="/admin/fornecedores" element={<AdminFornecedoresPage />} />
 
                 {/* Central de IA */}
                 <Route path="/ia" element={<CentralIADashboard />} />
