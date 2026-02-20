@@ -40,7 +40,7 @@ interface EmpresaConfig {
   cod_empresa: number;
   alias: string | null;
   cnpj: string | null;
-  cod_cliente_hoya: number | null;
+  cod_cliente_hoya: string | null;
   ativo: boolean;
   updated_at: string;
 }
@@ -263,7 +263,7 @@ function EmpresasSection() {
         };
         initial[r.id] = {
           cnpj: formatCnpjLocal(cnpjDigits),
-          cod_cliente_hoya: r.cod_cliente_hoya != null ? String(r.cod_cliente_hoya) : "",
+          cod_cliente_hoya: r.cod_cliente_hoya || "",
           alias: r.alias || "",
         };
       });
@@ -297,19 +297,14 @@ function EmpresasSection() {
   const handleSave = async (config: EmpresaConfig) => {
     const row = editing[config.id];
     if (!row) return;
-    // Armazena o código do cliente como número no banco mas aceita zeros à esquerda na entrada
+    // Salva o código como texto puro — preserva zeros à esquerda (ex: "008602")
     const codClienteStr = row.cod_cliente_hoya.trim();
-    const codCliente = codClienteStr !== "" ? parseInt(codClienteStr, 10) : null;
-    if (codClienteStr !== "" && (isNaN(codCliente!) || !Number.isFinite(codCliente))) {
-      toast({ title: "Código inválido", description: "O código do cliente deve ser numérico.", variant: "destructive" });
-      return;
-    }
     // Remove formatação do CNPJ para salvar apenas dígitos
     const cnpjDigits = row.cnpj.replace(/\D/g, "") || null;
     setSaving(config.id);
     const { error } = await supabase
       .from("hoya_empresa_config" as never)
-      .update({ cnpj: cnpjDigits, cod_cliente_hoya: codCliente, alias: row.alias.trim() || null } as never)
+      .update({ cnpj: cnpjDigits, cod_cliente_hoya: codClienteStr || null, alias: row.alias.trim() || null } as never)
       .eq("id", config.id);
 
     if (error) {
@@ -328,7 +323,7 @@ function EmpresasSection() {
     const cnpjDigitsRow = row.cnpj.replace(/\D/g, "");
     const cnpjDigitsConfig = (config.cnpj || "").replace(/\D/g, "");
     return cnpjDigitsRow !== cnpjDigitsConfig ||
-      row.cod_cliente_hoya !== (config.cod_cliente_hoya != null ? String(config.cod_cliente_hoya) : "") ||
+      row.cod_cliente_hoya !== (config.cod_cliente_hoya || "") ||
       row.alias !== (config.alias || "");
   };
 
