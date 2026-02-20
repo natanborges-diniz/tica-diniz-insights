@@ -328,7 +328,35 @@ serve(async (req) => {
         (params as Record<string, unknown>).__idempotencyKey = idempotencyKey;
         break;
       }
-      case "consultar-pedido": url = `${HOYA_BASE_URL}/pedido/tracking/${params.numeroPedido}`; break;
+      case "consultar-pedido": {
+        const trackingUrl = `${HOYA_BASE_URL}/pedido/tracking/${params.numeroPedido}`;
+        const trackingResp = await fetchWithRetry(
+          trackingUrl,
+          { method: "GET", headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" } },
+          { action: "consultar-pedido", correlationId }
+        );
+        const trackingText = await trackingResp.text();
+        let trackingData: unknown;
+        try { trackingData = JSON.parse(trackingText); } catch { trackingData = { rawResponse: trackingText }; }
+
+        if (!trackingResp.ok) {
+          // Sempre retorna 200 com campo error para evitar FunctionsHttpError no frontend
+          return new Response(
+            JSON.stringify({
+              error: "Pedido não encontrado na Hoya",
+              details: trackingData,
+              code: trackingResp.status === 404 ? "HOYA_NOT_FOUND" : HOYA_ERROR_CODES.API_ERROR,
+              correlationId,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId } }
+          );
+        }
+
+        return new Response(JSON.stringify(trackingData), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
 
       // Recupera pedido Hoya pelo número da OS (para casos onde o pedido foi criado mas não registrado)
       case "recuperar-pedido-por-os": {
