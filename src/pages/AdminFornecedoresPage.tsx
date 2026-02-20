@@ -252,8 +252,17 @@ function EmpresasSection() {
       setConfigs(rows);
       const initial: Record<string, EditingRow> = {};
       rows.forEach((r) => {
+        // Formata o CNPJ salvo (apenas dígitos) para exibição formatada
+        const cnpjDigits = (r.cnpj || "").replace(/\D/g, "");
+        const formatCnpjLocal = (d: string) => {
+          if (d.length <= 2) return d;
+          if (d.length <= 5) return `${d.slice(0,2)}.${d.slice(2)}`;
+          if (d.length <= 8) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5)}`;
+          if (d.length <= 12) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8)}`;
+          return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
+        };
         initial[r.id] = {
-          cnpj: r.cnpj || "",
+          cnpj: formatCnpjLocal(cnpjDigits),
           cod_cliente_hoya: r.cod_cliente_hoya != null ? String(r.cod_cliente_hoya) : "",
           alias: r.alias || "",
         };
@@ -265,22 +274,42 @@ function EmpresasSection() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Formata string de dígitos para XX.XXX.XXX/XXXX-XX
+  const formatCnpj = (digits: string): string => {
+    const d = digits.replace(/\D/g, "").slice(0, 14);
+    if (d.length <= 2) return d;
+    if (d.length <= 5) return `${d.slice(0,2)}.${d.slice(2)}`;
+    if (d.length <= 8) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5)}`;
+    if (d.length <= 12) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8)}`;
+    return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
+  };
+
   const handleChange = (id: string, field: keyof EditingRow, value: string) => {
+    if (field === "cnpj") {
+      value = formatCnpj(value);
+    } else if (field === "cod_cliente_hoya") {
+      // Permite apenas dígitos (incluindo zeros à esquerda)
+      value = value.replace(/\D/g, "");
+    }
     setEditing((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
   };
 
   const handleSave = async (config: EmpresaConfig) => {
     const row = editing[config.id];
     if (!row) return;
-    const codCliente = row.cod_cliente_hoya.trim() !== "" ? parseInt(row.cod_cliente_hoya, 10) : null;
-    if (row.cod_cliente_hoya.trim() !== "" && isNaN(codCliente!)) {
+    // Armazena o código do cliente como número no banco mas aceita zeros à esquerda na entrada
+    const codClienteStr = row.cod_cliente_hoya.trim();
+    const codCliente = codClienteStr !== "" ? parseInt(codClienteStr, 10) : null;
+    if (codClienteStr !== "" && (isNaN(codCliente!) || !Number.isFinite(codCliente))) {
       toast({ title: "Código inválido", description: "O código do cliente deve ser numérico.", variant: "destructive" });
       return;
     }
+    // Remove formatação do CNPJ para salvar apenas dígitos
+    const cnpjDigits = row.cnpj.replace(/\D/g, "") || null;
     setSaving(config.id);
     const { error } = await supabase
       .from("hoya_empresa_config" as never)
-      .update({ cnpj: row.cnpj.trim() || null, cod_cliente_hoya: codCliente, alias: row.alias.trim() || null } as never)
+      .update({ cnpj: cnpjDigits, cod_cliente_hoya: codCliente, alias: row.alias.trim() || null } as never)
       .eq("id", config.id);
 
     if (error) {
@@ -295,7 +324,10 @@ function EmpresasSection() {
   const isChanged = (config: EmpresaConfig) => {
     const row = editing[config.id];
     if (!row) return false;
-    return row.cnpj !== (config.cnpj || "") ||
+    // Compara CNPJ normalizando para apenas dígitos
+    const cnpjDigitsRow = row.cnpj.replace(/\D/g, "");
+    const cnpjDigitsConfig = (config.cnpj || "").replace(/\D/g, "");
+    return cnpjDigitsRow !== cnpjDigitsConfig ||
       row.cod_cliente_hoya !== (config.cod_cliente_hoya != null ? String(config.cod_cliente_hoya) : "") ||
       row.alias !== (config.alias || "");
   };
@@ -360,7 +392,7 @@ function EmpresasSection() {
                         <Input className="h-8 text-sm font-mono" value={row.cnpj} onChange={(e) => handleChange(config.id, "cnpj", e.target.value)} placeholder="00.000.000/0001-00" maxLength={18} />
                       </TableCell>
                       <TableCell>
-                        <Input className="h-8 text-sm font-mono" type="number" value={row.cod_cliente_hoya} onChange={(e) => handleChange(config.id, "cod_cliente_hoya", e.target.value)} placeholder="Ex: 12345" />
+                        <Input className="h-8 text-sm font-mono" type="text" inputMode="numeric" value={row.cod_cliente_hoya} onChange={(e) => handleChange(config.id, "cod_cliente_hoya", e.target.value)} placeholder="Ex: 00123" />
                       </TableCell>
                       <TableCell>
                         {ok
