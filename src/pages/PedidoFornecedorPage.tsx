@@ -810,7 +810,7 @@ const PedidoFornecedorPage: React.FC = () => {
           )}
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button variant="outline" onClick={() => navigate(`/os?openOs=${codOs}&codEmpresa=${codEmpresa}`)}>
             <ArrowLeft className="h-4 w-4 mr-2" /> Voltar à Receita
           </Button>
         </div>
