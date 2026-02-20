@@ -120,7 +120,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
               <RxField
                 label="OD — Perto"
                 esf={os.odPertoEsf} cil={os.odPertoCil} eixo={os.odPertoEixo}
-                adicao={null} dnp={null} altura={null}
+                adicao={null} dnp={os.odDnp} altura={os.odAltura}
               />
 
               {/* Receita OE */}
@@ -132,7 +132,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
               <RxField
                 label="OE — Perto"
                 esf={os.oePertoEsf} cil={os.oePertoCil} eixo={os.oePertoEixo}
-                adicao={null} dnp={null} altura={null}
+                adicao={null} dnp={os.oeDnp} altura={os.oeAltura}
               />
 
               {/* Armação */}
