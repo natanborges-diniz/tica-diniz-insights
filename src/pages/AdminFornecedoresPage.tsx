@@ -36,6 +36,8 @@ interface FornecedorConfig {
   base_url_staging: string | null;
   base_url_production: string | null;
   api_key: string | null;
+  api_key_staging: string | null;
+  api_key_production: string | null;
   ativo: boolean;
   updated_at: string;
 }
@@ -64,9 +66,11 @@ function CredenciaisSection({
     ambiente: config.ambiente,
     base_url_staging: config.base_url_staging || "",
     base_url_production: config.base_url_production || "",
-    api_key: config.api_key || "",
+    api_key_staging: config.api_key_staging || "",
+    api_key_production: config.api_key_production || "",
   });
-  const [showKey, setShowKey] = useState(false);
+  const [showKeySt, setShowKeySt] = useState(false);
+  const [showKeyProd, setShowKeyProd] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const isProduction = form.ambiente === "production";
@@ -79,7 +83,8 @@ function CredenciaisSection({
         ambiente: form.ambiente,
         base_url_staging: form.base_url_staging || null,
         base_url_production: form.base_url_production || null,
-        api_key: form.api_key || null,
+        api_key_staging: form.api_key_staging || null,
+        api_key_production: form.api_key_production || null,
       } as never)
       .eq("id", config.id);
 
@@ -177,41 +182,70 @@ function CredenciaisSection({
         </CardContent>
       </Card>
 
-      {/* API Key */}
+      {/* API Keys separadas por ambiente */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-primary" />
-            Credencial de Acesso (API Key)
+            Credenciais de Acesso (API Keys)
           </CardTitle>
           <CardDescription>
-            Chave de autenticação fornecida pelo laboratório. Armazenada com acesso restrito a administradores.
+            Chaves de autenticação fornecidas pelo laboratório, separadas por ambiente. Apenas a chave do ambiente ativo será utilizada.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-5">
+          {/* API Key Homologação */}
           <div className="space-y-2">
-            <Label className="text-sm">API Key</Label>
+            <Label className="flex items-center gap-2 text-sm">
+              <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block" />
+              API Key — Homologação (Staging)
+              {!isProduction && <span className="text-xs font-medium text-primary ml-1">(ativa)</span>}
+            </Label>
             <div className="flex gap-2">
               <Input
-                type={showKey ? "text" : "password"}
-                value={form.api_key}
-                onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
+                type={showKeySt ? "text" : "password"}
+                value={form.api_key_staging}
+                onChange={(e) => setForm((f) => ({ ...f, api_key_staging: e.target.value }))}
                 placeholder="••••••••••••••••••••"
                 className="font-mono text-sm flex-1"
               />
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowKey((v) => !v)}
-                type="button"
-              >
-                {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              <Button variant="outline" size="icon" onClick={() => setShowKeySt((v) => !v)} type="button">
+                {showKeySt ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
-            {config.api_key && (
+            {config.api_key_staging && (
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <CheckCircle2 className="h-3 w-3 text-primary" />
-                API Key configurada. Deixe em branco para manter a atual.
+                API Key de homologação configurada.
+              </p>
+            )}
+          </div>
+
+          <div className="border-t" />
+
+          {/* API Key Produção */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2 text-sm">
+              <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+              API Key — Produção
+              {isProduction && <span className="text-xs font-medium text-primary ml-1">(ativa)</span>}
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                type={showKeyProd ? "text" : "password"}
+                value={form.api_key_production}
+                onChange={(e) => setForm((f) => ({ ...f, api_key_production: e.target.value }))}
+                placeholder="••••••••••••••••••••"
+                className="font-mono text-sm flex-1"
+              />
+              <Button variant="outline" size="icon" onClick={() => setShowKeyProd((v) => !v)} type="button">
+                {showKeyProd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            {config.api_key_production && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3 text-primary" />
+                API Key de produção configurada.
               </p>
             )}
           </div>

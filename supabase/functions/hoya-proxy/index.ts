@@ -32,7 +32,7 @@ async function loadHoyaConfig(sb: ReturnType<typeof createClient>): Promise<Hoya
   try {
     const { data } = await sb
       .from("fornecedor_configuracao")
-      .select("ambiente, base_url_staging, base_url_production, api_key")
+      .select("ambiente, base_url_staging, base_url_production, api_key, api_key_staging, api_key_production")
       .eq("fornecedor", "HOYA")
       .eq("ativo", true)
       .maybeSingle();
@@ -41,7 +41,10 @@ async function loadHoyaConfig(sb: ReturnType<typeof createClient>): Promise<Hoya
       const isProduction = data.ambiente === "production";
       const baseUrl = (isProduction ? data.base_url_production : data.base_url_staging)
         || HOYA_BASE_URL_FALLBACK;
-      const apiKey = data.api_key || HOYA_API_KEY_FALLBACK || "";
+      // Usa a chave específica do ambiente; fallback para api_key legada, depois para env secret
+      const apiKey = isProduction
+        ? (data.api_key_production || data.api_key || HOYA_API_KEY_FALLBACK || "")
+        : (data.api_key_staging || data.api_key || HOYA_API_KEY_FALLBACK || "");
       return { baseUrl, apiKey, ambiente: data.ambiente };
     }
   } catch (e) {
