@@ -167,6 +167,42 @@ export type Database = {
         }
         Relationships: []
       }
+      fornecedor_configuracao: {
+        Row: {
+          ambiente: string
+          api_key: string | null
+          ativo: boolean
+          base_url_production: string | null
+          base_url_staging: string | null
+          created_at: string
+          fornecedor: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          ambiente?: string
+          api_key?: string | null
+          ativo?: boolean
+          base_url_production?: string | null
+          base_url_staging?: string | null
+          created_at?: string
+          fornecedor: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          ambiente?: string
+          api_key?: string | null
+          ativo?: boolean
+          base_url_production?: string | null
+          base_url_staging?: string | null
+          created_at?: string
+          fornecedor?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       fornecedor_marca: {
         Row: {
           created_at: string

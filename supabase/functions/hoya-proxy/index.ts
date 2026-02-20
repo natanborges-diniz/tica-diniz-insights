@@ -8,7 +8,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authGuard, corsHeaders } from "../_shared/authGuard.ts";
 
-const HOYA_BASE_URL = Deno.env.get("HOYA_BASE_URL") || "https://hoyalab.com.br/api/customer";
+// Config will be loaded from DB (fornecedor_configuracao) at runtime, with env secret as fallback
+const HOYA_BASE_URL_FALLBACK = Deno.env.get("HOYA_BASE_URL") || "https://hoyalab.com.br/api/customer";
+const HOYA_API_KEY_FALLBACK = Deno.env.get("HOYA_API_KEY");
 
 // F4.1: Standardized error codes
 const HOYA_ERROR_CODES = {
@@ -19,14 +21,49 @@ const HOYA_ERROR_CODES = {
   CONFIG_ERROR: "HOYA_CONFIG_ERROR",
 } as const;
 
-// Detect environment from base URL
-function detectHoyaEnvironment(): string {
-  const url = HOYA_BASE_URL.toLowerCase();
+// Load config from DB (fornecedor_configuracao), fallback to env secrets
+interface HoyaRuntimeConfig {
+  baseUrl: string;
+  apiKey: string;
+  ambiente: string;
+}
+
+async function loadHoyaConfig(sb: ReturnType<typeof createClient>): Promise<HoyaRuntimeConfig> {
+  try {
+    const { data } = await sb
+      .from("fornecedor_configuracao")
+      .select("ambiente, base_url_staging, base_url_production, api_key")
+      .eq("fornecedor", "HOYA")
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (data) {
+      const isProduction = data.ambiente === "production";
+      const baseUrl = (isProduction ? data.base_url_production : data.base_url_staging)
+        || HOYA_BASE_URL_FALLBACK;
+      const apiKey = data.api_key || HOYA_API_KEY_FALLBACK || "";
+      return { baseUrl, apiKey, ambiente: data.ambiente };
+    }
+  } catch (e) {
+    console.warn("[hoya-proxy] Could not load DB config, using fallback secrets:", e);
+  }
+  // Fallback to env secrets
+  return {
+    baseUrl: HOYA_BASE_URL_FALLBACK,
+    apiKey: HOYA_API_KEY_FALLBACK || "",
+    ambiente: HOYA_BASE_URL_FALLBACK.toLowerCase().includes("staging") ? "staging" : "production",
+  };
+}
+
+// Detect environment from base URL (kept for backward compat)
+function detectHoyaEnvironment(baseUrl?: string): string {
+  const url = (baseUrl || HOYA_BASE_URL_FALLBACK).toLowerCase();
   if (url.includes("staging") || url.includes("homolog") || url.includes("sandbox") || url.includes("test")) {
     return "staging";
   }
   return "production";
 }
+
 
 // F4.1: Generate correlation ID for request tracing
 function generateCorrelationId(): string {
@@ -152,7 +189,12 @@ serve(async (req) => {
       user = await authGuard(req, { requiredRole: "gestor" });
     }
 
-    const HOYA_API_KEY = Deno.env.get("HOYA_API_KEY");
+    // Load config from DB (fornecedor_configuracao) — fallback to secrets
+    const sbConfig = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const hoyaConfig = await loadHoyaConfig(sbConfig);
+    const HOYA_BASE_URL = hoyaConfig.baseUrl;
+    const HOYA_API_KEY = hoyaConfig.apiKey;
+
     if (!HOYA_API_KEY) {
       return new Response(
         JSON.stringify({ error: "HOYA_API_KEY não configurada.", code: HOYA_ERROR_CODES.CONFIG_ERROR, correlationId }),
@@ -160,8 +202,8 @@ serve(async (req) => {
       );
     }
 
-    const hoyaEnv = detectHoyaEnvironment();
-    console.log(`[hoya-proxy] [${correlationId}] Action: ${action} | Env: ${hoyaEnv} | User: ${user?.userId}`);
+    const hoyaEnv = hoyaConfig.ambiente;
+    console.log(`[hoya-proxy] [${correlationId}] Action: ${action} | Env: ${hoyaEnv} | URL: ${HOYA_BASE_URL} | User: ${user?.userId}`);
 
     let url: string;
     let method = "GET";
@@ -170,7 +212,7 @@ serve(async (req) => {
     switch (action) {
       case "listar-produtos": {
         // F4.3: Cache with 24h TTL
-        const cacheEnv = detectHoyaEnvironment();
+        const cacheEnv = hoyaEnv;
         const forceRefresh = params.forceRefresh === true;
         const sbCache = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -225,7 +267,7 @@ serve(async (req) => {
       case "invalidar-cache": {
         // F4.3: Force cache invalidation (admin only)
         const sbInv = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-        const invEnv = detectHoyaEnvironment();
+        const invEnv = hoyaEnv;
         await sbInv.from("hoya_catalogo_cache").delete().eq("hoya_environment", invEnv);
         console.log(`[hoya-proxy] [${correlationId}] Cache invalidated for env: ${invEnv}`);
         return new Response(JSON.stringify({ success: true, environment: invEnv }), {
@@ -286,7 +328,7 @@ serve(async (req) => {
         console.log(`[hoya-proxy] [${correlationId}] criar-pedido BODY: ${fetchBody.substring(0, 2000)}`);
 
         // F4.2: Idempotency check
-        const hoyaEnvForKey = detectHoyaEnvironment();
+        const hoyaEnvForKey = hoyaEnv;
         const payloadHash = await crypto.subtle.digest(
           "SHA-256",
           new TextEncoder().encode(fetchBody)
@@ -413,7 +455,7 @@ serve(async (req) => {
           .select("id")
           .eq("cod_os", codOsRec)
           .is("numero_pedido", null)
-          .eq("hoya_environment", detectHoyaEnvironment())
+          .eq("hoya_environment", hoyaEnv)
           .order("created_at", { ascending: false })
           .limit(1);
 
@@ -436,7 +478,7 @@ serve(async (req) => {
             status: "CONFIRMADO",
             response: pedidoHoya,
             requested_by: user?.userId || null,
-            hoya_environment: detectHoyaEnvironment(),
+            hoya_environment: hoyaEnv,
           });
           console.log(`[hoya-proxy] [${correlationId}] Novo registro criado com numeroPedido=${numeroPedidoRec}`);
         }
