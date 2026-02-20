@@ -298,7 +298,7 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
   const odPertoCil = coalesce(r.oe_perto_cil, r.ocrl_oe_perto_cil, r.cliente_perto_cil);
   const odPertoEixo = coalesce(r.oe_perto_eixo, r.ocrl_oe_perto_eixo, r.cliente_perto_eixo);
   const odAdicao = coalesce(r.oe_adicao, r.ocrl_oe_adicao, r.cliente_adicao);
-  const odDnp = coalesce(r.oe_dnp, r.oe_dp, r.ocrl_oe_dnp, r.cliente_dnp);
+  const odDnp = coalesce(r.oe_dnp, r.oe_dp, r.ocrl_oe_dnp, r.ocrl_oe_perto_dnp, r.cliente_dnp);
   const odAltura = coalesce(r.oe_altura, r.oe_alt, r.ocrl_oe_alt, r.cliente_alt);
 
   // OE prescription (from Firebird OD_* fields): OS fields → ocrl → cliente fallback
@@ -309,7 +309,7 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
   const oePertoCil = coalesce(r.od_perto_cil, r.ocrl_od_perto_cil, r.cliente_perto_cil);
   const oePertoEixo = coalesce(r.od_perto_eixo, r.ocrl_od_perto_eixo, r.cliente_perto_eixo);
   const oeAdicao = coalesce(r.od_adicao, r.ocrl_od_adicao, r.cliente_adicao);
-  const oeDnp = coalesce(r.od_dnp, r.od_dp, r.ocrl_od_dnp, r.cliente_dnp);
+  const oeDnp = coalesce(r.od_dnp, r.od_dp, r.ocrl_od_dnp, r.ocrl_od_perto_dnp, r.cliente_dnp);
   const oeAltura = coalesce(r.od_altura, r.od_alt, r.ocrl_od_alt, r.cliente_alt);
 
   const hasReceita = !!(
