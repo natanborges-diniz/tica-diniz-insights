@@ -718,8 +718,8 @@ const PedidoFornecedorPage: React.FC = () => {
       <div className="flex flex-col items-center justify-center h-full gap-4">
         <AlertTriangle className="h-10 w-10 text-destructive" />
         <p>OS não encontrada (codOs: {codOs})</p>
-        <Button variant="outline" onClick={() => navigate("/os")}>
-          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar ao Monitor
+        <Button variant="outline" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar à Receita
         </Button>
       </div>
     );
@@ -741,8 +741,8 @@ const PedidoFornecedorPage: React.FC = () => {
           <p className="text-muted-foreground">Status: {pedidoExistente.status}</p>
           <p className="text-sm text-muted-foreground">Esta OS já possui pedido confirmado. Não é possível enviar um segundo pedido.</p>
         </div>
-        <Button variant="outline" onClick={() => navigate("/os")}>
-          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar ao Monitor
+        <Button variant="outline" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar à Receita
         </Button>
       </div>
     );
@@ -781,8 +781,8 @@ const PedidoFornecedorPage: React.FC = () => {
         <Button variant="ghost" size="sm" onClick={() => setPedidoExistente(null)}>
           Ignorar e tentar enviar novamente
         </Button>
-        <Button variant="outline" onClick={() => navigate("/os")}>
-          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar ao Monitor
+        <Button variant="outline" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar à Receita
         </Button>
       </div>
     );
@@ -807,8 +807,8 @@ const PedidoFornecedorPage: React.FC = () => {
           )}
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => navigate("/os")}>
-            <ArrowLeft className="h-4 w-4 mr-2" /> Voltar ao Monitor
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4 mr-2" /> Voltar à Receita
           </Button>
         </div>
       </div>
@@ -821,7 +821,7 @@ const PedidoFornecedorPage: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/os")}>
+            <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
@@ -1486,7 +1486,7 @@ const PedidoFornecedorPage: React.FC = () => {
 
         {/* Submit */}
         <div className="flex justify-end gap-3 pb-8">
-          <Button variant="outline" onClick={() => navigate("/os")}>Cancelar</Button>
+          <Button variant="outline" onClick={() => navigate(-1)}>Voltar à Receita</Button>
           <Button
             onClick={handleEnviarPedido}
             disabled={enviando || enviandoCooldown || !produtoSelecionado || !isReadyToSubmit}
