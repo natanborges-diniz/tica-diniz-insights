@@ -25,6 +25,7 @@ import {
   ValidationResult,
 } from "@/services/hoyaValidationService";
 import { registrarPedidoNoCache } from "@/utils/pedidosMapCache";
+import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -187,13 +188,21 @@ const PedidoFornecedorPage: React.FC = () => {
 
           const hasAnyPrescData = found.odLongeEsf != null || found.odLongeCil != null ||
             found.oeLongeEsf != null || found.oeLongeCil != null ||
+            found.odPertoEsf != null || found.oePertoEsf != null ||
             found.odDnp != null || found.oeDnp != null;
 
+          // Resolver prescrição: aplica regras longe/perto/adição
+          const resolved = resolverPrescricaoCompleta(found);
+          if (resolved.od.origem !== "longe" || resolved.oe.origem !== "longe") {
+            console.log("[PedidoFornecedor] Prescrição resolvida:", 
+              `OD=${resolved.od.origem}`, `OE=${resolved.oe.origem}`);
+          }
+
           setPrescOd({
-            esferico: found.odLongeEsf != null ? String(found.odLongeEsf) : "",
-            cilindrico: found.odLongeCil != null ? String(found.odLongeCil) : "",
-            eixo: found.odLongeEixo != null ? String(found.odLongeEixo) : "",
-            adicao: found.odAdicao != null ? String(found.odAdicao) : "",
+            esferico: resolved.od.esferico != null ? String(resolved.od.esferico) : "",
+            cilindrico: resolved.od.cilindrico != null ? String(resolved.od.cilindrico) : "",
+            eixo: resolved.od.eixo != null ? String(resolved.od.eixo) : "",
+            adicao: resolved.od.adicao != null ? String(resolved.od.adicao) : "",
             dnpLonge: found.odDnp != null ? String(found.odDnp) : "",
             alturaPupilar: found.odAltura != null ? String(found.odAltura) : "",
             prismaH: prismas.odPrismaH != null ? String(prismas.odPrismaH) : "",
@@ -202,10 +211,10 @@ const PedidoFornecedorPage: React.FC = () => {
             basePrismaV: prismas.odBasePRPrismaV || "",
           });
           setPrescOe({
-            esferico: found.oeLongeEsf != null ? String(found.oeLongeEsf) : "",
-            cilindrico: found.oeLongeCil != null ? String(found.oeLongeCil) : "",
-            eixo: found.oeLongeEixo != null ? String(found.oeLongeEixo) : "",
-            adicao: found.oeAdicao != null ? String(found.oeAdicao) : "",
+            esferico: resolved.oe.esferico != null ? String(resolved.oe.esferico) : "",
+            cilindrico: resolved.oe.cilindrico != null ? String(resolved.oe.cilindrico) : "",
+            eixo: resolved.oe.eixo != null ? String(resolved.oe.eixo) : "",
+            adicao: resolved.oe.adicao != null ? String(resolved.oe.adicao) : "",
             dnpLonge: found.oeDnp != null ? String(found.oeDnp) : "",
             alturaPupilar: found.oeAltura != null ? String(found.oeAltura) : "",
             prismaH: prismas.oePrismaH != null ? String(prismas.oePrismaH) : "",
@@ -316,13 +325,14 @@ const PedidoFornecedorPage: React.FC = () => {
           handleProductChange(match, "depara");
 
           // Also run matching to populate group selects for visual consistency
+          const resolvedMatch = resolverPrescricaoCompleta(os);
           const result = matchProducts(produtos, descricao, {
-            esfericoOd: os.odLongeEsf,
-            esfericoOe: os.oeLongeEsf,
-            cilindricoOd: os.odLongeCil,
-            cilindricoOe: os.oeLongeCil,
-            adicaoOd: os.odAdicao,
-            adicaoOe: os.oeAdicao,
+            esfericoOd: resolvedMatch.od.esferico,
+            esfericoOe: resolvedMatch.oe.esferico,
+            cilindricoOd: resolvedMatch.od.cilindrico,
+            cilindricoOe: resolvedMatch.oe.cilindrico,
+            adicaoOd: resolvedMatch.od.adicao,
+            adicaoOe: resolvedMatch.oe.adicao,
           });
           setMatchResult(result);
 
@@ -352,13 +362,14 @@ const PedidoFornecedorPage: React.FC = () => {
       }
 
       // Run intelligent matching
+      const resolvedForMatch = resolverPrescricaoCompleta(os);
       const result = matchProducts(produtos, descricao, {
-        esfericoOd: os.odLongeEsf,
-        esfericoOe: os.oeLongeEsf,
-        cilindricoOd: os.odLongeCil,
-        cilindricoOe: os.oeLongeCil,
-        adicaoOd: os.odAdicao,
-        adicaoOe: os.oeAdicao,
+        esfericoOd: resolvedForMatch.od.esferico,
+        esfericoOe: resolvedForMatch.oe.esferico,
+        cilindricoOd: resolvedForMatch.od.cilindrico,
+        cilindricoOe: resolvedForMatch.oe.cilindrico,
+        adicaoOd: resolvedForMatch.od.adicao,
+        adicaoOe: resolvedForMatch.oe.adicao,
       });
       setMatchResult(result);
 
