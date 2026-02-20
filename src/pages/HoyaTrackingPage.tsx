@@ -369,7 +369,109 @@ const HoyaTrackingPage: React.FC = () => {
                   {/* Expanded content */}
                   {isExpanded && (
                     <div className="mt-4 pt-4 border-t space-y-4">
-                      {/* Dados do Pedido — vindos da API Hoya */}
+
+                      {/* ===== CONFIRMAÇÃO ORIGINAL DA HOYA ===== */}
+                      {(() => {
+                        const response = ped.response as Record<string, unknown> | null;
+                        const payload = ped.payload as Record<string, unknown> | null;
+                        
+                        if (!response && !payload) return null;
+
+                        // Detecta se pedido foi bem-sucedido (tem numero_pedido)
+                        const confirmado = !!ped.numero_pedido;
+                        const isErro = (ped.status || "").toUpperCase() === "ERRO";
+
+                        return (
+                          <div className={`rounded-md border p-3 space-y-2 text-xs ${confirmado ? "bg-emerald-500/5 border-emerald-300/50" : isErro ? "bg-red-500/5 border-red-300/50" : "bg-muted/40"}`}>
+                            <div className="flex items-center gap-2">
+                              {confirmado ? (
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                              ) : isErro ? (
+                                <XCircle className="h-4 w-4 text-red-600 shrink-0" />
+                              ) : (
+                                <Clock className="h-4 w-4 text-amber-600 shrink-0" />
+                              )}
+                              <p className="font-semibold text-sm">
+                                {confirmado ? "Pedido confirmado pela Hoya" : isErro ? "Falha no envio à Hoya" : "Resposta da Hoya"}
+                              </p>
+                            </div>
+
+                            {/* Dados da resposta de confirmação */}
+                            {response && (
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-background/60 rounded p-2">
+                                {response.numeroPedido != null && (
+                                  <>
+                                    <span className="text-muted-foreground">Nº Pedido Hoya</span>
+                                    <span className="font-mono font-bold text-emerald-700">{String(response.numeroPedido)}</span>
+                                  </>
+                                )}
+                                {response.status != null && (
+                                  <>
+                                    <span className="text-muted-foreground">Status Confirmado</span>
+                                    <span className="font-medium">{String(response.status)}</span>
+                                  </>
+                                )}
+                                {response.voucherGerado != null && (
+                                  <>
+                                    <span className="text-muted-foreground">Voucher Gerado</span>
+                                    <span className="font-mono">{String(response.voucherGerado)}</span>
+                                  </>
+                                )}
+                                {/* Erros da Hoya no response */}
+                                {Array.isArray((response as Record<string, unknown>).erros) && (
+                                  <>
+                                    <span className="text-muted-foreground col-span-2 text-red-600 font-medium mt-1">Erros retornados:</span>
+                                    {((response as Record<string, unknown>).erros as { mensagem?: string }[]).map((e, i) => (
+                                      <span key={i} className="col-span-2 text-red-600 pl-2">• {e.mensagem || JSON.stringify(e)}</span>
+                                    ))}
+                                  </>
+                                )}
+                                {/* Campos adicionais desconhecidos */}
+                                {Object.entries(response)
+                                  .filter(([k]) => !["numeroPedido", "status", "voucherGerado", "erros"].includes(k))
+                                  .map(([k, v]) => (
+                                    <>
+                                      <span key={`k-${k}`} className="text-muted-foreground">{k}</span>
+                                      <span key={`v-${k}`} className="font-mono break-all">{typeof v === "object" ? JSON.stringify(v) : String(v ?? "—")}</span>
+                                    </>
+                                  ))
+                                }
+                              </div>
+                            )}
+
+                            {/* OS e Empresa enviados */}
+                            {payload && (
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-background/60 rounded p-2 mt-1">
+                                <span className="text-muted-foreground col-span-2 font-medium text-[10px] uppercase tracking-wide">Dados enviados</span>
+                                {payload.os != null && (
+                                  <>
+                                    <span className="text-muted-foreground">OS (enviada)</span>
+                                    <span className="font-mono">{String(payload.os)}</span>
+                                  </>
+                                )}
+                                {payload.codigoCliente != null && (
+                                  <>
+                                    <span className="text-muted-foreground">Código Cliente Hoya</span>
+                                    <span className="font-mono">{String(payload.codigoCliente)}</span>
+                                  </>
+                                )}
+                                {(payload.especificacoes as Record<string, unknown> | null)?.codigoProduto != null && (
+                                  <>
+                                    <span className="text-muted-foreground">Código Produto</span>
+                                    <span className="font-mono">{String((payload.especificacoes as Record<string, unknown>).codigoProduto)}</span>
+                                  </>
+                                )}
+                              </div>
+                            )}
+
+                            <p className="text-[10px] text-muted-foreground">
+                              Enviado em {formatDate(ped.requested_at || ped.created_at)} • Ambiente: <span className="font-mono">{ped.hoya_environment || "staging"}</span>
+                            </p>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Dados do Pedido — vindos da API Hoya (tracking ao vivo) */}
                       {(() => {
                         const apiData = pedidoApiData[ped.id];
                         const isLoading = loadingPedidoData === ped.id;
@@ -419,7 +521,7 @@ const HoyaTrackingPage: React.FC = () => {
 
                         return (
                           <div className="rounded-md bg-muted/50 p-3 space-y-3 text-xs">
-                            <p className="font-semibold text-sm">Dados do Pedido <span className="text-[10px] font-normal text-muted-foreground">(Hoya)</span></p>
+                            <p className="font-semibold text-sm">Status ao vivo <span className="text-[10px] font-normal text-muted-foreground">(consultado agora na Hoya)</span></p>
 
                             {/* OS Cliente + Produto */}
                             <div className="grid grid-cols-2 gap-2">
