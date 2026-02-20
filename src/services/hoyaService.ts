@@ -159,6 +159,43 @@ async function callHoyaProxy<T>(action: string, params: Record<string, unknown> 
 
   if (error) {
     console.error("[hoyaService] Edge function error:", error);
+
+    // Try to extract structured Hoya error from the response body
+    let errorBody: Record<string, unknown> | null = null;
+    try {
+      if (error.context && typeof error.context.json === "function") {
+        errorBody = await error.context.json();
+      } else if (typeof error.context === "object" && error.context !== null) {
+        errorBody = error.context as Record<string, unknown>;
+      }
+    } catch {
+      // ignore parse errors
+    }
+
+    if (errorBody) {
+      // Hoya API structured error: { erros: [{ mensagem: "..." }] }
+      const erros = (errorBody as { erros?: { mensagem?: string }[] }).erros;
+      if (erros && erros.length > 0 && erros[0].mensagem) {
+        const proxyError: HoyaProxyError = {
+          code: "HOYA_API_ERROR",
+          message: erros[0].mensagem,
+        };
+        throw proxyError;
+      }
+
+      // Proxy standardized error: { error: "...", code: "..." }
+      if (errorBody.error) {
+        const code = errorBody.code as string | undefined;
+        const friendlyMessage = (code && HOYA_ERROR_MESSAGES[code]) || String(errorBody.error);
+        const proxyError: HoyaProxyError = {
+          code: code || "HOYA_API_ERROR",
+          message: friendlyMessage,
+          correlationId: errorBody.correlationId as string | undefined,
+        };
+        throw proxyError;
+      }
+    }
+
     throw new Error(error.message || "Erro ao chamar proxy Hoya");
   }
 
