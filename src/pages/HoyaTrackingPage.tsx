@@ -89,7 +89,7 @@ const HoyaTrackingPage: React.FC = () => {
   const [consultaAvulsaResult, setConsultaAvulsaResult] = useState<HoyaPedidoTracking | null>(null);
   const [consultaAvulsaError, setConsultaAvulsaError] = useState<string | null>(null);
   const [consultaAvulsaNumero, setConsultaAvulsaNumero] = useState<string | null>(null);
-  const [consultaAvulsaXmlLoading, setConsultaAvulsaXmlLoading] = useState(false);
+  const [consultaAvulsaXmlLoading, setConsultaAvulsaXmlLoading] = useState<"xml" | "danfe" | null>(null);
 
   // Fetch pedidos
   const { data: pedidos = [], isLoading, refetch } = useQuery({
@@ -157,7 +157,7 @@ const HoyaTrackingPage: React.FC = () => {
 
   const handleConsultaAvulsaXml = async (tipo: "xml" | "danfe", numero: string) => {
     if (!numero) return;
-    setConsultaAvulsaXmlLoading(true);
+    setConsultaAvulsaXmlLoading(tipo);
     try {
       if (tipo === "xml") {
         const result = await consultarXmlHoya(numero);
@@ -175,7 +175,7 @@ const HoyaTrackingPage: React.FC = () => {
     } catch (err) {
       toast({ title: `Erro ao consultar ${tipo.toUpperCase()}`, description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
     } finally {
-      setConsultaAvulsaXmlLoading(false);
+      setConsultaAvulsaXmlLoading(null);
     }
   };
 
@@ -391,18 +391,20 @@ const HoyaTrackingPage: React.FC = () => {
                       </Badge>
                       <span className="text-muted-foreground text-[10px]">(externo)</span>
                     </div>
-                    {showDocButtons && (
                     <div className="flex items-center gap-1">
-                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={consultaAvulsaXmlLoading}
-                        onClick={() => handleConsultaAvulsaXml("xml", consultaAvulsaNumero)}>
-                        {consultaAvulsaXmlLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileCode className="h-3 w-3" />} XML
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1"
+                        disabled={!showDocButtons || consultaAvulsaXmlLoading === "xml"}
+                        title={!showDocButtons ? "Disponível apenas após faturamento" : "Consultar XML"}
+                        onClick={() => showDocButtons && handleConsultaAvulsaXml("xml", consultaAvulsaNumero)}>
+                        {consultaAvulsaXmlLoading === "xml" ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileCode className="h-3 w-3" />} XML
                       </Button>
-                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={consultaAvulsaXmlLoading}
-                        onClick={() => handleConsultaAvulsaXml("danfe", consultaAvulsaNumero)}>
-                        {consultaAvulsaXmlLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />} DANFE
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1"
+                        disabled={!showDocButtons || consultaAvulsaXmlLoading === "danfe"}
+                        title={!showDocButtons ? "Disponível apenas após faturamento" : "Consultar DANFE"}
+                        onClick={() => showDocButtons && handleConsultaAvulsaXml("danfe", consultaAvulsaNumero)}>
+                        {consultaAvulsaXmlLoading === "danfe" ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />} DANFE
                       </Button>
                     </div>
-                    )}
                   </div>
                     );
                   })()}
