@@ -2,7 +2,7 @@
 // F4.5: Página de acompanhamento de pedidos Hoya com timeline de status
 
 import React, { useEffect, useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import {
   PedidoFornecedorRecord,
@@ -82,6 +82,8 @@ const HoyaTrackingPage: React.FC = () => {
   const [loadingPedidoData, setLoadingPedidoData] = useState<string | null>(null);
   const [xmlDialog, setXmlDialog] = useState<{ open: boolean; content: string; title: string }>({ open: false, content: "", title: "" });
   const [loadingXml, setLoadingXml] = useState<string | null>(null);
+  // Track refresh loading per pedido ID to avoid spinning all buttons
+  const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
 
   // Fetch pedidos
   const { data: pedidos = [], isLoading, refetch } = useQuery({
@@ -125,11 +127,12 @@ const HoyaTrackingPage: React.FC = () => {
     return result;
   }, [pedidos, statusFilter, search]);
 
-  // Refresh single tracking
-  const refreshMutation = useMutation({
-    mutationFn: (pedido: PedidoFornecedorRecord) =>
-      atualizarTrackingHoya(pedido.numero_pedido!, pedido.id),
-    onSuccess: (data, pedido) => {
+  // Refresh single tracking — scoped per pedido ID to avoid spinning all buttons
+  const handleRefreshPedido = async (pedido: PedidoFornecedorRecord) => {
+    if (refreshingIds.has(pedido.id)) return;
+    setRefreshingIds((prev) => new Set(prev).add(pedido.id));
+    try {
+      const data = await atualizarTrackingHoya(pedido.numero_pedido!, pedido.id);
       queryClient.invalidateQueries({ queryKey: ["hoya-tracking-pedidos"] });
       if (data.statusChanged) {
         toast({ title: "Status atualizado", description: `Pedido ${pedido.numero_pedido}: ${data.tracking.status || "atualizado"}` });
@@ -139,11 +142,12 @@ const HoyaTrackingPage: React.FC = () => {
       if (expandedId === pedido.id) {
         setTimeline(data.timeline);
       }
-    },
-    onError: (err) => {
+    } catch (err) {
       toast({ title: "Erro ao atualizar tracking", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
-    },
-  });
+    } finally {
+      setRefreshingIds((prev) => { const s = new Set(prev); s.delete(pedido.id); return s; });
+    }
+  };
 
   // Load timeline + API data when expanding
   const handleExpand = async (pedidoId: string, numeroPedido?: string | null) => {
@@ -349,11 +353,11 @@ const HoyaTrackingPage: React.FC = () => {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        disabled={refreshMutation.isPending}
-                        onClick={(e) => { e.stopPropagation(); refreshMutation.mutate(ped); }}
+                        disabled={refreshingIds.has(ped.id)}
+                        onClick={(e) => { e.stopPropagation(); handleRefreshPedido(ped); }}
                         title="Atualizar tracking"
                       >
-                        <RefreshCw className={`h-4 w-4 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
+                        <RefreshCw className={`h-4 w-4 ${refreshingIds.has(ped.id) ? "animate-spin" : ""}`} />
                       </Button>
                       <Button
                         variant="ghost"
@@ -439,7 +443,7 @@ const HoyaTrackingPage: React.FC = () => {
                               </div>
                             )}
 
-                            {/* OS e Empresa enviados */}
+                            {/* OS, Empresa e Valor enviados */}
                             {payload && (
                               <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-background/60 rounded p-2 mt-1">
                                 <span className="text-muted-foreground col-span-2 font-medium text-[10px] uppercase tracking-wide">Dados enviados</span>
@@ -461,6 +465,24 @@ const HoyaTrackingPage: React.FC = () => {
                                     <span className="font-mono">{String((payload.especificacoes as Record<string, unknown>).codigoProduto)}</span>
                                   </>
                                 )}
+                                {/* Valor do pedido — pode vir como ValorMontagemSemTriangulacao ou variantes */}
+                                {(() => {
+                                  const valor =
+                                    payload.ValorMontagemSemTriangulacao ??
+                                    payload.valorMontagemSemTriangulacao ??
+                                    payload.valorTotal ??
+                                    payload.total;
+                                  if (valor == null) return null;
+                                  const num = Number(valor);
+                                  return (
+                                    <>
+                                      <span className="text-muted-foreground">Valor do Pedido</span>
+                                      <span className="font-semibold">
+                                        {isNaN(num) ? String(valor) : num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                      </span>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             )}
 
