@@ -377,6 +377,11 @@ const HoyaTrackingPage: React.FC = () => {
               )}
               {consultaAvulsaResult && consultaAvulsaNumero && (
                 <div className="space-y-3 text-xs">
+                  {(() => {
+                    const temNF = Array.isArray(consultaAvulsaResult.nf) && consultaAvulsaResult.nf.length > 0;
+                    const statusFaturado = (consultaAvulsaResult.status || "").toLowerCase().match(/faturad|entreg|transit/);
+                    const showDocButtons = temNF || !!statusFaturado;
+                    return (
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -386,6 +391,7 @@ const HoyaTrackingPage: React.FC = () => {
                       </Badge>
                       <span className="text-muted-foreground text-[10px]">(externo)</span>
                     </div>
+                    {showDocButtons && (
                     <div className="flex items-center gap-1">
                       <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={consultaAvulsaXmlLoading}
                         onClick={() => handleConsultaAvulsaXml("xml", consultaAvulsaNumero)}>
@@ -396,7 +402,10 @@ const HoyaTrackingPage: React.FC = () => {
                         {consultaAvulsaXmlLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />} DANFE
                       </Button>
                     </div>
+                    )}
                   </div>
+                    );
+                  })()}
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-muted/50 rounded p-3">
                     {consultaAvulsaResult.osCliente && (<><span className="text-muted-foreground">OS Cliente</span><span className="font-mono">{consultaAvulsaResult.osCliente}</span></>)}
                     {consultaAvulsaResult.produto && (<><span className="text-muted-foreground">Produto</span><span>{consultaAvulsaResult.produto}</span></>)}

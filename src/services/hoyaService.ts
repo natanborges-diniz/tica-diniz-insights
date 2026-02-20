@@ -126,6 +126,7 @@ export interface HoyaPedidoTracking {
   tratamento: string;
   dataInclusao: string;
   rastreio: string;
+  nf?: unknown[]; // Notas fiscais — só presentes quando faturado
   historico: { situacao: string; data: string; observacao: string }[];
   prescricao: {
     esquerdo: Record<string, unknown>;
