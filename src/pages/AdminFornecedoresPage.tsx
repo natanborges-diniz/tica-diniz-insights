@@ -14,10 +14,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import {
   Loader2, Save, RefreshCw, Eye, EyeOff, FlaskConical,
-  Building2, Globe, KeyRound, CheckCircle2, AlertCircle, Settings2,
+  Building2, Globe, KeyRound, CheckCircle2, AlertCircle, Settings2, Trash2,
 } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
@@ -316,6 +321,19 @@ function EmpresasSection() {
     setSaving(null);
   };
 
+  const handleDelete = async (config: EmpresaConfig) => {
+    const { error } = await supabase
+      .from("hoya_empresa_config" as never)
+      .delete()
+      .eq("id", config.id);
+    if (error) {
+      toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Empresa ${config.cod_empresa} removida` });
+      fetchData();
+    }
+  };
+
   const isChanged = (config: EmpresaConfig) => {
     const row = editing[config.id];
     if (!row) return false;
@@ -368,7 +386,7 @@ function EmpresasSection() {
                   <TableHead className="w-44">CNPJ</TableHead>
                   <TableHead className="w-36">Cód. Cliente Hoya</TableHead>
                   <TableHead className="w-24">Status</TableHead>
-                  <TableHead className="w-16 text-right">Ação</TableHead>
+                  <TableHead className="w-24 text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -395,9 +413,35 @@ function EmpresasSection() {
                           : <Badge variant="outline" className="text-xs text-muted-foreground">Pendente</Badge>}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button size="sm" variant={changed ? "default" : "ghost"} className="h-8" onClick={() => handleSave(config)} disabled={!changed || isSaving}>
-                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button size="sm" variant={changed ? "default" : "ghost"} className="h-8" onClick={() => handleSave(config)} disabled={!changed || isSaving}>
+                            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="sm" variant="ghost" className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10">
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Excluir empresa {config.cod_empresa}?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Esta ação removerá o mapeamento da empresa <strong>{row.alias || config.cod_empresa}</strong> do fornecedor Hoya. Isso não pode ser desfeito.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  onClick={() => handleDelete(config)}
+                                >
+                                  Excluir
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
