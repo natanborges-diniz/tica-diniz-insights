@@ -82,15 +82,13 @@ const HoyaTrackingPage: React.FC = () => {
   const [loadingPedidoData, setLoadingPedidoData] = useState<string | null>(null);
   const [xmlDialog, setXmlDialog] = useState<{ open: boolean; content: string; title: string }>({ open: false, content: "", title: "" });
   const [loadingXml, setLoadingXml] = useState<string | null>(null);
-  // Track refresh loading per pedido ID to avoid spinning all buttons
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
 
-  // Consulta avulsa (pedidos feitos fora do sistema)
-  const [consultaAvulsa, setConsultaAvulsa] = useState("");
+  // Consulta avulsa — resultado de pedidos externos (não na lista local)
   const [consultaAvulsaLoading, setConsultaAvulsaLoading] = useState(false);
   const [consultaAvulsaResult, setConsultaAvulsaResult] = useState<HoyaPedidoTracking | null>(null);
   const [consultaAvulsaError, setConsultaAvulsaError] = useState<string | null>(null);
-  const [consultaAvulsaXml, setConsultaAvulsaXml] = useState<string | null>(null);
+  const [consultaAvulsaNumero, setConsultaAvulsaNumero] = useState<string | null>(null);
   const [consultaAvulsaXmlLoading, setConsultaAvulsaXmlLoading] = useState(false);
 
   // Fetch pedidos
@@ -135,16 +133,15 @@ const HoyaTrackingPage: React.FC = () => {
     return result;
   }, [pedidos, statusFilter, search]);
 
-  // Consulta avulsa: busca pedido diretamente na API Hoya por número
-  const handleConsultaAvulsa = async () => {
-    const num = consultaAvulsa.trim();
-    if (!num) return;
+  // Consulta avulsa: busca pedido diretamente na API Hoya quando não está na lista local
+  const handleConsultaAvulsa = async (num: string) => {
+    if (!num.trim()) return;
     setConsultaAvulsaLoading(true);
     setConsultaAvulsaResult(null);
     setConsultaAvulsaError(null);
-    setConsultaAvulsaXml(null);
+    setConsultaAvulsaNumero(num.trim());
     try {
-      const data = await consultarPedidoHoya(num);
+      const data = await consultarPedidoHoya(num.trim());
       const raw = data as unknown as { error?: string; code?: string };
       if (raw.error) {
         setConsultaAvulsaError(raw.error);
@@ -158,21 +155,21 @@ const HoyaTrackingPage: React.FC = () => {
     }
   };
 
-  const handleConsultaAvulsaXml = async (tipo: "xml" | "danfe") => {
-    if (!consultaAvulsa.trim()) return;
+  const handleConsultaAvulsaXml = async (tipo: "xml" | "danfe", numero: string) => {
+    if (!numero) return;
     setConsultaAvulsaXmlLoading(true);
     try {
       if (tipo === "xml") {
-        const result = await consultarXmlHoya(consultaAvulsa.trim());
+        const result = await consultarXmlHoya(numero);
         const content = result.xml || JSON.stringify(result, null, 2);
-        setXmlDialog({ open: true, content, title: `XML — Pedido #${consultaAvulsa.trim()}` });
+        setXmlDialog({ open: true, content, title: `XML — Pedido #${numero}` });
       } else {
-        const result = await consultarDanfeHoya(consultaAvulsa.trim());
+        const result = await consultarDanfeHoya(numero);
         if (result.url) {
           window.open(result.url, "_blank");
         } else {
           const content = result.danfe || JSON.stringify(result, null, 2);
-          setXmlDialog({ open: true, content, title: `DANFE — Pedido #${consultaAvulsa.trim()}` });
+          setXmlDialog({ open: true, content, title: `DANFE — Pedido #${numero}` });
         }
       }
     } catch (err) {
@@ -293,150 +290,7 @@ const HoyaTrackingPage: React.FC = () => {
           </Button>
         </div>
 
-        {/* Consulta Avulsa — pedidos feitos fora do sistema */}
-        <Card className="border-dashed">
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              Consultar pedido Hoya por número
-              <span className="text-xs font-normal text-muted-foreground">(inclui pedidos feitos fora do sistema)</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-3">
-            <div className="flex gap-2 items-end">
-              <div className="flex-1">
-                <Label className="text-[10px] uppercase">Nº Pedido Hoya</Label>
-                <Input
-                  value={consultaAvulsa}
-                  onChange={(e) => setConsultaAvulsa(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleConsultaAvulsa()}
-                  placeholder="Ex: 17141300"
-                  className="h-9 font-mono"
-                />
-              </div>
-              <Button
-                size="sm"
-                onClick={handleConsultaAvulsa}
-                disabled={consultaAvulsaLoading || !consultaAvulsa.trim()}
-                className="h-9 gap-2"
-              >
-                {consultaAvulsaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                Consultar
-              </Button>
-            </div>
-
-            {/* Resultado da consulta avulsa */}
-            {consultaAvulsaError && (
-              <div className="rounded-md border border-destructive/30 bg-destructive/10 text-destructive p-3 text-xs flex items-start gap-2">
-                <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium">Pedido não encontrado ou erro na Hoya</p>
-                  <p className="mt-0.5 opacity-80">{consultaAvulsaError}</p>
-                </div>
-              </div>
-            )}
-
-            {consultaAvulsaResult && (
-              <div className="rounded-md border bg-muted/50 p-3 space-y-3 text-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <span className="font-semibold text-sm">Pedido #{consultaAvulsaResult.numeroPedidoHoya}</span>
-                    <Badge variant="outline" className={statusBadge(consultaAvulsaResult.status).color + " text-xs"}>
-                      {consultaAvulsaResult.status}
-                    </Badge>
-                  </div>
-                  {/* XML/DANFE para consulta avulsa */}
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
-                      disabled={consultaAvulsaXmlLoading}
-                      onClick={() => handleConsultaAvulsaXml("xml")}
-                      title="Consultar XML"
-                    >
-                      {consultaAvulsaXmlLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileCode className="h-3 w-3" />}
-                      XML
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
-                      disabled={consultaAvulsaXmlLoading}
-                      onClick={() => handleConsultaAvulsaXml("danfe")}
-                      title="Consultar DANFE"
-                    >
-                      {consultaAvulsaXmlLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
-                      DANFE
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  {consultaAvulsaResult.osCliente && (
-                    <>
-                      <span className="text-muted-foreground">OS Cliente</span>
-                      <span className="font-mono">{consultaAvulsaResult.osCliente}</span>
-                    </>
-                  )}
-                  {consultaAvulsaResult.produto && (
-                    <>
-                      <span className="text-muted-foreground">Produto</span>
-                      <span>{consultaAvulsaResult.produto}</span>
-                    </>
-                  )}
-                  {consultaAvulsaResult.tratamento && (
-                    <>
-                      <span className="text-muted-foreground">Tratamento</span>
-                      <span>{consultaAvulsaResult.tratamento}</span>
-                    </>
-                  )}
-                  {consultaAvulsaResult.statusProducao && (
-                    <>
-                      <span className="text-muted-foreground">Status Produção</span>
-                      <span>{consultaAvulsaResult.statusProducao}</span>
-                    </>
-                  )}
-                  {consultaAvulsaResult.dataInclusao && (
-                    <>
-                      <span className="text-muted-foreground">Data Inclusão</span>
-                      <span>{formatDate(consultaAvulsaResult.dataInclusao)}</span>
-                    </>
-                  )}
-                  {consultaAvulsaResult.rastreio && (
-                    <>
-                      <span className="text-muted-foreground">Rastreio</span>
-                      <span className="font-mono flex items-center gap-1"><MapPin className="h-3 w-3" />{consultaAvulsaResult.rastreio}</span>
-                    </>
-                  )}
-                </div>
-
-                {/* Histórico da Hoya */}
-                {consultaAvulsaResult.historico && consultaAvulsaResult.historico.length > 0 && (
-                  <div>
-                    <p className="font-medium text-[10px] uppercase tracking-wide text-muted-foreground mb-2">Histórico Hoya</p>
-                    <div className="relative pl-5 space-y-2">
-                      <div className="absolute left-[7px] top-1 bottom-1 w-0.5 bg-border" />
-                      {consultaAvulsaResult.historico.map((h, i) => (
-                        <div key={i} className="relative">
-                          <div className="absolute -left-5 top-0.5 h-3.5 w-3.5 rounded-full bg-muted border flex items-center justify-center">
-                            <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-                          </div>
-                          <p className="font-medium">{h.situacao}</p>
-                          <p className="text-muted-foreground">{formatDate(h.data)}</p>
-                          {h.observacao && <p className="opacity-70">{h.observacao}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Filters */}
+        {/* Filters + unified search */}
         <div className="flex flex-wrap gap-3 items-end">
           <div className="w-48">
             <Label className="text-[10px] uppercase">Status</Label>
@@ -452,16 +306,41 @@ const HoyaTrackingPage: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex-1 min-w-[200px]">
-            <Label className="text-[10px] uppercase">Buscar</Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Nº pedido ou OS..."
-                className="pl-9 h-9"
-              />
+          <div className="flex-1 min-w-[220px]">
+            <Label className="text-[10px] uppercase">Buscar — Nº pedido, OS ou pedido externo</Label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    if (consultaAvulsaResult || consultaAvulsaError) {
+                      setConsultaAvulsaResult(null);
+                      setConsultaAvulsaError(null);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && filtered.length === 0 && search.trim()) {
+                      handleConsultaAvulsa(search);
+                    }
+                  }}
+                  placeholder="Nº pedido, OS ou externo (Enter p/ consultar Hoya)"
+                  className="pl-9 h-9 font-mono"
+                />
+              </div>
+              {filtered.length === 0 && search.trim() && !isLoading && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 gap-2 shrink-0"
+                  disabled={consultaAvulsaLoading}
+                  onClick={() => handleConsultaAvulsa(search)}
+                >
+                  {consultaAvulsaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  Consultar Hoya
+                </Button>
+              )}
             </div>
           </div>
           <Badge variant="secondary" className="h-9 flex items-center">
@@ -469,7 +348,7 @@ const HoyaTrackingPage: React.FC = () => {
           </Badge>
         </div>
 
-        {/* Loading */}
+        {/* Loading list */}
         {isLoading && (
           <div className="flex items-center justify-center py-12 gap-2">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -477,15 +356,90 @@ const HoyaTrackingPage: React.FC = () => {
           </div>
         )}
 
-        {/* Empty */}
-        {!isLoading && filtered.length === 0 && (
+        {/* Resultado de consulta avulsa (pedido externo) */}
+        {!isLoading && filtered.length === 0 && search.trim() && (consultaAvulsaResult || consultaAvulsaError || consultaAvulsaLoading) && (
+          <Card className="border-dashed">
+            <CardContent className="p-4 space-y-3">
+              {consultaAvulsaLoading && (
+                <div className="flex items-center gap-2 justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="text-sm text-muted-foreground">Consultando Hoya...</span>
+                </div>
+              )}
+              {consultaAvulsaError && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 text-destructive p-3 text-xs flex items-start gap-2">
+                  <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Pedido não encontrado ou erro na Hoya</p>
+                    <p className="mt-0.5 opacity-80">{consultaAvulsaError}</p>
+                  </div>
+                </div>
+              )}
+              {consultaAvulsaResult && consultaAvulsaNumero && (
+                <div className="space-y-3 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <span className="font-semibold text-sm font-mono">Pedido #{consultaAvulsaResult.numeroPedidoHoya}</span>
+                      <Badge variant="outline" className={statusBadge(consultaAvulsaResult.status).color + " text-xs"}>
+                        {consultaAvulsaResult.status}
+                      </Badge>
+                      <span className="text-muted-foreground text-[10px]">(externo)</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={consultaAvulsaXmlLoading}
+                        onClick={() => handleConsultaAvulsaXml("xml", consultaAvulsaNumero)}>
+                        {consultaAvulsaXmlLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileCode className="h-3 w-3" />} XML
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={consultaAvulsaXmlLoading}
+                        onClick={() => handleConsultaAvulsaXml("danfe", consultaAvulsaNumero)}>
+                        {consultaAvulsaXmlLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />} DANFE
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-muted/50 rounded p-3">
+                    {consultaAvulsaResult.osCliente && (<><span className="text-muted-foreground">OS Cliente</span><span className="font-mono">{consultaAvulsaResult.osCliente}</span></>)}
+                    {consultaAvulsaResult.produto && (<><span className="text-muted-foreground">Produto</span><span>{consultaAvulsaResult.produto}</span></>)}
+                    {consultaAvulsaResult.tratamento && (<><span className="text-muted-foreground">Tratamento</span><span>{consultaAvulsaResult.tratamento}</span></>)}
+                    {consultaAvulsaResult.statusProducao && (<><span className="text-muted-foreground">Status Produção</span><span>{consultaAvulsaResult.statusProducao}</span></>)}
+                    {consultaAvulsaResult.dataInclusao && (<><span className="text-muted-foreground">Data Inclusão</span><span>{formatDate(consultaAvulsaResult.dataInclusao)}</span></>)}
+                    {consultaAvulsaResult.rastreio && (<><span className="text-muted-foreground">Rastreio</span><span className="font-mono flex items-center gap-1"><MapPin className="h-3 w-3" />{consultaAvulsaResult.rastreio}</span></>)}
+                  </div>
+                  {consultaAvulsaResult.historico && consultaAvulsaResult.historico.length > 0 && (
+                    <div>
+                      <p className="font-medium text-[10px] uppercase tracking-wide text-muted-foreground mb-2">Histórico Hoya</p>
+                      <div className="relative pl-5 space-y-2">
+                        <div className="absolute left-[7px] top-1 bottom-1 w-0.5 bg-border" />
+                        {consultaAvulsaResult.historico.map((h, i) => (
+                          <div key={i} className="relative">
+                            <div className="absolute -left-5 top-0.5 h-3.5 w-3.5 rounded-full bg-muted border flex items-center justify-center">
+                              <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                            </div>
+                            <p className="font-medium">{h.situacao}</p>
+                            <p className="text-muted-foreground">{formatDate(h.data)}</p>
+                            {h.observacao && <p className="opacity-70">{h.observacao}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Empty (sem resultado local nem avulso) */}
+        {!isLoading && filtered.length === 0 && !consultaAvulsaResult && !consultaAvulsaError && !consultaAvulsaLoading && (
           <Card>
             <CardContent className="py-12 text-center text-muted-foreground">
               <Package className="h-10 w-10 mx-auto mb-3 opacity-50" />
               <p>Nenhum pedido encontrado</p>
+              {search.trim() && <p className="text-xs mt-1">Pressione Enter ou clique "Consultar Hoya" para buscar diretamente no laboratório</p>}
             </CardContent>
           </Card>
         )}
+
 
         {/* Pedidos list */}
         <div className="space-y-2">
