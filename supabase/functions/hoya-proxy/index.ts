@@ -312,6 +312,23 @@ serve(async (req) => {
         const baseUrl = HOYA_BASE_URL.replace(/\/+$/, '');
         url = `${baseUrl}/pedido`;
         
+        // 3) Auto-inject codigoCliente from hoya_empresa_config if not provided
+        if (!pedidoPayload.codigoCliente && params.codEmpresa) {
+          const sbConfig = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+          const { data: empConfig } = await sbConfig
+            .from("hoya_empresa_config")
+            .select("cod_cliente_hoya")
+            .eq("cod_empresa", params.codEmpresa)
+            .eq("ativo", true)
+            .maybeSingle();
+          if (empConfig?.cod_cliente_hoya) {
+            pedidoPayload.codigoCliente = Number(empConfig.cod_cliente_hoya) || empConfig.cod_cliente_hoya;
+            console.log(`[hoya-proxy] [${correlationId}] Auto-injected codigoCliente=${pedidoPayload.codigoCliente} for empresa=${params.codEmpresa}`);
+          } else {
+            console.warn(`[hoya-proxy] [${correlationId}] No cod_cliente_hoya found for empresa=${params.codEmpresa}`);
+          }
+        }
+
         // Ensure all expected nullable fields are present (Hoya .NET deserializer requires explicit nulls)
         pedidoPayload.observacao = pedidoPayload.observacao ?? null;
         pedidoPayload.codigoCliente = pedidoPayload.codigoCliente ?? null;
