@@ -78,6 +78,7 @@ const HoyaTrackingPage: React.FC = () => {
   const [timeline, setTimeline] = useState<StatusHistoryEntry[]>([]);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
   const [pedidoApiData, setPedidoApiData] = useState<Record<string, HoyaPedidoTracking>>({});
+  const [pedidoApiError, setPedidoApiError] = useState<Record<string, string>>({});
   const [loadingPedidoData, setLoadingPedidoData] = useState<string | null>(null);
   const [xmlDialog, setXmlDialog] = useState<{ open: boolean; content: string; title: string }>({ open: false, content: "", title: "" });
   const [loadingXml, setLoadingXml] = useState<string | null>(null);
@@ -163,15 +164,19 @@ const HoyaTrackingPage: React.FC = () => {
       promises.push(
         consultarPedidoHoya(numeroPedido)
           .then((data) => {
-            // Edge function retorna { error } com status 200 quando Hoya retorna 404
-            if ((data as unknown as { error?: string }).error) {
-              setPedidoApiData((prev) => ({ ...prev, [pedidoId]: null as unknown as HoyaPedidoTracking }));
+            // Edge function retorna { error, details } com status 200 quando Hoya retorna erro
+            const raw = data as unknown as { error?: string; details?: { erros?: { mensagem: string }[] }; code?: string };
+            if (raw.error) {
+              // Extrai a mensagem mais amigável possível
+              const detail = raw.details?.erros?.[0]?.mensagem || raw.error;
+              setPedidoApiError((prev) => ({ ...prev, [pedidoId]: detail }));
             } else {
               setPedidoApiData((prev) => ({ ...prev, [pedidoId]: data }));
             }
           })
-          .catch(() => {
-            setPedidoApiData((prev) => ({ ...prev, [pedidoId]: null as unknown as HoyaPedidoTracking }));
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : "Erro ao consultar dados na Hoya.";
+            setPedidoApiError((prev) => ({ ...prev, [pedidoId]: msg }));
           })
           .finally(() => setLoadingPedidoData(null))
       );
@@ -379,13 +384,20 @@ const HoyaTrackingPage: React.FC = () => {
                         }
 
                         if (!apiData) {
-                          // Só mostra aviso se já tentamos buscar (pedidoApiData tem a chave, mas null)
-                          const tried = ped.id in pedidoApiData;
-                          if (!tried) return null;
+                          const errorMsg = pedidoApiError[ped.id];
+                          if (!errorMsg) return null; // ainda não tentamos ou está carregando
+                          const isNotFound = errorMsg.toLowerCase().includes("não encontrado") || errorMsg.toLowerCase().includes("nenhum pedido");
                           return (
-                            <div className="rounded-md bg-muted/30 border border-dashed p-3 text-xs text-muted-foreground flex items-center gap-2">
-                              <Clock className="h-4 w-4 shrink-0" />
-                              <span>Dados do pedido ainda não disponíveis na Hoya. O pedido pode estar sendo processado — tente atualizar o tracking em alguns instantes.</span>
+                            <div className={`rounded-md border p-3 text-xs flex items-start gap-2 ${isNotFound ? "bg-amber-500/10 border-amber-300 text-amber-800" : "bg-destructive/10 border-destructive/30 text-destructive"}`}>
+                              {isNotFound ? (
+                                <Clock className="h-4 w-4 shrink-0 mt-0.5" />
+                              ) : (
+                                <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                              )}
+                              <div>
+                                <p className="font-medium">{isNotFound ? "Pedido ainda em processamento" : "Erro ao consultar Hoya"}</p>
+                                <p className="mt-0.5 opacity-80">{errorMsg}</p>
+                              </div>
                             </div>
                           );
                         }
