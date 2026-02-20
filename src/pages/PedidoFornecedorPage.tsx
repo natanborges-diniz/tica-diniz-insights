@@ -606,10 +606,13 @@ const PedidoFornecedorPage: React.FC = () => {
       });
     } catch (err) {
       console.error("[PedidoFornecedor] Error:", err);
+      // Extract friendly message — HoyaProxyError has .message, plain Error also has .message
+      const errMsg = (err as { message?: string })?.message || "Erro desconhecido ao comunicar com o laboratório.";
       toast({
-        title: "Erro ao enviar pedido",
-        description: err instanceof Error ? err.message : "Erro desconhecido",
+        title: "Erro ao enviar pedido para a Hoya",
+        description: errMsg,
         variant: "destructive",
+        duration: 8000,
       });
     } finally {
       setEnviando(false);
