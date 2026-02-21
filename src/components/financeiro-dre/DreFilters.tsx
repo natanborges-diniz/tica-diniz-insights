@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useEmpresas } from "@/hooks/useEmpresas";
+import { useUserEmpresas } from "@/hooks/useUserEmpresas";
 import { DreFilters as DreFiltersType } from "@/hooks/useFinanceiroDre";
 import { Loader2, AlertCircle } from "lucide-react";
 
@@ -19,7 +19,7 @@ interface Props {
 }
 
 export function DreFilters({ filters, onChange }: Props) {
-  const { empresas, isLoading, error } = useEmpresas();
+  const { empresas, isLoading, error, canSeeAll } = useUserEmpresas();
 
   return (
     <div className="flex flex-wrap gap-4 items-end">
@@ -46,8 +46,8 @@ export function DreFilters({ filters, onChange }: Props) {
               <SelectValue placeholder="Selecione a empresa" />
             )}
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="TODAS">Todas as empresas</SelectItem>
+           <SelectContent>
+            {canSeeAll && <SelectItem value="TODAS">Todas as empresas</SelectItem>}
             {empresas.map((emp) => (
               <SelectItem key={emp.codEmpresa} value={String(emp.codEmpresa)}>
                 {emp.nome}

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useInteligenciaVendas, TabAtiva } from "@/hooks/useInteligenciaVendas";
-import { useEmpresas } from "@/hooks/useEmpresas";
+import { useUserEmpresas } from "@/hooks/useUserEmpresas";
 import { DiretrizesIA } from "@/components/ranking/DiretrizesIA";
 import { InteligenciaKPICards } from "@/components/inteligencia/InteligenciaKPICards";
 import { InteligenciaLojasTable } from "@/components/inteligencia/InteligenciaLojasTable";
@@ -63,7 +63,7 @@ export default function InteligenciaVendasDashboard() {
     gerarAnaliseIA,
   } = useInteligenciaVendas();
 
-  const { empresas } = useEmpresas();
+  const { empresas } = useUserEmpresas();
 
   const handleTabChange = (value: string) => {
     setTabAtiva(value as TabAtiva);

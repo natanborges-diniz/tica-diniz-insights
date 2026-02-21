@@ -2,7 +2,7 @@
 // Hook para Central de IA - gerenciamento de estado e coleta de dados
 
 import { useState, useCallback, useEffect } from "react";
-import { useEmpresas } from "./useEmpresas";
+import { useUserEmpresas } from "./useUserEmpresas";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { 
@@ -30,7 +30,7 @@ export interface CentralIAState {
 }
 
 export function useCentralIA() {
-  const { empresas, isLoading: loadingEmpresas } = useEmpresas();
+  const { empresas, isLoading: loadingEmpresas } = useUserEmpresas();
   const { defaultEmpresa } = useDefaultEmpresa();
   
   const hoje = new Date();

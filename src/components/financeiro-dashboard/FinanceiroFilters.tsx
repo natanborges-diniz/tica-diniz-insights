@@ -2,7 +2,7 @@
 
 import React from "react";
 import { FinanceiroFilters as FiltersType, TipoFilter, SituacaoFilter, CampoDataFilter } from "../../hooks/useFinanceiroParcelas";
-import { useEmpresas } from "../../hooks/useEmpresas";
+import { useUserEmpresas } from "../../hooks/useUserEmpresas";
 import {
   Select,
   SelectContent,
@@ -20,7 +20,7 @@ interface FinanceiroFiltersProps {
 }
 
 export function FinanceiroFilters({ filters, onChange }: FinanceiroFiltersProps) {
-  const { empresas, isLoading, error } = useEmpresas();
+  const { empresas, isLoading, error, canSeeAll } = useUserEmpresas();
 
   return (
     <div className="flex flex-wrap gap-4 items-end">
@@ -50,7 +50,7 @@ export function FinanceiroFilters({ filters, onChange }: FinanceiroFiltersProps)
             )}
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="TODAS">Todas as empresas</SelectItem>
+            {canSeeAll && <SelectItem value="TODAS">Todas as empresas</SelectItem>}
             {empresas.map((e) => (
               <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
                 {e.nome}

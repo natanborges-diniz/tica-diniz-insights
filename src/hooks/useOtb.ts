@@ -2,7 +2,7 @@
 // Hook para módulo OTB (Open to Buy) - cálculo de necessidades de compra
 
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { useEmpresas } from "./useEmpresas";
+import { useUserEmpresas } from "./useUserEmpresas";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { getAnaliseSku, AnaliseSku } from "@/services/vendasService";
 import { toast } from "@/hooks/use-toast";
@@ -104,7 +104,7 @@ interface MapeamentoFornecedor {
 }
 
 export function useOtb() {
-  const { empresas, isLoading: loadingEmpresas } = useEmpresas();
+  const { empresas, isLoading: loadingEmpresas } = useUserEmpresas();
   
   // Período padrão: últimos 180 dias (base para projeção)
   const hoje = new Date();
