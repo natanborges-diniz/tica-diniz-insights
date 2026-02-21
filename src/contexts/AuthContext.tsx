@@ -56,7 +56,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === "TOKEN_REFRESHED" && !session) {
-          // Token refresh failed — session expired
           toast.error("Sua sessão expirou. Faça login novamente.", { duration: 6000 });
           setUser(null);
           setProfile(null);
@@ -73,13 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         if (session?.user) {
           setUser(session.user);
-          setTimeout(() => loadUserData(session.user), 0);
+          // Load user data and ONLY set isLoading=false after it completes
+          loadUserData(session.user).finally(() => setIsLoading(false));
         } else {
           setUser(null);
           setProfile(null);
           setRoles([]);
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     );
 
