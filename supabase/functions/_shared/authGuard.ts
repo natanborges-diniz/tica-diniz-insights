@@ -50,18 +50,19 @@ export async function authGuard(
     global: { headers: { Authorization: authHeader } },
   });
 
-  // Validate JWT via getClaims
-  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+  // Validate JWT via getUser
+  const { data: userData, error: userError } = await supabase.auth.getUser(token);
 
-  if (claimsError || !claimsData?.claims) {
+  if (userError || !userData?.user) {
+    console.error("[authGuard] getUser failed:", userError?.message);
     throw new Response(
       JSON.stringify({ error: "Unauthorized — token inválido" }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
-  const userId = claimsData.claims.sub as string;
-  const email = claimsData.claims.email as string | undefined;
+  const userId = userData.user.id;
+  const email = userData.user.email;
 
   if (!userId) {
     throw new Response(
