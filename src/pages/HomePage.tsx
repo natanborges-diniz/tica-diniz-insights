@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain } from "lucide-react";
+import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { BridgeStatusBanner } from "@/components/ui/bridge-status-banner";
@@ -95,6 +95,11 @@ export default function HomePage() {
         />
       )}
 
+      {permLoading ? (
+        <div className="flex items-center justify-center p-8">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      ) : (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {modules.filter((mod) => hasAccess(mod.key as any)).map((mod) => {
           const Icon = mod.icon;
@@ -117,6 +122,7 @@ export default function HomePage() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
