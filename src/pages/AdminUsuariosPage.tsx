@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,7 @@ interface RoleRow {
 interface ModulePermRow {
   user_id: string;
   module: string;
-  enabled: boolean;
+  access_level: string;
 }
 
 interface EmpresaPermRow {
@@ -222,7 +223,7 @@ function UserCard({
   onSave: (data: {
     nome: string;
     roles: AppRole[];
-    modules: Record<string, boolean>;
+    modules: Record<string, string>;
     empresaCods: number[];
   }) => Promise<void>;
   onResetPassword: () => void;
@@ -233,10 +234,10 @@ function UserCard({
   // Draft state
   const [draftName, setDraftName] = useState(profile.nome || "");
   const [draftRoles, setDraftRoles] = useState<AppRole[]>(serverRoles);
-  const [draftModules, setDraftModules] = useState<Record<string, boolean>>(() => {
-    const map: Record<string, boolean> = {};
-    ALL_MODULES.forEach(m => { map[m.key] = false; });
-    serverModulePerms.forEach(p => { map[p.module] = p.enabled; });
+  const [draftModules, setDraftModules] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    ALL_MODULES.forEach(m => { map[m.key] = "nenhum"; });
+    serverModulePerms.forEach(p => { map[p.module] = p.access_level; });
     return map;
   });
   const [draftEmpresas, setDraftEmpresas] = useState<number[]>(
@@ -247,9 +248,9 @@ function UserCard({
   useEffect(() => {
     setDraftName(profile.nome || "");
     setDraftRoles(serverRoles);
-    const map: Record<string, boolean> = {};
-    ALL_MODULES.forEach(m => { map[m.key] = false; });
-    serverModulePerms.forEach(p => { map[p.module] = p.enabled; });
+    const map: Record<string, string> = {};
+    ALL_MODULES.forEach(m => { map[m.key] = "nenhum"; });
+    serverModulePerms.forEach(p => { map[p.module] = p.access_level; });
     setDraftModules(map);
     setDraftEmpresas(serverEmpresaPerms.map(p => p.cod_empresa));
   }, [profile, serverRoles, serverModulePerms, serverEmpresaPerms]);
@@ -260,9 +261,9 @@ function UserCard({
   const hasChanges = useMemo(() => {
     if (draftName !== (profile.nome || "")) return true;
     if (JSON.stringify([...draftRoles].sort()) !== JSON.stringify([...serverRoles].sort())) return true;
-    const serverModMap: Record<string, boolean> = {};
-    ALL_MODULES.forEach(m => { serverModMap[m.key] = false; });
-    serverModulePerms.forEach(p => { serverModMap[p.module] = p.enabled; });
+    const serverModMap: Record<string, string> = {};
+    ALL_MODULES.forEach(m => { serverModMap[m.key] = "nenhum"; });
+    serverModulePerms.forEach(p => { serverModMap[p.module] = p.access_level; });
     if (JSON.stringify(draftModules) !== JSON.stringify(serverModMap)) return true;
     const serverEmpCods = serverEmpresaPerms.map(p => p.cod_empresa).sort((a, b) => a - b);
     const draftEmpCods = [...draftEmpresas].sort((a, b) => a - b);
@@ -273,9 +274,9 @@ function UserCard({
   const handleDiscard = () => {
     setDraftName(profile.nome || "");
     setDraftRoles(serverRoles);
-    const map: Record<string, boolean> = {};
-    ALL_MODULES.forEach(m => { map[m.key] = false; });
-    serverModulePerms.forEach(p => { map[p.module] = p.enabled; });
+    const map: Record<string, string> = {};
+    ALL_MODULES.forEach(m => { map[m.key] = "nenhum"; });
+    serverModulePerms.forEach(p => { map[p.module] = p.access_level; });
     setDraftModules(map);
     setDraftEmpresas(serverEmpresaPerms.map(p => p.cod_empresa));
   };
@@ -303,8 +304,8 @@ function UserCard({
     );
   };
 
-  const toggleModule = (key: string) => {
-    setDraftModules(prev => ({ ...prev, [key]: !prev[key] }));
+  const setModuleLevel = (key: string, level: string) => {
+    setDraftModules(prev => ({ ...prev, [key]: level }));
   };
 
   const toggleEmpresa = (cod: number) => {
@@ -323,7 +324,7 @@ function UserCard({
 
   const moduleCount = isAdminUser
     ? ALL_MODULES.length
-    : Object.values(draftModules).filter(Boolean).length;
+    : Object.values(draftModules).filter(v => v !== "nenhum").length;
   const empresaCount = draftEmpresas.length;
 
   return (
@@ -438,23 +439,37 @@ function UserCard({
 
             {/* Column 2: Telas Visíveis */}
             <div>
-              <SectionHeader icon={Eye} title="Telas Visíveis" description="Quais módulos aparecem no menu" />
-              <div className="space-y-1.5">
+              <SectionHeader icon={Eye} title="Telas Visíveis" description="Nível de acesso por módulo" />
+              <div className="space-y-2">
                 {ALL_MODULES.map((mod) => {
-                  const enabled = isAdminUser || draftModules[mod.key];
+                  const level = isAdminUser ? "total" : (draftModules[mod.key] || "nenhum");
                   return (
-                    <label key={mod.key} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-accent/50 cursor-pointer transition-colors">
-                      <Checkbox
-                        checked={enabled}
-                        disabled={isAdminUser}
-                        onCheckedChange={() => toggleModule(mod.key)}
-                        className="h-3.5 w-3.5"
-                      />
-                      <div>
-                        <span className="text-sm">{mod.label}</span>
-                        <span className="text-[10px] text-muted-foreground ml-1.5">{mod.desc}</span>
+                    <div key={mod.key} className="p-2 rounded-md border">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div>
+                          <span className="text-sm font-medium">{mod.label}</span>
+                          <span className="text-[10px] text-muted-foreground ml-1.5">{mod.desc}</span>
+                        </div>
                       </div>
-                    </label>
+                      <div className="flex gap-1">
+                        {(["nenhum", "consulta", "edita", "total"] as const).map((lvl) => (
+                          <button
+                            key={lvl}
+                            disabled={isAdminUser}
+                            onClick={() => setModuleLevel(mod.key, lvl)}
+                            className={cn(
+                              "px-2 py-0.5 text-[11px] rounded-md border transition-colors capitalize",
+                              level === lvl
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background text-muted-foreground border-border hover:bg-accent/50",
+                              isAdminUser && "opacity-50 cursor-not-allowed"
+                            )}
+                          >
+                            {lvl}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -540,7 +555,7 @@ export default function AdminUsuariosPage() {
     const [profilesRes, rolesRes, permsRes, empresaPermsRes] = await Promise.all([
       supabase.from("profiles").select("id, email, nome, cod_empresa"),
       supabase.from("user_roles").select("user_id, role"),
-      supabase.from("user_module_permissions").select("user_id, module, enabled"),
+      supabase.from("user_module_permissions").select("user_id, module, access_level"),
       supabase.from("user_empresa_permissions").select("user_id, cod_empresa"),
     ]);
     if (profilesRes.data) setProfiles(profilesRes.data);
@@ -566,7 +581,7 @@ export default function AdminUsuariosPage() {
 
   const handleSaveUser = async (
     userId: string,
-    data: { nome: string; roles: AppRole[]; modules: Record<string, boolean>; empresaCods: number[] }
+    data: { nome: string; roles: AppRole[]; modules: Record<string, string>; empresaCods: number[] }
   ) => {
     const currentProfile = profiles.find(p => p.id === userId);
     const currentRoles = userRoles.filter(r => r.user_id === userId).map(r => r.role);
@@ -608,16 +623,16 @@ export default function AdminUsuariosPage() {
       );
     }
 
-    // 3. Save modules
+    // 3. Save modules (access_level)
     for (const mod of ALL_MODULES) {
-      const serverEnabled = currentModules.find(p => p.module === mod.key)?.enabled ?? false;
-      const draftEnabled = data.modules[mod.key] ?? false;
-      if (draftEnabled !== serverEnabled) {
+      const serverLevel = currentModules.find(p => p.module === mod.key)?.access_level ?? "nenhum";
+      const draftLevel = data.modules[mod.key] ?? "nenhum";
+      if (draftLevel !== serverLevel) {
         promises.push(
           (async () => {
             const { error } = await supabase
               .from("user_module_permissions")
-              .upsert({ user_id: userId, module: mod.key, enabled: draftEnabled }, { onConflict: "user_id,module" });
+              .upsert({ user_id: userId, module: mod.key, access_level: draftLevel } as any, { onConflict: "user_id,module" });
             if (error) throw error;
           })()
         );

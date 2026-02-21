@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import ModuleGuard from "@/components/auth/ModuleGuard";
 import LoginPage from "@/components/auth/LoginPage";
 import { AppLayout } from "@/components/layout/AppLayout";
 import HomePage from "./pages/HomePage";
@@ -52,28 +53,38 @@ const App = () => (
                 <Route path="/" element={<Navigate to="/home" replace />} />
 
                 {/* Vendas */}
-                <Route path="/vendas" element={<SalesDashboard />} />
-                <Route path="/vendas/familia" element={<SalesFamilyDashboard />} />
-                <Route path="/vendas-familia" element={<Navigate to="/vendas/familia" replace />} />
-                <Route path="/vendas/inteligencia" element={<InteligenciaVendasDashboard />} />
+                <Route element={<ModuleGuard module="vendas" />}>
+                  <Route path="/vendas" element={<SalesDashboard />} />
+                  <Route path="/vendas/familia" element={<SalesFamilyDashboard />} />
+                  <Route path="/vendas-familia" element={<Navigate to="/vendas/familia" replace />} />
+                  <Route path="/vendas/inteligencia" element={<InteligenciaVendasDashboard />} />
+                </Route>
 
                 {/* Estoque */}
-                <Route path="/estoque" element={<VisaoEstoquePage />} />
-                <Route path="/estoque/acoes" element={<OQueFazerPage />} />
-                <Route path="/estoque/otb" element={<AnaliseOTBPage />} />
+                <Route element={<ModuleGuard module="estoque" />}>
+                  <Route path="/estoque" element={<VisaoEstoquePage />} />
+                  <Route path="/estoque/acoes" element={<OQueFazerPage />} />
+                  <Route path="/estoque/otb" element={<AnaliseOTBPage />} />
+                </Route>
 
                 {/* Monitor */}
-                <Route path="/os" element={<OsDashboard />} />
-                <Route path="/os/pedido" element={<PedidoFornecedorPage />} />
-                <Route path="/os/tracking" element={<HoyaTrackingPage />} />
+                <Route element={<ModuleGuard module="monitor" />}>
+                  <Route path="/os" element={<OsDashboard />} />
+                  <Route path="/os/pedido" element={<PedidoFornecedorPage />} />
+                  <Route path="/os/tracking" element={<HoyaTrackingPage />} />
+                </Route>
 
                 {/* Financeiro */}
-                <Route path="/financeiro" element={<FinanceiroDashboard />} />
-                <Route path="/financeiro/dre" element={<FinanceiroDreDashboard />} />
-                <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaDashboard />} />
+                <Route element={<ModuleGuard module="financeiro" />}>
+                  <Route path="/financeiro" element={<FinanceiroDashboard />} />
+                  <Route path="/financeiro/dre" element={<FinanceiroDreDashboard />} />
+                  <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaDashboard />} />
+                </Route>
 
                 {/* Config */}
-                <Route path="/config/metas" element={<MetasConfigDashboard />} />
+                <Route element={<ModuleGuard module="config" />}>
+                  <Route path="/config/metas" element={<MetasConfigDashboard />} />
+                </Route>
 
                 {/* Admin */}
                 <Route path="/admin/usuarios" element={<AdminUsuariosPage />} />
@@ -84,7 +95,9 @@ const App = () => (
                 <Route path="/admin/fornecedores" element={<AdminFornecedoresPage />} />
 
                 {/* Central de IA */}
-                <Route path="/ia" element={<CentralIADashboard />} />
+                <Route element={<ModuleGuard module="ia" />}>
+                  <Route path="/ia" element={<CentralIADashboard />} />
+                </Route>
               </Route>
             </Route>
 

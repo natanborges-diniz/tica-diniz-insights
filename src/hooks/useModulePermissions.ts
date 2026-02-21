@@ -3,19 +3,30 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { ModuleKey } from "@/components/layout/AppLayout";
 
+export type AccessLevel = "nenhum" | "consulta" | "edita" | "total";
+
 const ALL_MODULES: ModuleKey[] = ["vendas", "estoque", "monitor", "financeiro", "ia", "config"];
+
+const LEVEL_HIERARCHY: Record<AccessLevel, number> = {
+  nenhum: 0,
+  consulta: 1,
+  edita: 2,
+  total: 3,
+};
 
 interface ModulePermissions {
   allowedModules: ModuleKey[];
   isLoading: boolean;
-  /** Admin sempre tem acesso total */
   hasAccess: (module: ModuleKey) => boolean;
+  getAccessLevel: (module: ModuleKey) => AccessLevel;
+  canEdit: (module: ModuleKey) => boolean;
+  canInsert: (module: ModuleKey) => boolean;
   refetch: () => void;
 }
 
 export function useModulePermissions(): ModulePermissions {
   const { user, isAdmin, isLoading: authLoading } = useAuth();
-  const [permissions, setPermissions] = useState<Record<string, boolean>>({});
+  const [permissions, setPermissions] = useState<Record<string, AccessLevel>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchPermissions = useCallback(async () => {
@@ -25,10 +36,9 @@ export function useModulePermissions(): ModulePermissions {
       return;
     }
 
-    // Admins têm acesso a tudo
     if (isAdmin) {
-      const all: Record<string, boolean> = {};
-      ALL_MODULES.forEach(m => { all[m] = true; });
+      const all: Record<string, AccessLevel> = {};
+      ALL_MODULES.forEach(m => { all[m] = "total"; });
       setPermissions(all);
       setIsLoading(false);
       return;
@@ -36,13 +46,13 @@ export function useModulePermissions(): ModulePermissions {
 
     const { data } = await supabase
       .from("user_module_permissions")
-      .select("module, enabled")
+      .select("module, access_level")
       .eq("user_id", user.id);
 
-    const perms: Record<string, boolean> = {};
+    const perms: Record<string, AccessLevel> = {};
     if (data) {
-      data.forEach(row => {
-        perms[row.module] = row.enabled;
+      data.forEach((row: any) => {
+        perms[row.module] = row.access_level as AccessLevel;
       });
     }
     setPermissions(perms);
@@ -53,15 +63,30 @@ export function useModulePermissions(): ModulePermissions {
     if (!authLoading) fetchPermissions();
   }, [authLoading, fetchPermissions]);
 
-  const hasAccess = useCallback(
-    (module: ModuleKey) => {
-      if (isAdmin) return true;
-      return permissions[module] === true;
+  const getAccessLevel = useCallback(
+    (module: ModuleKey): AccessLevel => {
+      if (isAdmin) return "total";
+      return permissions[module] || "nenhum";
     },
     [isAdmin, permissions]
   );
 
+  const hasAccess = useCallback(
+    (module: ModuleKey) => getAccessLevel(module) !== "nenhum",
+    [getAccessLevel]
+  );
+
+  const canEdit = useCallback(
+    (module: ModuleKey) => LEVEL_HIERARCHY[getAccessLevel(module)] >= LEVEL_HIERARCHY["edita"],
+    [getAccessLevel]
+  );
+
+  const canInsert = useCallback(
+    (module: ModuleKey) => getAccessLevel(module) === "total",
+    [getAccessLevel]
+  );
+
   const allowedModules = ALL_MODULES.filter(m => hasAccess(m));
 
-  return { allowedModules, isLoading: isLoading || authLoading, hasAccess, refetch: fetchPermissions };
+  return { allowedModules, isLoading: isLoading || authLoading, hasAccess, getAccessLevel, canEdit, canInsert, refetch: fetchPermissions };
 }
