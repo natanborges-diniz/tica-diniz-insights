@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { BridgeStatusBanner } from "@/components/ui/bridge-status-banner";
 import { useBridgeStatus } from "@/hooks/useBridgeStatus";
 import { supabase } from "@/integrations/supabase/client";
+import { useModulePermissions } from "@/hooks/useModulePermissions";
 
 const modules = [
   {
@@ -56,6 +57,7 @@ export default function HomePage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const bridgeStatus = useBridgeStatus();
+  const { hasAccess, isLoading: permLoading } = useModulePermissions();
   const [retrying, setRetrying] = useState(false);
 
   const handleRetry = useCallback(async () => {
@@ -94,7 +96,7 @@ export default function HomePage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {modules.map((mod) => {
+        {modules.filter((mod) => hasAccess(mod.key as any)).map((mod) => {
           const Icon = mod.icon;
           return (
             <Card
