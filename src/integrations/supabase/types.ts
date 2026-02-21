@@ -1046,6 +1046,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_module_permissions: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          module: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          module: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          module?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -1290,6 +1317,10 @@ export type Database = {
       cleanup_rate_limits: { Args: never; Returns: undefined }
       executar_transformacao_dw: { Args: never; Returns: Json }
       get_user_empresa: { Args: { _user_id: string }; Returns: number }
+      has_module_access: {
+        Args: { _module: string; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
