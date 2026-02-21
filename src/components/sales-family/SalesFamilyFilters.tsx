@@ -4,10 +4,12 @@ import { Label } from '@/components/ui/label';
 import { AnaliseFamiliaVendedor } from '@/services/vendasService';
 import { Empresa } from '@/services/empresaService';
 
+
 interface SalesFamilyFiltersProps {
   empresas: Empresa[];
   selectedEmpresaId: number | null;
-  onEmpresaChange: (id: number) => void;
+  onEmpresaChange: (id: number | null) => void;
+  canSeeAll?: boolean;
   dataInicio: string;
   dataFim: string;
   onDataInicioChange: (value: string) => void;
@@ -22,7 +24,7 @@ interface SalesFamilyFiltersProps {
 }
 
 export function SalesFamilyFilters({
-  empresas, selectedEmpresaId, onEmpresaChange,
+  empresas, selectedEmpresaId, onEmpresaChange, canSeeAll,
   dataInicio, dataFim, onDataInicioChange, onDataFimChange,
   dados, filtroVendedor, setFiltroVendedor,
   filtroFamilia, setFiltroFamilia, filtroBuscaTexto, setFiltroBuscaTexto,
@@ -41,7 +43,8 @@ export function SalesFamilyFilters({
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       <div className="space-y-2">
         <Label htmlFor="empresa">Empresa</Label>
-        <select id="empresa" value={selectedEmpresaId ?? ''} onChange={(e) => onEmpresaChange(Number(e.target.value))} className="w-full px-3 py-2 border rounded-md bg-background">
+        <select id="empresa" value={selectedEmpresaId !== null ? String(selectedEmpresaId) : 'ALL'} onChange={(e) => onEmpresaChange(e.target.value === 'ALL' ? null : Number(e.target.value))} className="w-full px-3 py-2 border rounded-md bg-background">
+          {canSeeAll && <option value="ALL">Todas as Empresas</option>}
           {empresas.map((emp) => (<option key={emp.codEmpresa} value={emp.codEmpresa}>{emp.nome}</option>))}
         </select>
       </div>

@@ -63,7 +63,7 @@ export default function InteligenciaVendasDashboard() {
     gerarAnaliseIA,
   } = useInteligenciaVendas();
 
-  const { empresas } = useUserEmpresas();
+  const { empresas, canSeeAll } = useUserEmpresas();
 
   const handleTabChange = (value: string) => {
     setTabAtiva(value as TabAtiva);
@@ -108,7 +108,7 @@ export default function InteligenciaVendasDashboard() {
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ALL">Todas as Empresas</SelectItem>
+                  {canSeeAll && <SelectItem value="ALL">Todas as Empresas</SelectItem>}
                   {empresas.map((emp) => (
                     <SelectItem key={emp.codEmpresa} value={String(emp.codEmpresa)}>
                       {emp.nome}

@@ -28,7 +28,7 @@ export default function SalesFamilyDashboard() {
   const { codEmpresa: profileEmpresa } = useDefaultEmpresa();
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<number | null>(null);
 
-  const { empresas, isLoading: loadingEmpresas, error: errorEmpresas } = useUserEmpresas();
+  const { empresas, isLoading: loadingEmpresas, error: errorEmpresas, canSeeAll } = useUserEmpresas();
 
   // Selecionar empresa do profile quando disponível
   const [dataInicio, setDataInicio] = useState(getFirstDayOfMonth);
@@ -139,6 +139,7 @@ export default function SalesFamilyDashboard() {
                   empresas={empresas}
                   selectedEmpresaId={selectedEmpresaId}
                   onEmpresaChange={setSelectedEmpresaId}
+                  canSeeAll={canSeeAll}
                   dataInicio={dataInicio}
                   dataFim={dataFim}
                   onDataInicioChange={setDataInicio}
@@ -175,7 +176,7 @@ export default function SalesFamilyDashboard() {
             )}
 
             {/* Conteúdo quando dados carregados */}
-            {!isLoading && !error && selectedEmpresaId !== null && (
+            {!isLoading && !error && (
               <>
                 <SalesFamilyKPICards dados={filteredData} />
                 <SalesFamilyChart dados={filteredData} />
