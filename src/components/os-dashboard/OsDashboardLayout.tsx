@@ -111,7 +111,7 @@ type Props = {
   empresasDisponiveis: Empresa[];
   empresasLoading: boolean;
   defaultCodEmpresa: number | null;
-  isAdmin: boolean;
+  canSeeAll: boolean;
 };
 
 // Module-level cache para seleções de layout — sobrevive à navegação
@@ -174,7 +174,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
   empresasDisponiveis,
   empresasLoading,
   defaultCodEmpresa,
-  isAdmin,
+  canSeeAll,
 }) => {
   const hoje = new Date();
   const inicio30 = new Date(hoje);
@@ -184,7 +184,7 @@ export const OsDashboardLayout: React.FC<Props> = ({
   const [dataInicio, setDataInicio] = useState<Date>(_layoutCache.dataInicio ?? inicio30);
   const [dataFim, setDataFim] = useState<Date>(_layoutCache.dataFim ?? hoje);
   const [empresaSelecionada, setEmpresaSelecionada] = useState<string>(
-    _layoutCache.empresa ?? (isAdmin ? "ALL" : (defaultCodEmpresa ? String(defaultCodEmpresa) : ""))
+    _layoutCache.empresa ?? (canSeeAll ? "ALL" : (defaultCodEmpresa ? String(defaultCodEmpresa) : ""))
   );
 
   // Pagination
@@ -265,8 +265,8 @@ export const OsDashboardLayout: React.FC<Props> = ({
                   <SelectValue placeholder="Selecione a empresa" />
                 </SelectTrigger>
                 <SelectContent>
-                  {isAdmin && (
-                    <SelectItem value="ALL">⚠ Todas (admin)</SelectItem>
+                  {canSeeAll && (
+                    <SelectItem value="ALL">Todas as Empresas</SelectItem>
                   )}
                   {empresasDisponiveis.map((emp) => (
                     <SelectItem key={emp.codEmpresa} value={String(emp.codEmpresa)}>

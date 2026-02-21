@@ -8,6 +8,7 @@ interface MetasFiltersProps {
   filters: Filters;
   setFilters: (filters: Filters) => void;
   empresas: Empresa[];
+  canSeeAll?: boolean;
   onBuscar: () => void;
   loading?: boolean;
 }
@@ -27,7 +28,7 @@ const MESES = [
   { value: 12, label: "Dezembro" },
 ];
 
-export function MetasFilters({ filters, setFilters, empresas, onBuscar, loading }: MetasFiltersProps) {
+export function MetasFilters({ filters, setFilters, empresas, canSeeAll, onBuscar, loading }: MetasFiltersProps) {
   const anoAtual = new Date().getFullYear();
   const anos = [anoAtual - 1, anoAtual, anoAtual + 1];
 
@@ -94,7 +95,7 @@ export function MetasFilters({ filters, setFilters, empresas, onBuscar, loading 
             <SelectValue placeholder="Selecione..." />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="ALL">Todas</SelectItem>
+            {canSeeAll && <SelectItem value="ALL">Todas</SelectItem>}
             {empresas.map(emp => (
               <SelectItem key={emp.codEmpresa} value={String(emp.codEmpresa)}>
                 {emp.nome}

@@ -107,7 +107,7 @@ function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
 const OsDashboardPage: React.FC = () => {
   const { isAdmin, codEmpresa } = useAuth();
   const bridge = useBridgeStatus();
-  const { empresas, isLoading: empresasLoading } = useUserEmpresas();
+  const { empresas, isLoading: empresasLoading, canSeeAll } = useUserEmpresas();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const {
@@ -275,7 +275,7 @@ const OsDashboardPage: React.FC = () => {
       empresasDisponiveis={empresas}
       empresasLoading={empresasLoading}
       defaultCodEmpresa={codEmpresa}
-      isAdmin={isAdmin}
+      canSeeAll={canSeeAll}
     />
   );
 };
