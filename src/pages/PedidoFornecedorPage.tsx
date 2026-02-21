@@ -830,7 +830,8 @@ const PedidoFornecedorPage: React.FC = () => {
   }
 
   return (
-    <ScrollArea className="h-full">
+    <div className="h-full flex flex-col">
+    <ScrollArea className="flex-1">
       <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -848,29 +849,7 @@ const PedidoFornecedorPage: React.FC = () => {
 
         <Separator />
 
-        {/* FASE 5: Confirmation status summary */}
-        {(produtoSelecionado || prescriptionAutoFilled) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {produtoSelecionado && autoFillSource && autoFillSource !== "manual" && (
-              <AutoFillConfirmBanner
-                type="product"
-                confirmed={confirmedProduct}
-                source={autoFillSource}
-                onConfirm={() => setConfirmedProduct(true)}
-                onEdit={() => setConfirmedProduct(false)}
-              />
-            )}
-            {prescriptionAutoFilled && (
-              <AutoFillConfirmBanner
-                type="prescription"
-                confirmed={confirmedPrescription}
-                source={null}
-                onConfirm={() => setConfirmedPrescription(true)}
-                onEdit={() => setConfirmedPrescription(false)}
-              />
-            )}
-          </div>
-        )}
+        {/* Confirmation banners removed — now in sticky footer */}
 
         {/* Lentes da OS */}
         {(os.lenteOdDescricao || os.lenteOeDescricao) && (
@@ -1484,23 +1463,48 @@ const PedidoFornecedorPage: React.FC = () => {
           </Alert>
         )}
 
-        {/* FASE 5: Missing confirmations warning */}
-        {produtoSelecionado && !isReadyToSubmit && (
-          <Alert className="border-primary/30 bg-primary/5">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            <AlertDescription>
-              <p className="text-sm font-medium text-primary">Confirmação necessária antes de enviar:</p>
-              <ul className="list-disc list-inside text-xs space-y-0.5 text-muted-foreground mt-1">
-                {!confirmedProduct && autoFillSource !== "manual" && <li>Confirme o <strong>produto</strong> pré-selecionado</li>}
-                {!confirmedPrescription && prescriptionAutoFilled && <li>Confirme a <strong>prescrição</strong> pré-preenchida</li>}
-              </ul>
-            </AlertDescription>
-          </Alert>
-        )}
+      </div>
+    </ScrollArea>
 
-        {/* Submit */}
-        <div className="flex justify-end gap-3 pb-8">
-          <Button variant="outline" onClick={() => navigate(-1)}>Voltar à Receita</Button>
+      {/* Sticky Footer — confirmações + enviar */}
+      <div className="shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-[0_-4px_12px_rgba(0,0,0,0.08)]">
+        <div className="max-w-5xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 flex-wrap">
+          {produtoSelecionado && autoFillSource && autoFillSource !== "manual" && (
+            confirmedProduct ? (
+              <button
+                onClick={() => setConfirmedProduct(false)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-500/20 transition-colors"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" /> Produto ✓
+              </button>
+            ) : (
+              <button
+                onClick={() => setConfirmedProduct(true)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-500/10 px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-500/20 transition-colors animate-pulse"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" /> Confirmar Produto
+              </button>
+            )
+          )}
+          {prescriptionAutoFilled && (
+            confirmedPrescription ? (
+              <button
+                onClick={() => setConfirmedPrescription(false)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-500/20 transition-colors"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" /> Prescrição ✓
+              </button>
+            ) : (
+              <button
+                onClick={() => setConfirmedPrescription(true)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-500/10 px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-500/20 transition-colors animate-pulse"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" /> Confirmar Prescrição
+              </button>
+            )
+          )}
+          <div className="flex-1" />
+          <Button variant="outline" size="sm" onClick={() => navigate(-1)}>Voltar</Button>
           <Button
             onClick={handleEnviarPedido}
             disabled={enviando || enviandoCooldown || !produtoSelecionado || !isReadyToSubmit}
@@ -1514,7 +1518,7 @@ const PedidoFornecedorPage: React.FC = () => {
           </Button>
         </div>
       </div>
-    </ScrollArea>
+    </div>
   );
 };
 
