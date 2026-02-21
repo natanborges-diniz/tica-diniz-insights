@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useEmpresas } from '@/hooks/useEmpresas';
+import { useUserEmpresas } from '@/hooks/useUserEmpresas';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface SalesFiltersProps {
@@ -37,7 +37,7 @@ export function SalesFilters({
   isLoading,
   alertaPeriodo
 }: SalesFiltersProps) {
-  const { empresas, isLoading: empresasLoading } = useEmpresas();
+  const { empresas, isLoading: empresasLoading, canSeeAll } = useUserEmpresas();
 
   return (
     <Card>
@@ -63,7 +63,7 @@ export function SalesFilters({
                   )}
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ALL">Todas as Empresas</SelectItem>
+                  {canSeeAll && <SelectItem value="ALL">Todas as Empresas</SelectItem>}
                   {empresas.map((e) => (
                     <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
                       {e.nome}

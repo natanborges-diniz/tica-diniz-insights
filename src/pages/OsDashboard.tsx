@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { CampoDataOs } from "@/services/osService";
 import { useBridgeStatus } from "@/hooks/useBridgeStatus";
-import { useEmpresas } from "@/hooks/useEmpresas";
+import { useUserEmpresas } from "@/hooks/useUserEmpresas";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -107,7 +107,7 @@ function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
 const OsDashboardPage: React.FC = () => {
   const { isAdmin, codEmpresa } = useAuth();
   const bridge = useBridgeStatus();
-  const { empresas, isLoading: empresasLoading } = useEmpresas();
+  const { empresas, isLoading: empresasLoading } = useUserEmpresas();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const {

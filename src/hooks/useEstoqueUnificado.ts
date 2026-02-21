@@ -7,7 +7,7 @@
 // - Dados são MESCLADOS pelo cod_sku para ter visão completa
 
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { useEmpresas } from "./useEmpresas";
+import { useUserEmpresas } from "./useUserEmpresas";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
 import { getAnaliseSku, AnaliseSku } from "@/services/vendasService";
@@ -127,7 +127,7 @@ interface MapeamentoFornecedor {
 // ============================================
 
 export function useEstoqueUnificado() {
-  const { empresas, isLoading: loadingEmpresas } = useEmpresas();
+  const { empresas, isLoading: loadingEmpresas } = useUserEmpresas();
   const { defaultEmpresa } = useDefaultEmpresa();
   
   // Período padrão: últimos 180 dias

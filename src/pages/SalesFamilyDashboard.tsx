@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useEmpresas } from '@/hooks/useEmpresas';
+import { useUserEmpresas } from '@/hooks/useUserEmpresas';
 import { useDefaultEmpresa } from '@/hooks/useDefaultEmpresa';
 import { useAnaliseVendasFamilia } from '@/hooks/useAnaliseVendasFamilia';
 import { SalesFamilyFilters } from '@/components/sales-family/SalesFamilyFilters';
@@ -28,7 +28,7 @@ export default function SalesFamilyDashboard() {
   const { codEmpresa: profileEmpresa } = useDefaultEmpresa();
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<number | null>(null);
 
-  const { empresas, isLoading: loadingEmpresas, error: errorEmpresas } = useEmpresas();
+  const { empresas, isLoading: loadingEmpresas, error: errorEmpresas } = useUserEmpresas();
 
   // Selecionar empresa do profile quando disponível
   const [dataInicio, setDataInicio] = useState(getFirstDayOfMonth);

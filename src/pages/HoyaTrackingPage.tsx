@@ -4,7 +4,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { useEmpresas } from "@/hooks/useEmpresas";
+import { useUserEmpresas } from "@/hooks/useUserEmpresas";
 import {
   PedidoFornecedorRecord,
   HoyaPedidoTracking,
@@ -93,7 +93,7 @@ const HoyaTrackingPage: React.FC = () => {
   const [consultaAvulsaXmlLoading, setConsultaAvulsaXmlLoading] = useState<"xml" | "danfe" | null>(null);
 
   // Empresas lookup
-  const { empresas } = useEmpresas();
+  const { empresas } = useUserEmpresas();
   const empresaNameMap = useMemo(() => {
     const map = new Map<number, string>();
     empresas.forEach(e => map.set(e.codEmpresa, e.nome));

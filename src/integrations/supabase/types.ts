@@ -1046,6 +1046,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_empresa_permissions: {
+        Row: {
+          cod_empresa: number
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          cod_empresa: number
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          cod_empresa?: number
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_module_permissions: {
         Row: {
           created_at: string
