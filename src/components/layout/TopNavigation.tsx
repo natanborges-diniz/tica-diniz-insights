@@ -3,6 +3,7 @@ import { BarChart3, Package, ClipboardList, Wallet, Settings, Database, Brain, L
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { useModulePermissions } from "@/hooks/useModulePermissions";
 import type { ModuleKey } from "./AppLayout";
 
 interface TopNavigationProps {
@@ -10,7 +11,7 @@ interface TopNavigationProps {
   onModuleChange: (module: ModuleKey) => void;
 }
 
-const modules: { key: ModuleKey; label: string; icon: React.ElementType; defaultPath: string }[] = [
+const allModules: { key: ModuleKey; label: string; icon: React.ElementType; defaultPath: string }[] = [
   { key: "vendas", label: "Vendas", icon: BarChart3, defaultPath: "/vendas" },
   { key: "estoque", label: "Estoque", icon: Package, defaultPath: "/estoque" },
   { key: "monitor", label: "Monitor", icon: ClipboardList, defaultPath: "/os" },
@@ -22,8 +23,11 @@ const modules: { key: ModuleKey; label: string; icon: React.ElementType; default
 export function TopNavigation({ activeModule, onModuleChange }: TopNavigationProps) {
   const navigate = useNavigate();
   const { profile, isAdmin, signOut } = useAuth();
+  const { hasAccess } = useModulePermissions();
 
-  const handleModuleClick = (module: typeof modules[0]) => {
+  const modules = allModules.filter(m => hasAccess(m.key));
+
+  const handleModuleClick = (module: typeof allModules[0]) => {
     onModuleChange(module.key);
     navigate(module.defaultPath);
   };

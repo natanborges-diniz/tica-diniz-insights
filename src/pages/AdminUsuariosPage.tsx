@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, Shield } from "lucide-react";
 import { Navigate } from "react-router-dom";
+import type { ModuleKey } from "@/components/layout/AppLayout";
 
 type AppRole = "admin" | "gestor" | "vendedor";
 
@@ -24,23 +26,41 @@ interface RoleRow {
   role: AppRole;
 }
 
+interface ModulePermRow {
+  user_id: string;
+  module: string;
+  enabled: boolean;
+}
+
+const ALL_MODULES: { key: ModuleKey; label: string }[] = [
+  { key: "vendas", label: "Vendas" },
+  { key: "estoque", label: "Estoque" },
+  { key: "monitor", label: "Monitor" },
+  { key: "financeiro", label: "Financeiro" },
+  { key: "ia", label: "Central IA" },
+  { key: "config", label: "Config" },
+];
+
 export default function AdminUsuariosPage() {
   const { isAdmin, isLoading: authLoading } = useAuth();
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [userRoles, setUserRoles] = useState<RoleRow[]>([]);
+  const [modulePerms, setModulePerms] = useState<ModulePermRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingEmpresa, setEditingEmpresa] = useState<Record<string, string>>({});
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
-    const [profilesRes, rolesRes] = await Promise.all([
+    const [profilesRes, rolesRes, permsRes] = await Promise.all([
       supabase.from("profiles").select("id, email, nome, cod_empresa"),
       supabase.from("user_roles").select("user_id, role"),
+      supabase.from("user_module_permissions").select("user_id, module, enabled"),
     ]);
     if (profilesRes.data) setProfiles(profilesRes.data);
     if (rolesRes.data) setUserRoles(rolesRes.data as RoleRow[]);
+    if (permsRes.data) setModulePerms(permsRes.data as ModulePermRow[]);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     if (isAdmin) fetchData();
@@ -58,6 +78,36 @@ export default function AdminUsuariosPage() {
 
   const getRolesForUser = (userId: string) =>
     userRoles.filter((r) => r.user_id === userId).map((r) => r.role);
+
+  const getModuleEnabled = (userId: string, module: string) => {
+    const perm = modulePerms.find(p => p.user_id === userId && p.module === module);
+    return perm?.enabled ?? false;
+  };
+
+  const handleModuleToggle = async (userId: string, module: string, currentlyEnabled: boolean) => {
+    const newEnabled = !currentlyEnabled;
+    // Upsert
+    const { error } = await supabase
+      .from("user_module_permissions")
+      .upsert(
+        { user_id: userId, module, enabled: newEnabled },
+        { onConflict: "user_id,module" }
+      );
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    } else {
+      // Update local state immediately
+      setModulePerms(prev => {
+        const idx = prev.findIndex(p => p.user_id === userId && p.module === module);
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = { ...copy[idx], enabled: newEnabled };
+          return copy;
+        }
+        return [...prev, { user_id: userId, module, enabled: newEnabled }];
+      });
+    }
+  };
 
   const handleEmpresaChange = async (userId: string) => {
     const val = parseInt(editingEmpresa[userId] || "", 10);
@@ -125,6 +175,7 @@ export default function AdminUsuariosPage() {
                   <TableHead>Nome</TableHead>
                   <TableHead>Empresa</TableHead>
                   <TableHead>Roles</TableHead>
+                  <TableHead>Módulos</TableHead>
                   <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -158,6 +209,25 @@ export default function AdminUsuariosPage() {
                             </span>
                           ))}
                           {currentRoles.length === 0 && <span className="text-xs text-muted-foreground">nenhuma</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2 flex-wrap">
+                          {ALL_MODULES.map((mod) => {
+                            const isAdminUser = currentRoles.includes("admin");
+                            const enabled = isAdminUser || getModuleEnabled(p.id, mod.key);
+                            return (
+                              <label key={mod.key} className="flex items-center gap-1 text-xs cursor-pointer">
+                                <Checkbox
+                                  checked={enabled}
+                                  disabled={isAdminUser}
+                                  onCheckedChange={() => handleModuleToggle(p.id, mod.key, getModuleEnabled(p.id, mod.key))}
+                                  className="h-3.5 w-3.5"
+                                />
+                                {mod.label}
+                              </label>
+                            );
+                          })}
                         </div>
                       </TableCell>
                       <TableCell>
