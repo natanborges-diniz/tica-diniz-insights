@@ -1,200 +1,101 @@
 
-# FASE 4 — Integracao Hoya Completa
+# Correcao de Permissoes + Modelo CRUD Granular por Modulo
 
-Plano de implementacao em 7 subfases para tornar a integracao com o laboratorio Hoya confiavel, auditavel e operacionalmente completa.
+## Problema Atual
 
----
+A Roseane tem apenas "monitor" habilitado no banco, mas ao logar ve todos os modulos porque:
+1. A **HomePage** mostra todos os 6 cards de modulo sem filtrar permissoes
+2. As **rotas nao sao bloqueadas** — a permissao apenas esconde itens do menu, mas o usuario acessa qualquer rota digitando a URL
+3. O modelo atual e binario (ve/nao ve) sem distincao entre consultar, editar ou inserir
 
-## F4.1 — Robustez do Gateway (timeout + retry + erros padronizados)
+## Solucao Proposta
 
-**Arquivo:** `supabase/functions/hoya-proxy/index.ts`
+### 1. Novo modelo de permissoes com niveis CRUD
 
-- Criar funcao `fetchWithRetry(url, options, { timeout, maxRetries, backoffMs })` que:
-  - Usa `AbortController` com timeout de 15s por request
-  - Retenta automaticamente em caso de HTTP 429, 503 ou timeout (ate 3 tentativas)
-  - Backoff exponencial: 1s, 2s, 4s
-  - Loga cada tentativa com `[hoya-proxy] Retry N/3 for ACTION`
-- Padronizar respostas de erro com codigos internos:
-  - `HOYA_TIMEOUT` — API nao respondeu
-  - `HOYA_RATE_LIMITED` — 429 apos retries
-  - `HOYA_UNAVAILABLE` — 503 apos retries
-  - `HOYA_API_ERROR` — erro generico da API
-  - `HOYA_CONFIG_ERROR` — secret/env faltando
-- Substituir o `fetch()` direto (linha 99) pela nova funcao
+Substituir o campo `enabled` (boolean) por `access_level` com 4 niveis:
 
-**Frontend:** `src/services/hoyaService.ts` — tratar novos codigos de erro em `callHoyaProxy` para exibir mensagens amigaveis via toast
+| Nivel | Significado | Permite |
+|-------|-------------|---------|
+| `nenhum` | Sem acesso | Nada — modulo invisivel |
+| `consulta` | Somente leitura | Ve dashboards e dados, nao edita |
+| `edita` | Leitura + edicao | Consulta + altera registros existentes |
+| `total` | Acesso completo | Consulta + edita + insere + deleta |
 
----
+### 2. Correcoes de bloqueio
 
-## F4.2 — Idempotencia de Pedido
+- **HomePage**: filtrar cards por modulos permitidos (qualquer nivel diferente de `nenhum`)
+- **Rotas**: criar componente `ModuleGuard` que verifica permissao antes de renderizar a pagina. Se nao tem acesso, redireciona para `/home`
+- **TopNavigation**: ja filtra (ok), mas usara o novo modelo
 
-**Banco (migracao):**
-- Adicionar coluna `idempotency_key TEXT UNIQUE` na tabela `pedidos_fornecedor`
-- Criar indice unico: `CREATE UNIQUE INDEX idx_idempotency ON pedidos_fornecedor(idempotency_key) WHERE idempotency_key IS NOT NULL`
+### 3. Hook `useModulePermissions` atualizado
 
-**Edge Function (`hoya-proxy`):**
-- Na action `criar-pedido`, antes de chamar a Hoya:
-  1. Gerar `idempotency_key` = `HOYA_{cod_empresa}_{cod_os}_{hoya_environment}_{sha256(payload)}`
-  2. Consultar `pedidos_fornecedor` com essa key
-  3. Se existir com status != 'ERRO': retornar o registro existente (sem chamar Hoya)
-  4. Se existir com status 'ERRO': permitir retry (deletar/atualizar o registro antigo nao e permitido pela politica de auditoria, entao inserir novo com mesma key nao sera possivel — nesse caso, gerar key com sufixo `_retry_N`)
-  5. Inserir a key no registro de auditoria
+O hook passara a retornar o nivel de acesso por modulo:
+- `hasAccess(module)` — retorna true se nivel != nenhum
+- `getAccessLevel(module)` — retorna "nenhum" | "consulta" | "edita" | "total"
+- `canEdit(module)` — atalho para nivel >= edita
+- `canInsert(module)` — atalho para nivel = total
 
-**Frontend (`PedidoFornecedorPage.tsx`):**
-- Desabilitar botao "Enviar" durante submissao (ja existe `enviando` state)
-- Adicionar debounce de 2s apos clique para evitar double-click
-- Se a resposta retornar registro existente (idempotency hit), exibir toast informativo "Pedido ja enviado para esta OS"
+### 4. Interface Admin atualizada
 
----
-
-## F4.3 — Cache do Catalogo
-
-**Banco (migracao):**
-- Criar tabela `hoya_catalogo_cache`:
-  - `id UUID PK DEFAULT gen_random_uuid()`
-  - `data JSONB NOT NULL` — array completo de produtos
-  - `hoya_environment TEXT NOT NULL`
-  - `fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()`
-  - `expires_at TIMESTAMPTZ NOT NULL` — fetched_at + 24h
-  - `produto_count INTEGER`
-- RLS: leitura para authenticated, escrita apenas via service_role
-
-**Edge Function (`hoya-proxy`):**
-- Na action `listar-produtos`:
-  1. Consultar `hoya_catalogo_cache` onde `hoya_environment = env AND expires_at > now()`
-  2. Se cache valido: retornar `data` do cache com header `X-Hoya-Cache: HIT`
-  3. Se cache expirado ou inexistente: buscar da API Hoya, salvar no cache, retornar com `X-Hoya-Cache: MISS`
-- Nova action `invalidar-cache`: permite admin forcar refresh do catalogo
-
-**Frontend:**
-- `hoyaService.ts`: adicionar `forceRefresh?: boolean` como parametro opcional em `listarProdutosHoya()`
-- `PedidoFornecedorPage.tsx`: remover loading pesado; adicionar botao "Atualizar Catalogo" para admin
-
----
-
-## F4.4 — Campos Complementares Dinamicos
-
-**Edge Function (`hoya-proxy`):**
-- A action `consultar-produto` ja existe e retorna `camposComplementares` do produto
-
-**Frontend (`PedidoFornecedorPage.tsx`):**
-- Apos selecionar o produto final (`produtoSelecionado`), verificar `produtoSelecionado.camposComplementares`
-- Para cada campo complementar:
-  - Renderizar Input com label = `nome`, placeholder com `valorPadrao`
-  - Se `obrigatorio = true`, marcar como required e bloquear envio
-  - Aplicar validacao de range (`rangeMinimo` / `rangeMaximo`) e incremento
-- Novo state: `camposComplementaresValues: Record<number, string>`
-- No payload de envio, adicionar array `camposComplementares: [{ codigo, valor }]`
-
-**Validacao (`hoyaValidationService.ts`):**
-- Adicionar validacao: se produto tem `camposComplementares` obrigatorios e nao preenchidos, retornar erro
-
----
-
-## F4.5 — Tracking e Status History
-
-**Banco (migracao):**
-- Criar tabela `pedido_status_history`:
-  - `id UUID PK`
-  - `pedido_fornecedor_id UUID FK -> pedidos_fornecedor(id)`
-  - `status TEXT NOT NULL`
-  - `status_producao TEXT`
-  - `rastreio TEXT`
-  - `observacao TEXT`
-  - `checked_at TIMESTAMPTZ DEFAULT now()`
-- RLS: mesmas politicas de `pedidos_fornecedor` (admin le tudo, gestor le por empresa)
-- Indice em `pedido_fornecedor_id`
-
-**Edge Function (`hoya-proxy`):**
-- Nova action `atualizar-tracking`:
-  1. Receber `pedidoFornecedorId` ou `numeroPedido`
-  2. Chamar `GET /pedido/tracking/{numeroPedido}` na API Hoya
-  3. Comparar status retornado com ultimo status salvo em `pedido_status_history`
-  4. Se mudou: inserir nova entrada em `pedido_status_history` e atualizar `pedidos_fornecedor.status`
-  5. Retornar timeline completa
-
-**Cron Job (SQL via pg_cron + pg_net):**
-- A cada 30 minutos, chamar `hoya-proxy` com action `atualizar-tracking-batch`:
-  - Buscar `pedidos_fornecedor` com `status NOT IN ('Entregue', 'Cancelado', 'ERRO')` e `numero_pedido IS NOT NULL`
-  - Para cada pedido, chamar tracking e atualizar historico
-  - Limitar a 20 pedidos por execucao para nao estourar rate limit
-
-**Frontend:**
-- Nova pagina `src/pages/HoyaTrackingPage.tsx` em rota `/os/tracking`:
-  - Filtros: empresa, periodo, status
-  - Tabela com: OS, Nro Pedido, Status, Ultima Atualizacao, Rastreio
-  - Ao clicar em um pedido: expandir timeline com historico de status
-  - Botao "Atualizar agora" para refresh manual de um pedido
-- Link de acesso:
-  - Na tela de sucesso do `PedidoFornecedorPage` apos envio
-  - Na `AdminPedidosAuditoriaPage` como coluna com link
-  - No sidebar sob "Monitor > Tracking Hoya"
-
----
-
-## F4.6 — XML/DANFE
-
-**Edge Function (`hoya-proxy`):**
-- Nova action `consultar-xml`:
-  - Receber `numeroPedido` ou `chaveDanfe`
-  - Chamar endpoint Hoya `GET /pedido/xml/{chave}` (ou equivalente conforme documentacao)
-  - Retornar conteudo XML como texto
-- Nova action `consultar-danfe`:
-  - Receber `numeroPedido`
-  - Chamar endpoint Hoya para obter chave DANFE e link de download
-
-**Frontend:**
-- Na `HoyaTrackingPage`: botao "XML" e "DANFE" por pedido (visivel quando `status = Faturado` ou equivalente)
-- Ao clicar: abrir modal/dialog com XML formatado ou iniciar download do PDF
-- `hoyaService.ts`: novas funcoes `consultarXmlHoya()` e `consultarDanfeHoya()`
-
-> **Nota:** Esta subfase depende de confirmacao dos endpoints exatos da API Hoya para XML/DANFE. Se nao existirem, sera marcada como "bloqueada" ate validacao com o laboratorio.
-
----
-
-## F4.7 — Ambiente Explicito
-
-**Secrets:**
-- Adicionar novo secret `HOYA_ENVIRONMENT` com valor `staging` ou `production`
-- Remover heuristica de URL (`detectHoyaEnvironment()`)
-
-**Edge Function (`hoya-proxy`):**
-- Substituir `detectHoyaEnvironment()` por:
-  ```
-  const hoyaEnv = Deno.env.get("HOYA_ENVIRONMENT") || "staging";
-  ```
-- Guardrail de producao: se `hoyaEnv === "production"`, bloquear actions de teste e logar warning se payload vier sem campos obrigatorios
-- Incluir `hoya_environment` em todos os logs e respostas
-
-**Frontend:**
-- Na `AdminPedidosAuditoriaPage`: destacar visualmente pedidos de producao vs staging
-- No `PedidoFornecedorPage`: exibir badge do ambiente atual no header ("Producao" em vermelho ou "Homologacao" em amarelo) — obter via nova action `get-environment` ou incluir no response de qualquer action
-
----
-
-## Ordem de Execucao Recomendada
+Na pagina `/admin/usuarios`, substituir os checkboxes de modulo por um seletor de nivel (dropdown ou radio group) para cada modulo:
 
 ```text
-F4.7 (Ambiente)      -- pre-requisito, 1 arquivo + 1 secret
-F4.1 (Retry/Timeout) -- muda apenas edge function
-F4.2 (Idempotencia)  -- migracao + edge + frontend
-F4.3 (Cache)         -- migracao + edge + frontend
-F4.4 (Campos Compl.) -- apenas frontend + validacao
-F4.5 (Tracking)      -- migracao + edge + cron + nova pagina
-F4.6 (XML/DANFE)     -- depende de confirmacao API
+Vendas      [Nenhum] [Consulta] [Edita] [Total]
+Estoque     [Nenhum] [Consulta] [Edita] [Total]
+Monitor     [Nenhum] [Consulta] [Edita] [Total]
+Financeiro  [Nenhum] [Consulta] [Edita] [Total]
+Central IA  [Nenhum] [Consulta] [Edita] [Total]
+Config      [Nenhum] [Consulta] [Edita] [Total]
 ```
 
 ---
 
-## Resumo de Artefatos por Subfase
+## Detalhes Tecnicos
 
-| Subfase | Migracoes | Edge Function | Frontend | Secrets |
-|---------|-----------|---------------|----------|---------|
-| F4.1 | -- | hoya-proxy (retry) | hoyaService (erros) | -- |
-| F4.2 | 1 (idempotency_key) | hoya-proxy (check) | PedidoFornecedor (debounce) | -- |
-| F4.3 | 1 (hoya_catalogo_cache) | hoya-proxy (cache) | PedidoFornecedor + hoyaService | -- |
-| F4.4 | -- | -- | PedidoFornecedor + validacao | -- |
-| F4.5 | 1 (pedido_status_history) | hoya-proxy (tracking) | HoyaTrackingPage (nova) | -- |
-| F4.6 | -- | hoya-proxy (xml/danfe) | HoyaTrackingPage (botoes) | -- |
-| F4.7 | -- | hoya-proxy (env) | AdminPedidos + PedidoFornecedor | HOYA_ENVIRONMENT |
+### Migracao do Banco de Dados
 
+```sql
+-- Adicionar coluna access_level e migrar dados existentes
+ALTER TABLE user_module_permissions 
+  ADD COLUMN access_level text NOT NULL DEFAULT 'nenhum';
+
+-- Migrar: enabled=true vira 'total', enabled=false vira 'nenhum'
+UPDATE user_module_permissions 
+  SET access_level = CASE WHEN enabled THEN 'total' ELSE 'nenhum' END;
+
+-- Remover coluna antiga
+ALTER TABLE user_module_permissions DROP COLUMN enabled;
+
+-- Atualizar funcao has_module_access
+CREATE OR REPLACE FUNCTION public.has_module_access(...)
+  -- Retorna true se access_level != 'nenhum'
+```
+
+### Arquivos Modificados
+
+1. **`src/hooks/useModulePermissions.ts`** — novo modelo com `getAccessLevel`, `canEdit`, `canInsert`
+2. **`src/pages/HomePage.tsx`** — filtrar cards por `hasAccess`
+3. **`src/components/auth/ModuleGuard.tsx`** (novo) — componente wrapper de rota que verifica permissao
+4. **`src/App.tsx`** — envolver rotas de cada modulo com `ModuleGuard`
+5. **`src/pages/AdminUsuariosPage.tsx`** — trocar checkboxes por seletor de nivel (toggle group com 4 opcoes)
+6. **`src/components/layout/TopNavigation.tsx`** — sem mudanca (ja usa `hasAccess`)
+
+### Fluxo do ModuleGuard
+
+```text
+Usuario acessa /vendas
+  -> ModuleGuard(module="vendas")
+    -> useModulePermissions().hasAccess("vendas")
+      -> false? Redireciona para /home
+      -> true? Renderiza <Outlet />
+```
+
+### Uso pratico do nivel de acesso nos componentes
+
+Componentes que permitem edicao (ex: MetasConfigDashboard, formularios) verificarao:
+```typescript
+const { canEdit } = useModulePermissions();
+// Desabilitar botoes de edicao se canEdit("config") === false
+```
+
+Isso sera feito incrementalmente — primeiro o modelo e a infraestrutura, depois cada tela adapta seus botoes conforme necessario.
