@@ -1342,6 +1342,10 @@ export type Database = {
         Args: { _module: string; _user_id: string }
         Returns: boolean
       }
+      has_module_edit_access: {
+        Args: { _module: string; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
