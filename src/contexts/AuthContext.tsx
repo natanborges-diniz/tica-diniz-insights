@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-
+import { toast } from "sonner";
 type AppRole = "admin" | "gestor" | "vendedor";
 
 interface Profile {
@@ -55,9 +55,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (event === "TOKEN_REFRESHED" && !session) {
+          // Token refresh failed — session expired
+          toast.error("Sua sessão expirou. Faça login novamente.", { duration: 6000 });
+          setUser(null);
+          setProfile(null);
+          setRoles([]);
+          setIsLoading(false);
+          return;
+        }
+        if (event === "SIGNED_OUT") {
+          setUser(null);
+          setProfile(null);
+          setRoles([]);
+          setIsLoading(false);
+          return;
+        }
         if (session?.user) {
           setUser(session.user);
-          // Use setTimeout to avoid Supabase deadlock
           setTimeout(() => loadUserData(session.user), 0);
         } else {
           setUser(null);
