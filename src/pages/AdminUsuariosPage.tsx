@@ -5,10 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Shield, Users, Eye, Store, KeyRound, Info, Plus, Save, X, ChevronDown, ChevronRight, Lock, Undo2 } from "lucide-react";
+import { Loader2, Shield, Users, Eye, Store, Info, Plus, Save, ChevronDown, ChevronRight, Lock, Undo2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Navigate } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -17,7 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import type { ModuleKey } from "@/components/layout/AppLayout";
 
-type AppRole = "admin" | "gestor" | "vendedor";
+type AppRole = "admin";
 
 interface ProfileRow {
   id: string;
@@ -50,24 +51,6 @@ const ALL_MODULES: { key: ModuleKey; label: string; desc: string }[] = [
   { key: "ia", label: "Central IA", desc: "Análises inteligentes" },
   { key: "config", label: "Config", desc: "Metas e configurações" },
 ];
-
-const ROLE_INFO: Record<AppRole, { label: string; desc: string; color: string }> = {
-  admin: {
-    label: "Administrador",
-    desc: "Acesso total ao sistema, gestão de usuários e configurações",
-    color: "bg-destructive/10 text-destructive border-destructive/20",
-  },
-  gestor: {
-    label: "Gestor",
-    desc: "Pode editar metas, configurações e visualizar relatórios",
-    color: "bg-primary/10 text-primary border-primary/20",
-  },
-  vendedor: {
-    label: "Vendedor",
-    desc: "Visualização de dados da sua loja",
-    color: "bg-muted text-muted-foreground border-border",
-  },
-};
 
 function SectionHeader({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
   return (
@@ -222,7 +205,7 @@ function UserCard({
   empresas: { codEmpresa: number; nome: string }[];
   onSave: (data: {
     nome: string;
-    roles: AppRole[];
+    isAdmin: boolean;
     modules: Record<string, string>;
     empresaCods: number[];
   }) => Promise<void>;
@@ -233,7 +216,7 @@ function UserCard({
 
   // Draft state
   const [draftName, setDraftName] = useState(profile.nome || "");
-  const [draftRoles, setDraftRoles] = useState<AppRole[]>(serverRoles);
+  const [draftIsAdmin, setDraftIsAdmin] = useState(serverRoles.includes("admin"));
   const [draftModules, setDraftModules] = useState<Record<string, string>>(() => {
     const map: Record<string, string> = {};
     ALL_MODULES.forEach(m => { map[m.key] = "nenhum"; });
@@ -247,7 +230,7 @@ function UserCard({
   // Reset draft when server data changes
   useEffect(() => {
     setDraftName(profile.nome || "");
-    setDraftRoles(serverRoles);
+    setDraftIsAdmin(serverRoles.includes("admin"));
     const map: Record<string, string> = {};
     ALL_MODULES.forEach(m => { map[m.key] = "nenhum"; });
     serverModulePerms.forEach(p => { map[p.module] = p.access_level; });
@@ -255,12 +238,13 @@ function UserCard({
     setDraftEmpresas(serverEmpresaPerms.map(p => p.cod_empresa));
   }, [profile, serverRoles, serverModulePerms, serverEmpresaPerms]);
 
-  const isAdminUser = draftRoles.includes("admin");
+  const isAdminUser = draftIsAdmin;
 
   // Detect changes
   const hasChanges = useMemo(() => {
     if (draftName !== (profile.nome || "")) return true;
-    if (JSON.stringify([...draftRoles].sort()) !== JSON.stringify([...serverRoles].sort())) return true;
+    const serverIsAdmin = serverRoles.includes("admin");
+    if (draftIsAdmin !== serverIsAdmin) return true;
     const serverModMap: Record<string, string> = {};
     ALL_MODULES.forEach(m => { serverModMap[m.key] = "nenhum"; });
     serverModulePerms.forEach(p => { serverModMap[p.module] = p.access_level; });
@@ -269,11 +253,11 @@ function UserCard({
     const draftEmpCods = [...draftEmpresas].sort((a, b) => a - b);
     if (JSON.stringify(draftEmpCods) !== JSON.stringify(serverEmpCods)) return true;
     return false;
-  }, [draftName, draftRoles, draftModules, draftEmpresas, profile, serverRoles, serverModulePerms, serverEmpresaPerms]);
+  }, [draftName, draftIsAdmin, draftModules, draftEmpresas, profile, serverRoles, serverModulePerms, serverEmpresaPerms]);
 
   const handleDiscard = () => {
     setDraftName(profile.nome || "");
-    setDraftRoles(serverRoles);
+    setDraftIsAdmin(serverRoles.includes("admin"));
     const map: Record<string, string> = {};
     ALL_MODULES.forEach(m => { map[m.key] = "nenhum"; });
     serverModulePerms.forEach(p => { map[p.module] = p.access_level; });
@@ -286,7 +270,7 @@ function UserCard({
     try {
       await onSave({
         nome: draftName,
-        roles: draftRoles,
+        isAdmin: draftIsAdmin,
         modules: draftModules,
         empresaCods: draftEmpresas,
       });
@@ -296,12 +280,6 @@ function UserCard({
     } finally {
       setSaving(false);
     }
-  };
-
-  const toggleRole = (role: AppRole) => {
-    setDraftRoles(prev =>
-      prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
-    );
   };
 
   const setModuleLevel = (key: string, level: string) => {
@@ -355,14 +333,9 @@ function UserCard({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {draftRoles.map((r) => (
-              <Badge key={r} variant="outline" className={`text-[10px] px-1.5 py-0 ${ROLE_INFO[r].color}`}>
-                {ROLE_INFO[r].label}
-              </Badge>
-            ))}
-            {draftRoles.length === 0 && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
-                Sem acesso
+            {isAdminUser && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-destructive/10 text-destructive border-destructive/20">
+                Admin
               </Badge>
             )}
             <Tooltip>
@@ -411,35 +384,26 @@ function UserCard({
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Column 1: Nível de Acesso */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Admin toggle + Módulos */}
             <div>
-              <SectionHeader icon={KeyRound} title="Nível de Acesso" description="O que o usuário pode fazer" />
-              <div className="space-y-2">
-                {(["admin", "gestor", "vendedor"] as AppRole[]).map((role) => {
-                  const info = ROLE_INFO[role];
-                  const hasRole = draftRoles.includes(role);
-                  return (
-                    <label key={role} className="flex items-start gap-2 p-2 rounded-md border cursor-pointer hover:bg-accent/50 transition-colors">
-                      <Checkbox checked={hasRole} onCheckedChange={() => toggleRole(role)} className="mt-0.5" />
-                      <div>
-                        <span className="text-sm font-medium">{info.label}</span>
-                        <p className="text-[11px] text-muted-foreground leading-tight">{info.desc}</p>
-                      </div>
-                    </label>
-                  );
-                })}
+              <div className="flex items-center justify-between p-2 rounded-md border mb-3">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-destructive" />
+                  <div>
+                    <span className="text-sm font-medium">Administrador</span>
+                    <p className="text-[11px] text-muted-foreground">Acesso total ao sistema</p>
+                  </div>
+                </div>
+                <Switch checked={draftIsAdmin} onCheckedChange={setDraftIsAdmin} />
               </div>
               {isAdminUser && (
-                <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
-                  <Info className="h-3 w-3" /> Admin tem acesso total automático
+                <p className="text-[11px] text-muted-foreground mb-3 flex items-center gap-1">
+                  <Info className="h-3 w-3" /> Admin tem acesso total automático a todos os módulos e lojas
                 </p>
               )}
-            </div>
 
-            {/* Column 2: Telas Visíveis */}
-            <div>
-              <SectionHeader icon={Eye} title="Telas Visíveis" description="Nível de acesso por módulo" />
+              <SectionHeader icon={Eye} title="Módulos" description="Nível de acesso por módulo" />
               <div className="space-y-2">
                 {ALL_MODULES.map((mod) => {
                   const level = isAdminUser ? "total" : (draftModules[mod.key] || "nenhum");
@@ -474,8 +438,6 @@ function UserCard({
                 })}
               </div>
             </div>
-
-            {/* Column 3: Lojas */}
             <div>
               <SectionHeader icon={Store} title="Lojas" description="De quais lojas pode ver dados" />
               <div className="space-y-1.5">
@@ -581,10 +543,10 @@ export default function AdminUsuariosPage() {
 
   const handleSaveUser = async (
     userId: string,
-    data: { nome: string; roles: AppRole[]; modules: Record<string, string>; empresaCods: number[] }
+    data: { nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[] }
   ) => {
     const currentProfile = profiles.find(p => p.id === userId);
-    const currentRoles = userRoles.filter(r => r.user_id === userId).map(r => r.role);
+    const currentIsAdmin = userRoles.some(r => r.user_id === userId && r.role === "admin");
     const currentModules = modulePerms.filter(p => p.user_id === userId);
     const currentEmpresas = empresaPerms.filter(p => p.user_id === userId).map(p => p.cod_empresa);
 
@@ -603,24 +565,23 @@ export default function AdminUsuariosPage() {
       );
     }
 
-    // 2. Save roles (add missing, remove extra)
-    const rolesToAdd = data.roles.filter(r => !currentRoles.includes(r));
-    const rolesToRemove = currentRoles.filter(r => !data.roles.includes(r));
-    for (const role of rolesToAdd) {
-      promises.push(
-        (async () => {
-          const { error } = await supabase.from("user_roles").insert({ user_id: userId, role });
-          if (error) throw error;
-        })()
-      );
-    }
-    for (const role of rolesToRemove) {
-      promises.push(
-        (async () => {
-          const { error } = await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", role);
-          if (error) throw error;
-        })()
-      );
+    // 2. Save admin role
+    if (data.isAdmin !== currentIsAdmin) {
+      if (data.isAdmin) {
+        promises.push(
+          (async () => {
+            const { error } = await supabase.from("user_roles").insert({ user_id: userId, role: "admin" as any });
+            if (error) throw error;
+          })()
+        );
+      } else {
+        promises.push(
+          (async () => {
+            const { error } = await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", "admin");
+            if (error) throw error;
+          })()
+        );
+      }
     }
 
     // 3. Save modules (access_level)
@@ -689,19 +650,12 @@ export default function AdminUsuariosPage() {
         {/* Legend */}
         <Card className="border-dashed">
           <CardContent className="pt-4 pb-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-              <div className="flex items-start gap-2">
-                <KeyRound className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
-                <div>
-                  <span className="font-semibold">Nível de Acesso</span>
-                  <p className="text-muted-foreground">Define o que o usuário pode <strong>fazer</strong> (editar metas, gerenciar usuários, etc)</p>
-                </div>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div className="flex items-start gap-2">
                 <Eye className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
                 <div>
-                  <span className="font-semibold">Telas Visíveis</span>
-                  <p className="text-muted-foreground">Quais módulos <strong>aparecem</strong> no menu do usuário</p>
+                  <span className="font-semibold">Módulos</span>
+                  <p className="text-muted-foreground">Define quais módulos o usuário pode <strong>ver e o que pode fazer</strong> (nenhum, consulta, edita, total)</p>
                 </div>
               </div>
               <div className="flex items-start gap-2">
