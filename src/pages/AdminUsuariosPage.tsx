@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Shield, Users, Eye, Store, KeyRound, Info, Plus, Save, X, ChevronDown, ChevronRight, Lock } from "lucide-react";
+import { Loader2, Shield, Users, Eye, Store, KeyRound, Info, Plus, Save, X, ChevronDown, ChevronRight, Lock, Undo2 } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -209,43 +209,125 @@ function ResetPasswordDialog({ open, onOpenChange, userId, userName }: { open: b
   );
 }
 
-// ─── User Card ──────────────────────────────────────────────────────
+// ─── User Card with Draft State ─────────────────────────────────────
 function UserCard({
-  profile, currentRoles, modulePerms, empresaPerms, empresas, isAdminUser,
-  onRoleToggle, onModuleToggle, onEmpresaToggle, onToggleAllEmpresas,
-  getModuleEnabled, getEmpresaEnabled, onSaveName, onResetPassword,
+  profile, serverRoles, serverModulePerms, serverEmpresaPerms, empresas,
+  onSave, onResetPassword,
 }: {
   profile: ProfileRow;
-  currentRoles: AppRole[];
-  modulePerms: ModulePermRow[];
-  empresaPerms: EmpresaPermRow[];
+  serverRoles: AppRole[];
+  serverModulePerms: ModulePermRow[];
+  serverEmpresaPerms: EmpresaPermRow[];
   empresas: { codEmpresa: number; nome: string }[];
-  isAdminUser: boolean;
-  onRoleToggle: (role: AppRole) => void;
-  onModuleToggle: (module: string, enabled: boolean) => void;
-  onEmpresaToggle: (codEmpresa: number) => void;
-  onToggleAllEmpresas: () => void;
-  getModuleEnabled: (module: string) => boolean;
-  getEmpresaEnabled: (codEmpresa: number) => boolean;
-  onSaveName: (nome: string) => void;
+  onSave: (data: {
+    nome: string;
+    roles: AppRole[];
+    modules: Record<string, boolean>;
+    empresaCods: number[];
+  }) => Promise<void>;
   onResetPassword: () => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [editingName, setEditingName] = useState(false);
-  const [nameValue, setNameValue] = useState(profile.nome || "");
+  const [saving, setSaving] = useState(false);
 
-  const userEmpresaCount = empresaPerms.filter(ep => ep.user_id === profile.id).length;
-  const moduleCount = isAdminUser
-    ? ALL_MODULES.length
-    : modulePerms.filter(mp => mp.user_id === profile.id && mp.enabled).length;
+  // Draft state
+  const [draftName, setDraftName] = useState(profile.nome || "");
+  const [draftRoles, setDraftRoles] = useState<AppRole[]>(serverRoles);
+  const [draftModules, setDraftModules] = useState<Record<string, boolean>>(() => {
+    const map: Record<string, boolean> = {};
+    ALL_MODULES.forEach(m => { map[m.key] = false; });
+    serverModulePerms.forEach(p => { map[p.module] = p.enabled; });
+    return map;
+  });
+  const [draftEmpresas, setDraftEmpresas] = useState<number[]>(
+    serverEmpresaPerms.map(p => p.cod_empresa)
+  );
 
-  const handleSaveName = () => {
-    onSaveName(nameValue);
-    setEditingName(false);
+  // Reset draft when server data changes
+  useEffect(() => {
+    setDraftName(profile.nome || "");
+    setDraftRoles(serverRoles);
+    const map: Record<string, boolean> = {};
+    ALL_MODULES.forEach(m => { map[m.key] = false; });
+    serverModulePerms.forEach(p => { map[p.module] = p.enabled; });
+    setDraftModules(map);
+    setDraftEmpresas(serverEmpresaPerms.map(p => p.cod_empresa));
+  }, [profile, serverRoles, serverModulePerms, serverEmpresaPerms]);
+
+  const isAdminUser = draftRoles.includes("admin");
+
+  // Detect changes
+  const hasChanges = useMemo(() => {
+    if (draftName !== (profile.nome || "")) return true;
+    if (JSON.stringify([...draftRoles].sort()) !== JSON.stringify([...serverRoles].sort())) return true;
+    const serverModMap: Record<string, boolean> = {};
+    ALL_MODULES.forEach(m => { serverModMap[m.key] = false; });
+    serverModulePerms.forEach(p => { serverModMap[p.module] = p.enabled; });
+    if (JSON.stringify(draftModules) !== JSON.stringify(serverModMap)) return true;
+    const serverEmpCods = serverEmpresaPerms.map(p => p.cod_empresa).sort((a, b) => a - b);
+    const draftEmpCods = [...draftEmpresas].sort((a, b) => a - b);
+    if (JSON.stringify(draftEmpCods) !== JSON.stringify(serverEmpCods)) return true;
+    return false;
+  }, [draftName, draftRoles, draftModules, draftEmpresas, profile, serverRoles, serverModulePerms, serverEmpresaPerms]);
+
+  const handleDiscard = () => {
+    setDraftName(profile.nome || "");
+    setDraftRoles(serverRoles);
+    const map: Record<string, boolean> = {};
+    ALL_MODULES.forEach(m => { map[m.key] = false; });
+    serverModulePerms.forEach(p => { map[p.module] = p.enabled; });
+    setDraftModules(map);
+    setDraftEmpresas(serverEmpresaPerms.map(p => p.cod_empresa));
   };
 
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave({
+        nome: draftName,
+        roles: draftRoles,
+        modules: draftModules,
+        empresaCods: draftEmpresas,
+      });
+      toast({ title: "Permissões salvas com sucesso!" });
+    } catch (err: any) {
+      toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleRole = (role: AppRole) => {
+    setDraftRoles(prev =>
+      prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
+    );
+  };
+
+  const toggleModule = (key: string) => {
+    setDraftModules(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const toggleEmpresa = (cod: number) => {
+    setDraftEmpresas(prev =>
+      prev.includes(cod) ? prev.filter(c => c !== cod) : [...prev, cod]
+    );
+  };
+
+  const toggleAllEmpresas = () => {
+    if (draftEmpresas.length >= empresas.length) {
+      setDraftEmpresas([]);
+    } else {
+      setDraftEmpresas(empresas.map(e => e.codEmpresa));
+    }
+  };
+
+  const moduleCount = isAdminUser
+    ? ALL_MODULES.length
+    : Object.values(draftModules).filter(Boolean).length;
+  const empresaCount = draftEmpresas.length;
+
   return (
-    <Card className={isExpanded ? "ring-1 ring-primary/30" : ""}>
+    <Card className={isExpanded ? "ring-1 ring-primary/30" : hasChanges ? "ring-1 ring-amber-400/50" : ""}>
       <CardHeader
         className="cursor-pointer hover:bg-accent/30 transition-colors py-4"
         onClick={() => setIsExpanded(!isExpanded)}
@@ -264,15 +346,20 @@ function UserCard({
                 <CardDescription className="text-xs truncate">{profile.email}</CardDescription>
               )}
             </div>
+            {hasChanges && !isExpanded && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-600 bg-amber-50 shrink-0">
+                Não salvo
+              </Badge>
+            )}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {currentRoles.map((r) => (
+            {draftRoles.map((r) => (
               <Badge key={r} variant="outline" className={`text-[10px] px-1.5 py-0 ${ROLE_INFO[r].color}`}>
                 {ROLE_INFO[r].label}
               </Badge>
             ))}
-            {currentRoles.length === 0 && (
+            {draftRoles.length === 0 && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
                 Sem acesso
               </Badge>
@@ -290,10 +377,10 @@ function UserCard({
               <TooltipTrigger asChild>
                 <Badge
                   variant="secondary"
-                  className={`text-[10px] px-1.5 py-0 gap-1 ${!isAdminUser && userEmpresaCount === 0 ? "border-destructive/50 text-destructive" : ""}`}
+                  className={`text-[10px] px-1.5 py-0 gap-1 ${!isAdminUser && empresaCount === 0 ? "border-destructive/50 text-destructive" : ""}`}
                 >
                   <Store className="h-2.5 w-2.5" />
-                  {isAdminUser ? "Todas" : `${userEmpresaCount}/${empresas.length}`}
+                  {isAdminUser ? "Todas" : `${empresaCount}/${empresas.length}`}
                 </Badge>
               </TooltipTrigger>
               <TooltipContent>Lojas com acesso</TooltipContent>
@@ -308,32 +395,14 @@ function UserCard({
 
           {/* Editable Name + Actions */}
           <div className="flex items-center gap-2 mb-4 p-3 rounded-md bg-accent/30">
-            <div className="flex-1">
+            <div className="flex-1 space-y-1">
               <Label className="text-xs text-muted-foreground">Nome do usuário</Label>
-              {editingName ? (
-                <div className="flex items-center gap-2 mt-1">
-                  <Input
-                    value={nameValue}
-                    onChange={(e) => setNameValue(e.target.value)}
-                    className="h-8 text-sm"
-                    autoFocus
-                    onKeyDown={(e) => e.key === "Enter" && handleSaveName()}
-                  />
-                  <Button size="sm" variant="default" className="h-8 px-2" onClick={handleSaveName}>
-                    <Save className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => { setEditingName(false); setNameValue(profile.nome || ""); }}>
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ) : (
-                <p
-                  className="text-sm mt-1 cursor-pointer hover:text-primary transition-colors"
-                  onClick={(e) => { e.stopPropagation(); setEditingName(true); }}
-                >
-                  {profile.nome || <span className="text-muted-foreground italic">Clique para definir</span>}
-                </p>
-              )}
+              <Input
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                className="h-8 text-sm"
+                placeholder="Nome do usuário"
+              />
             </div>
             <Button size="sm" variant="outline" className="h-8 gap-1.5 shrink-0" onClick={(e) => { e.stopPropagation(); onResetPassword(); }}>
               <Lock className="h-3.5 w-3.5" />
@@ -348,10 +417,10 @@ function UserCard({
               <div className="space-y-2">
                 {(["admin", "gestor", "vendedor"] as AppRole[]).map((role) => {
                   const info = ROLE_INFO[role];
-                  const hasRole = currentRoles.includes(role);
+                  const hasRole = draftRoles.includes(role);
                   return (
                     <label key={role} className="flex items-start gap-2 p-2 rounded-md border cursor-pointer hover:bg-accent/50 transition-colors">
-                      <Checkbox checked={hasRole} onCheckedChange={() => onRoleToggle(role)} className="mt-0.5" />
+                      <Checkbox checked={hasRole} onCheckedChange={() => toggleRole(role)} className="mt-0.5" />
                       <div>
                         <span className="text-sm font-medium">{info.label}</span>
                         <p className="text-[11px] text-muted-foreground leading-tight">{info.desc}</p>
@@ -372,13 +441,13 @@ function UserCard({
               <SectionHeader icon={Eye} title="Telas Visíveis" description="Quais módulos aparecem no menu" />
               <div className="space-y-1.5">
                 {ALL_MODULES.map((mod) => {
-                  const enabled = isAdminUser || getModuleEnabled(mod.key);
+                  const enabled = isAdminUser || draftModules[mod.key];
                   return (
                     <label key={mod.key} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-accent/50 cursor-pointer transition-colors">
                       <Checkbox
                         checked={enabled}
                         disabled={isAdminUser}
-                        onCheckedChange={() => onModuleToggle(mod.key, getModuleEnabled(mod.key))}
+                        onCheckedChange={() => toggleModule(mod.key)}
                         className="h-3.5 w-3.5"
                       />
                       <div>
@@ -397,21 +466,21 @@ function UserCard({
               <div className="space-y-1.5">
                 <label className="flex items-center gap-2 p-1.5 rounded-md hover:bg-accent/50 cursor-pointer transition-colors border-b border-border pb-2 mb-1">
                   <Checkbox
-                    checked={isAdminUser || userEmpresaCount >= empresas.length}
+                    checked={isAdminUser || draftEmpresas.length >= empresas.length}
                     disabled={isAdminUser}
-                    onCheckedChange={() => onToggleAllEmpresas()}
+                    onCheckedChange={() => toggleAllEmpresas()}
                     className="h-3.5 w-3.5"
                   />
                   <span className="text-sm font-medium">Todas as lojas</span>
                 </label>
                 {empresas.map((emp) => {
-                  const enabled = isAdminUser || getEmpresaEnabled(emp.codEmpresa);
+                  const enabled = isAdminUser || draftEmpresas.includes(emp.codEmpresa);
                   return (
                     <label key={emp.codEmpresa} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-accent/50 cursor-pointer transition-colors">
                       <Checkbox
                         checked={enabled}
                         disabled={isAdminUser}
-                        onCheckedChange={() => onEmpresaToggle(emp.codEmpresa)}
+                        onCheckedChange={() => toggleEmpresa(emp.codEmpresa)}
                         className="h-3.5 w-3.5"
                       />
                       <span className="text-sm">{emp.nome}</span>
@@ -419,11 +488,33 @@ function UserCard({
                   );
                 })}
               </div>
-              {!isAdminUser && userEmpresaCount === 0 && (
+              {!isAdminUser && draftEmpresas.length === 0 && (
                 <p className="text-[11px] text-destructive mt-2 flex items-center gap-1">
                   <Info className="h-3 w-3" /> Sem lojas = sem acesso a dados
                 </p>
               )}
+            </div>
+          </div>
+
+          {/* Save / Discard bar */}
+          <Separator className="mt-5 mb-4" />
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-muted-foreground">
+              {hasChanges ? (
+                <span className="text-amber-600 font-medium">● Alterações não salvas</span>
+              ) : (
+                <span className="text-green-600">✓ Tudo salvo</span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="ghost" onClick={handleDiscard} disabled={!hasChanges || saving} className="gap-1.5">
+                <Undo2 className="h-3.5 w-3.5" />
+                Descartar
+              </Button>
+              <Button size="sm" onClick={handleSave} disabled={!hasChanges || saving} className="gap-1.5">
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                Salvar Permissões
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -473,105 +564,94 @@ export default function AdminUsuariosPage() {
 
   if (!isAdmin) return <Navigate to="/" replace />;
 
-  const getRolesForUser = (userId: string) =>
-    userRoles.filter((r) => r.user_id === userId).map((r) => r.role);
+  const handleSaveUser = async (
+    userId: string,
+    data: { nome: string; roles: AppRole[]; modules: Record<string, boolean>; empresaCods: number[] }
+  ) => {
+    const currentProfile = profiles.find(p => p.id === userId);
+    const currentRoles = userRoles.filter(r => r.user_id === userId).map(r => r.role);
+    const currentModules = modulePerms.filter(p => p.user_id === userId);
+    const currentEmpresas = empresaPerms.filter(p => p.user_id === userId).map(p => p.cod_empresa);
 
-  const getModuleEnabled = (userId: string, module: string) => {
-    const perm = modulePerms.find(p => p.user_id === userId && p.module === module);
-    return perm?.enabled ?? false;
-  };
+    const promises: Promise<any>[] = [];
 
-  const getEmpresaEnabled = (userId: string, codEmpresa: number) =>
-    empresaPerms.some(p => p.user_id === userId && p.cod_empresa === codEmpresa);
-
-  const handleModuleToggle = async (userId: string, module: string, currentlyEnabled: boolean) => {
-    const newEnabled = !currentlyEnabled;
-    const { error } = await supabase
-      .from("user_module_permissions")
-      .upsert({ user_id: userId, module, enabled: newEnabled }, { onConflict: "user_id,module" });
-    if (error) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
-    } else {
-      setModulePerms(prev => {
-        const idx = prev.findIndex(p => p.user_id === userId && p.module === module);
-        if (idx >= 0) {
-          const copy = [...prev];
-          copy[idx] = { ...copy[idx], enabled: newEnabled };
-          return copy;
-        }
-        return [...prev, { user_id: userId, module, enabled: newEnabled }];
-      });
+    // 1. Save name via edge function
+    if (data.nome !== (currentProfile?.nome || "")) {
+      promises.push(
+        (async () => {
+          const { data: d, error } = await supabase.functions.invoke("admin-manage-users", {
+            body: { action: "update_profile", user_id: userId, nome: data.nome },
+          });
+          if (error) throw error;
+          if (d?.error) throw new Error(d.error);
+        })()
+      );
     }
-  };
 
-  const handleEmpresaToggle = async (userId: string, codEmpresa: number) => {
-    const isEnabled = getEmpresaEnabled(userId, codEmpresa);
-    if (isEnabled) {
-      const { error } = await supabase.from("user_empresa_permissions").delete().eq("user_id", userId).eq("cod_empresa", codEmpresa);
-      if (error) {
-        toast({ title: "Erro", description: error.message, variant: "destructive" });
-      } else {
-        setEmpresaPerms(prev => prev.filter(p => !(p.user_id === userId && p.cod_empresa === codEmpresa)));
-      }
-    } else {
-      const { error } = await supabase.from("user_empresa_permissions").insert({ user_id: userId, cod_empresa: codEmpresa });
-      if (error) {
-        toast({ title: "Erro", description: error.message, variant: "destructive" });
-      } else {
-        setEmpresaPerms(prev => [...prev, { user_id: userId, cod_empresa: codEmpresa }]);
-      }
+    // 2. Save roles (add missing, remove extra)
+    const rolesToAdd = data.roles.filter(r => !currentRoles.includes(r));
+    const rolesToRemove = currentRoles.filter(r => !data.roles.includes(r));
+    for (const role of rolesToAdd) {
+      promises.push(
+        (async () => {
+          const { error } = await supabase.from("user_roles").insert({ user_id: userId, role });
+          if (error) throw error;
+        })()
+      );
     }
-  };
+    for (const role of rolesToRemove) {
+      promises.push(
+        (async () => {
+          const { error } = await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", role);
+          if (error) throw error;
+        })()
+      );
+    }
 
-  const handleToggleAllEmpresas = async (userId: string) => {
-    const userEmpresas = empresaPerms.filter(p => p.user_id === userId);
-    const allEnabled = userEmpresas.length >= empresas.length;
-    if (allEnabled) {
-      const { error } = await supabase.from("user_empresa_permissions").delete().eq("user_id", userId);
-      if (error) {
-        toast({ title: "Erro", description: error.message, variant: "destructive" });
-      } else {
-        setEmpresaPerms(prev => prev.filter(p => p.user_id !== userId));
-      }
-    } else {
-      const existing = new Set(userEmpresas.map(p => p.cod_empresa));
-      const toInsert = empresas.filter(e => !existing.has(e.codEmpresa)).map(e => ({ user_id: userId, cod_empresa: e.codEmpresa }));
-      if (toInsert.length > 0) {
-        const { error } = await supabase.from("user_empresa_permissions").insert(toInsert);
-        if (error) {
-          toast({ title: "Erro", description: error.message, variant: "destructive" });
-        } else {
-          setEmpresaPerms(prev => [...prev, ...toInsert]);
-        }
+    // 3. Save modules
+    for (const mod of ALL_MODULES) {
+      const serverEnabled = currentModules.find(p => p.module === mod.key)?.enabled ?? false;
+      const draftEnabled = data.modules[mod.key] ?? false;
+      if (draftEnabled !== serverEnabled) {
+        promises.push(
+          (async () => {
+            const { error } = await supabase
+              .from("user_module_permissions")
+              .upsert({ user_id: userId, module: mod.key, enabled: draftEnabled }, { onConflict: "user_id,module" });
+            if (error) throw error;
+          })()
+        );
       }
     }
-  };
 
-  const handleRoleToggle = async (userId: string, role: AppRole) => {
-    const hasRole = getRolesForUser(userId).includes(role);
-    if (hasRole) {
-      const { error } = await supabase.from("user_roles").delete().eq("user_id", userId).eq("role", role);
-      if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
-      else fetchData();
-    } else {
-      const { error } = await supabase.from("user_roles").insert({ user_id: userId, role });
-      if (error) toast({ title: "Erro", description: error.message, variant: "destructive" });
-      else fetchData();
+    // 4. Save empresas (add missing, remove extra)
+    const empresasToAdd = data.empresaCods.filter(c => !currentEmpresas.includes(c));
+    const empresasToRemove = currentEmpresas.filter(c => !data.empresaCods.includes(c));
+    if (empresasToAdd.length > 0) {
+      promises.push(
+        (async () => {
+          const { error } = await supabase
+            .from("user_empresa_permissions")
+            .insert(empresasToAdd.map(c => ({ user_id: userId, cod_empresa: c })));
+          if (error) throw error;
+        })()
+      );
     }
-  };
+    for (const cod of empresasToRemove) {
+      promises.push(
+        (async () => {
+          const { error } = await supabase
+            .from("user_empresa_permissions")
+            .delete()
+            .eq("user_id", userId)
+            .eq("cod_empresa", cod);
+          if (error) throw error;
+        })()
+      );
+    }
 
-  const handleSaveName = async (userId: string, nome: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-manage-users", {
-        body: { action: "update_profile", user_id: userId, nome },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      setProfiles(prev => prev.map(p => p.id === userId ? { ...p, nome } : p));
-      toast({ title: "Nome salvo!" });
-    } catch (err: any) {
-      toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
-    }
+    await Promise.all(promises);
+    await fetchData();
   };
 
   return (
@@ -627,24 +707,18 @@ export default function AdminUsuariosPage() {
         ) : (
           <div className="space-y-3">
             {profiles.map((p) => {
-              const currentRoles = getRolesForUser(p.id);
-              const isAdminUser = currentRoles.includes("admin");
+              const currentRoles = userRoles.filter(r => r.user_id === p.id).map(r => r.role);
+              const userModPerms = modulePerms.filter(mp => mp.user_id === p.id);
+              const userEmpPerms = empresaPerms.filter(ep => ep.user_id === p.id);
               return (
                 <UserCard
                   key={p.id}
                   profile={p}
-                  currentRoles={currentRoles}
-                  modulePerms={modulePerms}
-                  empresaPerms={empresaPerms}
+                  serverRoles={currentRoles}
+                  serverModulePerms={userModPerms}
+                  serverEmpresaPerms={userEmpPerms}
                   empresas={empresas}
-                  isAdminUser={isAdminUser}
-                  onRoleToggle={(role) => handleRoleToggle(p.id, role)}
-                  onModuleToggle={(mod, enabled) => handleModuleToggle(p.id, mod, enabled)}
-                  onEmpresaToggle={(cod) => handleEmpresaToggle(p.id, cod)}
-                  onToggleAllEmpresas={() => handleToggleAllEmpresas(p.id)}
-                  getModuleEnabled={(mod) => getModuleEnabled(p.id, mod)}
-                  getEmpresaEnabled={(cod) => getEmpresaEnabled(p.id, cod)}
-                  onSaveName={(nome) => handleSaveName(p.id, nome)}
+                  onSave={(data) => handleSaveUser(p.id, data)}
                   onResetPassword={() => setResetTarget({ id: p.id, name: p.nome || p.email || "Usuário" })}
                 />
               );
