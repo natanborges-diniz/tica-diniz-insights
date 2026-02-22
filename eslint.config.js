@@ -21,6 +21,19 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      // Quality gate: block direct Dialog/Sheet imports in pages/components (use BaseDialog/BaseSheet)
+      "no-restricted-imports": ["warn", {
+        paths: [
+          {
+            name: "@/components/ui/dialog",
+            message: "Use BaseDialog from @/components/system/BaseDialog instead of raw Dialog.",
+          },
+          {
+            name: "@/components/ui/sheet",
+            message: "Use BaseSheet from @/components/system/BaseSheet instead of raw Sheet.",
+          },
+        ],
+      }],
     },
   },
 );

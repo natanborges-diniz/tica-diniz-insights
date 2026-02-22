@@ -41,13 +41,13 @@ export default function AdminPedidosAuditoriaPage() {
     if (!status) return <Badge variant="secondary">—</Badge>;
     const s = status.toUpperCase();
     if (s === "ERRO") return <Badge variant="destructive">Erro</Badge>;
-    if (s.includes("ENVI") || s.includes("PROD")) return <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-300">{status}</Badge>;
+    if (s.includes("ENVI") || s.includes("PROD")) return <Badge variant="outline" className="bg-success-soft text-success border-success-muted">{status}</Badge>;
     return <Badge variant="secondary">{status}</Badge>;
   }
 
   function envBadge(env: string | null) {
-    if (env === "production") return <Badge className="bg-red-500/15 text-red-700 border-red-300">Produção</Badge>;
-    return <Badge className="bg-amber-500/15 text-amber-700 border-amber-300">Staging</Badge>;
+    if (env === "production") return <Badge variant="outline" className="bg-danger-soft text-danger border-danger-muted">Produção</Badge>;
+    return <Badge variant="outline" className="bg-warning-soft text-warning border-warning-muted">Staging</Badge>;
   }
 
   return (

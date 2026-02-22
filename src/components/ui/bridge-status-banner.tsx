@@ -36,18 +36,18 @@ export const BridgeStatusBanner: React.FC<BridgeStatusBannerProps> = ({
       isDown
         ? "bg-destructive/10 border-destructive/30"
         : isDegraded
-        ? "bg-yellow-500/10 border-yellow-500/30"
+        ? "bg-warning-soft border-warning-muted"
         : isCircuitOpen
-        ? "bg-amber-500/10 border-amber-500/30"
+        ? "bg-warning-soft border-warning-muted"
         : "bg-muted border-border"
     }`}>
       {isDown ? (
         <WifiOff className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
       ) : (
-        <AlertTriangle className={`h-5 w-5 mt-0.5 shrink-0 ${isDegraded ? "text-yellow-600" : "text-amber-600"}`} />
+        <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0 text-warning" />
       )}
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium ${isDown ? "text-destructive" : isDegraded ? "text-yellow-700" : "text-amber-700"}`}>
+        <p className={`text-sm font-medium ${isDown ? "text-destructive" : "text-warning-foreground"}`}>
           {isDown
             ? "Conexão com o servidor de dados indisponível"
             : isDegraded
