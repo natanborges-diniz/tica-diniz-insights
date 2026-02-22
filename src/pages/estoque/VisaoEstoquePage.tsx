@@ -1,7 +1,7 @@
 // src/pages/estoque/VisaoEstoquePage.tsx
 // Página: Visão Estoque - lista detalhada de SKUs com KPIs
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useEstoqueUnificado, ItemEstoque } from "@/hooks/useEstoqueUnificado";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { OtbFornecedorMarcaConfig } from "@/components/otb/OtbFornecedorMarcaConfig";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
+import { DataTable, DataTableColumn, QueryState } from "@/components/ui/data-table";
 import { formatters, ExportColumn } from "@/utils/exportData";
 import { 
   Package, 
@@ -99,19 +100,140 @@ function formatarDiasEmEstoque(dias: number): string {
   return String(dias);
 }
 
+// Colunas do DataTable
+const estoqueColumns: DataTableColumn<ItemEstoque>[] = [
+  {
+    key: "codigoBarra",
+    header: "Cód. Barras",
+    sortable: true,
+    mobileVisible: true,
+    cell: (row) => (
+      <span className="font-mono text-xs">{row.codigoBarra || row.codSku}</span>
+    ),
+  },
+  {
+    key: "descricao",
+    header: "Descrição",
+    sortable: true,
+    mobileVisible: true,
+    maxWidth: "200px",
+    cell: (row) => (
+      <span title={row.descricao}>
+        {row.isDeadStock && <AlertTriangle className="h-3 w-3 inline mr-1 text-danger" />}
+        {row.descricao}
+      </span>
+    ),
+  },
+  {
+    key: "marca",
+    header: "Marca",
+    sortable: true,
+    mobileVisible: false,
+  },
+  {
+    key: "fornecedor",
+    header: "Fornecedor",
+    sortable: true,
+    mobileVisible: false,
+  },
+  {
+    key: "categoria",
+    header: "Cat.",
+    sortable: true,
+    mobileVisible: false,
+    cell: (row) => (
+      <Badge variant="outline" className="text-xs">
+        {row.categoria === "ARMACOES" ? "AR" : row.categoria === "LENTES" ? "LT" : row.categoria === "ACESSORIOS" ? "AC" : "OU"}
+      </Badge>
+    ),
+  },
+  {
+    key: "estoqueAtual",
+    header: "Estoque",
+    sortable: true,
+    align: "right",
+    mobileVisible: true,
+    cell: (row) => <span className="font-medium">{row.estoqueAtual}</span>,
+  },
+  {
+    key: "valorEstoqueCusto",
+    header: "Valor Custo",
+    sortable: true,
+    align: "right",
+    mobileVisible: false,
+    cell: (row) => (
+      <span className="text-muted-foreground">
+        {row.valorEstoqueCusto.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+      </span>
+    ),
+  },
+  {
+    key: "diasEmEstoque",
+    header: "Dias Estoque",
+    sortable: true,
+    align: "right",
+    mobileVisible: false,
+    cell: (row) => (
+      <span className={row.diasEmEstoque > 180 ? "text-danger font-medium" : ""}>
+        {row.diasEmEstoque === 0 ? "-" : row.diasEmEstoque}
+      </span>
+    ),
+  },
+  {
+    key: "curvaABC",
+    header: "Curva",
+    sortable: true,
+    mobileVisible: false,
+    cell: (row) => (
+      <Badge
+        variant={row.curvaABC === "A" ? "default" : row.curvaABC === "B" ? "secondary" : "outline"}
+        className="text-xs"
+      >
+        {row.curvaABC}
+      </Badge>
+    ),
+  },
+  {
+    key: "acaoSugerida",
+    header: "Ação",
+    sortable: true,
+    mobileVisible: true,
+    cell: (row) => (
+      <Badge
+        variant={
+          row.acaoSugerida.includes("URGENTE") ? "destructive"
+          : row.acaoSugerida.includes("COMPRAR") ? "default"
+          : row.acaoSugerida.includes("LIQUIDA") ? "secondary"
+          : "outline"
+        }
+        className="text-xs whitespace-nowrap"
+      >
+        {row.acaoSugerida}
+      </Badge>
+    ),
+  },
+];
+
 function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
+  const [queryState, setQueryState] = useState<QueryState>({
+    page: 1,
+    pageSize: 50,
+    sort: { field: "estoqueAtual", direction: "desc" },
+    search: "",
+  });
+
   const exportColumns: ExportColumn[] = [
-    { key: 'codSku', header: 'Código SKU' },
-    { key: 'codigoBarra', header: 'Cód. Barras' },
-    { key: 'descricao', header: 'Descrição' },
-    { key: 'marca', header: 'Marca' },
-    { key: 'fornecedor', header: 'Fornecedor' },
-    { key: 'categoria', header: 'Categoria' },
-    { key: 'estoqueAtual', header: 'Estoque', format: formatters.number },
-    { key: 'valorEstoqueCusto', header: 'Valor Custo', format: formatters.currency },
-    { key: 'diasEmEstoque', header: 'Dias em Estoque', format: (v) => formatarDiasEmEstoque(v) },
-    { key: 'curvaABC', header: 'Curva ABC' },
-    { key: 'acaoSugerida', header: 'Ação Sugerida' },
+    { key: "codSku", header: "Código SKU" },
+    { key: "codigoBarra", header: "Cód. Barras" },
+    { key: "descricao", header: "Descrição" },
+    { key: "marca", header: "Marca" },
+    { key: "fornecedor", header: "Fornecedor" },
+    { key: "categoria", header: "Categoria" },
+    { key: "estoqueAtual", header: "Estoque", format: formatters.number },
+    { key: "valorEstoqueCusto", header: "Valor Custo", format: formatters.currency },
+    { key: "diasEmEstoque", header: "Dias em Estoque", format: (v) => (v === 0 ? "-" : String(v)) },
+    { key: "curvaABC", header: "Curva ABC" },
+    { key: "acaoSugerida", header: "Ação Sugerida" },
   ];
 
   if (itens.length === 0) {
@@ -123,96 +245,30 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
   }
 
   return (
-    <div className="space-y-4">
-      <DataTableToolbar
-        exportOptions={{
-          filename: `estoque_${new Date().toISOString().split('T')[0]}`,
-          title: 'Detalhamento de Estoque',
-          columns: exportColumns,
-          data: itens,
-        }}
-      >
-        <span className="text-sm text-muted-foreground">
-          {itens.length.toLocaleString('pt-BR')} itens • Posição: {new Date().toLocaleDateString('pt-BR')} (tempo real)
-        </span>
-      </DataTableToolbar>
-
-      <div className="rounded-md border overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="text-left p-3 font-medium">Cód. Barras</th>
-              <th className="text-left p-3 font-medium">Descrição</th>
-              <th className="text-left p-3 font-medium">Marca</th>
-              <th className="text-left p-3 font-medium">Fornecedor</th>
-              <th className="text-left p-3 font-medium">Cat.</th>
-              <th className="text-right p-3 font-medium">Estoque</th>
-              <th className="text-right p-3 font-medium">Valor Custo</th>
-              <th className="text-right p-3 font-medium">Dias em Estoque</th>
-              <th className="text-left p-3 font-medium">Curva</th>
-              <th className="text-left p-3 font-medium">Ação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {itens.slice(0, 100).map((item, index) => (
-              <tr 
-                key={`${item.codSku}-${index}`} 
-                className={`border-t hover:bg-muted/30 ${item.isDeadStock ? 'bg-destructive/5' : ''}`}
-              >
-                <td className="p-3 font-mono text-xs">{item.codigoBarra || item.codSku}</td>
-                <td className="p-3 max-w-[200px] truncate" title={item.descricao}>
-                  {item.isDeadStock && <AlertTriangle className="h-3 w-3 inline mr-1 text-destructive" />}
-                  {item.descricao}
-                </td>
-                <td className="p-3">{item.marca}</td>
-                <td className="p-3">{item.fornecedor}</td>
-                <td className="p-3">
-                  <Badge variant="outline" className="text-xs">
-                    {item.categoria === 'ARMACOES' ? 'AR' : 
-                     item.categoria === 'LENTES' ? 'LT' : 
-                     item.categoria === 'ACESSORIOS' ? 'AC' : 'OU'}
-                  </Badge>
-                </td>
-                <td className="p-3 text-right font-medium">{item.estoqueAtual}</td>
-                <td className="p-3 text-right text-muted-foreground">
-                  {item.valorEstoqueCusto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </td>
-                <td className="p-3 text-right">
-                  <span className={item.diasEmEstoque > 180 ? 'text-destructive font-medium' : ''}>
-                    {formatarDiasEmEstoque(item.diasEmEstoque)}
-                  </span>
-                </td>
-                <td className="p-3">
-                  <Badge 
-                    variant={item.curvaABC === 'A' ? 'default' : item.curvaABC === 'B' ? 'secondary' : 'outline'}
-                    className="text-xs"
-                  >
-                    {item.curvaABC}
-                  </Badge>
-                </td>
-                <td className="p-3">
-                  <Badge 
-                    variant={
-                      item.acaoSugerida.includes('URGENTE') ? 'destructive' : 
-                      item.acaoSugerida.includes('COMPRAR') ? 'default' : 
-                      item.acaoSugerida.includes('LIQUIDAR') ? 'secondary' : 'outline'
-                    }
-                    className="text-xs whitespace-nowrap"
-                  >
-                    {item.acaoSugerida}
-                  </Badge>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {itens.length > 100 && (
-          <div className="p-3 text-center text-sm text-muted-foreground border-t">
-            Mostrando 100 de {itens.length} itens. Use os filtros para refinar.
-          </div>
-        )}
-      </div>
-    </div>
+    <DataTable
+      columns={estoqueColumns}
+      data={itens}
+      mode="client"
+      queryState={queryState}
+      onQueryChange={setQueryState}
+      rowKey={(row, idx) => `${row.codSku}-${idx}`}
+      rowClassName={(row) => (row.isDeadStock ? "bg-danger-soft/50" : "")}
+      emptyMessage="Nenhum item encontrado com os filtros selecionados"
+      toolbar={
+        <DataTableToolbar
+          exportOptions={{
+            filename: `estoque_${new Date().toISOString().split("T")[0]}`,
+            title: "Detalhamento de Estoque",
+            columns: exportColumns,
+            data: itens,
+          }}
+        >
+          <span className="text-sm text-muted-foreground">
+            {itens.length.toLocaleString("pt-BR")} itens • Posição: {new Date().toLocaleDateString("pt-BR")} (tempo real)
+          </span>
+        </DataTableToolbar>
+      }
+    />
   );
 }
 
