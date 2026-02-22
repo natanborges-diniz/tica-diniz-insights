@@ -8,7 +8,6 @@ import type { ModuleKey } from "./AppLayout";
 
 interface TopNavigationProps {
   activeModule: ModuleKey;
-  onModuleChange: (module: ModuleKey) => void;
 }
 
 const allModules: { key: ModuleKey; label: string; icon: React.ElementType; defaultPath: string }[] = [
@@ -20,7 +19,7 @@ const allModules: { key: ModuleKey; label: string; icon: React.ElementType; defa
   { key: "config", label: "Configurações", icon: Settings, defaultPath: "/config/metas" },
 ];
 
-export function TopNavigation({ activeModule, onModuleChange }: TopNavigationProps) {
+export function TopNavigation({ activeModule }: TopNavigationProps) {
   const navigate = useNavigate();
   const { profile, isAdmin, signOut } = useAuth();
   const { hasAccess } = useModulePermissions();
@@ -28,7 +27,6 @@ export function TopNavigation({ activeModule, onModuleChange }: TopNavigationPro
   const modules = allModules.filter(m => hasAccess(m.key));
 
   const handleModuleClick = (module: typeof allModules[0]) => {
-    onModuleChange(module.key);
     navigate(module.defaultPath);
   };
 
@@ -42,14 +40,20 @@ export function TopNavigation({ activeModule, onModuleChange }: TopNavigationPro
       <div className="flex h-14 items-center px-4 gap-4">
         {/* Logo */}
         <div className="flex items-center gap-2 mr-4">
-          <div className="p-1.5 rounded-lg bg-primary/10">
-            <Database className="h-5 w-5 text-primary" />
-          </div>
-          <span className="font-semibold text-sm hidden sm:inline">Sistema de Gestão</span>
+          <button
+            onClick={() => navigate("/home")}
+            className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-accent transition-colors"
+            aria-label="Ir para o início"
+          >
+            <div className="p-1 rounded-lg bg-primary/10">
+              <Database className="h-5 w-5 text-primary" />
+            </div>
+            <span className="font-semibold text-sm hidden sm:inline">Sistema de Gestão</span>
+          </button>
         </div>
 
         {/* Module Tabs */}
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-1" role="tablist" aria-label="Módulos do sistema">
           {modules.map((module) => {
             const Icon = module.icon;
             const isActive = activeModule === module.key;
@@ -57,10 +61,14 @@ export function TopNavigation({ activeModule, onModuleChange }: TopNavigationPro
             return (
               <button
                 key={module.key}
+                role="tab"
+                aria-selected={isActive}
+                aria-current={isActive ? "true" : undefined}
                 onClick={() => handleModuleClick(module)}
                 className={cn(
                   "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
                   "hover:bg-accent hover:text-accent-foreground",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                   isActive
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground"
