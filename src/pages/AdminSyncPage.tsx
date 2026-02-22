@@ -36,10 +36,10 @@ function generateCompetencias(): string[] {
 }
 
 const statusIcon: Record<string, React.ReactNode> = {
-  completed: <CheckCircle className="h-4 w-4 text-green-500" />,
+  completed: <CheckCircle className="h-4 w-4 text-success" />,
   failed: <XCircle className="h-4 w-4 text-destructive" />,
-  partial: <AlertTriangle className="h-4 w-4 text-yellow-500" />,
-  running: <Loader2 className="h-4 w-4 animate-spin text-blue-500" />,
+  partial: <AlertTriangle className="h-4 w-4 text-warning" />,
+  running: <Loader2 className="h-4 w-4 animate-spin text-info" />,
   pending: <SkipForward className="h-4 w-4 text-muted-foreground" />,
 };
 

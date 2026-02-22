@@ -101,38 +101,38 @@ export function SalesKPICards({
       title: usarVendasSemCreditos ? 'Vendas Válidas' : 'Total Vendido',
       value: formatCurrency(kpiPrincipal),
       icon: BadgeCheck,
-      color: 'text-emerald-600',
-      bgColor: 'bg-emerald-50 dark:bg-emerald-950/20',
+      iconClass: 'text-success',
+      bgClass: 'bg-success-soft',
       highlight: true,
     },
     {
       title: 'Créditos Utilizados',
       value: formatCurrency(metrics.totalCreditos),
       icon: CreditCard,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50 dark:bg-purple-950/20',
+      iconClass: 'text-chart-4',
+      bgClass: 'bg-chart-4/10',
     },
     {
       title: 'Devoluções',
       value: formatCurrency(metrics.totalDevolucoes),
       subtitle: '(apenas indicador)',
       icon: RotateCcw,
-      color: 'text-rose-600',
-      bgColor: 'bg-rose-50 dark:bg-rose-950/20',
+      iconClass: 'text-danger',
+      bgClass: 'bg-danger-soft',
     },
     {
       title: 'Qtd. Transações',
       value: formatNumber(metrics.qtdTransacoes),
       icon: ShoppingCart,
-      color: 'text-indigo-600',
-      bgColor: 'bg-indigo-50 dark:bg-indigo-950/20',
+      iconClass: 'text-info',
+      bgClass: 'bg-info-soft',
     },
     {
       title: 'Ticket Médio',
       value: formatCurrency(metrics.ticketMedio),
       icon: Receipt,
-      color: 'text-cyan-600',
-      bgColor: 'bg-cyan-50 dark:bg-cyan-950/20',
+      iconClass: 'text-chart-6',
+      bgClass: 'bg-chart-6/10',
     },
   ];
 
@@ -142,27 +142,27 @@ export function SalesKPICards({
     value: formatCurrency(projecao.projecaoFechamento),
     subtitle: `${projecao.diasDecorridos}/${projecao.diasTotais} dias (${projecao.percentualPeriodo.toFixed(0)}%)`,
     icon: TrendingUp,
-    color: 'text-sky-600',
-    bgColor: 'bg-sky-50 dark:bg-sky-950/20',
+    iconClass: 'text-info',
+    bgClass: 'bg-info-soft',
     isProjecao: true,
   } : null;
 
-  // Cards de desconto - agora vêm do mesmo endpoint (corrigido no backend)
+  // Cards de desconto
   const cardsDesconto = [
     {
       title: 'Total Desconto',
       value: metrics.descontoDisponivel ? formatCurrency(metrics.totalDesconto) : '—',
       icon: TrendingDown,
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50 dark:bg-amber-950/20',
+      iconClass: 'text-warning',
+      bgClass: 'bg-warning-soft',
       indisponivel: !metrics.descontoDisponivel,
     },
     {
       title: '% Desconto',
       value: metrics.descontoDisponivel ? formatPercent(metrics.percentualDesconto) : '—',
       icon: Percent,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50 dark:bg-orange-950/20',
+      iconClass: 'text-chart-8',
+      bgClass: 'bg-chart-8/10',
       indisponivel: !metrics.descontoDisponivel,
     },
   ];
@@ -214,15 +214,15 @@ export function SalesKPICards({
       <div ref={containerRef} className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 p-1">
         {/* Cards de vendas */}
         {cardsVendas.map((card, i) => (
-          <Card key={i} className={card.highlight ? 'ring-2 ring-emerald-500 ring-offset-2' : ''}>
+          <Card key={i} className={card.highlight ? 'ring-2 ring-success ring-offset-2' : ''}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
-              <div className={`p-2 rounded-full ${card.bgColor}`}>
-                <card.icon className={`h-4 w-4 ${card.color}`} />
+              <div className={`p-2 rounded-full ${card.bgClass}`}>
+                <card.icon className={`h-4 w-4 ${card.iconClass}`} />
               </div>
             </CardHeader>
             <CardContent>
-              <div className={`text-xl font-bold ${card.highlight ? 'text-emerald-600' : ''}`}>
+              <div className={`text-xl font-bold ${card.highlight ? 'text-success' : ''}`}>
                 {card.value}
               </div>
               {card.subtitle && (
@@ -234,17 +234,17 @@ export function SalesKPICards({
 
         {/* Card de projeção (somente se houver datas futuras) */}
         {cardProjecao && (
-          <Card className="ring-2 ring-sky-500 ring-offset-2 bg-sky-50/50 dark:bg-sky-950/20">
+          <Card className="ring-2 ring-info ring-offset-2 bg-info-soft">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-sky-700 dark:text-sky-300">{cardProjecao.title}</CardTitle>
-              <div className={`p-2 rounded-full ${cardProjecao.bgColor}`}>
-                <TrendingUp className={`h-4 w-4 ${cardProjecao.color}`} />
+              <CardTitle className="text-sm font-medium text-info">{cardProjecao.title}</CardTitle>
+              <div className={`p-2 rounded-full ${cardProjecao.bgClass}`}>
+                <TrendingUp className={`h-4 w-4 ${cardProjecao.iconClass}`} />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-xl font-bold text-sky-600">{cardProjecao.value}</div>
+              <div className="text-xl font-bold text-info">{cardProjecao.value}</div>
               {cardProjecao.subtitle && (
-                <p className="text-xs text-sky-600/80 mt-1">{cardProjecao.subtitle}</p>
+                <p className="text-xs text-info/80 mt-1">{cardProjecao.subtitle}</p>
               )}
             </CardContent>
           </Card>
@@ -255,11 +255,11 @@ export function SalesKPICards({
           <Card key={`desc-${i}`} className={card.indisponivel ? 'opacity-60' : ''}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
-              <div className={`p-2 rounded-full ${card.bgColor}`}>
+              <div className={`p-2 rounded-full ${card.bgClass}`}>
                 {card.indisponivel ? (
                   <AlertCircle className="h-4 w-4 text-muted-foreground" />
                 ) : (
-                  <card.icon className={`h-4 w-4 ${card.color}`} />
+                  <card.icon className={`h-4 w-4 ${card.iconClass}`} />
                 )}
               </div>
             </CardHeader>

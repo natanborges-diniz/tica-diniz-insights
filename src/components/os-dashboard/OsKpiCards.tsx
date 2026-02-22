@@ -26,7 +26,7 @@ interface KpiCardConfig {
   value: number | string;
   icon: React.ElementType;
   filterValue?: OsStatusFilter;
-  highlight?: "default" | "blue" | "green" | "amber" | "destructive";
+  highlight?: "default" | "info" | "success" | "warning" | "danger";
 }
 
 export const OsKpiCards: React.FC<Props> = ({
@@ -48,28 +48,28 @@ export const OsKpiCards: React.FC<Props> = ({
       value: metrics.emAndamento,
       icon: Clock,
       filterValue: "NO_PRAZO",
-      highlight: "blue",
+      highlight: "info",
     },
     {
       title: "Entregues",
       value: metrics.entregues,
       icon: CheckCircle2,
       filterValue: "ENTREGUE",
-      highlight: "green",
+      highlight: "success",
     },
     {
       title: "Atrasadas",
       value: metrics.atrasadas,
       icon: AlertTriangle,
       filterValue: "ATRASADAS",
-      highlight: "destructive",
+      highlight: "danger",
     },
     {
       title: "Sem Previsão",
       value: metrics.semPrevisao,
       icon: Calendar,
       filterValue: "SEM_DATA",
-      highlight: "amber",
+      highlight: "warning",
     },
     {
       title: "Tempo Médio (dias)",
@@ -82,14 +82,14 @@ export const OsKpiCards: React.FC<Props> = ({
   const getHighlightStyles = (highlight: string, isActive: boolean) => {
     const base = isActive ? "ring-2 ring-offset-2" : "";
     switch (highlight) {
-      case "blue":
-        return cn(base, isActive && "ring-blue-500");
-      case "green":
-        return cn(base, isActive && "ring-green-500");
-      case "amber":
-        return cn(base, isActive && "ring-amber-500");
-      case "destructive":
-        return cn(base, isActive && "ring-destructive");
+      case "info":
+        return cn(base, isActive && "ring-info");
+      case "success":
+        return cn(base, isActive && "ring-success");
+      case "warning":
+        return cn(base, isActive && "ring-warning");
+      case "danger":
+        return cn(base, isActive && "ring-danger");
       default:
         return cn(base, isActive && "ring-primary");
     }
@@ -97,14 +97,14 @@ export const OsKpiCards: React.FC<Props> = ({
 
   const getIconStyles = (highlight: string) => {
     switch (highlight) {
-      case "blue":
-        return "text-blue-500";
-      case "green":
-        return "text-green-500";
-      case "amber":
-        return "text-amber-500";
-      case "destructive":
-        return "text-destructive";
+      case "info":
+        return "text-info";
+      case "success":
+        return "text-success";
+      case "warning":
+        return "text-warning";
+      case "danger":
+        return "text-danger";
       default:
         return "text-primary";
     }

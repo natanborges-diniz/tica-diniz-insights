@@ -3,7 +3,7 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FinanceiroMetrics } from "../../hooks/useFinanceiroParcelas";
-import { TrendingUp, TrendingDown, AlertTriangle, FileText } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type KPIFilterType = 
@@ -33,7 +33,6 @@ export function FinanceiroKPICards({
 }: FinanceiroKPICardsProps) {
   const handleClick = (filter: KPIFilterType) => {
     if (onFilterChange) {
-      // Toggle: se já está ativo, volta para TODOS
       onFilterChange(activeFilter === filter ? "TODOS" : filter);
     }
   };
@@ -46,16 +45,16 @@ export function FinanceiroKPICards({
       <Card 
         className={cn(
           isClickable && "cursor-pointer transition-all hover:shadow-md",
-          activeFilter === "RECEBER_ABERTO" && "ring-2 ring-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20"
+          activeFilter === "RECEBER_ABERTO" && "ring-2 ring-success bg-success-soft"
         )}
         onClick={() => handleClick("RECEBER_ABERTO")}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">A Receber (Aberto)</CardTitle>
-          <TrendingUp className="h-4 w-4 text-emerald-500" />
+          <TrendingUp className="h-4 w-4 text-success" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-emerald-600">
+          <div className="text-2xl font-bold text-success">
             {formatCurrency(metrics.totalReceberAberto)}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -67,18 +66,18 @@ export function FinanceiroKPICards({
       {/* A Receber em Atraso */}
       <Card 
         className={cn(
-          "border-amber-200 bg-amber-50/50 dark:bg-amber-950/20",
+          "border-warning-muted bg-warning-soft",
           isClickable && "cursor-pointer transition-all hover:shadow-md",
-          activeFilter === "RECEBER_ATRASO" && "ring-2 ring-amber-500"
+          activeFilter === "RECEBER_ATRASO" && "ring-2 ring-warning"
         )}
         onClick={() => handleClick("RECEBER_ATRASO")}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">A Receber (Atraso)</CardTitle>
-          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          <AlertTriangle className="h-4 w-4 text-warning" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-amber-600">
+          <div className="text-2xl font-bold text-warning">
             {formatCurrency(metrics.totalReceberAtraso)}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -91,16 +90,16 @@ export function FinanceiroKPICards({
       <Card 
         className={cn(
           isClickable && "cursor-pointer transition-all hover:shadow-md",
-          activeFilter === "PAGAR_ABERTO" && "ring-2 ring-blue-500 bg-blue-50/50 dark:bg-blue-950/20"
+          activeFilter === "PAGAR_ABERTO" && "ring-2 ring-info bg-info-soft"
         )}
         onClick={() => handleClick("PAGAR_ABERTO")}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">A Pagar (Aberto)</CardTitle>
-          <TrendingDown className="h-4 w-4 text-blue-500" />
+          <TrendingDown className="h-4 w-4 text-info" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-blue-600">
+          <div className="text-2xl font-bold text-info">
             {formatCurrency(metrics.totalPagarAberto)}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -112,18 +111,18 @@ export function FinanceiroKPICards({
       {/* A Pagar em Atraso */}
       <Card 
         className={cn(
-          "border-destructive/50 bg-destructive/5",
+          "border-danger-muted bg-danger-soft",
           isClickable && "cursor-pointer transition-all hover:shadow-md",
-          activeFilter === "PAGAR_ATRASO" && "ring-2 ring-destructive"
+          activeFilter === "PAGAR_ATRASO" && "ring-2 ring-danger"
         )}
         onClick={() => handleClick("PAGAR_ATRASO")}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">A Pagar (Atraso)</CardTitle>
-          <AlertTriangle className="h-4 w-4 text-destructive" />
+          <AlertTriangle className="h-4 w-4 text-danger" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-destructive">
+          <div className="text-2xl font-bold text-danger">
             {formatCurrency(metrics.totalPagarAtraso)}
           </div>
           <p className="text-xs text-muted-foreground">

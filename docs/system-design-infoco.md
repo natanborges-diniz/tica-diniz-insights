@@ -120,6 +120,7 @@ Paleta fixa de 8 cores para gráficos. Usar em ordem sequencial:
 ## Status
 
 - [x] **Phase 0**: Tokens definidos em `index.css` + `tailwind.config.ts`
-- [ ] **Phase 1**: Migrar componentes P0 (SalesKPICards, VendasDiariasTable, FinanceiroKPICards…)
-- [ ] **Phase 2**: Migrar componentes P1
-- [ ] **Phase 3**: Migrar componentes P2 + remover safelist de cores nativas
+- [x] **Phase 1**: Migrar componentes P0 (SalesKPICards, VendasDiariasTable, FinanceiroKPICards, OsKpiCards, AdminSyncPage)
+- [x] **Phase 1b**: Migrar componentes P1 (OtbKPICards, OtbPainelAcoes)
+- [ ] **Phase 2**: Migrar componentes P2 (charts, tabelas restantes, inteligência)
+- [ ] **Phase 3**: Remover safelist de cores nativas

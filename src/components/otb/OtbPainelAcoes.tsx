@@ -49,10 +49,9 @@ export function OtbPainelAcoes({ itens, metrics, onFiltrarCategoria }: OtbPainel
     const acoesList: AcaoItem[] = [];
     
     // =====================================================
-    // 1. RUPTURA DE ESTOQUE - Abaixo do mínimo configurado
+    // 1. RUPTURA DE ESTOQUE
     // =====================================================
     
-    // 1.1 Curva A com estoque crítico (< 30% do mínimo)
     const curvaACritico = itens.filter(i => 
       i.curvaABC === 'A' && 
       i.estoqueMinimo > 0 &&
@@ -72,12 +71,11 @@ export function OtbPainelAcoes({ itens, metrics, onFiltrarCategoria }: OtbPainel
         qtd: curvaACritico.length,
         itens: curvaACritico,
         icon: <Flame className="h-5 w-5" />,
-        cor: 'text-red-600',
-        corBg: 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800',
+        cor: 'text-danger',
+        corBg: 'bg-danger-soft border-danger-muted',
       });
     }
     
-    // 1.2 Compra urgente geral (abaixo do mínimo)
     const compraUrgente = itens.filter(i => 
       i.classificacao === 'COMPRAR_URGENTE' &&
       !curvaACritico.includes(i)
@@ -96,16 +94,15 @@ export function OtbPainelAcoes({ itens, metrics, onFiltrarCategoria }: OtbPainel
         qtd: compraUrgente.length,
         itens: compraUrgente,
         icon: <AlertTriangle className="h-5 w-5" />,
-        cor: 'text-orange-600',
-        corBg: 'bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800',
+        cor: 'text-warning',
+        corBg: 'bg-warning-soft border-warning-muted',
       });
     }
     
     // =====================================================
-    // 2. CAPITAL PARADO - Estoque excessivo
+    // 2. CAPITAL PARADO
     // =====================================================
     
-    // 2.1 Excesso em Curva C (produtos que não giram)
     const curvaCExcesso = itens.filter(i => 
       i.curvaABC === 'C' && 
       i.diasDesdeUltimaVenda > 180
@@ -124,12 +121,11 @@ export function OtbPainelAcoes({ itens, metrics, onFiltrarCategoria }: OtbPainel
         qtd: curvaCExcesso.length,
         itens: curvaCExcesso,
         icon: <Snowflake className="h-5 w-5" />,
-        cor: 'text-blue-600',
-        corBg: 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800',
+        cor: 'text-info',
+        corBg: 'bg-info-soft border-info-muted',
       });
     }
     
-    // 2.2 Excesso geral (> 2x mínimo)
     const excessoGeral = itens.filter(i => 
       i.classificacao === 'EXCESSO' &&
       !curvaCExcesso.includes(i)
@@ -152,16 +148,15 @@ export function OtbPainelAcoes({ itens, metrics, onFiltrarCategoria }: OtbPainel
         qtd: excessoGeral.length,
         itens: excessoGeral,
         icon: <Package className="h-5 w-5" />,
-        cor: 'text-slate-600',
-        corBg: 'bg-slate-50 border-slate-200 dark:bg-slate-950/30 dark:border-slate-800',
+        cor: 'text-neutral-600',
+        corBg: 'bg-neutral-100 border-neutral-200',
       });
     }
     
     // =====================================================
-    // 3. SAÚDE DO MIX - Oportunidades
+    // 3. SAÚDE DO MIX
     // =====================================================
     
-    // 3.1 Curva A sem estoque (vendeu tudo)
     const curvaASemEstoque = itens.filter(i => 
       i.curvaABC === 'A' && 
       i.estoqueAtual === 0 &&
@@ -181,12 +176,11 @@ export function OtbPainelAcoes({ itens, metrics, onFiltrarCategoria }: OtbPainel
         qtd: curvaASemEstoque.length,
         itens: curvaASemEstoque,
         icon: <Target className="h-5 w-5" />,
-        cor: 'text-purple-600',
-        corBg: 'bg-purple-50 border-purple-200 dark:bg-purple-950/30 dark:border-purple-800',
+        cor: 'text-chart-4',
+        corBg: 'bg-chart-4/10 border-chart-4/30',
       });
     }
     
-    // 3.2 Produtos sem venda há muito tempo mas com estoque
     const semVendaComEstoque = itens.filter(i => 
       i.diasDesdeUltimaVenda > 90 && 
       i.estoqueAtual > 0
@@ -205,8 +199,8 @@ export function OtbPainelAcoes({ itens, metrics, onFiltrarCategoria }: OtbPainel
         qtd: semVendaComEstoque.length,
         itens: semVendaComEstoque,
         icon: <AlertCircle className="h-5 w-5" />,
-        cor: 'text-amber-600',
-        corBg: 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800',
+        cor: 'text-warning',
+        corBg: 'bg-warning-soft border-warning-muted',
       });
     }
     
@@ -242,10 +236,10 @@ export function OtbPainelAcoes({ itens, metrics, onFiltrarCategoria }: OtbPainel
       {/* Cards Resumo dos 3 Pilares */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Pilar 1: Ruptura */}
-        <Card className="border-2 border-red-200 dark:border-red-800 bg-gradient-to-br from-red-50 to-white dark:from-red-950/20 dark:to-background">
+        <Card className="border-2 border-danger-muted bg-gradient-to-br from-danger-soft to-background">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2 text-red-700 dark:text-red-400">
+              <CardTitle className="text-base flex items-center gap-2 text-danger">
                 <TrendingDown className="h-5 w-5" />
                 Risco de Ruptura
               </CardTitle>
@@ -255,63 +249,63 @@ export function OtbPainelAcoes({ itens, metrics, onFiltrarCategoria }: OtbPainel
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
+            <div className="text-2xl font-bold text-danger">
               R$ {(resumoPilares.ruptura.valor / 1000).toFixed(0)}k
             </div>
             <p className="text-xs text-muted-foreground">em potencial de perda/investimento</p>
             <Progress 
               value={Math.min((resumoPilares.ruptura.qtd / metrics.totalSkus) * 100, 100)} 
-              className="mt-2 h-2 bg-red-100"
+              className="mt-2 h-2 bg-danger-soft"
             />
           </CardContent>
         </Card>
 
         {/* Pilar 2: Capital Parado */}
-        <Card className="border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/20 dark:to-background">
+        <Card className="border-2 border-info-muted bg-gradient-to-br from-info-soft to-background">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2 text-blue-700 dark:text-blue-400">
+              <CardTitle className="text-base flex items-center gap-2 text-info">
                 <DollarSign className="h-5 w-5" />
                 Capital Parado
               </CardTitle>
-              <Badge className="text-lg px-3 bg-blue-600">
+              <Badge className="text-lg px-3 bg-info text-info-foreground">
                 {resumoPilares.capital.qtd}
               </Badge>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
+            <div className="text-2xl font-bold text-info">
               R$ {(resumoPilares.capital.valor / 1000).toFixed(0)}k
             </div>
             <p className="text-xs text-muted-foreground">imobilizado em excesso de estoque</p>
             <Progress 
               value={Math.min((resumoPilares.capital.qtd / metrics.totalSkus) * 100, 100)} 
-              className="mt-2 h-2 bg-blue-100"
+              className="mt-2 h-2 bg-info-soft"
             />
           </CardContent>
         </Card>
 
         {/* Pilar 3: Saúde do Mix */}
-        <Card className="border-2 border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50 to-white dark:from-purple-950/20 dark:to-background">
+        <Card className="border-2 border-chart-4/30 bg-gradient-to-br from-chart-4/5 to-background">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2 text-purple-700 dark:text-purple-400">
+              <CardTitle className="text-base flex items-center gap-2 text-chart-4">
                 <Target className="h-5 w-5" />
                 Saúde do Mix
               </CardTitle>
-              <Badge className="text-lg px-3 bg-purple-600">
+              <Badge className="text-lg px-3 bg-chart-4 text-white">
                 {resumoPilares.saude.qtd}
               </Badge>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-600">
+            <div className="text-2xl font-bold text-chart-4">
               R$ {(resumoPilares.saude.valor / 1000).toFixed(0)}k
             </div>
             <p className="text-xs text-muted-foreground">em oportunidades e problemas de giro</p>
             <Progress 
               value={Math.min((resumoPilares.saude.qtd / metrics.totalSkus) * 100, 100)} 
-              className="mt-2 h-2 bg-purple-100"
+              className="mt-2 h-2 bg-chart-4/10"
             />
           </CardContent>
         </Card>
