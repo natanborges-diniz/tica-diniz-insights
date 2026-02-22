@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, DataTableColumn, QueryState } from '@/components/ui/data-table';
 import { SalesRowDetailSheet } from './SalesRowDetailSheet';
 import { ResumoLoja } from '@/hooks/useVendasDashboard';
+import { EmptyState } from '@/components/system/states';
 
 interface StoreTableProps {
   dados: ResumoLoja[];
@@ -80,7 +81,7 @@ export function StoreTable({ dados, isLoading, usarVendasSemCreditos = true }: S
           onQueryChange={setQueryState}
           rowKey={(row) => row.empresa}
           loading={isLoading}
-          emptyMessage="Sem dados no período"
+          emptyState={<EmptyState title="Sem dados no período" description="Ajuste os filtros ou selecione outro período." />}
           onRowClick={(row) => setDetailRow(row)}
         />
       </CardContent>

@@ -10,6 +10,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { DataTable, DataTableColumn, QueryState } from "@/components/ui/data-table";
 import { formatters, ExportColumn } from "@/utils/exportData";
 import { Search, X } from "lucide-react";
+import { EmptyState } from "@/components/system/states";
 
 interface FinanceiroParcelasTableProps {
   data: FinanceiroParcela[];
@@ -203,7 +204,12 @@ export function FinanceiroParcelasTable({ data }: FinanceiroParcelasTableProps) 
           queryState={queryState}
           onQueryChange={setQueryState}
           rowKey={(p, index) => `${p.codEmpresa}-${p.documento}-${index}`}
-          emptyMessage={data.length === 0 ? "Nenhuma parcela encontrada" : "Nenhum resultado para a busca"}
+          emptyState={
+            <EmptyState
+              title={data.length === 0 ? "Nenhuma parcela encontrada" : "Nenhum resultado para a busca"}
+              description={data.length === 0 ? "Selecione uma empresa e período." : "Tente ajustar o termo de busca."}
+            />
+          }
           toolbar={
             <DataTableToolbar
               exportOptions={{

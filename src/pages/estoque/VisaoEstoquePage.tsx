@@ -25,6 +25,7 @@ import {
   Users,
   AlertTriangle
 } from "lucide-react";
+import { EmptyState, ErrorState, LoadingState } from "@/components/system/states";
 
 // KPI Cards Component
 function EstoqueKPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueUnificado>['metricas'] }) {
@@ -242,9 +243,11 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
 
   if (itens.length === 0) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
-        Nenhum item encontrado com os filtros selecionados
-      </div>
+      <EmptyState
+        title="Nenhum item encontrado"
+        description="Ajuste os filtros selecionados ou selecione outra empresa."
+        icon={<Package className="h-6 w-6 text-muted-foreground" />}
+      />
     );
   }
 
@@ -445,22 +448,15 @@ export default function VisaoEstoquePage() {
 
       {/* Erro */}
       {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <ErrorState
+          description={error}
+          onRetry={carregarDados}
+        />
       )}
 
       {/* Loading */}
       {loading && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-24" />
-            ))}
-          </div>
-          <Skeleton className="h-[400px]" />
-        </div>
+        <LoadingState message="Carregando estoque..." />
       )}
 
       {/* Conteúdo Principal */}

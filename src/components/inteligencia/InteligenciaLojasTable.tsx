@@ -5,6 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Trophy } from "lucide-react";
 import { DataTable, DataTableColumn, QueryState } from "@/components/ui/data-table";
 import { SalesRowDetailSheet } from "@/components/sales-dashboard/SalesRowDetailSheet";
+import { EmptyState } from "@/components/system/states";
 import {
   Table,
   TableBody,
@@ -160,7 +161,7 @@ export function InteligenciaLojasTable({ ranking, compact = false }: Inteligenci
         queryState={queryState}
         onQueryChange={setQueryState}
         rowKey={(row) => String(row.codEmpresa)}
-        emptyMessage="Nenhum dado disponível. Clique em &quot;Carregar Dados&quot; para buscar."
+        emptyState={<EmptyState title="Nenhum dado disponível" description='Clique em "Carregar Dados" para buscar.' />}
         rowClassName={(row) => row.posicao <= 3 ? "bg-muted/30" : ""}
         onRowClick={(row) => setDetailRow(row)}
       />

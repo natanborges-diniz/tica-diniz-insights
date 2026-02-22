@@ -146,7 +146,79 @@ function MinhaTelaEditavel() {
 
 ---
 
-## 7. Estrutura de Arquivos
+## 7. Estados do Sistema
+
+Componentes padronizados em `src/components/system/states/`:
+
+### EmptyState — Nenhum dado
+
+```tsx
+import { EmptyState } from "@/components/system/states";
+
+<EmptyState
+  title="Nenhum registro encontrado"
+  description="Ajuste os filtros ou selecione outro período."
+  icon={<Package className="h-6 w-6 text-muted-foreground" />}
+  action={<Button size="sm">Carregar Dados</Button>}
+/>
+```
+
+### ErrorState — Erro ao carregar
+
+```tsx
+import { ErrorState } from "@/components/system/states";
+
+<ErrorState
+  description="Não foi possível conectar ao servidor."
+  onRetry={() => refetch()}
+/>
+```
+
+### LoadingState — Carregando
+
+```tsx
+import { LoadingState } from "@/components/system/states";
+
+<LoadingState message="Carregando estoque..." variant="page" />
+```
+
+### NoPermissionState — Sem permissão
+
+```tsx
+import { NoPermissionState } from "@/components/system/states";
+
+<NoPermissionState />
+// Usado automaticamente pelo ModuleGuard
+```
+
+### toastPatterns — Toasts padronizados
+
+```tsx
+import { toastPatterns } from "@/lib/toastPatterns";
+
+toastPatterns.success("Configuração salva");
+toastPatterns.error("Falha ao salvar", "Verifique sua conexão.");
+toastPatterns.warning("Atenção", "Existem campos obrigatórios vazios.");
+toastPatterns.info("Dica", "Use filtros para refinar a busca.");
+toastPatterns.saved("Meta");       // ✓ Meta salvo
+toastPatterns.deleted("Registro"); // ✓ Registro removido
+toastPatterns.apiError();          // ✗ Erro de comunicação
+```
+
+### Integração com DataTable
+
+```tsx
+<DataTable
+  // ...
+  emptyState={<EmptyState title="Sem dados" description="Ajuste os filtros." />}
+  errorState={isError ? <ErrorState onRetry={refetch} /> : undefined}
+  loading={isLoading}
+/>
+```
+
+---
+
+## 8. Estrutura de Arquivos
 
 ```
 src/components/
@@ -154,10 +226,18 @@ src/components/
 │   ├── ActionBar.tsx          # Barra de ações sticky
 │   ├── BaseDialog.tsx         # Modal padronizado
 │   ├── BaseSheet.tsx          # Gaveta lateral padronizada
-│   └── dirty/
-│       └── useDirtyGuard.ts   # Hook de dirty state
+│   ├── dirty/
+│   │   └── useDirtyGuard.ts   # Hook de dirty state
+│   └── states/
+│       ├── EmptyState.tsx     # Estado vazio padronizado
+│       ├── ErrorState.tsx     # Estado de erro padronizado
+│       ├── LoadingState.tsx   # Estado de loading padronizado
+│       ├── NoPermissionState.tsx # Sem permissão
+│       └── index.ts           # Barrel export
 ├── ui/                        # shadcn primitivos (NÃO usar direto em páginas)
 │   ├── dialog.tsx             # ⛔ Use BaseDialog
 │   ├── sheet.tsx              # ⛔ Use BaseSheet
 │   └── ...
+src/lib/
+├── toastPatterns.ts           # Helpers de toast com tokens semânticos
 ```
