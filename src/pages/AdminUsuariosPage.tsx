@@ -1,21 +1,23 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Shield, Users, Eye, Store, Info, Plus, Save, ChevronDown, ChevronRight, Lock, Undo2 } from "lucide-react";
+import { Loader2, Shield, Users, Eye, Store, Info, Plus, Lock, Undo2, Check } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Navigate } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { BaseDialog } from "@/components/system/BaseDialog";
+import { BaseSheet } from "@/components/system/BaseSheet";
+import { useDirtyGuard } from "@/components/system/dirty/useDirtyGuard";
 import type { ModuleKey } from "@/components/layout/AppLayout";
 
 type AppRole = "admin";
@@ -64,28 +66,38 @@ function SectionHeader({ icon: Icon, title, description }: { icon: React.Element
   );
 }
 
-// ─── Create User Dialog ─────────────────────────────────────────────
+// ─── Create User Dialog (BaseDialog) ────────────────────────────────
 function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [nome, setNome] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const nomeRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setError(null);
+      setTimeout(() => nomeRef.current?.focus(), 100);
+    }
+  }, [open]);
 
   const handleCreate = async () => {
+    setError(null);
     if (!email || !password) {
-      toast({ title: "Preencha email e senha", variant: "destructive" });
+      setError("Preencha email e senha");
       return;
     }
     if (password.length < 6) {
-      toast({ title: "Senha deve ter no mínimo 6 caracteres", variant: "destructive" });
+      setError("Senha deve ter no mínimo 6 caracteres");
       return;
     }
     setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke("admin-manage-users", {
+      const { data, error: fnError } = await supabase.functions.invoke("admin-manage-users", {
         body: { action: "create", email, password, nome },
       });
-      if (error) throw error;
+      if (fnError) throw fnError;
       if (data?.error) throw new Error(data.error);
       toast({ title: "Usuário criado com sucesso!" });
       setEmail("");
@@ -94,141 +106,226 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
       onOpenChange(false);
       onCreated();
     } catch (err: any) {
-      toast({ title: "Erro ao criar usuário", description: err.message, variant: "destructive" });
+      setError(err.message);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            Novo Usuário
-          </DialogTitle>
-          <DialogDescription>
-            Crie um novo usuário. Após criar, configure as permissões na lista.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label htmlFor="nome">Nome</Label>
-            <Input id="nome" placeholder="Nome do usuário" value={nome} onChange={(e) => setNome(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email *</Label>
-            <Input id="email" type="email" placeholder="usuario@empresa.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Senha *</Label>
-            <Input id="password" type="password" placeholder="Mínimo 6 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </div>
-        </div>
-        <DialogFooter>
+    <BaseDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Novo Usuário"
+      description="Crie um novo usuário. Após criar, configure as permissões na lista."
+      size="sm"
+      footer={
+        <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={handleCreate} disabled={saving}>
-            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             Criar Usuário
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && (
+          <p className="text-sm text-danger bg-danger-soft px-3 py-2 rounded-md">{error}</p>
+        )}
+        <div className="space-y-2">
+          <Label htmlFor="create-nome">Nome</Label>
+          <Input ref={nomeRef} id="create-nome" placeholder="Nome do usuário" value={nome} onChange={(e) => setNome(e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="create-email">Email *</Label>
+          <Input id="create-email" type="email" placeholder="usuario@empresa.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="create-password">Senha *</Label>
+          <Input id="create-password" type="password" placeholder="Mínimo 6 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </div>
+      </div>
+    </BaseDialog>
   );
 }
 
-// ─── Reset Password Dialog ──────────────────────────────────────────
+// ─── Reset Password Dialog (BaseDialog) ─────────────────────────────
 function ResetPasswordDialog({ open, onOpenChange, userId, userName }: { open: boolean; onOpenChange: (v: boolean) => void; userId: string; userName: string }) {
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setPassword("");
+      setError(null);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [open]);
 
   const handleReset = async () => {
+    setError(null);
     if (password.length < 6) {
-      toast({ title: "Senha deve ter no mínimo 6 caracteres", variant: "destructive" });
+      setError("Senha deve ter no mínimo 6 caracteres");
       return;
     }
     setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke("admin-manage-users", {
+      const { data, error: fnError } = await supabase.functions.invoke("admin-manage-users", {
         body: { action: "reset_password", user_id: userId, password },
       });
-      if (error) throw error;
+      if (fnError) throw fnError;
       if (data?.error) throw new Error(data.error);
       toast({ title: "Senha alterada com sucesso!" });
       setPassword("");
       onOpenChange(false);
     } catch (err: any) {
-      toast({ title: "Erro ao alterar senha", description: err.message, variant: "destructive" });
+      setError(err.message);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Lock className="h-5 w-5" />
-            Redefinir Senha
-          </DialogTitle>
-          <DialogDescription>
-            Nova senha para <strong>{userName}</strong>
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-2 py-2">
-          <Label htmlFor="new-password">Nova Senha</Label>
-          <Input id="new-password" type="password" placeholder="Mínimo 6 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </div>
-        <DialogFooter>
+    <BaseDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Redefinir Senha"
+      description={`Nova senha para ${userName}`}
+      size="sm"
+      footer={
+        <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleReset} disabled={saving}>
-            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          <Button onClick={handleReset} disabled={saving || password.length < 6}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             Salvar Senha
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <div className="space-y-2">
+        {error && (
+          <p className="text-sm text-danger bg-danger-soft px-3 py-2 rounded-md">{error}</p>
+        )}
+        <Label htmlFor="new-password">Nova Senha</Label>
+        <Input ref={inputRef} id="new-password" type="password" placeholder="Mínimo 6 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} />
+      </div>
+    </BaseDialog>
   );
 }
 
-// ─── User Card with Draft State ─────────────────────────────────────
-function UserCard({
-  profile, serverRoles, serverModulePerms, serverEmpresaPerms, empresas,
-  onSave, onResetPassword,
+// ─── User Row (clickable summary) ───────────────────────────────────
+function UserRow({
+  profile,
+  isAdmin,
+  moduleCount,
+  empresaCount,
+  totalModules,
+  totalEmpresas,
+  onClick,
 }: {
   profile: ProfileRow;
+  isAdmin: boolean;
+  moduleCount: number;
+  empresaCount: number;
+  totalModules: number;
+  totalEmpresas: number;
+  onClick: () => void;
+}) {
+  return (
+    <Card
+      className="cursor-pointer hover:bg-accent/30 transition-colors"
+      onClick={onClick}
+    >
+      <CardHeader className="py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <Users className="h-4 w-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <CardTitle className="text-sm font-medium truncate">
+                {profile.nome || profile.email || "Sem nome"}
+              </CardTitle>
+              {profile.nome && (
+                <CardDescription className="text-xs truncate">{profile.email}</CardDescription>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {isAdmin && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-danger-soft text-danger border-danger/20">
+                Admin
+              </Badge>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1">
+                  <Eye className="h-2.5 w-2.5" />
+                  {isAdmin ? totalModules : moduleCount}/{totalModules}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>Telas visíveis</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "text-[10px] px-1.5 py-0 gap-1",
+                    !isAdmin && empresaCount === 0 && "border-danger/50 text-danger"
+                  )}
+                >
+                  <Store className="h-2.5 w-2.5" />
+                  {isAdmin ? "Todas" : `${empresaCount}/${totalEmpresas}`}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>Lojas com acesso</TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
+      </CardHeader>
+    </Card>
+  );
+}
+
+// ─── User Edit Sheet (BaseSheet + DirtyGuard) ───────────────────────
+function UserEditSheet({
+  open,
+  onOpenChange,
+  profile,
+  serverRoles,
+  serverModulePerms,
+  serverEmpresaPerms,
+  empresas,
+  onSave,
+  onResetPassword,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  profile: ProfileRow | null;
   serverRoles: AppRole[];
   serverModulePerms: ModulePermRow[];
   serverEmpresaPerms: EmpresaPermRow[];
   empresas: { codEmpresa: number; nome: string }[];
-  onSave: (data: {
-    nome: string;
-    isAdmin: boolean;
-    modules: Record<string, string>;
-    empresaCods: number[];
-  }) => Promise<void>;
+  onSave: (data: { nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[] }) => Promise<void>;
   onResetPassword: () => void;
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const { isDirty, setDirty, setClean, guardClose } = useDirtyGuard();
+  const [saveStatus, setSaveStatus] = useState<"idle" | "loading" | "success">("idle");
 
   // Draft state
-  const [draftName, setDraftName] = useState(profile.nome || "");
-  const [draftIsAdmin, setDraftIsAdmin] = useState(serverRoles.includes("admin"));
-  const [draftModules, setDraftModules] = useState<Record<string, string>>(() => {
-    const map: Record<string, string> = {};
-    ALL_MODULES.forEach(m => { map[m.key] = "nenhum"; });
-    serverModulePerms.forEach(p => { map[p.module] = p.access_level; });
-    return map;
-  });
-  const [draftEmpresas, setDraftEmpresas] = useState<number[]>(
-    serverEmpresaPerms.map(p => p.cod_empresa)
-  );
+  const [draftName, setDraftName] = useState("");
+  const [draftIsAdmin, setDraftIsAdmin] = useState(false);
+  const [draftModules, setDraftModules] = useState<Record<string, string>>({});
+  const [draftEmpresas, setDraftEmpresas] = useState<number[]>([]);
 
-  // Reset draft when server data changes
+  // Reset draft when profile/server data changes
   useEffect(() => {
+    if (!profile) return;
     setDraftName(profile.nome || "");
     setDraftIsAdmin(serverRoles.includes("admin"));
     const map: Record<string, string> = {};
@@ -236,15 +333,17 @@ function UserCard({
     serverModulePerms.forEach(p => { map[p.module] = p.access_level; });
     setDraftModules(map);
     setDraftEmpresas(serverEmpresaPerms.map(p => p.cod_empresa));
-  }, [profile, serverRoles, serverModulePerms, serverEmpresaPerms]);
+    setClean();
+    setSaveStatus("idle");
+  }, [profile, serverRoles, serverModulePerms, serverEmpresaPerms, setClean]);
 
   const isAdminUser = draftIsAdmin;
 
   // Detect changes
   const hasChanges = useMemo(() => {
+    if (!profile) return false;
     if (draftName !== (profile.nome || "")) return true;
-    const serverIsAdmin = serverRoles.includes("admin");
-    if (draftIsAdmin !== serverIsAdmin) return true;
+    if (draftIsAdmin !== serverRoles.includes("admin")) return true;
     const serverModMap: Record<string, string> = {};
     ALL_MODULES.forEach(m => { serverModMap[m.key] = "nenhum"; });
     serverModulePerms.forEach(p => { serverModMap[p.module] = p.access_level; });
@@ -255,7 +354,14 @@ function UserCard({
     return false;
   }, [draftName, draftIsAdmin, draftModules, draftEmpresas, profile, serverRoles, serverModulePerms, serverEmpresaPerms]);
 
+  // Sync dirty state
+  useEffect(() => {
+    if (hasChanges) setDirty();
+    else setClean();
+  }, [hasChanges, setDirty, setClean]);
+
   const handleDiscard = () => {
+    if (!profile) return;
     setDraftName(profile.nome || "");
     setDraftIsAdmin(serverRoles.includes("admin"));
     const map: Record<string, string> = {};
@@ -266,7 +372,7 @@ function UserCard({
   };
 
   const handleSave = async () => {
-    setSaving(true);
+    setSaveStatus("loading");
     try {
       await onSave({
         nome: draftName,
@@ -274,12 +380,20 @@ function UserCard({
         modules: draftModules,
         empresaCods: draftEmpresas,
       });
+      setSaveStatus("success");
       toast({ title: "Permissões salvas com sucesso!" });
+      setTimeout(() => {
+        setSaveStatus("idle");
+        onOpenChange(false);
+      }, 1500);
     } catch (err: any) {
+      setSaveStatus("idle");
       toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
-    } finally {
-      setSaving(false);
     }
+  };
+
+  const handleOpenChange = (v: boolean) => {
+    if (guardClose(v)) onOpenChange(v);
   };
 
   const setModuleLevel = (key: string, level: string) => {
@@ -300,203 +414,166 @@ function UserCard({
     }
   };
 
-  const moduleCount = isAdminUser
-    ? ALL_MODULES.length
-    : Object.values(draftModules).filter(v => v !== "nenhum").length;
-  const empresaCount = draftEmpresas.length;
+  if (!profile) return null;
+
+  const footer = (
+    <div className="flex items-center justify-between w-full">
+      <div className="text-sm text-muted-foreground">
+        {saveStatus === "success" ? (
+          <span className="text-success flex items-center gap-1.5 font-medium">
+            <Check className="h-4 w-4" /> Salvo com sucesso
+          </span>
+        ) : isDirty ? (
+          <span className="text-warning font-medium">● Alterações não salvas</span>
+        ) : null}
+      </div>
+      <div className="flex gap-2">
+        <Button variant="ghost" size="sm" onClick={handleDiscard} disabled={!isDirty || saveStatus === "loading"} className="gap-1.5">
+          <Undo2 className="h-3.5 w-3.5" />
+          Descartar
+        </Button>
+        <Button size="sm" onClick={handleSave} disabled={!isDirty || saveStatus === "loading" || saveStatus === "success"} className="gap-1.5">
+          {saveStatus === "loading" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {saveStatus === "success" && <Check className="h-3.5 w-3.5" />}
+          Salvar Permissões
+        </Button>
+      </div>
+    </div>
+  );
 
   return (
-    <Card className={isExpanded ? "ring-1 ring-primary/30" : hasChanges ? "ring-1 ring-amber-400/50" : ""}>
-      <CardHeader
-        className="cursor-pointer hover:bg-accent/30 transition-colors py-4"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
-            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <Users className="h-4 w-4 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <CardTitle className="text-sm font-medium truncate">
-                {profile.nome || profile.email || "Sem nome"}
-              </CardTitle>
-              {profile.nome && (
-                <CardDescription className="text-xs truncate">{profile.email}</CardDescription>
-              )}
-            </div>
-            {hasChanges && !isExpanded && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-600 bg-amber-50 shrink-0">
-                Não salvo
-              </Badge>
-            )}
+    <BaseSheet
+      open={open}
+      onOpenChange={handleOpenChange}
+      title={profile.nome || profile.email || "Usuário"}
+      description={profile.email || undefined}
+      headerExtra={
+        isAdminUser ? (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-danger-soft text-danger border-danger/20">
+            Admin
+          </Badge>
+        ) : undefined
+      }
+      size="wide"
+      footer={footer}
+    >
+      <div className="space-y-6">
+        {/* Name + Reset Password */}
+        <div className="flex items-end gap-3 p-3 rounded-md bg-accent/30">
+          <div className="flex-1 space-y-1">
+            <Label className="text-xs text-muted-foreground">Nome do usuário</Label>
+            <Input
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              className="h-8 text-sm"
+              placeholder="Nome do usuário"
+            />
           </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {isAdminUser && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-destructive/10 text-destructive border-destructive/20">
-                Admin
-              </Badge>
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1">
-                  <Eye className="h-2.5 w-2.5" />
-                  {moduleCount}/{ALL_MODULES.length}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>Telas visíveis</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge
-                  variant="secondary"
-                  className={`text-[10px] px-1.5 py-0 gap-1 ${!isAdminUser && empresaCount === 0 ? "border-destructive/50 text-destructive" : ""}`}
-                >
-                  <Store className="h-2.5 w-2.5" />
-                  {isAdminUser ? "Todas" : `${empresaCount}/${empresas.length}`}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>Lojas com acesso</TooltipContent>
-            </Tooltip>
-          </div>
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 shrink-0" onClick={onResetPassword}>
+            <Lock className="h-3.5 w-3.5" />
+            Redefinir Senha
+          </Button>
         </div>
-      </CardHeader>
 
-      {isExpanded && (
-        <CardContent className="pt-0 pb-5">
-          <Separator className="mb-4" />
+        <Separator />
 
-          {/* Editable Name + Actions */}
-          <div className="flex items-center gap-2 mb-4 p-3 rounded-md bg-accent/30">
-            <div className="flex-1 space-y-1">
-              <Label className="text-xs text-muted-foreground">Nome do usuário</Label>
-              <Input
-                value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
-                className="h-8 text-sm"
-                placeholder="Nome do usuário"
-              />
+        {/* Admin toggle */}
+        <div>
+          <div className="flex items-center justify-between p-3 rounded-md border">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-danger" />
+              <div>
+                <span className="text-sm font-medium">Administrador</span>
+                <p className="text-[11px] text-muted-foreground">Acesso total ao sistema</p>
+              </div>
             </div>
-            <Button size="sm" variant="outline" className="h-8 gap-1.5 shrink-0" onClick={(e) => { e.stopPropagation(); onResetPassword(); }}>
-              <Lock className="h-3.5 w-3.5" />
-              Redefinir Senha
-            </Button>
+            <Switch checked={draftIsAdmin} onCheckedChange={setDraftIsAdmin} />
           </div>
+          {isAdminUser && (
+            <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
+              <Info className="h-3 w-3" /> Admin tem acesso total automático a todos os módulos e lojas
+            </p>
+          )}
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Admin toggle + Módulos */}
-            <div>
-              <div className="flex items-center justify-between p-2 rounded-md border mb-3">
-                <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-destructive" />
-                  <div>
-                    <span className="text-sm font-medium">Administrador</span>
-                    <p className="text-[11px] text-muted-foreground">Acesso total ao sistema</p>
+        <Separator />
+
+        {/* Modules section */}
+        <div>
+          <SectionHeader icon={Eye} title="Módulos" description="Nível de acesso por módulo" />
+          <div className="space-y-2">
+            {ALL_MODULES.map((mod) => {
+              const level = isAdminUser ? "total" : (draftModules[mod.key] || "nenhum");
+              return (
+                <div key={mod.key} className="p-2 rounded-md border">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div>
+                      <span className="text-sm font-medium">{mod.label}</span>
+                      <span className="text-[10px] text-muted-foreground ml-1.5">{mod.desc}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    {(["nenhum", "consulta", "edita", "total"] as const).map((lvl) => (
+                      <button
+                        key={lvl}
+                        disabled={isAdminUser}
+                        onClick={() => setModuleLevel(mod.key, lvl)}
+                        className={cn(
+                          "px-2 py-0.5 text-[11px] rounded-md border transition-colors capitalize",
+                          level === lvl
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-muted-foreground border-border hover:bg-accent/50",
+                          isAdminUser && "opacity-50 cursor-not-allowed"
+                        )}
+                      >
+                        {lvl}
+                      </button>
+                    ))}
                   </div>
                 </div>
-                <Switch checked={draftIsAdmin} onCheckedChange={setDraftIsAdmin} />
-              </div>
-              {isAdminUser && (
-                <p className="text-[11px] text-muted-foreground mb-3 flex items-center gap-1">
-                  <Info className="h-3 w-3" /> Admin tem acesso total automático a todos os módulos e lojas
-                </p>
-              )}
+              );
+            })}
+          </div>
+        </div>
 
-              <SectionHeader icon={Eye} title="Módulos" description="Nível de acesso por módulo" />
-              <div className="space-y-2">
-                {ALL_MODULES.map((mod) => {
-                  const level = isAdminUser ? "total" : (draftModules[mod.key] || "nenhum");
-                  return (
-                    <div key={mod.key} className="p-2 rounded-md border">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div>
-                          <span className="text-sm font-medium">{mod.label}</span>
-                          <span className="text-[10px] text-muted-foreground ml-1.5">{mod.desc}</span>
-                        </div>
-                      </div>
-                      <div className="flex gap-1">
-                        {(["nenhum", "consulta", "edita", "total"] as const).map((lvl) => (
-                          <button
-                            key={lvl}
-                            disabled={isAdminUser}
-                            onClick={() => setModuleLevel(mod.key, lvl)}
-                            className={cn(
-                              "px-2 py-0.5 text-[11px] rounded-md border transition-colors capitalize",
-                              level === lvl
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-background text-muted-foreground border-border hover:bg-accent/50",
-                              isAdminUser && "opacity-50 cursor-not-allowed"
-                            )}
-                          >
-                            {lvl}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <div>
-              <SectionHeader icon={Store} title="Lojas" description="De quais lojas pode ver dados" />
-              <div className="space-y-1.5">
-                <label className="flex items-center gap-2 p-1.5 rounded-md hover:bg-accent/50 cursor-pointer transition-colors border-b border-border pb-2 mb-1">
+        <Separator />
+
+        {/* Stores section */}
+        <div>
+          <SectionHeader icon={Store} title="Lojas" description="De quais lojas pode ver dados" />
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-2 p-1.5 rounded-md hover:bg-accent/50 cursor-pointer transition-colors border-b border-border pb-2 mb-1">
+              <Checkbox
+                checked={isAdminUser || draftEmpresas.length >= empresas.length}
+                disabled={isAdminUser}
+                onCheckedChange={() => toggleAllEmpresas()}
+                className="h-3.5 w-3.5"
+              />
+              <span className="text-sm font-medium">Todas as lojas</span>
+            </label>
+            {empresas.map((emp) => {
+              const enabled = isAdminUser || draftEmpresas.includes(emp.codEmpresa);
+              return (
+                <label key={emp.codEmpresa} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-accent/50 cursor-pointer transition-colors">
                   <Checkbox
-                    checked={isAdminUser || draftEmpresas.length >= empresas.length}
+                    checked={enabled}
                     disabled={isAdminUser}
-                    onCheckedChange={() => toggleAllEmpresas()}
+                    onCheckedChange={() => toggleEmpresa(emp.codEmpresa)}
                     className="h-3.5 w-3.5"
                   />
-                  <span className="text-sm font-medium">Todas as lojas</span>
+                  <span className="text-sm">{emp.nome}</span>
                 </label>
-                {empresas.map((emp) => {
-                  const enabled = isAdminUser || draftEmpresas.includes(emp.codEmpresa);
-                  return (
-                    <label key={emp.codEmpresa} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-accent/50 cursor-pointer transition-colors">
-                      <Checkbox
-                        checked={enabled}
-                        disabled={isAdminUser}
-                        onCheckedChange={() => toggleEmpresa(emp.codEmpresa)}
-                        className="h-3.5 w-3.5"
-                      />
-                      <span className="text-sm">{emp.nome}</span>
-                    </label>
-                  );
-                })}
-              </div>
-              {!isAdminUser && draftEmpresas.length === 0 && (
-                <p className="text-[11px] text-destructive mt-2 flex items-center gap-1">
-                  <Info className="h-3 w-3" /> Sem lojas = sem acesso a dados
-                </p>
-              )}
-            </div>
+              );
+            })}
           </div>
-
-          {/* Save / Discard bar */}
-          <Separator className="mt-5 mb-4" />
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-muted-foreground">
-              {hasChanges ? (
-                <span className="text-amber-600 font-medium">● Alterações não salvas</span>
-              ) : (
-                <span className="text-green-600">✓ Tudo salvo</span>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="ghost" onClick={handleDiscard} disabled={!hasChanges || saving} className="gap-1.5">
-                <Undo2 className="h-3.5 w-3.5" />
-                Descartar
-              </Button>
-              <Button size="sm" onClick={handleSave} disabled={!hasChanges || saving} className="gap-1.5">
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                Salvar Permissões
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      )}
-    </Card>
+          {!isAdminUser && draftEmpresas.length === 0 && (
+            <p className="text-[11px] text-danger mt-2 flex items-center gap-1">
+              <Info className="h-3 w-3" /> Sem lojas = sem acesso a dados
+            </p>
+          )}
+        </div>
+      </div>
+    </BaseSheet>
   );
 }
 
@@ -511,6 +588,7 @@ export default function AdminUsuariosPage() {
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
+  const [editUserId, setEditUserId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -584,7 +662,7 @@ export default function AdminUsuariosPage() {
       }
     }
 
-    // 3. Save modules (access_level)
+    // 3. Save modules
     for (const mod of ALL_MODULES) {
       const serverLevel = currentModules.find(p => p.module === mod.key)?.access_level ?? "nenhum";
       const draftLevel = data.modules[mod.key] ?? "nenhum";
@@ -600,7 +678,7 @@ export default function AdminUsuariosPage() {
       }
     }
 
-    // 4. Save empresas (add missing, remove extra)
+    // 4. Save empresas
     const empresasToAdd = data.empresaCods.filter(c => !currentEmpresas.includes(c));
     const empresasToRemove = currentEmpresas.filter(c => !data.empresaCods.includes(c));
     if (empresasToAdd.length > 0) {
@@ -629,6 +707,11 @@ export default function AdminUsuariosPage() {
     await Promise.all(promises);
     await fetchData();
   };
+
+  const editProfile = editUserId ? profiles.find(p => p.id === editUserId) || null : null;
+  const editRoles = editUserId ? userRoles.filter(r => r.user_id === editUserId).map(r => r.role) : [];
+  const editModPerms = editUserId ? modulePerms.filter(mp => mp.user_id === editUserId) : [];
+  const editEmpPerms = editUserId ? empresaPerms.filter(ep => ep.user_id === editUserId) : [];
 
   return (
     <TooltipProvider>
@@ -676,19 +759,23 @@ export default function AdminUsuariosPage() {
         ) : (
           <div className="space-y-3">
             {profiles.map((p) => {
-              const currentRoles = userRoles.filter(r => r.user_id === p.id).map(r => r.role);
+              const isUserAdmin = userRoles.some(r => r.user_id === p.id && r.role === "admin");
               const userModPerms = modulePerms.filter(mp => mp.user_id === p.id);
               const userEmpPerms = empresaPerms.filter(ep => ep.user_id === p.id);
+              const moduleCount = isUserAdmin
+                ? ALL_MODULES.length
+                : userModPerms.filter(mp => mp.access_level !== "nenhum").length;
+
               return (
-                <UserCard
+                <UserRow
                   key={p.id}
                   profile={p}
-                  serverRoles={currentRoles}
-                  serverModulePerms={userModPerms}
-                  serverEmpresaPerms={userEmpPerms}
-                  empresas={empresas}
-                  onSave={(data) => handleSaveUser(p.id, data)}
-                  onResetPassword={() => setResetTarget({ id: p.id, name: p.nome || p.email || "Usuário" })}
+                  isAdmin={isUserAdmin}
+                  moduleCount={moduleCount}
+                  empresaCount={userEmpPerms.length}
+                  totalModules={ALL_MODULES.length}
+                  totalEmpresas={empresas.length}
+                  onClick={() => setEditUserId(p.id)}
                 />
               );
             })}
@@ -697,6 +784,7 @@ export default function AdminUsuariosPage() {
       </div>
 
       <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={fetchData} />
+
       {resetTarget && (
         <ResetPasswordDialog
           open={!!resetTarget}
@@ -705,6 +793,21 @@ export default function AdminUsuariosPage() {
           userName={resetTarget.name}
         />
       )}
+
+      <UserEditSheet
+        open={!!editUserId}
+        onOpenChange={(v) => !v && setEditUserId(null)}
+        profile={editProfile}
+        serverRoles={editRoles}
+        serverModulePerms={editModPerms}
+        serverEmpresaPerms={editEmpPerms}
+        empresas={empresas}
+        onSave={(data) => handleSaveUser(editUserId!, data)}
+        onResetPassword={() => {
+          const p = profiles.find(pr => pr.id === editUserId);
+          setResetTarget({ id: editUserId!, name: p?.nome || p?.email || "Usuário" });
+        }}
+      />
     </TooltipProvider>
   );
 }

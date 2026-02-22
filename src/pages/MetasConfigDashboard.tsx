@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -17,26 +17,16 @@ import {
 import { useCalendarioConfig } from "@/hooks/useCalendarioConfig";
 import { useMetasVendas, VendedorOption } from "@/hooks/useMetasVendas";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { upsertMeta } from "@/services/metasService";
+import { ActionBar, ActionBarStatus } from "@/components/system/ActionBar";
+import { useDirtyGuard } from "@/components/system/dirty/useDirtyGuard";
 
 const MESES = [
   { value: 1, label: "Janeiro" },
@@ -97,8 +87,6 @@ export default function MetasConfigDashboard() {
   const [percentualAceitavelLoja, setPercentualAceitavelLoja] = useState("100");
   const [savingMetas, setSavingMetas] = useState(false);
   const [calcularAutomatico, setCalcularAutomatico] = useState(true);
-  
-  // Estado para loja base no cálculo automático de vendedores
   const [lojaBaseCalculo, setLojaBaseCalculo] = useState<number | null>(null);
 
   // ========== ESTADOS: METAS VENDEDOR ==========
@@ -142,6 +130,63 @@ export default function MetasConfigDashboard() {
     motivo: "",
   });
 
+  // ========== DIRTY GUARD + ACTIONBAR ==========
+  const { isDirty, setDirty, setClean, guardClose } = useDirtyGuard();
+  const [actionStatus, setActionStatus] = useState<ActionBarStatus>("idle");
+
+  // Compute dirty state based on active tab
+  const computedDirty = useMemo(() => {
+    if (tabAtiva === "metas-lojas") {
+      return lojasSelecionadas.length > 0 && (!!metaFaturamento || !!metaTicketMedio);
+    }
+    if (tabAtiva === "metas-vendedores") {
+      return vendedoresSelecionados.length > 0;
+    }
+    return false;
+  }, [tabAtiva, lojasSelecionadas, metaFaturamento, metaTicketMedio, vendedoresSelecionados]);
+
+  useEffect(() => {
+    if (computedDirty) setDirty();
+    else setClean();
+  }, [computedDirty, setDirty, setClean]);
+
+  // Guard tab change
+  const handleTabChange = useCallback((newTab: string) => {
+    if (isDirty) {
+      const confirmed = window.confirm("Existem alterações não salvas. Deseja sair sem salvar?");
+      if (!confirmed) return;
+    }
+    // Clear selections when switching tabs
+    clearCurrentTabSelections();
+    setTabAtiva(newTab);
+  }, [isDirty]);
+
+  // Guard ano change
+  const handleAnoChange = useCallback((newAno: number) => {
+    if (isDirty) {
+      const confirmed = window.confirm("Existem alterações não salvas. Deseja sair sem salvar?");
+      if (!confirmed) return;
+    }
+    clearCurrentTabSelections();
+    setAno(newAno);
+  }, [isDirty, setAno]);
+
+  const clearCurrentTabSelections = () => {
+    if (tabAtiva === "metas-lojas") {
+      setLojasSelecionadas([]);
+      setMetaFaturamento("");
+      setMetaTicketMedio("");
+      setNumVendedoresMeta("1");
+      setPercentualAceitavelLoja("100");
+    } else if (tabAtiva === "metas-vendedores") {
+      setVendedoresSelecionados([]);
+      setMetaFaturamento("");
+      setMetaTicketMedio("");
+      setPercentualAceitavelVendedor("100");
+    }
+    setActionStatus("idle");
+  };
+
   // Carregar vendedores ao mudar filtro
   useEffect(() => {
     fetchVendedores(empresaFiltro);
@@ -182,6 +227,7 @@ export default function MetasConfigDashboard() {
     }
     
     setSavingMetas(true);
+    setActionStatus("loading");
     try {
       const promises: Promise<boolean>[] = [];
       
@@ -190,7 +236,6 @@ export default function MetasConfigDashboard() {
         const metaLoja = Number(metaFaturamento) || 0;
         
         for (const mes of mesesMeta) {
-          // Meta da Loja com num_vendedores
           promises.push(upsertMeta({
             tipo: 'LOJA',
             codReferencia: codEmpresa,
@@ -209,20 +254,19 @@ export default function MetasConfigDashboard() {
       
       await Promise.all(promises);
       toast.success(`Metas salvas para ${lojasSelecionadas.length} loja(s) em ${mesesMeta.length} mês(es)!`);
-      setLojasSelecionadas([]);
-      setMetaFaturamento("");
-      setMetaTicketMedio("");
-      setNumVendedoresMeta("1");
-      setPercentualAceitavelLoja("100");
+      setActionStatus("success");
+      setTimeout(() => {
+        clearCurrentTabSelections();
+      }, 2000);
       fetchMetas();
     } catch (err) {
       toast.error("Erro ao salvar metas");
+      setActionStatus("idle");
     } finally {
       setSavingMetas(false);
     }
   };
 
-  // Toggle mês na seleção múltipla
   const toggleMesMeta = (mes: number) => {
     setMesesMeta(prev => 
       prev.includes(mes)
@@ -248,9 +292,7 @@ export default function MetasConfigDashboard() {
     );
   };
 
-  // Função para calcular meta do vendedor baseado na loja selecionada
   const calcularMetaVendedor = (codEmpresa: number, mes: number): { faturamento: number; ticketMedio: number } => {
-    // Buscar meta da loja para o período (já inclui numVendedores)
     const metaLoja = metas.find(m => 
       m.tipo === 'LOJA' && 
       m.codReferencia === codEmpresa && 
@@ -258,15 +300,12 @@ export default function MetasConfigDashboard() {
       m.mes === mes
     );
     
-    if (!metaLoja) {
-      return { faturamento: 0, ticketMedio: 0 };
-    }
+    if (!metaLoja) return { faturamento: 0, ticketMedio: 0 };
     
     const numVendedores = metaLoja.numVendedores || 1;
-    
     return {
       faturamento: Math.round((metaLoja.metaFaturamento || 0) / numVendedores),
-      ticketMedio: metaLoja.metaTicketMedio || 0, // Ticket médio não divide
+      ticketMedio: metaLoja.metaTicketMedio || 0,
     };
   };
 
@@ -280,13 +319,11 @@ export default function MetasConfigDashboard() {
       return;
     }
     
-    // Verificar se há loja base selecionada quando cálculo automático
     if (calcularAutomatico && !lojaBaseCalculo) {
       toast.error("Selecione a loja base para cálculo automático");
       return;
     }
     
-    // Verificar se há metas de lojas cadastradas para calcular automaticamente
     if (calcularAutomatico && lojaBaseCalculo) {
       const mesesSemMeta: string[] = [];
       for (const mes of mesesMeta) {
@@ -301,6 +338,7 @@ export default function MetasConfigDashboard() {
     }
     
     setSavingMetas(true);
+    setActionStatus("loading");
     try {
       const promises: Promise<boolean>[] = [];
       
@@ -312,7 +350,6 @@ export default function MetasConfigDashboard() {
           let faturamento = Number(metaFaturamento) || 0;
           let ticketMedio = Number(metaTicketMedio) || 0;
           
-          // Se cálculo automático ativado, usa meta da loja selecionada / num vendedores
           if (calcularAutomatico && lojaBaseCalculo) {
             const metaCalc = calcularMetaVendedor(lojaBaseCalculo, mes);
             faturamento = metaCalc.faturamento;
@@ -337,14 +374,14 @@ export default function MetasConfigDashboard() {
       
       await Promise.all(promises);
       toast.success(`Metas salvas para ${vendedoresSelecionados.length} vendedor(es) em ${mesesMeta.length} mês(es)!`);
-      setVendedoresSelecionados([]);
-      if (!calcularAutomatico) {
-        setMetaFaturamento("");
-        setMetaTicketMedio("");
-      }
+      setActionStatus("success");
+      setTimeout(() => {
+        clearCurrentTabSelections();
+      }, 2000);
       fetchMetas();
     } catch (err) {
       toast.error("Erro ao salvar metas");
+      setActionStatus("idle");
     } finally {
       setSavingMetas(false);
     }
@@ -404,6 +441,26 @@ export default function MetasConfigDashboard() {
     setNovaExcecao({ codEmpresa: null, data: "", aberto: true, motivo: "" });
   };
 
+  // ========== ACTIONBAR HANDLERS ==========
+  const handleActionBarSave = () => {
+    if (tabAtiva === "metas-lojas") handleSalvarMetasEmLote();
+    else if (tabAtiva === "metas-vendedores") handleSalvarMetasVendedorEmLote();
+  };
+
+  const handleActionBarCancel = () => {
+    clearCurrentTabSelections();
+  };
+
+  const actionBarLabel = useMemo(() => {
+    if (tabAtiva === "metas-lojas") {
+      return `Salvar para ${lojasSelecionadas.length} Loja(s)`;
+    }
+    if (tabAtiva === "metas-vendedores") {
+      return `Salvar para ${vendedoresSelecionados.length} Vendedor(es)`;
+    }
+    return "Salvar";
+  }, [tabAtiva, lojasSelecionadas.length, vendedoresSelecionados.length]);
+
   const loading = loadingCalendario;
 
   // Metas já cadastradas para os períodos selecionados
@@ -416,7 +473,7 @@ export default function MetasConfigDashboard() {
     : vendedores.filter(v => v.codEmpresa === empresaFiltro);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-16">
       {/* Header */}
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-4">
@@ -442,7 +499,7 @@ export default function MetasConfigDashboard() {
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <Label className="text-sm">Ano:</Label>
-                <Select value={String(ano)} onValueChange={(v) => setAno(Number(v))}>
+                <Select value={String(ano)} onValueChange={(v) => handleAnoChange(Number(v))}>
                   <SelectTrigger className="w-24">
                     <SelectValue />
                   </SelectTrigger>
@@ -463,7 +520,7 @@ export default function MetasConfigDashboard() {
         {loading ? (
           <Skeleton className="h-96" />
         ) : (
-          <Tabs value={tabAtiva} onValueChange={setTabAtiva} className="space-y-6">
+          <Tabs value={tabAtiva} onValueChange={handleTabChange} className="space-y-6">
             <TabsList className="grid w-full grid-cols-6 h-auto">
               <TabsTrigger value="metas-lojas" className="flex flex-col gap-1 py-2">
                 <Target className="h-4 w-4" />
@@ -637,15 +694,6 @@ export default function MetasConfigDashboard() {
                         </p>
                       </div>
                     </div>
-
-                    <Button 
-                      onClick={handleSalvarMetasEmLote} 
-                      disabled={lojasSelecionadas.length === 0 || savingMetas}
-                      className="w-full"
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      {savingMetas ? "Salvando..." : `Salvar para ${lojasSelecionadas.length} Loja(s)`}
-                    </Button>
                   </CardContent>
                 </Card>
 
@@ -695,7 +743,7 @@ export default function MetasConfigDashboard() {
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button variant="ghost" size="icon">
-                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                      <Trash2 className="h-4 w-4 text-danger" />
                                     </Button>
                                   </AlertDialogTrigger>
                                   <AlertDialogContent>
@@ -914,7 +962,6 @@ export default function MetasConfigDashboard() {
                             placeholder="0,00"
                           />
                         </div>
-
                       </>
                     )}
 
@@ -951,15 +998,6 @@ export default function MetasConfigDashboard() {
                         )}
                       </div>
                     )}
-
-                    <Button 
-                      onClick={handleSalvarMetasVendedorEmLote} 
-                      disabled={vendedoresSelecionados.length === 0 || savingMetas}
-                      className="w-full"
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      {savingMetas ? "Salvando..." : `Salvar para ${vendedoresSelecionados.length} Vendedor(es)`}
-                    </Button>
                   </CardContent>
                 </Card>
 
@@ -1005,7 +1043,7 @@ export default function MetasConfigDashboard() {
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button variant="ghost" size="icon">
-                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                      <Trash2 className="h-4 w-4 text-danger" />
                                     </Button>
                                   </AlertDialogTrigger>
                                   <AlertDialogContent>
@@ -1264,7 +1302,7 @@ export default function MetasConfigDashboard() {
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button variant="ghost" size="icon">
-                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                      <Trash2 className="h-4 w-4 text-danger" />
                                     </Button>
                                   </AlertDialogTrigger>
                                   <AlertDialogContent>
@@ -1354,6 +1392,16 @@ export default function MetasConfigDashboard() {
                                   <SelectItem value="SHOPPING">Loja de Shopping</SelectItem>
                                 </SelectContent>
                               </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label>Nº de Vendedores</Label>
+                              <Input 
+                                type="number"
+                                min={1}
+                                value={configLote.numVendedores}
+                                onChange={(e) => setConfigLote(c => ({ ...c, numVendedores: Number(e.target.value) || 1 }))}
+                              />
                             </div>
 
                             <div className="space-y-2">
@@ -1543,7 +1591,7 @@ export default function MetasConfigDashboard() {
                                   <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                       <Button variant="ghost" size="icon">
-                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                        <Trash2 className="h-4 w-4 text-danger" />
                                       </Button>
                                     </AlertDialogTrigger>
                                     <AlertDialogContent>
@@ -1575,6 +1623,22 @@ export default function MetasConfigDashboard() {
           </Tabs>
         )}
       </main>
+
+      {/* ActionBar sticky — metas-lojas / metas-vendedores */}
+      <ActionBar
+        visible={isDirty}
+        status={actionStatus}
+        saveLabel={actionBarLabel}
+        onSave={handleActionBarSave}
+        onCancel={handleActionBarCancel}
+      >
+        {tabAtiva === "metas-lojas" && (
+          <span>{lojasSelecionadas.length} loja(s) × {mesesMeta.length} mês(es)</span>
+        )}
+        {tabAtiva === "metas-vendedores" && (
+          <span>{vendedoresSelecionados.length} vendedor(es) × {mesesMeta.length} mês(es)</span>
+        )}
+      </ActionBar>
     </div>
   );
 }
