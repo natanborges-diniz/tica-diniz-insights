@@ -20,6 +20,8 @@ interface BaseSheetProps {
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: string;
+  /** Extra content rendered to the right of the title row (badges, action buttons) */
+  headerExtra?: React.ReactNode;
   size?: SheetSize;
   /** Sticky footer content (buttons) */
   footer?: React.ReactNode;
@@ -32,6 +34,7 @@ export function BaseSheet({
   onOpenChange,
   title,
   description,
+  headerExtra,
   size = "default",
   footer,
   children,
@@ -49,8 +52,17 @@ export function BaseSheet({
       >
         {/* Fixed header */}
         <SheetHeader className="shrink-0 border-b px-6 py-4">
-          <SheetTitle>{title}</SheetTitle>
-          {description && <SheetDescription>{description}</SheetDescription>}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <SheetTitle>{title}</SheetTitle>
+              {description && <SheetDescription className="mt-1">{description}</SheetDescription>}
+            </div>
+            {headerExtra && (
+              <div className="flex items-center gap-2 shrink-0">
+                {headerExtra}
+              </div>
+            )}
+          </div>
         </SheetHeader>
 
         {/* Scrollable body */}
