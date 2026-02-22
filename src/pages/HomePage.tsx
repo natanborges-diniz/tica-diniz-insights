@@ -106,8 +106,17 @@ export default function HomePage() {
           return (
             <Card
               key={mod.key}
-              className="cursor-pointer transition-all hover:shadow-md hover:border-primary/30 group"
+              role="button"
+              tabIndex={0}
+              aria-label={`Abrir módulo ${mod.label}`}
+              className="cursor-pointer transition-all hover:shadow-md hover:border-primary/30 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               onClick={() => navigate(mod.path)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  navigate(mod.path);
+                }
+              }}
             >
               <CardContent className="flex items-start gap-4 p-5">
                 <div className="rounded-lg bg-primary/10 p-2.5 group-hover:bg-primary/20 transition-colors">

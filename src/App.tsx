@@ -47,11 +47,9 @@ const App = () => (
 
             {/* Protected */}
             <Route element={<ProtectedRoute />}>
-              {/* Home Hub — sem sidebar/topbar */}
-              <Route path="/home" element={<HomePage />} />
-
               <Route element={<AppLayout />}>
                 <Route path="/" element={<Navigate to="/home" replace />} />
+                <Route path="/home" element={<HomePage />} />
 
                 {/* Vendas */}
                 <Route element={<ModuleGuard module="vendas" />}>

@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useMemo } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { TopNavigation } from "./TopNavigation";
 import { AppSidebar } from "./AppSidebar";
+import { AppBreadcrumbs } from "./AppBreadcrumbs";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 export type ModuleKey = "vendas" | "estoque" | "monitor" | "financeiro" | "ia" | "config";
 
-const moduleFromPath = (pathname: string): ModuleKey => {
+export const moduleFromPath = (pathname: string): ModuleKey => {
   if (pathname.startsWith("/vendas") || pathname.startsWith("/ranking")) return "vendas";
   if (pathname.startsWith("/estoque")) return "estoque";
   if (pathname.startsWith("/os")) return "monitor";
@@ -14,21 +15,18 @@ const moduleFromPath = (pathname: string): ModuleKey => {
   if (pathname.startsWith("/ia")) return "ia";
   if (pathname.startsWith("/config")) return "config";
   if (pathname.startsWith("/admin")) return "config";
-  return "vendas"; // default
+  if (pathname === "/home" || pathname === "/") return "vendas";
+  return "vendas";
 };
 
 export function AppLayout() {
   const location = useLocation();
-  const [activeModule, setActiveModule] = useState<ModuleKey>(moduleFromPath(location.pathname));
-
-  const handleModuleChange = (module: ModuleKey) => {
-    setActiveModule(module);
-  };
+  const activeModule = useMemo(() => moduleFromPath(location.pathname), [location.pathname]);
 
   return (
     <SidebarProvider>
       <div className="min-h-screen flex flex-col w-full">
-        <TopNavigation activeModule={activeModule} onModuleChange={handleModuleChange} />
+        <TopNavigation activeModule={activeModule} />
         <div className="flex flex-1 w-full">
           <AppSidebar activeModule={activeModule} />
           <main className="flex-1 overflow-auto">
@@ -36,6 +34,7 @@ export function AppLayout() {
               <div className="md:hidden mb-4">
                 <SidebarTrigger />
               </div>
+              <AppBreadcrumbs />
               <Outlet />
             </div>
           </main>
