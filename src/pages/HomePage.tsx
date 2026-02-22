@@ -7,6 +7,7 @@ import { BridgeStatusBanner } from "@/components/ui/bridge-status-banner";
 import { useBridgeStatus } from "@/hooks/useBridgeStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
+import { ModuleHeader } from "@/components/system/ModuleHeader";
 
 const modules = [
   {
@@ -75,14 +76,12 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Olá, {firstName} 👋
-        </h1>
-        <p className="text-muted-foreground">
-          Selecione um módulo para começar.
-        </p>
-      </div>
+      <ModuleHeader
+        title={`Olá, ${firstName} 👋`}
+        subtitle="Selecione um módulo para começar."
+        accent={false}
+        breadcrumb={false}
+      />
 
       {(bridgeStatus.health !== "up" && bridgeStatus.health !== "unknown") && (
         <BridgeStatusBanner
@@ -109,7 +108,7 @@ export default function HomePage() {
               role="button"
               tabIndex={0}
               aria-label={`Abrir módulo ${mod.label}`}
-              className="cursor-pointer transition-all hover:shadow-md hover:border-primary/30 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="cursor-pointer hover:shadow-card-hover hover:border-primary/30 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               onClick={() => navigate(mod.path)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -119,7 +118,7 @@ export default function HomePage() {
               }}
             >
               <CardContent className="flex items-start gap-4 p-5">
-                <div className="rounded-lg bg-primary/10 p-2.5 group-hover:bg-primary/20 transition-colors">
+                <div className="rounded-lg bg-primary/10 p-2.5 group-hover:bg-primary/15 transition-colors duration-150">
                   <Icon className="h-5 w-5 text-primary" />
                 </div>
                 <div className="space-y-1">

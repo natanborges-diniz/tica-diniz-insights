@@ -26,6 +26,7 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { EmptyState, ErrorState, LoadingState } from "@/components/system/states";
+import { ModuleHeader } from "@/components/system/ModuleHeader";
 
 // KPI Cards Component
 function EstoqueKPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueUnificado>['metricas'] }) {
@@ -307,19 +308,16 @@ export default function VisaoEstoquePage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Package className="h-6 w-6 text-primary" />
-          <div>
-            <h1 className="text-2xl font-bold">Visão Estoque</h1>
-            <p className="text-sm text-muted-foreground">Lista detalhada de SKUs com KPIs</p>
-          </div>
-        </div>
-        {empresas.length > 0 && (
-          <OtbFornecedorMarcaConfig marcasSemFornecedor={marcasSemFornecedor} />
-        )}
-      </div>
+      <ModuleHeader
+        title="Visão Estoque"
+        subtitle="Lista detalhada de SKUs com KPIs"
+        icon={<Package className="h-6 w-6 text-primary" />}
+        actions={
+          empresas.length > 0 ? (
+            <OtbFornecedorMarcaConfig marcasSemFornecedor={marcasSemFornecedor} />
+          ) : undefined
+        }
+      />
 
       {/* Parâmetros de Análise */}
       <Card>

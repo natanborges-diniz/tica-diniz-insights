@@ -4,6 +4,7 @@ import {
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
   Target, Users, Brain, Eye, RefreshCw, Activity, Truck, FlaskConical
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -117,7 +118,7 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
         {sections.map((section) => (
           <SidebarGroup key={section.label}>
             {!collapsed && (
-              <SidebarGroupLabel className="text-xs uppercase tracking-wider text-muted-foreground">
+              <SidebarGroupLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {section.label}
               </SidebarGroupLabel>
             )}
@@ -147,8 +148,11 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
                         ) : (
                           <NavLink
                             to={item.url}
-                            className="flex items-center gap-3"
-                            activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                            className={cn(
+                              "flex items-center gap-3 transition-colors duration-150",
+                              isActive && "border-l-2 border-primary pl-[10px]"
+                            )}
+                            activeClassName="bg-brand-soft text-primary font-medium"
                           >
                             <item.icon className="h-4 w-4 shrink-0" />
                             {!collapsed && <span className="truncate">{item.title}</span>}

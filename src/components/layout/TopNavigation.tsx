@@ -36,19 +36,19 @@ export function TopNavigation({ activeModule }: TopNavigationProps) {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full bg-surface border-b-2 border-primary">
       <div className="flex h-14 items-center px-4 gap-4">
         {/* Logo */}
         <div className="flex items-center gap-2 mr-4">
           <button
             onClick={() => navigate("/home")}
-            className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-accent transition-colors"
+            className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-muted transition-colors duration-150"
             aria-label="Ir para o início"
           >
             <div className="p-1 rounded-lg bg-primary/10">
               <Database className="h-5 w-5 text-primary" />
             </div>
-            <span className="font-semibold text-sm hidden sm:inline">Sistema de Gestão</span>
+            <span className="font-bold text-sm hidden sm:inline tracking-tight">INFOCO</span>
           </button>
         </div>
 
@@ -66,16 +66,20 @@ export function TopNavigation({ activeModule }: TopNavigationProps) {
                 aria-current={isActive ? "true" : undefined}
                 onClick={() => handleModuleClick(module)}
                 className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                  "hover:bg-accent hover:text-accent-foreground",
+                  "relative flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150",
+                  "hover:bg-muted hover:text-foreground",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                   isActive
-                    ? "bg-primary text-primary-foreground"
+                    ? "text-primary"
                     : "text-muted-foreground"
                 )}
               >
                 <Icon className="h-4 w-4" />
                 <span className="hidden md:inline">{module.label}</span>
+                {/* Active underline indicator */}
+                {isActive && (
+                  <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full" />
+                )}
               </button>
             );
           })}
