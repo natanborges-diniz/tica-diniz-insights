@@ -13,38 +13,29 @@ interface PaymentMethodsChartProps {
   onFormaPagamentoClick?: (formaPagamento: string) => void;
 }
 
-const COLORS = [
-  'hsl(var(--primary))',
+// All chart tokens
+const CHART_COLORS = [
+  'hsl(var(--chart-1))',
   'hsl(var(--chart-2))',
   'hsl(var(--chart-3))',
   'hsl(var(--chart-4))',
   'hsl(var(--chart-5))',
-  '#8884d8',
-  '#82ca9d',
-  '#ffc658',
-  '#ff7300',
-  '#00C49F',
+  'hsl(var(--chart-6))',
+  'hsl(var(--chart-7))',
+  'hsl(var(--chart-8))',
 ];
 
 const DIMMED_COLOR = 'hsl(var(--muted))';
 
 function formatCurrency(value: number): string {
-  if (value >= 1000000) {
-    return `R$ ${(value / 1000000).toFixed(1)}M`;
-  }
-  if (value >= 1000) {
-    return `R$ ${(value / 1000).toFixed(0)}k`;
-  }
+  if (value >= 1000000) return `R$ ${(value / 1000000).toFixed(1)}M`;
+  if (value >= 1000) return `R$ ${(value / 1000).toFixed(0)}k`;
   return `R$ ${value.toFixed(0)}`;
 }
 
-// Componente para renderizar setor ativo (hover)
 const renderActiveShape = (props: any) => {
   const RADIAN = Math.PI / 180;
-  const {
-    cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle,
-    fill, payload, percent, value
-  } = props;
+  const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value } = props;
   const sin = Math.sin(-RADIAN * midAngle);
   const cos = Math.cos(-RADIAN * midAngle);
   const sx = cx + (outerRadius + 10) * cos;
@@ -57,75 +48,36 @@ const renderActiveShape = (props: any) => {
 
   return (
     <g>
-      <text x={cx} y={cy} dy={8} textAnchor="middle" fill="hsl(var(--foreground))" className="text-sm font-medium">
-        {payload.name}
-      </text>
-      <Sector
-        cx={cx}
-        cy={cy}
-        innerRadius={innerRadius}
-        outerRadius={outerRadius}
-        startAngle={startAngle}
-        endAngle={endAngle}
-        fill={fill}
-      />
-      <Sector
-        cx={cx}
-        cy={cy}
-        startAngle={startAngle}
-        endAngle={endAngle}
-        innerRadius={outerRadius + 6}
-        outerRadius={outerRadius + 10}
-        fill={fill}
-      />
+      <text x={cx} y={cy} dy={8} textAnchor="middle" fill="hsl(var(--foreground))" className="text-sm font-medium">{payload.name}</text>
+      <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius} startAngle={startAngle} endAngle={endAngle} fill={fill} />
+      <Sector cx={cx} cy={cy} startAngle={startAngle} endAngle={endAngle} innerRadius={outerRadius + 6} outerRadius={outerRadius + 10} fill={fill} />
       <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={fill} fill="none" />
       <circle cx={ex} cy={ey} r={2} fill={fill} stroke="none" />
-      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill="hsl(var(--foreground))" className="text-xs">
-        {formatCurrency(value)}
-      </text>
-      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={14} textAnchor={textAnchor} fill="hsl(var(--muted-foreground))" className="text-xs">
-        {`(${(percent * 100).toFixed(1)}%)`}
-      </text>
+      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill="hsl(var(--foreground))" className="text-xs">{formatCurrency(value)}</text>
+      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={14} textAnchor={textAnchor} fill="hsl(var(--muted-foreground))" className="text-xs">{`(${(percent * 100).toFixed(1)}%)`}</text>
     </g>
   );
 };
 
-export function PaymentMethodsChart({ 
-  dados, 
-  isLoading,
-  selectedFormaPagamento,
-  onFormaPagamentoClick,
-}: PaymentMethodsChartProps) {
+export function PaymentMethodsChart({ dados, isLoading, selectedFormaPagamento, onFormaPagamentoClick }: PaymentMethodsChartProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const onPieEnter = useCallback((_: any, index: number) => setActiveIndex(index), []);
 
-  const onPieEnter = useCallback((_: any, index: number) => {
-    setActiveIndex(index);
-  }, []);
-
-  // Agrupa por forma de pagamento (soma de todas empresas)
   const chartData = dados.reduce((acc, item) => {
     const existing = acc.find(d => d.name === item.formaPagamento);
-    if (existing) {
-      existing.value += item.totalGeral;
-      existing.qtd += item.qtdVendas;
-    } else {
-      acc.push({ name: item.formaPagamento, value: item.totalGeral, qtd: item.qtdVendas });
-    }
+    if (existing) { existing.value += item.totalGeral; existing.qtd += item.qtdVendas; }
+    else acc.push({ name: item.formaPagamento, value: item.totalGeral, qtd: item.qtdVendas });
     return acc;
   }, [] as { name: string; value: number; qtd: number }[]);
-
-  // Ordena por valor decrescente
   chartData.sort((a, b) => b.value - a.value);
 
   const handlePieClick = (data: any) => {
-    if (onFormaPagamentoClick && data?.name) {
-      onFormaPagamentoClick(data.name);
-    }
+    if (onFormaPagamentoClick && data?.name) onFormaPagamentoClick(data.name);
   };
 
   const getCellColor = (name: string, index: number) => {
-    if (!selectedFormaPagamento) return COLORS[index % COLORS.length];
-    return name === selectedFormaPagamento ? COLORS[index % COLORS.length] : DIMMED_COLOR;
+    if (!selectedFormaPagamento) return CHART_COLORS[index % CHART_COLORS.length];
+    return name === selectedFormaPagamento ? CHART_COLORS[index % CHART_COLORS.length] : DIMMED_COLOR;
   };
 
   return (
@@ -151,37 +103,23 @@ export function PaymentMethodsChart({
                 cy="50%"
                 innerRadius={60}
                 outerRadius={90}
-                fill="#8884d8"
+                fill="hsl(var(--chart-1))"
                 dataKey="value"
                 onMouseEnter={onPieEnter}
                 onClick={handlePieClick}
                 style={{ cursor: onFormaPagamentoClick ? 'pointer' : 'default' }}
               >
                 {chartData.map((entry, index) => (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={getCellColor(entry.name, index)}
-                    className="transition-all duration-200"
-                  />
+                  <Cell key={`cell-${index}`} fill={getCellColor(entry.name, index)} className="transition-all duration-200" />
                 ))}
               </Pie>
               <Tooltip
                 formatter={(value: number, name: string, props: any) => [
-                  `${formatCurrency(value)} (${props.payload.qtd} vendas)`,
-                  name
+                  `${formatCurrency(value)} (${props.payload.qtd} vendas)`, name
                 ]}
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
+                contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
               />
-              <Legend 
-                layout="horizontal" 
-                verticalAlign="bottom" 
-                align="center"
-                wrapperStyle={{ paddingTop: '10px' }}
-              />
+              <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ paddingTop: '10px' }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
