@@ -51,16 +51,16 @@ function getIconeFormaPagamento(forma: string) {
 
 function getCorFormaPagamento(forma: string): string {
   const formaUpper = forma.toUpperCase();
-  if (formaUpper.includes('DINHEIRO')) return 'bg-green-500/10 text-green-700 dark:text-green-400';
-  if (formaUpper.includes('PIX')) return 'bg-teal-500/10 text-teal-700 dark:text-teal-400';
+  if (formaUpper.includes('DINHEIRO')) return 'bg-success-soft text-success';
+  if (formaUpper.includes('PIX')) return 'bg-chart-6/10 text-chart-6';
   if (formaUpper.includes('CARTAO') || formaUpper.includes('CARTÃO')) {
-    if (formaUpper.includes('CREDITO') || formaUpper.includes('CRÉDITO')) return 'bg-blue-500/10 text-blue-700 dark:text-blue-400';
-    if (formaUpper.includes('DEBITO') || formaUpper.includes('DÉBITO')) return 'bg-purple-500/10 text-purple-700 dark:text-purple-400';
-    return 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400';
+    if (formaUpper.includes('CREDITO') || formaUpper.includes('CRÉDITO')) return 'bg-info-soft text-info';
+    if (formaUpper.includes('DEBITO') || formaUpper.includes('DÉBITO')) return 'bg-chart-4/10 text-chart-4';
+    return 'bg-chart-1/10 text-chart-1';
   }
-  if (formaUpper.includes('DEVOLUCAO') || formaUpper.includes('DEVOLUÇÃO')) return 'bg-red-500/10 text-red-700 dark:text-red-400';
-  if (formaUpper.includes('CREDITO') && !formaUpper.includes('CARTAO')) return 'bg-amber-500/10 text-amber-700 dark:text-amber-400';
-  return 'bg-gray-500/10 text-gray-700 dark:text-gray-400';
+  if (formaUpper.includes('DEVOLUCAO') || formaUpper.includes('DEVOLUÇÃO')) return 'bg-danger-soft text-danger';
+  if (formaUpper.includes('CREDITO') && !formaUpper.includes('CARTAO')) return 'bg-warning-soft text-warning';
+  return 'bg-neutral-100 text-neutral-600';
 }
 
 // ============================================
@@ -68,10 +68,9 @@ function getCorFormaPagamento(forma: string): string {
 // ============================================
 
 function FormasPagamentoBadges({ formasPagamento }: { formasPagamento: ResumoDiario['formasPagamento'] }) {
-  // Ordenar por valor total (maior primeiro)
   const formasOrdenadas = Object.entries(formasPagamento)
     .sort((a, b) => b[1].totalVendido - a[1].totalVendido)
-    .slice(0, 4); // Mostrar apenas as 4 principais
+    .slice(0, 4);
   
   const temMais = Object.keys(formasPagamento).length > 4;
   
@@ -110,7 +109,6 @@ export function VendasDiariasTable({
   error,
   onReload,
 }: VendasDiariasTableProps) {
-  // Agrupar por data (todas as lojas no mesmo dia)
   const diasAgrupados = useMemo(() => {
     const mapa = new Map<string, ResumoDiario[]>();
     
@@ -120,7 +118,6 @@ export function VendasDiariasTable({
       mapa.set(r.data, existing);
     });
     
-    // Ordenar cada grupo por total
     mapa.forEach((resumos) => {
       resumos.sort((a, b) => b.totalDia - a.totalDia);
     });
@@ -212,7 +209,6 @@ export function VendasDiariasTable({
                   key={`${resumo.data}-${resumo.codEmpresa}`}
                   className="px-4 py-3 hover:bg-muted/50 transition-colors flex items-start gap-3"
                 >
-                  {/* Data e Loja */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-medium text-sm">
@@ -223,12 +219,8 @@ export function VendasDiariasTable({
                         {resumo.empresa}
                       </span>
                     </div>
-                    
-                    {/* Formas de pagamento */}
                     <FormasPagamentoBadges formasPagamento={resumo.formasPagamento} />
                   </div>
-                  
-                  {/* Totais */}
                   <div className="text-right shrink-0">
                     <div className="font-semibold text-primary">
                       {formatarMoeda(resumo.totalDia)}

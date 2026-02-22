@@ -6,9 +6,8 @@ import {
   ShoppingCart, 
   Package, 
   AlertTriangle, 
-  TrendingUp,
-  DollarSign,
-  BarChart3
+  BarChart3,
+  DollarSign
 } from "lucide-react";
 import type { OtbMetrics } from "@/hooks/useOtb";
 
@@ -37,10 +36,10 @@ export function OtbKPICards({ metrics }: OtbKPICardsProps) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">OTB Total</CardTitle>
-          <ShoppingCart className="h-4 w-4 text-primary" />
+          <ShoppingCart className="h-4 w-4 text-brand" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-primary">
+          <div className="text-2xl font-bold text-brand">
             {metrics.totalOtb.toLocaleString('pt-BR')}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -53,10 +52,10 @@ export function OtbKPICards({ metrics }: OtbKPICardsProps) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Investimento OTB</CardTitle>
-          <DollarSign className="h-4 w-4 text-primary" />
+          <DollarSign className="h-4 w-4 text-brand" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-primary">
+          <div className="text-2xl font-bold text-brand">
             R$ {(metrics.totalOtbValor / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}k
           </div>
           <p className="text-xs text-muted-foreground">
@@ -66,13 +65,13 @@ export function OtbKPICards({ metrics }: OtbKPICardsProps) {
       </Card>
 
       {/* Comprar Urgente */}
-      <Card className="border-destructive/50">
+      <Card className="border-danger-muted">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Compra Urgente</CardTitle>
-          <AlertTriangle className="h-4 w-4 text-destructive" />
+          <AlertTriangle className="h-4 w-4 text-danger" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-destructive">
+          <div className="text-2xl font-bold text-danger">
             {metrics.skusComprarUrgente}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -82,13 +81,13 @@ export function OtbKPICards({ metrics }: OtbKPICardsProps) {
       </Card>
 
       {/* Comprar */}
-      <Card className="border-orange-500/50">
+      <Card className="border-warning-muted">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Comprar</CardTitle>
-          <ShoppingCart className="h-4 w-4 text-orange-600" />
+          <ShoppingCart className="h-4 w-4 text-warning" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-orange-600">
+          <div className="text-2xl font-bold text-warning">
             {metrics.skusComprar}
           </div>
           <p className="text-xs text-muted-foreground">
