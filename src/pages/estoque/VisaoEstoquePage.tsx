@@ -119,7 +119,11 @@ const estoqueColumns: DataTableColumn<ItemEstoque>[] = [
     maxWidth: "200px",
     cell: (row) => (
       <span title={row.descricao}>
-        {row.isDeadStock && <AlertTriangle className="h-3 w-3 inline mr-1 text-danger" />}
+        {row.isDeadStock && (
+          <span className="inline-flex items-center gap-0.5 mr-1" title="Dead stock — sem giro no período">
+            <AlertTriangle className="h-3 w-3 text-danger" />
+          </span>
+        )}
         {row.descricao}
       </span>
     ),
@@ -252,7 +256,7 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
       queryState={queryState}
       onQueryChange={setQueryState}
       rowKey={(row, idx) => `${row.codSku}-${idx}`}
-      rowClassName={(row) => (row.isDeadStock ? "bg-danger-soft/50" : "")}
+      rowClassName={(row) => (row.isDeadStock ? "bg-danger-soft/50 [&_td:first-child]:border-l-2 [&_td:first-child]:border-l-danger" : "")}
       emptyMessage="Nenhum item encontrado com os filtros selecionados"
       toolbar={
         <DataTableToolbar
