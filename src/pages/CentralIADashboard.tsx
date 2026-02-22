@@ -30,6 +30,7 @@ import {
   ShoppingCart
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { ModuleHeader } from "@/components/system/ModuleHeader";
 
 export default function CentralIADashboard() {
   const {
@@ -50,18 +51,11 @@ export default function CentralIADashboard() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <Brain className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-3xl font-bold">Central de Inteligência Artificial</h1>
-              <p className="text-muted-foreground">
-                Análise multi-dimensional consolidada do negócio
-              </p>
-            </div>
-          </div>
-        </div>
+        <ModuleHeader
+          title="Central de Inteligência Artificial"
+          subtitle="Análise multi-dimensional consolidada do negócio"
+          icon={<Brain className="h-7 w-7 text-primary" />}
+        />
 
         {/* Filtros e Controles */}
         <Card>
@@ -379,7 +373,7 @@ export default function CentralIADashboard() {
         )}
 
         {/* Resultado da Análise */}
-        <Card className="border-primary/20">
+        <Card className="border-l-4 border-l-primary">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

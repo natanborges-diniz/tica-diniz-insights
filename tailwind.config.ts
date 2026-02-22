@@ -14,6 +14,13 @@ export default {
     },
     extend: {
       colors: {
+        /* ── App Shell ──────────────────────────────── */
+        "app-bg": "hsl(var(--app-bg))",
+        surface: {
+          DEFAULT: "hsl(var(--surface))",
+          alt: "hsl(var(--surface-alt))",
+        },
+
         /* ── Brand ─────────────────────────────────── */
         brand: {
           DEFAULT: "hsl(var(--brand))",
@@ -134,6 +141,16 @@ export default {
       },
       ringOffsetColor: {
         focus: "hsl(var(--focus-ring-offset))",
+      },
+      boxShadow: {
+        card: "0 1px 3px 0 hsl(var(--foreground) / 0.04), 0 1px 2px -1px hsl(var(--foreground) / 0.04)",
+        "card-hover": "0 4px 12px -2px hsl(var(--foreground) / 0.08), 0 2px 6px -2px hsl(var(--foreground) / 0.04)",
+      },
+      transitionDuration: {
+        DEFAULT: "180ms",
+      },
+      transitionTimingFunction: {
+        DEFAULT: "cubic-bezier(0.4, 0, 0.2, 1)",
       },
       borderRadius: {
         lg: "var(--radius)",

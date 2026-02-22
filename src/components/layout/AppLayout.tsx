@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { TopNavigation } from "./TopNavigation";
 import { AppSidebar } from "./AppSidebar";
-import { AppBreadcrumbs } from "./AppBreadcrumbs";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 export type ModuleKey = "vendas" | "estoque" | "monitor" | "financeiro" | "ia" | "config";
@@ -25,7 +24,7 @@ export function AppLayout() {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex flex-col w-full">
+      <div className="min-h-screen flex flex-col w-full bg-app-bg">
         <TopNavigation activeModule={activeModule} />
         <div className="flex flex-1 w-full">
           <AppSidebar activeModule={activeModule} />
@@ -34,7 +33,6 @@ export function AppLayout() {
               <div className="md:hidden mb-4">
                 <SidebarTrigger />
               </div>
-              <AppBreadcrumbs />
               <Outlet />
             </div>
           </main>

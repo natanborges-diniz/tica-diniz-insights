@@ -45,7 +45,7 @@ export function BaseSheet({
       <SheetContent
         side="right"
         className={cn(
-          "flex flex-col p-0",
+          "flex flex-col p-0 transition-transform duration-200 ease-out",
           sizeClasses[size],
           className,
         )}

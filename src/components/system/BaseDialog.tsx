@@ -41,7 +41,7 @@ export function BaseDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          "flex flex-col gap-0 p-0 max-h-[80vh]",
+          "flex flex-col gap-0 p-0 max-h-[80vh] transition-all duration-200 ease-out",
           sizeClasses[size],
           className,
         )}
