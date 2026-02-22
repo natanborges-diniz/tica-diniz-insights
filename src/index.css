@@ -2,12 +2,75 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* ============================================================
+   INFOCO Design System — Phase 0: Token Foundation
+   All colors MUST be HSL (without hsl() wrapper).
+   Usage: hsl(var(--token))
+   ============================================================ */
 
 @layer base {
   :root {
+    /* ── Brand ─────────────────────────────────────────────── */
+    --brand: 220 70% 50%;
+    --brand-foreground: 0 0% 100%;
+    --brand-soft: 220 70% 96%;
+    --brand-hover: 220 70% 44%;
+
+    /* ── Neutral ───────────────────────────────────────────── */
+    --neutral-50: 210 20% 98%;
+    --neutral-100: 210 17% 95%;
+    --neutral-200: 214 18% 91%;
+    --neutral-300: 213 14% 82%;
+    --neutral-400: 215 14% 64%;
+    --neutral-500: 215 16% 47%;
+    --neutral-600: 217 19% 35%;
+    --neutral-700: 218 22% 26%;
+    --neutral-800: 220 26% 14%;
+    --neutral-900: 222 47% 11%;
+
+    /* ── Semantic: Success (replaces emerald/green) ─────── */
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 152 50% 95%;
+    --success-muted: 152 40% 80%;
+    --success-hover: 152 60% 34%;
+
+    /* ── Semantic: Warning (replaces amber/yellow) ──────── */
+    --warning: 38 92% 50%;
+    --warning-foreground: 38 92% 14%;
+    --warning-soft: 38 80% 95%;
+    --warning-muted: 38 60% 78%;
+    --warning-hover: 38 92% 42%;
+
+    /* ── Semantic: Danger (replaces red) ────────────────── */
+    --danger: 0 72% 51%;
+    --danger-foreground: 0 0% 100%;
+    --danger-soft: 0 60% 96%;
+    --danger-muted: 0 50% 82%;
+    --danger-hover: 0 72% 44%;
+
+    /* ── Semantic: Info (replaces blue/indigo) ──────────── */
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
+    --info-soft: 217 80% 96%;
+    --info-muted: 217 60% 82%;
+    --info-hover: 217 91% 52%;
+
+    /* ── Focus ring ────────────────────────────────────── */
+    --focus-ring: 220 70% 55%;
+    --focus-ring-offset: 0 0% 100%;
+
+    /* ── DataViz palette (8 chart colors) ──────────────── */
+    --chart-1: 220 70% 50%;
+    --chart-2: 152 60% 40%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 280 60% 55%;
+    --chart-5: 0 72% 51%;
+    --chart-6: 190 80% 42%;
+    --chart-7: 340 65% 55%;
+    --chart-8: 30 80% 55%;
+
+    /* ── Existing shadcn tokens (unchanged) ─────────────── */
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
 
@@ -39,23 +102,74 @@ All colors MUST be HSL.
     --radius: 0.5rem;
 
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
+    /* ── Brand (dark) ───────────────────────────────────── */
+    --brand: 220 70% 60%;
+    --brand-foreground: 0 0% 100%;
+    --brand-soft: 220 40% 16%;
+    --brand-hover: 220 70% 66%;
+
+    /* ── Neutral (dark) ────────────────────────────────── */
+    --neutral-50: 220 20% 10%;
+    --neutral-100: 220 18% 13%;
+    --neutral-200: 218 18% 18%;
+    --neutral-300: 217 14% 28%;
+    --neutral-400: 215 14% 42%;
+    --neutral-500: 215 16% 57%;
+    --neutral-600: 213 14% 70%;
+    --neutral-700: 214 17% 82%;
+    --neutral-800: 210 17% 91%;
+    --neutral-900: 210 20% 96%;
+
+    /* ── Semantic (dark) ───────────────────────────────── */
+    --success: 152 55% 48%;
+    --success-foreground: 152 60% 10%;
+    --success-soft: 152 30% 14%;
+    --success-muted: 152 30% 28%;
+    --success-hover: 152 55% 55%;
+
+    --warning: 38 85% 55%;
+    --warning-foreground: 38 92% 10%;
+    --warning-soft: 38 30% 14%;
+    --warning-muted: 38 30% 28%;
+    --warning-hover: 38 85% 62%;
+
+    --danger: 0 65% 55%;
+    --danger-foreground: 0 0% 100%;
+    --danger-soft: 0 30% 14%;
+    --danger-muted: 0 30% 28%;
+    --danger-hover: 0 65% 62%;
+
+    --info: 217 80% 65%;
+    --info-foreground: 217 91% 10%;
+    --info-soft: 217 30% 14%;
+    --info-muted: 217 30% 28%;
+    --info-hover: 217 80% 72%;
+
+    /* ── Focus ring (dark) ─────────────────────────────── */
+    --focus-ring: 220 70% 65%;
+    --focus-ring-offset: 222.2 84% 4.9%;
+
+    /* ── DataViz (dark — slightly brighter) ────────────── */
+    --chart-1: 220 70% 60%;
+    --chart-2: 152 55% 48%;
+    --chart-3: 38 85% 55%;
+    --chart-4: 280 55% 62%;
+    --chart-5: 0 65% 55%;
+    --chart-6: 190 70% 50%;
+    --chart-7: 340 60% 60%;
+    --chart-8: 30 75% 60%;
+
+    /* ── Existing shadcn tokens (dark, unchanged) ──────── */
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
 
@@ -83,6 +197,7 @@ All colors MUST be HSL.
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
+
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;

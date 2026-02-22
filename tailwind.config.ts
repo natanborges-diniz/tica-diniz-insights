@@ -14,6 +14,77 @@ export default {
     },
     extend: {
       colors: {
+        /* ── Brand ─────────────────────────────────── */
+        brand: {
+          DEFAULT: "hsl(var(--brand))",
+          foreground: "hsl(var(--brand-foreground))",
+          soft: "hsl(var(--brand-soft))",
+          hover: "hsl(var(--brand-hover))",
+        },
+
+        /* ── Neutral scale ─────────────────────────── */
+        neutral: {
+          50: "hsl(var(--neutral-50))",
+          100: "hsl(var(--neutral-100))",
+          200: "hsl(var(--neutral-200))",
+          300: "hsl(var(--neutral-300))",
+          400: "hsl(var(--neutral-400))",
+          500: "hsl(var(--neutral-500))",
+          600: "hsl(var(--neutral-600))",
+          700: "hsl(var(--neutral-700))",
+          800: "hsl(var(--neutral-800))",
+          900: "hsl(var(--neutral-900))",
+        },
+
+        /* ── Semantic: Success ─────────────────────── */
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+          soft: "hsl(var(--success-soft))",
+          muted: "hsl(var(--success-muted))",
+          hover: "hsl(var(--success-hover))",
+        },
+
+        /* ── Semantic: Warning ─────────────────────── */
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+          soft: "hsl(var(--warning-soft))",
+          muted: "hsl(var(--warning-muted))",
+          hover: "hsl(var(--warning-hover))",
+        },
+
+        /* ── Semantic: Danger ──────────────────────── */
+        danger: {
+          DEFAULT: "hsl(var(--danger))",
+          foreground: "hsl(var(--danger-foreground))",
+          soft: "hsl(var(--danger-soft))",
+          muted: "hsl(var(--danger-muted))",
+          hover: "hsl(var(--danger-hover))",
+        },
+
+        /* ── Semantic: Info ────────────────────────── */
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          foreground: "hsl(var(--info-foreground))",
+          soft: "hsl(var(--info-soft))",
+          muted: "hsl(var(--info-muted))",
+          hover: "hsl(var(--info-hover))",
+        },
+
+        /* ── DataViz (chart palette) ───────────────── */
+        chart: {
+          1: "hsl(var(--chart-1))",
+          2: "hsl(var(--chart-2))",
+          3: "hsl(var(--chart-3))",
+          4: "hsl(var(--chart-4))",
+          5: "hsl(var(--chart-5))",
+          6: "hsl(var(--chart-6))",
+          7: "hsl(var(--chart-7))",
+          8: "hsl(var(--chart-8))",
+        },
+
+        /* ── Existing shadcn tokens (unchanged) ────── */
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -58,6 +129,12 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
       },
+      ringColor: {
+        focus: "hsl(var(--focus-ring))",
+      },
+      ringOffsetColor: {
+        focus: "hsl(var(--focus-ring-offset))",
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
@@ -65,20 +142,12 @@ export default {
       },
       keyframes: {
         "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
         },
       },
       animation: {
