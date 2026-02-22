@@ -60,7 +60,7 @@ function getCorFormaPagamento(forma: string): string {
   }
   if (formaUpper.includes('DEVOLUCAO') || formaUpper.includes('DEVOLUÇÃO')) return 'bg-danger-soft text-danger';
   if (formaUpper.includes('CREDITO') && !formaUpper.includes('CARTAO')) return 'bg-warning-soft text-warning';
-  return 'bg-neutral-100 text-neutral-600';
+  return 'bg-muted text-muted-foreground';
 }
 
 // ============================================

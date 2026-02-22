@@ -60,9 +60,9 @@ export default function FluxoCaixaDashboard() {
 
         {/* Aviso quando carregando dados de todas as empresas */}
         {loading && filters.empresa === null && (
-          <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
-            <AlertCircle className="h-4 w-4 text-yellow-600" />
-            <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+          <Alert className="border-warning-muted bg-warning-soft">
+            <AlertCircle className="h-4 w-4 text-warning" />
+            <AlertDescription className="text-warning-foreground">
               Carregando dados de todas as empresas. Esta consulta pode demorar até 60 segundos...
             </AlertDescription>
           </Alert>

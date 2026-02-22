@@ -457,13 +457,13 @@ export function getSupplierBadgeInfo(supplier: string | null): {
   if (!supplier) return null;
   switch (supplier) {
     case "HOYA":
-      return { label: "Hoya", className: "bg-orange-500/15 text-orange-700 border-orange-300" };
+      return { label: "Hoya", className: "bg-chart-1/15 text-chart-1 border-chart-1/30" };
     case "ZEISS":
-      return { label: "Zeiss", className: "bg-blue-500/15 text-blue-700 border-blue-300" };
+      return { label: "Zeiss", className: "bg-chart-2/15 text-chart-2 border-chart-2/30" };
     case "ESSILOR":
-      return { label: "Essilor", className: "bg-purple-500/15 text-purple-700 border-purple-300" };
+      return { label: "Essilor", className: "bg-chart-3/15 text-chart-3 border-chart-3/30" };
     case "PROPRIA":
-      return { label: "Própria", className: "bg-gray-500/15 text-gray-700 border-gray-300" };
+      return { label: "Própria", className: "bg-muted text-muted-foreground border-border" };
     default:
       return null;
   }

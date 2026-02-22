@@ -89,15 +89,15 @@ export function OtbResumoVisual({ metrics, itens }: OtbResumoVisualProps) {
         </Card>
 
         {/* Valor em Estoque */}
-        <Card className="bg-gradient-to-br from-emerald-500/5 to-background border-emerald-500/20">
+        <Card className="bg-gradient-to-br from-success/5 to-background border-success/20">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-emerald-600" />
+              <DollarSign className="h-4 w-4 text-success" />
               Valor em Estoque
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">
+            <div className="text-2xl font-bold text-success">
               R$ {(indicadores.estoqueValor / 1000).toFixed(0)}k
             </div>
             <p className="text-xs text-muted-foreground">
@@ -107,15 +107,15 @@ export function OtbResumoVisual({ metrics, itens }: OtbResumoVisualProps) {
         </Card>
 
         {/* Giro Médio */}
-        <Card className="bg-gradient-to-br from-amber-500/5 to-background border-amber-500/20">
+        <Card className="bg-gradient-to-br from-warning/5 to-background border-warning/20">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-amber-600" />
+              <TrendingUp className="h-4 w-4 text-warning" />
               Giro Médio
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">
+            <div className="text-2xl font-bold text-warning">
               {indicadores.giroMedio.toFixed(1)}x
             </div>
             <p className="text-xs text-muted-foreground">
@@ -125,15 +125,15 @@ export function OtbResumoVisual({ metrics, itens }: OtbResumoVisualProps) {
         </Card>
 
         {/* OTB Total */}
-        <Card className="bg-gradient-to-br from-blue-500/5 to-background border-blue-500/20">
+        <Card className="bg-gradient-to-br from-info/5 to-background border-info/20">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Package className="h-4 w-4 text-blue-600" />
+              <Package className="h-4 w-4 text-info" />
               OTB Total
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
+            <div className="text-2xl font-bold text-info">
               {metrics.totalOtb.toLocaleString('pt-BR')}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -157,22 +157,22 @@ export function OtbResumoVisual({ metrics, itens }: OtbResumoVisualProps) {
             {/* Barra empilhada */}
             <div className="flex h-8 rounded-lg overflow-hidden mb-3">
               <div 
-                className="bg-red-500 transition-all" 
+                className="bg-danger transition-all" 
                 style={{ width: `${indicadores.distribuicao.urgente.pct}%` }}
                 title={`Urgente: ${indicadores.distribuicao.urgente.pct.toFixed(1)}%`}
               />
               <div 
-                className="bg-orange-400 transition-all" 
+                className="bg-warning transition-all" 
                 style={{ width: `${indicadores.distribuicao.comprar.pct}%` }}
                 title={`Comprar: ${indicadores.distribuicao.comprar.pct.toFixed(1)}%`}
               />
               <div 
-                className="bg-emerald-500 transition-all" 
+                className="bg-success transition-all" 
                 style={{ width: `${indicadores.distribuicao.ok.pct}%` }}
                 title={`OK: ${indicadores.distribuicao.ok.pct.toFixed(1)}%`}
               />
               <div 
-                className="bg-slate-400 transition-all" 
+                className="bg-muted-foreground/40 transition-all" 
                 style={{ width: `${indicadores.distribuicao.excesso.pct}%` }}
                 title={`Excesso: ${indicadores.distribuicao.excesso.pct.toFixed(1)}%`}
               />
@@ -181,22 +181,22 @@ export function OtbResumoVisual({ metrics, itens }: OtbResumoVisualProps) {
             {/* Legenda */}
             <div className="grid grid-cols-4 gap-2 text-xs">
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-red-500" />
+                <div className="w-3 h-3 rounded bg-danger" />
                 <span>Urgente</span>
                 <span className="font-medium ml-auto">{indicadores.distribuicao.urgente.pct.toFixed(0)}%</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-orange-400" />
+                <div className="w-3 h-3 rounded bg-warning" />
                 <span>Comprar</span>
                 <span className="font-medium ml-auto">{indicadores.distribuicao.comprar.pct.toFixed(0)}%</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-emerald-500" />
+                <div className="w-3 h-3 rounded bg-success" />
                 <span>OK</span>
                 <span className="font-medium ml-auto">{indicadores.distribuicao.ok.pct.toFixed(0)}%</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-slate-400" />
+                <div className="w-3 h-3 rounded bg-muted-foreground/40" />
                 <span>Excesso</span>
                 <span className="font-medium ml-auto">{indicadores.distribuicao.excesso.pct.toFixed(0)}%</span>
               </div>

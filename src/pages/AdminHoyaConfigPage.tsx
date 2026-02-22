@@ -193,7 +193,7 @@ export default function AdminHoyaConfigPage() {
                   const configurada = config.cod_cliente_hoya != null && config.cnpj;
 
                   return (
-                    <TableRow key={config.id} className={changed ? "bg-amber-50 dark:bg-amber-950/20" : ""}>
+                    <TableRow key={config.id} className={changed ? "bg-warning-soft" : ""}>
                       <TableCell className="font-mono font-bold text-muted-foreground">
                         {config.cod_empresa}
                       </TableCell>

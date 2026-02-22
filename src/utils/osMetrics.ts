@@ -15,13 +15,13 @@ export interface OsMetrics {
 export function getStatusColor(status: StatusAtraso): string {
   switch (status) {
     case 'ENTREGUE':
-      return 'bg-green-500/20 text-green-700 border-green-500/30';
+      return 'bg-success-soft text-success border-success-muted';
     case 'NO_PRAZO':
-      return 'bg-blue-500/20 text-blue-700 border-blue-500/30';
+      return 'bg-info-soft text-info border-info-muted';
     case 'ATRASO_LEVE':
-      return 'bg-yellow-500/20 text-yellow-700 border-yellow-500/30';
+      return 'bg-warning-soft text-warning border-warning-muted';
     case 'ATRASO':
-      return 'bg-red-500/20 text-red-700 border-red-500/30';
+      return 'bg-danger-soft text-danger border-danger-muted';
     case 'SEM_DATA':
     default:
       return 'bg-muted text-muted-foreground border-muted-foreground/30';

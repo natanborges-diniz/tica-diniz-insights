@@ -27,10 +27,10 @@ export function FluxoCaixaResumoCards({ resumo, fluxoAgrupado }: Props) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Total a Receber</CardTitle>
-          <TrendingUp className="h-4 w-4 text-green-500" />
+          <TrendingUp className="h-4 w-4 text-success" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-green-600">
+          <div className="text-2xl font-bold text-success">
             {formatCurrency(resumo.totalReceber)}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -42,10 +42,10 @@ export function FluxoCaixaResumoCards({ resumo, fluxoAgrupado }: Props) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Total a Pagar</CardTitle>
-          <TrendingDown className="h-4 w-4 text-red-500" />
+          <TrendingDown className="h-4 w-4 text-danger" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-red-600">
+          <div className="text-2xl font-bold text-danger">
             {formatCurrency(resumo.totalPagar)}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -57,10 +57,10 @@ export function FluxoCaixaResumoCards({ resumo, fluxoAgrupado }: Props) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Saldo do Período</CardTitle>
-          <Wallet className={`h-4 w-4 ${resumo.saldoPeriodo >= 0 ? "text-green-500" : "text-red-500"}`} />
+          <Wallet className={`h-4 w-4 ${resumo.saldoPeriodo >= 0 ? "text-success" : "text-danger"}`} />
         </CardHeader>
         <CardContent>
-          <div className={`text-2xl font-bold ${resumo.saldoPeriodo >= 0 ? "text-green-600" : "text-red-600"}`}>
+          <div className={`text-2xl font-bold ${resumo.saldoPeriodo >= 0 ? "text-success" : "text-danger"}`}>
             {formatCurrency(resumo.saldoPeriodo)}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -72,10 +72,10 @@ export function FluxoCaixaResumoCards({ resumo, fluxoAgrupado }: Props) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Saldo Acumulado</CardTitle>
-          <BarChart3 className={`h-4 w-4 ${saldoAcumuladoFinal >= 0 ? "text-green-500" : "text-red-500"}`} />
+          <BarChart3 className={`h-4 w-4 ${saldoAcumuladoFinal >= 0 ? "text-success" : "text-danger"}`} />
         </CardHeader>
         <CardContent>
-          <div className={`text-2xl font-bold ${saldoAcumuladoFinal >= 0 ? "text-green-600" : "text-red-600"}`}>
+          <div className={`text-2xl font-bold ${saldoAcumuladoFinal >= 0 ? "text-success" : "text-danger"}`}>
             {formatCurrency(saldoAcumuladoFinal)}
           </div>
           <p className="text-xs text-muted-foreground">

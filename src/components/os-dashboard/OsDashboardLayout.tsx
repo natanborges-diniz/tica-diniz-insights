@@ -355,9 +355,9 @@ export const OsDashboardLayout: React.FC<Props> = ({
                 </div>
               )}
               {osSemData.length > 0 && (
-                <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                  <AlertTriangle className="h-5 w-5 text-amber-600" />
-                  <span className="text-sm font-medium text-amber-700">
+                <div className="flex items-center gap-2 p-3 bg-warning-soft border border-warning-muted rounded-lg">
+                  <AlertTriangle className="h-5 w-5 text-warning" />
+                  <span className="text-sm font-medium text-warning-foreground">
                     {osSemData.length} OS sem data de previsão.
                   </span>
                 </div>

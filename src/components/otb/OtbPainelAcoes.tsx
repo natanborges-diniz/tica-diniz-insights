@@ -148,8 +148,8 @@ export function OtbPainelAcoes({ itens, metrics, onFiltrarCategoria }: OtbPainel
         qtd: excessoGeral.length,
         itens: excessoGeral,
         icon: <Package className="h-5 w-5" />,
-        cor: 'text-neutral-600',
-        corBg: 'bg-neutral-100 border-neutral-200',
+        cor: 'text-muted-foreground',
+        corBg: 'bg-muted border-border',
       });
     }
     

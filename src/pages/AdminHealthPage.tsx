@@ -81,17 +81,17 @@ export default function AdminHealthPage() {
 
       {/* Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className={isUp ? 'border-green-500/30' : isDegraded ? 'border-yellow-500/30 bg-yellow-500/5' : latest ? 'border-destructive/30 bg-destructive/5' : ''}>
+        <Card className={isUp ? 'border-success/30' : isDegraded ? 'border-warning-muted bg-warning-soft' : latest ? 'border-destructive/30 bg-destructive/5' : ''}>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              {isUp ? <Wifi className="h-8 w-8 text-green-500" /> : isDegraded ? <Wifi className="h-8 w-8 text-yellow-500" /> : <WifiOff className="h-8 w-8 text-destructive" />}
+              {isUp ? <Wifi className="h-8 w-8 text-success" /> : isDegraded ? <Wifi className="h-8 w-8 text-warning" /> : <WifiOff className="h-8 w-8 text-destructive" />}
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-muted-foreground">Status Atual</p>
-                <p className={`text-xl font-bold ${isUp ? 'text-green-500' : isDegraded ? 'text-yellow-500' : 'text-destructive'}`}>
+                <p className={`text-xl font-bold ${isUp ? 'text-success' : isDegraded ? 'text-warning' : 'text-destructive'}`}>
                   {latest ? (isUp ? 'Online' : isDegraded ? 'Degradado' : latest.status === 'timeout' ? 'Timeout' : 'Offline') : '—'}
                 </p>
                 {isDegraded && (
-                  <p className="text-xs text-yellow-600 mt-1">Processo OK, banco Firebird desconectado</p>
+                  <p className="text-xs text-warning mt-1">Processo OK, banco Firebird desconectado</p>
                 )}
                 {latest && !isUp && !isDegraded && latest.error_message && (
                   <p className="text-xs text-destructive mt-1 truncate" title={latest.error_message}>{latest.error_message}</p>
@@ -143,16 +143,16 @@ export default function AdminHealthPage() {
 
       {/* Degraded detail banner */}
       {isDegraded && latest?.error_message && (
-        <Card className="border-yellow-500/30 bg-yellow-500/5">
+        <Card className="border-warning-muted bg-warning-soft">
           <CardContent className="pt-6 pb-4">
             <div className="flex items-start gap-3">
-              <Wifi className="h-5 w-5 text-yellow-600 mt-0.5 shrink-0" />
+              <Wifi className="h-5 w-5 text-warning mt-0.5 shrink-0" />
               <div>
-                <p className="text-sm font-medium text-yellow-700">Bridge parcialmente disponível</p>
+                <p className="text-sm font-medium text-warning-foreground">Bridge parcialmente disponível</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   O processo Node.js está ativo, mas a conexão com o banco Firebird falhou.
                 </p>
-                <code className="text-xs bg-yellow-500/10 px-2 py-1 rounded mt-2 inline-block font-mono">
+                <code className="text-xs bg-warning/10 px-2 py-1 rounded mt-2 inline-block font-mono">
                   {latest.error_message}
                 </code>
                 <p className="text-xs text-muted-foreground mt-2">
@@ -223,7 +223,7 @@ export default function AdminHealthPage() {
                       <TableCell>
                         <Badge
                           variant={log.status === 'up' ? 'default' : log.status === 'degraded' ? 'outline' : 'destructive'}
-                          className={`text-xs ${log.status === 'degraded' ? 'border-yellow-500 text-yellow-600' : ''}`}
+                          className={`text-xs ${log.status === 'degraded' ? 'border-warning text-warning' : ''}`}
                         >
                           {log.status === 'degraded' ? 'degraded' : log.status}
                         </Badge>
@@ -267,7 +267,7 @@ function BridgeTelemetryPanel() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <Badge variant="default" className="text-xs bg-green-600">Strict ON</Badge>
+          <Badge variant="default" className="text-xs bg-success">Strict ON</Badge>
           <Button variant="outline" size="sm" onClick={refresh}>
             <RefreshCw className="h-4 w-4 mr-1" />
             Atualizar
@@ -280,8 +280,8 @@ function BridgeTelemetryPanel() {
             <p className="text-2xl font-bold text-primary">{telemetry.v2Endpoints.length}</p>
             <p className="text-xs text-muted-foreground">Endpoints v2 ativos</p>
           </div>
-          <div className="text-center p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-            <p className="text-2xl font-bold text-green-600">0</p>
+          <div className="text-center p-3 rounded-lg bg-success-soft border border-success-muted">
+            <p className="text-2xl font-bold text-success">0</p>
             <p className="text-xs text-muted-foreground">Endpoints legados (removidos)</p>
           </div>
         </div>

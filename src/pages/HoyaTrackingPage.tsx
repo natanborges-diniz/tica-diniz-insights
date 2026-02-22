@@ -50,11 +50,11 @@ import { ptBR } from "date-fns/locale";
 
 function statusBadge(status: string | null) {
   const s = (status || "").toLowerCase();
-  if (s.includes("entreg")) return { color: "bg-emerald-500/15 text-emerald-700 border-emerald-300", icon: CheckCircle2 };
-  if (s.includes("faturad")) return { color: "bg-blue-500/15 text-blue-700 border-blue-300", icon: Package };
-  if (s.includes("produc") || s.includes("process")) return { color: "bg-amber-500/15 text-amber-700 border-amber-300", icon: Clock };
-  if (s.includes("cancel") || s.includes("erro")) return { color: "bg-red-500/15 text-red-700 border-red-300", icon: XCircle };
-  if (s.includes("transit") || s.includes("enviad")) return { color: "bg-indigo-500/15 text-indigo-700 border-indigo-300", icon: Truck };
+  if (s.includes("entreg")) return { color: "bg-success-soft text-success border-success-muted", icon: CheckCircle2 };
+  if (s.includes("faturad")) return { color: "bg-info-soft text-info border-info-muted", icon: Package };
+  if (s.includes("produc") || s.includes("process")) return { color: "bg-warning-soft text-warning border-warning-muted", icon: Clock };
+  if (s.includes("cancel") || s.includes("erro")) return { color: "bg-danger-soft text-danger border-danger-muted", icon: XCircle };
+  if (s.includes("transit") || s.includes("enviad")) return { color: "bg-chart-5/15 text-chart-5 border-chart-5/30", icon: Truck };
   return { color: "bg-muted text-muted-foreground", icon: Clock };
 }
 
@@ -487,7 +487,7 @@ const HoyaTrackingPage: React.FC = () => {
                         </Badge>
                         <span className="text-xs text-muted-foreground">OS {ped.cod_os}</span>
                         {ped.hoya_environment === "staging" && (
-                          <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-300">HML</Badge>
+                          <Badge variant="outline" className="text-[10px] bg-warning-soft text-warning border-warning-muted">HML</Badge>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
@@ -559,14 +559,14 @@ const HoyaTrackingPage: React.FC = () => {
                         const isErro = (ped.status || "").toUpperCase() === "ERRO";
 
                         return (
-                          <div className={`rounded-md border p-3 space-y-2 text-xs ${confirmado ? "bg-emerald-500/5 border-emerald-300/50" : isErro ? "bg-red-500/5 border-red-300/50" : "bg-muted/40"}`}>
+                          <div className={`rounded-md border p-3 space-y-2 text-xs ${confirmado ? "bg-success-soft border-success-muted" : isErro ? "bg-danger-soft border-danger-muted" : "bg-muted/40"}`}>
                             <div className="flex items-center gap-2">
                               {confirmado ? (
-                                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                                <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
                               ) : isErro ? (
-                                <XCircle className="h-4 w-4 text-red-600 shrink-0" />
+                                <XCircle className="h-4 w-4 text-danger shrink-0" />
                               ) : (
-                                <Clock className="h-4 w-4 text-amber-600 shrink-0" />
+                                <Clock className="h-4 w-4 text-warning shrink-0" />
                               )}
                               <p className="font-semibold text-sm">
                                 {confirmado ? "Pedido confirmado pela Hoya" : isErro ? "Falha no envio à Hoya" : "Resposta da Hoya"}
@@ -685,7 +685,7 @@ const HoyaTrackingPage: React.FC = () => {
                           if (!errorMsg) return null; // ainda não tentamos ou está carregando
                           const isNotFound = errorMsg.toLowerCase().includes("não encontrado") || errorMsg.toLowerCase().includes("nenhum pedido");
                           return (
-                            <div className={`rounded-md border p-3 text-xs flex items-start gap-2 ${isNotFound ? "bg-amber-500/10 border-amber-300 text-amber-800" : "bg-destructive/10 border-destructive/30 text-destructive"}`}>
+                            <div className={`rounded-md border p-3 text-xs flex items-start gap-2 ${isNotFound ? "bg-warning-soft border-warning-muted text-warning-foreground" : "bg-destructive/10 border-destructive/30 text-destructive"}`}>
                               {isNotFound ? (
                                 <Clock className="h-4 w-4 shrink-0 mt-0.5" />
                               ) : (
