@@ -29,6 +29,7 @@ import AdminHealthPage from "./pages/AdminHealthPage";
 import AdminPedidosAuditoriaPage from "./pages/AdminPedidosAuditoriaPage";
 import AdminHoyaConfigPage from "./pages/AdminHoyaConfigPage";
 import AdminFornecedoresPage from "./pages/AdminFornecedoresPage";
+import SystemPlayground from "./pages/_SystemPlayground";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -93,6 +94,9 @@ const App = () => (
                 <Route path="/admin/pedidos" element={<AdminPedidosAuditoriaPage />} />
                 <Route path="/admin/hoya-config" element={<AdminHoyaConfigPage />} />
                 <Route path="/admin/fornecedores" element={<AdminFornecedoresPage />} />
+
+                {/* Dev playground — system design */}
+                <Route path="/dev/playground" element={<SystemPlayground />} />
 
                 {/* Central de IA */}
                 <Route element={<ModuleGuard module="ia" />}>
