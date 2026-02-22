@@ -7,6 +7,7 @@ import { TableIcon, Search, AlertTriangle, CheckCircle, Loader2 } from 'lucide-r
 import { DataTable, DataTableColumn, QueryState } from '@/components/ui/data-table';
 import { SalesRowDetailSheet } from './SalesRowDetailSheet';
 import { ResumoEmpresaVendedor } from '@/services/vendasService';
+import { EmptyState } from '@/components/system/states';
 
 interface SalesTableProps {
   dados: ResumoEmpresaVendedor[];
@@ -166,7 +167,7 @@ export function SalesTable({
           onQueryChange={setQueryState}
           rowKey={(row, idx) => `${row.empresaCodLogico}-${row.vendedor}-${idx}`}
           loading={isLoading}
-          emptyMessage="Sem dados no período"
+          emptyState={<EmptyState title="Sem dados no período" description="Ajuste os filtros ou selecione outro período." />}
           onRowClick={(row) => setDetailRow(row)}
         />
       </CardContent>

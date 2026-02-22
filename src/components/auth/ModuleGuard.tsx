@@ -1,6 +1,6 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
-import { Loader2 } from "lucide-react";
+import { LoadingState, NoPermissionState } from "@/components/system/states";
 import type { ModuleKey } from "@/components/layout/AppLayout";
 
 interface ModuleGuardProps {
@@ -11,15 +11,11 @@ export default function ModuleGuard({ module }: ModuleGuardProps) {
   const { hasAccess, isLoading } = useModulePermissions();
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <LoadingState variant="page" message="Verificando permissões..." />;
   }
 
   if (!hasAccess(module)) {
-    return <Navigate to="/home" replace />;
+    return <NoPermissionState />;
   }
 
   return <Outlet />;
