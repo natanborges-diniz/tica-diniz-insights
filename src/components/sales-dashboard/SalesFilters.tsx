@@ -115,9 +115,9 @@ export function SalesFilters({
           
           {/* OTIMIZAÇÃO 3: Alerta para períodos longos */}
           {alertaPeriodo && (
-            <Alert variant="default" className="border-yellow-500/50 bg-yellow-500/10">
-              <AlertTriangle className="h-4 w-4 text-yellow-600" />
-              <AlertDescription className="text-yellow-700">
+            <Alert variant="default" className="border-warning-muted bg-warning-soft">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              <AlertDescription className="text-warning-foreground">
                 {alertaPeriodo}
               </AlertDescription>
             </Alert>

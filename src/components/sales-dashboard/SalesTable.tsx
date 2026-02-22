@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { TableIcon, Search, ArrowUpDown, ArrowUp, ArrowDown, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { TableIcon, Search, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { DataTable, DataTableColumn, QueryState } from '@/components/ui/data-table';
+import { SalesRowDetailSheet } from './SalesRowDetailSheet';
 import { ResumoEmpresaVendedor } from '@/services/vendasService';
 
 interface SalesTableProps {
@@ -15,89 +16,119 @@ interface SalesTableProps {
   usarVendasSemCreditos?: boolean;
 }
 
-type SortField = 'empresaNomeLogico' | 'vendedor' | 'qtdTransacao' | 'qtdProdutos' | 'totalBruto' | 
-                 'totalDesconto' | 'percentualDesconto' | 'totalVendido' | 'totalCreditos' |
-                 'totalVendidoSemCreditos' | 'ticketMedio';
-type SortDirection = 'asc' | 'desc' | null;
+const formatCurrency = (v: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+const formatNumber = (v: number) => new Intl.NumberFormat('pt-BR').format(v);
+const formatPercent = (v: number) => `${v.toFixed(2)}%`;
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
-}
-
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat('pt-BR').format(value);
-}
-
-function formatPercent(value: number): string {
-  return `${value.toFixed(2)}%`;
-}
-
-export function SalesTable({ 
-  dados, 
-  isLoading, 
+export function SalesTable({
+  dados,
+  isLoading,
   loadingDesconto,
-  limiteDesconto = 15, 
-  usarVendasSemCreditos = true 
+  limiteDesconto = 15,
+  usarVendasSemCreditos = true,
 }: SalesTableProps) {
   const [search, setSearch] = useState('');
-  const defaultSortField: SortField = usarVendasSemCreditos ? 'totalVendidoSemCreditos' : 'totalVendido';
-  const [sortField, setSortField] = useState<SortField>(defaultSortField);
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [queryState, setQueryState] = useState<QueryState>({
+    page: 1,
+    pageSize: 20,
+    sort: { field: usarVendasSemCreditos ? 'totalVendidoSemCreditos' : 'totalVendido', direction: 'desc' },
+    search: '',
+  });
+  const [detailRow, setDetailRow] = useState<ResumoEmpresaVendedor | null>(null);
 
-  // Verificar se temos dados de desconto disponíveis
   const temDesconto = dados.some(d => d.totalDesconto > 0 || d.percentualDesconto > 0);
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? null : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('desc');
-    }
-  };
+  const filteredData = useMemo(() => {
+    if (!search) return dados;
+    const s = search.toLowerCase();
+    return dados.filter(r =>
+      r.empresaNomeLogico?.toLowerCase().includes(s) ||
+      r.vendedor?.toLowerCase().includes(s)
+    );
+  }, [dados, search]);
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />;
-    if (sortDirection === 'asc') return <ArrowUp className="ml-1 h-3 w-3" />;
-    if (sortDirection === 'desc') return <ArrowDown className="ml-1 h-3 w-3" />;
-    return <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />;
-  };
-
-  const filteredAndSortedData = useMemo(() => {
-    let filtered = dados;
-
-    // Filtro de busca
-    if (search) {
-      const searchLower = search.toLowerCase();
-      filtered = dados.filter(row => 
-        row.empresaNomeLogico?.toLowerCase().includes(searchLower) ||
-        row.vendedor?.toLowerCase().includes(searchLower)
-      );
-    }
-
-    // Ordenação
-    if (sortField && sortDirection) {
-      filtered = [...filtered].sort((a, b) => {
-        const aVal = a[sortField as keyof typeof a] ?? 0;
-        const bVal = b[sortField as keyof typeof b] ?? 0;
-        
-        if (typeof aVal === 'string' && typeof bVal === 'string') {
-          return sortDirection === 'asc' 
-            ? aVal.localeCompare(bVal) 
-            : bVal.localeCompare(aVal);
+  const columns: DataTableColumn<ResumoEmpresaVendedor>[] = useMemo(() => [
+    {
+      key: 'empresaNomeLogico', header: 'Empresa', sortable: true, mobileVisible: true,
+      cell: (row) => <span className="font-medium">{row.empresaNomeLogico}</span>,
+    },
+    {
+      key: 'vendedor', header: 'Vendedor', sortable: true, mobileVisible: true,
+    },
+    {
+      key: 'qtdTransacao', header: 'Qtd Trans.', sortable: true, align: 'right' as const, mobileVisible: false,
+      cell: (row) => formatNumber(row.qtdTransacao),
+    },
+    {
+      key: 'totalBruto', header: 'Total Bruto', sortable: true, align: 'right' as const, mobileVisible: false,
+      cell: (row) => row.totalBruto > 0 ? formatCurrency(row.totalBruto) : (
+        loadingDesconto ? <Skeleton className="h-4 w-16 ml-auto" /> : '—'
+      ),
+    },
+    {
+      key: 'totalDesconto', header: 'Desconto', sortable: true, align: 'right' as const, mobileVisible: false,
+      cell: (row) => row.totalDesconto > 0 ? (
+        <span className="text-warning">{formatCurrency(row.totalDesconto)}</span>
+      ) : (loadingDesconto ? <Skeleton className="h-4 w-16 ml-auto" /> : '—'),
+    },
+    {
+      key: 'percentualDesconto', header: '% Desc.', sortable: true, align: 'right' as const, mobileVisible: false,
+      cell: (row) => row.percentualDesconto > 0 ? (
+        <span className={row.percentualDesconto > limiteDesconto ? 'text-danger font-semibold' : 'text-warning'}>
+          {formatPercent(row.percentualDesconto)}
+        </span>
+      ) : (loadingDesconto ? <Skeleton className="h-4 w-12 ml-auto" /> : '—'),
+    },
+    {
+      key: 'totalVendidoSemCreditos', header: 'Vendas Válidas', sortable: true, align: 'right' as const, mobileVisible: true,
+      headerClassName: usarVendasSemCreditos ? 'bg-primary/10' : '',
+      cellClassName: usarVendasSemCreditos ? 'font-bold text-success bg-primary/5' : '',
+      cell: (row) => formatCurrency(row.totalVendidoSemCreditos),
+    },
+    {
+      key: 'totalCreditos', header: 'Créditos', sortable: true, align: 'right' as const, mobileVisible: false,
+      cell: (row) => <span className="text-info">{formatCurrency(row.totalCreditos)}</span>,
+    },
+    {
+      key: 'ticketMedio', header: 'Ticket Médio', sortable: true, align: 'right' as const, mobileVisible: false,
+      cell: (row) => formatCurrency(row.ticketMedio),
+    },
+    ...(temDesconto ? [{
+      key: 'qualidade' as string, header: 'Qualidade', align: 'center' as const, mobileVisible: false,
+      cell: (row: ResumoEmpresaVendedor) => {
+        if (row.percentualDesconto > limiteDesconto) {
+          return (
+            <Badge className="gap-1 bg-danger-soft text-danger border-danger-muted" variant="outline">
+              <AlertTriangle className="h-3 w-3" />
+              Desc {formatPercent(row.percentualDesconto)}
+            </Badge>
+          );
         }
-        
-        return sortDirection === 'asc' 
-          ? (aVal as number) - (bVal as number)
-          : (bVal as number) - (aVal as number);
-      });
-    }
+        if (row.percentualDesconto > 0) {
+          return (
+            <Badge className="gap-1 bg-success-soft text-success border-success-muted" variant="outline">
+              <CheckCircle className="h-3 w-3" />
+              OK
+            </Badge>
+          );
+        }
+        return null;
+      },
+    }] : []),
+  ], [usarVendasSemCreditos, loadingDesconto, temDesconto, limiteDesconto]);
 
-    return filtered;
-  }, [dados, search, sortField, sortDirection]);
+  const detailFields = detailRow ? [
+    { label: 'Empresa / Vendedor', value: `${detailRow.empresaNomeLogico} — ${detailRow.vendedor}` },
+    { label: 'Vendas Válidas', value: detailRow.totalVendidoSemCreditos },
+    { label: 'Total Vendido', value: detailRow.totalVendido },
+    { label: 'Total Bruto', value: detailRow.totalBruto },
+    { label: 'Desconto', value: detailRow.totalDesconto },
+    { label: '% Desconto', value: formatPercent(detailRow.percentualDesconto) },
+    { label: 'Créditos', value: detailRow.totalCreditos },
+    { label: 'Ticket Médio', value: detailRow.ticketMedio },
+    { label: 'Qtd Transações', value: formatNumber(detailRow.qtdTransacao) },
+  ] : [];
 
   return (
     <Card>
@@ -114,11 +145,6 @@ export function SalesTable({
                 Carregando desconto...
               </Badge>
             )}
-            {!temDesconto && !loadingDesconto && (
-              <Badge variant="secondary" className="gap-1">
-                Desconto indisponível
-              </Badge>
-            )}
           </div>
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -132,173 +158,26 @@ export function SalesTable({
         </div>
       </CardHeader>
       <CardContent>
-        {isLoading ? (
-          <div className="space-y-2">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
-        ) : filteredAndSortedData.length === 0 ? (
-          <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-            Sem dados no período
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('empresaNomeLogico')}
-                  >
-                    <div className="flex items-center">
-                      Empresa
-                      <SortIcon field="empresaNomeLogico" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('vendedor')}
-                  >
-                    <div className="flex items-center">
-                      Vendedor
-                      <SortIcon field="vendedor" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="text-right cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('qtdTransacao')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Qtd Trans.
-                      <SortIcon field="qtdTransacao" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="text-right cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('totalBruto')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Total Bruto
-                      <SortIcon field="totalBruto" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="text-right cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('totalDesconto')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Desconto
-                      <SortIcon field="totalDesconto" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="text-right cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('percentualDesconto')}
-                  >
-                    <div className="flex items-center justify-end">
-                      % Desc.
-                      <SortIcon field="percentualDesconto" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className={`text-right cursor-pointer hover:bg-muted/50 ${!usarVendasSemCreditos ? 'bg-primary/10' : ''}`}
-                    onClick={() => handleSort('totalVendido')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Total Vendido
-                      <SortIcon field="totalVendido" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="text-right cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('totalCreditos')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Créditos
-                      <SortIcon field="totalCreditos" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className="text-right cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort('ticketMedio')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Ticket Médio
-                      <SortIcon field="ticketMedio" />
-                    </div>
-                  </TableHead>
-                  <TableHead 
-                    className={`text-right cursor-pointer hover:bg-muted/50 ${usarVendasSemCreditos ? 'bg-primary/10' : ''}`}
-                    onClick={() => handleSort('totalVendidoSemCreditos')}
-                  >
-                    <div className="flex items-center justify-end">
-                      Vendas Válidas
-                      <SortIcon field="totalVendidoSemCreditos" />
-                    </div>
-                  </TableHead>
-                  {temDesconto && (
-                    <TableHead className="text-center">
-                      Qualidade
-                    </TableHead>
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAndSortedData.map((row, index) => (
-                  <TableRow key={`${row.empresaCodLogico}-${row.vendedor}-${index}`}>
-                    <TableCell className="font-medium">{row.empresaNomeLogico}</TableCell>
-                    <TableCell>{row.vendedor}</TableCell>
-                    <TableCell className="text-right">{formatNumber(row.qtdTransacao)}</TableCell>
-                    <TableCell className="text-right">
-                      {row.totalBruto > 0 ? formatCurrency(row.totalBruto) : (
-                        loadingDesconto ? <Skeleton className="h-4 w-16 ml-auto" /> : '—'
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right text-amber-600">
-                      {row.totalDesconto > 0 ? formatCurrency(row.totalDesconto) : (
-                        loadingDesconto ? <Skeleton className="h-4 w-16 ml-auto" /> : '—'
-                      )}
-                    </TableCell>
-                    <TableCell className={`text-right ${row.percentualDesconto > limiteDesconto ? 'text-red-600 font-semibold' : 'text-orange-600'}`}>
-                      {row.percentualDesconto > 0 ? formatPercent(row.percentualDesconto) : (
-                        loadingDesconto ? <Skeleton className="h-4 w-12 ml-auto" /> : '—'
-                      )}
-                    </TableCell>
-                    <TableCell className={`text-right ${!usarVendasSemCreditos ? 'font-bold text-emerald-600 bg-primary/5' : ''}`}>
-                      {formatCurrency(row.totalVendido)}
-                    </TableCell>
-                    <TableCell className="text-right text-blue-600">
-                      {formatCurrency(row.totalCreditos)}
-                    </TableCell>
-                    <TableCell className="text-right text-indigo-600">
-                      {formatCurrency(row.ticketMedio)}
-                    </TableCell>
-                    <TableCell className={`text-right ${usarVendasSemCreditos ? 'font-bold text-emerald-600 bg-primary/5' : ''}`}>
-                      {formatCurrency(row.totalVendidoSemCreditos)}
-                    </TableCell>
-                    {temDesconto && (
-                      <TableCell className="text-center">
-                        {row.percentualDesconto > limiteDesconto ? (
-                          <Badge variant="destructive" className="gap-1">
-                            <AlertTriangle className="h-3 w-3" />
-                            Desc {formatPercent(row.percentualDesconto)}
-                          </Badge>
-                        ) : row.percentualDesconto > 0 ? (
-                          <Badge variant="outline" className="gap-1 text-emerald-600 border-emerald-600">
-                            <CheckCircle className="h-3 w-3" />
-                            OK
-                          </Badge>
-                        ) : null}
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+        <DataTable
+          columns={columns}
+          data={filteredData}
+          mode="client"
+          queryState={queryState}
+          onQueryChange={setQueryState}
+          rowKey={(row, idx) => `${row.empresaCodLogico}-${row.vendedor}-${idx}`}
+          loading={isLoading}
+          emptyMessage="Sem dados no período"
+          onRowClick={(row) => setDetailRow(row)}
+        />
       </CardContent>
+
+      <SalesRowDetailSheet
+        open={!!detailRow}
+        onOpenChange={(open) => !open && setDetailRow(null)}
+        title={detailRow?.vendedor || ''}
+        subtitle={detailRow?.empresaNomeLogico}
+        fields={detailFields}
+      />
     </Card>
   );
 }
