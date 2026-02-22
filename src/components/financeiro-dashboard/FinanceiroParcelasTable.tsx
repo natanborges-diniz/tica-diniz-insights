@@ -35,10 +35,13 @@ function getSituacaoBadge(situacao: string) {
     case "PAGA":
       return <Badge variant="outline" className="bg-success-soft text-success border-success-muted">Paga</Badge>;
     case "EM ATRASO":
-      return <Badge variant="destructive">Em Atraso</Badge>;
+      return <Badge variant="outline" className="bg-danger-soft text-danger border-danger-muted">Em Atraso</Badge>;
+    case "VENCE HOJE":
+    case "VENCE AMANHÃ":
+      return <Badge variant="outline" className="bg-warning-soft text-warning-foreground border-warning-muted">{situacao === "VENCE HOJE" ? "Vence Hoje" : "Vence Amanhã"}</Badge>;
     case "EM ABERTO":
     default:
-      return <Badge variant="secondary">Em Aberto</Badge>;
+      return <Badge variant="outline" className="bg-info-soft text-info border-info-muted">Em Aberto</Badge>;
   }
 }
 

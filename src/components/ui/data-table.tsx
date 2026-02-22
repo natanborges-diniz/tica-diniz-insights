@@ -46,6 +46,12 @@ export interface DataTableColumn<T> {
   cellClassName?: string;
 }
 
+/**
+ * Export policy: a DataTable never exports by itself.
+ * Use `<DataTableToolbar>` with `exportOptions` prop to add export.
+ * The toolbar always exports the FULL filtered dataset passed to it,
+ * not just the visible page. Document this in your `exportOptions.data`.
+ */
 interface DataTableProps<T> {
   /** Colunas da tabela */
   columns: DataTableColumn<T>[];
@@ -65,6 +71,10 @@ interface DataTableProps<T> {
   loading?: boolean;
   /** Mensagem quando vazio */
   emptyMessage?: string;
+  /** Slot: conteúdo customizado quando vazio (sobrepõe emptyMessage) */
+  emptyState?: React.ReactNode;
+  /** Slot: conteúdo customizado quando há erro */
+  errorState?: React.ReactNode;
   /** Slot toolbar (acima da tabela) */
   toolbar?: React.ReactNode;
   /** Classes extras no container */
@@ -73,6 +83,8 @@ interface DataTableProps<T> {
   pageSizeOptions?: number[];
   /** Classe da linha (para destaque condicional) */
   rowClassName?: (row: T) => string;
+  /** Callback ao clicar em uma linha (mobile escape hatch: abre detalhe/sheet) */
+  onRowClick?: (row: T, index: number) => void;
 }
 
 // ============================================
@@ -241,11 +253,29 @@ export function DataTable<T extends Record<string, any>>({
   rowKey,
   loading = false,
   emptyMessage = "Nenhum registro encontrado",
+  emptyState,
+  errorState,
   toolbar,
   className,
   pageSizeOptions = [20, 50, 100],
   rowClassName,
+  onRowClick,
 }: DataTableProps<T>) {
+
+  // ── Validate sort field against sortable columns ──
+  const sortableKeys = useMemo(
+    () => new Set(columns.filter((c) => c.sortable).map((c) => c.key)),
+    [columns]
+  );
+
+  // If current sort references a non-sortable column, clear it
+  const effectiveSort = useMemo(() => {
+    if (queryState.sort && !sortableKeys.has(queryState.sort.field)) {
+      return null;
+    }
+    return queryState.sort;
+  }, [queryState.sort, sortableKeys]);
+
   // ── Client-side sort + paginate ─────────────
   const processedData = useMemo(() => {
     if (mode === "server") return data;
@@ -253,8 +283,8 @@ export function DataTable<T extends Record<string, any>>({
     let result = [...data];
 
     // Sort
-    if (queryState.sort) {
-      const { field, direction } = queryState.sort;
+    if (effectiveSort) {
+      const { field, direction } = effectiveSort;
       result.sort((a, b) => {
         let aVal = a[field];
         let bVal = b[field];
@@ -270,7 +300,7 @@ export function DataTable<T extends Record<string, any>>({
     }
 
     return result;
-  }, [mode, data, queryState.sort]);
+  }, [mode, data, effectiveSort]);
 
   // Total rows
   const totalRows = mode === "server" ? (totalRowsProp ?? data.length) : processedData.length;
@@ -285,7 +315,10 @@ export function DataTable<T extends Record<string, any>>({
   // ── Handlers ──────────────────────────────
   const handleSort = useCallback(
     (field: string) => {
-      const current = queryState.sort;
+      // Guard: only allow sorting on sortable columns
+      if (!sortableKeys.has(field)) return;
+
+      const current = effectiveSort;
       let newSort: SortState | null;
 
       if (current?.field === field) {
@@ -297,7 +330,7 @@ export function DataTable<T extends Record<string, any>>({
 
       onQueryChange({ ...queryState, sort: newSort, page: 1 });
     },
-    [queryState, onQueryChange]
+    [queryState, onQueryChange, effectiveSort, sortableKeys]
   );
 
   const handlePageChange = useCallback(
@@ -310,8 +343,15 @@ export function DataTable<T extends Record<string, any>>({
     [queryState, onQueryChange]
   );
 
-  // ── Visible columns (desktop vs mobile) ───
-  const visibleColumns = columns; // CSS handles hiding via class
+  // ── Error state ───────────────────────────
+  if (errorState) {
+    return (
+      <div className={cn("space-y-2", className)}>
+        {toolbar}
+        {errorState}
+      </div>
+    );
+  }
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -322,7 +362,7 @@ export function DataTable<T extends Record<string, any>>({
           <table className="w-full text-sm" role="grid">
             <thead className="bg-muted/50 sticky top-0 z-10">
               <tr>
-                {visibleColumns.map((col) => (
+                {columns.map((col) => (
                   <th
                     key={col.key}
                     scope="col"
@@ -340,7 +380,7 @@ export function DataTable<T extends Record<string, any>>({
                         label={col.header}
                         field={col.key}
                         align={col.align}
-                        currentSort={queryState.sort}
+                        currentSort={effectiveSort}
                         onSort={handleSort}
                       />
                     ) : (
@@ -354,7 +394,7 @@ export function DataTable<T extends Record<string, any>>({
               {loading ? (
                 Array.from({ length: Math.min(queryState.pageSize, 5) }).map((_, i) => (
                   <tr key={`skeleton-${i}`} className="border-t">
-                    {visibleColumns.map((col) => (
+                    {columns.map((col) => (
                       <td
                         key={col.key}
                         className={cn(
@@ -370,10 +410,10 @@ export function DataTable<T extends Record<string, any>>({
               ) : pageData.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={visibleColumns.length}
+                    colSpan={columns.length}
                     className="text-center text-muted-foreground py-8"
                   >
-                    {emptyMessage}
+                    {emptyState || emptyMessage}
                   </td>
                 </tr>
               ) : (
@@ -382,10 +422,24 @@ export function DataTable<T extends Record<string, any>>({
                     key={rowKey(row, idx)}
                     className={cn(
                       "border-t hover:bg-muted/30 transition-colors",
+                      onRowClick && "cursor-pointer",
                       rowClassName?.(row)
                     )}
+                    onClick={onRowClick ? () => onRowClick(row, idx) : undefined}
+                    tabIndex={onRowClick ? 0 : undefined}
+                    onKeyDown={
+                      onRowClick
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onRowClick(row, idx);
+                            }
+                          }
+                        : undefined
+                    }
+                    role={onRowClick ? "button" : undefined}
                   >
-                    {visibleColumns.map((col) => (
+                    {columns.map((col) => (
                       <td
                         key={col.key}
                         className={cn(
