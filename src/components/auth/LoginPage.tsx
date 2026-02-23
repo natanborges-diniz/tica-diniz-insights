@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Check, BarChart3, Brain, ShieldCheck } from "lucide-react";
+import { Loader2, BarChart3, Brain, ShieldCheck } from "lucide-react";
+import logoInfoco from "@/assets/logo-infoco.png";
 
 export default function LoginPage() {
   const { user, isLoading, signIn } = useAuth();
@@ -47,14 +48,9 @@ export default function LoginPage() {
         <div className="hidden md:block absolute left-0 top-1/4 bottom-1/4 w-[3px] bg-primary rounded-full" />
 
         <div className="max-w-md w-full space-y-8 text-center md:text-left">
-          {/* Logo / Brand mark */}
-          <div className="space-y-1">
-            <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-foreground leading-tight">
-              <span className="text-primary">In</span>Foco
-            </h1>
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
-              Optical Business
-            </p>
+          {/* Logo oficial */}
+          <div>
+            <img src={logoInfoco} alt="InFoco Optical Business" className="h-16 md:h-20 w-auto" />
           </div>
 
           {/* Slogan */}
