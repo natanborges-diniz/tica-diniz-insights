@@ -1114,8 +1114,8 @@ const PedidoFornecedorPage: React.FC = () => {
                       </SelectTrigger>
                       <SelectContent>
                         {selectedGroup.tratamentosDisponiveis.map(t => (
-                          <SelectItem key={`${t.codigoTratamento}_${t.temCor}`} value={`${t.codigoTratamento}_${t.temCor}`}>
-                            {t.tratamento}{t.temCor ? " (COR)" : ""}
+                          <SelectItem key={String(t.codigoTratamento)} value={`${t.codigoTratamento}_false`}>
+                            {t.tratamento}
                           </SelectItem>
                         ))}
                       </SelectContent>

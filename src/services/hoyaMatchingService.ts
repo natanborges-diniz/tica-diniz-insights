@@ -400,15 +400,13 @@ export function matchProducts(
     }
 
     // Add unique treatments
-    const temCor = produto.nome.toUpperCase().includes(" COR");
-    const tratKey = `${produto.codigoTratamento}_${temCor}`;
     if (!group.tratamentosDisponiveis.some(t =>
-      t.codigoTratamento === produto.codigoTratamento && t.temCor === temCor
+      t.codigoTratamento === produto.codigoTratamento
     )) {
       group.tratamentosDisponiveis.push({
         tratamento: produto.tratamento,
         codigoTratamento: produto.codigoTratamento,
-        temCor,
+        temCor: false,
       });
     }
 
