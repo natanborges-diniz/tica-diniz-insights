@@ -40,6 +40,7 @@ import {
   MapPin,
   FileText,
   FileCode,
+  Download,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -854,9 +855,29 @@ const HoyaTrackingPage: React.FC = () => {
       <Dialog open={xmlDialog.open} onOpenChange={(open) => setXmlDialog(prev => ({ ...prev, open }))}>
         <DialogContent className="max-w-3xl max-h-[80vh]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {xmlDialog.mode === "danfe" ? <FileText className="h-4 w-4" /> : <FileCode className="h-4 w-4" />} {xmlDialog.title}
-            </DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2">
+                {xmlDialog.mode === "danfe" ? <FileText className="h-4 w-4" /> : <FileCode className="h-4 w-4" />} {xmlDialog.title}
+              </DialogTitle>
+              {xmlDialog.mode === "xml" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => {
+                    const blob = new Blob([xmlDialog.content], { type: "application/xml" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `${xmlDialog.title.replace(/[^a-zA-Z0-9]/g, "_")}.xml`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  <Download className="h-3.5 w-3.5" /> Exportar XML
+                </Button>
+              )}
+            </div>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh]">
             {xmlDialog.mode === "danfe" ? (
