@@ -13,7 +13,6 @@ import {
   listarTimelinePedido,
   consultarPedidoHoya,
   consultarXmlHoya,
-  consultarDanfeHoya,
   StatusHistoryEntry,
 } from "@/services/hoyaService";
 import { toast } from "@/hooks/use-toast";
@@ -26,6 +25,7 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import DanfeVisual from "@/components/hoya/DanfeVisual";
 import {
   Loader2,
   RefreshCw,
@@ -81,7 +81,7 @@ const HoyaTrackingPage: React.FC = () => {
   const [pedidoApiData, setPedidoApiData] = useState<Record<string, HoyaPedidoTracking>>({});
   const [pedidoApiError, setPedidoApiError] = useState<Record<string, string>>({});
   const [loadingPedidoData, setLoadingPedidoData] = useState<string | null>(null);
-  const [xmlDialog, setXmlDialog] = useState<{ open: boolean; content: string; title: string }>({ open: false, content: "", title: "" });
+  const [xmlDialog, setXmlDialog] = useState<{ open: boolean; content: string; title: string; mode: "xml" | "danfe" }>({ open: false, content: "", title: "", mode: "xml" });
   const [loadingXml, setLoadingXml] = useState<string | null>(null);
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
 
@@ -172,15 +172,11 @@ const HoyaTrackingPage: React.FC = () => {
       if (tipo === "xml") {
         const result = await consultarXmlHoya(numero);
         const content = result.xml || JSON.stringify(result, null, 2);
-        setXmlDialog({ open: true, content, title: `XML — Pedido #${numero}` });
+        setXmlDialog({ open: true, content, title: `XML — Pedido #${numero}`, mode: "xml" });
       } else {
-        const result = await consultarDanfeHoya(numero);
-        if (result.url) {
-          window.open(result.url, "_blank");
-        } else {
-          const content = result.danfe || JSON.stringify(result, null, 2);
-          setXmlDialog({ open: true, content, title: `DANFE — Pedido #${numero}` });
-        }
+        const result = await consultarXmlHoya(numero);
+        const content = result.xml || JSON.stringify(result, null, 2);
+        setXmlDialog({ open: true, content, title: `DANFE — Pedido #${numero}`, mode: "danfe" });
       }
     } catch (err: unknown) {
       const hoyaErr = err as { code?: string; message?: string };
@@ -263,7 +259,7 @@ const HoyaTrackingPage: React.FC = () => {
     try {
       const result = await consultarXmlHoya(numeroPedido);
       const content = result.xml || JSON.stringify(result, null, 2);
-      setXmlDialog({ open: true, content, title: `XML — Pedido #${numeroPedido}` });
+      setXmlDialog({ open: true, content, title: `XML — Pedido #${numeroPedido}`, mode: "xml" });
     } catch (err: unknown) {
       const hoyaErr = err as { code?: string; message?: string };
       if (hoyaErr?.code === "HOYA_API_ERROR") {
@@ -276,20 +272,16 @@ const HoyaTrackingPage: React.FC = () => {
     }
   };
 
-  // F4.6: DANFE handler
+  // F4.6: DANFE handler — reutiliza o endpoint XML mas renderiza visual
   const handleDanfe = async (numeroPedido: string) => {
     setLoadingXml(`danfe-${numeroPedido}`);
     try {
-      const result = await consultarDanfeHoya(numeroPedido);
-      if (result.url) {
-        window.open(result.url, "_blank");
-      } else {
-        const content = result.danfe || JSON.stringify(result, null, 2);
-        setXmlDialog({ open: true, content, title: `DANFE — Pedido #${numeroPedido}` });
-      }
+      const result = await consultarXmlHoya(numeroPedido);
+      const content = result.xml || JSON.stringify(result, null, 2);
+      setXmlDialog({ open: true, content, title: `DANFE — Pedido #${numeroPedido}`, mode: "danfe" });
     } catch (err: unknown) {
       const hoyaErr = err as { code?: string; message?: string };
-      if (hoyaErr?.code === "HOYA_API_ERROR" && hoyaErr?.message?.toLowerCase().includes("erro")) {
+      if (hoyaErr?.code === "HOYA_API_ERROR") {
         toast({ title: "DANFE indisponível", description: "O pedido ainda não foi faturado ou a DANFE não está disponível.", className: "border-warning bg-warning-soft text-warning-foreground" });
       } else {
         toast({ title: "Erro ao consultar DANFE", description: hoyaErr?.message || "Erro desconhecido", variant: "destructive" });
@@ -863,13 +855,19 @@ const HoyaTrackingPage: React.FC = () => {
         <DialogContent className="max-w-3xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileCode className="h-4 w-4" /> {xmlDialog.title}
+              {xmlDialog.mode === "danfe" ? <FileText className="h-4 w-4" /> : <FileCode className="h-4 w-4" />} {xmlDialog.title}
             </DialogTitle>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh]">
-            <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto whitespace-pre-wrap font-mono">
-              {xmlDialog.content}
-            </pre>
+            {xmlDialog.mode === "danfe" ? (
+              <div className="p-4">
+                <DanfeVisual xmlContent={xmlDialog.content} />
+              </div>
+            ) : (
+              <pre className="text-xs bg-muted p-4 rounded-md overflow-x-auto whitespace-pre-wrap font-mono">
+                {xmlDialog.content}
+              </pre>
+            )}
           </ScrollArea>
         </DialogContent>
       </Dialog>
