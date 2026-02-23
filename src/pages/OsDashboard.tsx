@@ -207,9 +207,18 @@ const OsDashboardPage: React.FC = () => {
       setLoadingRecipeCodOs(codOs);
       toast({ title: "Buscando receita...", description: "Consultando dados completos." });
 
+      // Find monitor record to merge patient data
+      const monitorOs = data.find(os => os.codOs === codOs);
+
       const found = await fetchSingleOsRecipe(codOs, codEmpresa);
 
       if (found) {
+        // Merge patient data from monitor if hub-receitas didn't return them
+        if (monitorOs) {
+          if (!found.cpf && monitorOs.cpf) found.cpf = monitorOs.cpf;
+          if (!found.paciente && monitorOs.paciente) found.paciente = monitorOs.paciente;
+          if (!found.dataNascimento && monitorOs.dataNascimento) found.dataNascimento = monitorOs.dataNascimento;
+        }
         setSelectedHubOs(found);
         saveToCache([found]).catch(err =>
           console.warn("[OsDashboard] Failed to cache recipe:", err)
@@ -222,7 +231,14 @@ const OsDashboardPage: React.FC = () => {
           .maybeSingle();
 
         if (row) {
-          setSelectedHubOs(mapCacheRowToHubRecord(row as Record<string, unknown>));
+          const hubRecord = mapCacheRowToHubRecord(row as Record<string, unknown>);
+          // Merge patient data from monitor
+          if (monitorOs) {
+            if (!hubRecord.cpf && monitorOs.cpf) hubRecord.cpf = monitorOs.cpf;
+            if (!hubRecord.paciente && monitorOs.paciente) hubRecord.paciente = monitorOs.paciente;
+            if (!hubRecord.dataNascimento && monitorOs.dataNascimento) hubRecord.dataNascimento = monitorOs.dataNascimento;
+          }
+          setSelectedHubOs(hubRecord);
         } else {
           toast({
             title: "Receita não encontrada",
