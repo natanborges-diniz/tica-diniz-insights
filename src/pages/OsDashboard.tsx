@@ -175,17 +175,19 @@ const OsDashboardPage: React.FC = () => {
         const batch = codOsList.slice(i, i + 100);
         const { data: rows } = await supabase
           .from("pedidos_fornecedor")
-          .select("cod_os, numero_pedido, fornecedor, status, created_at")
+          .select("cod_os, numero_pedido, fornecedor, status, created_at, response")
           .in("cod_os", batch)
           .order("created_at", { ascending: false }); // mais recente primeiro
         if (rows) {
           for (const r of rows) {
             const existing = map[r.cod_os];
+            const respObj = r.response as Record<string, unknown> | null;
+            const voucher = (respObj?.voucherGerado as string) || null;
             // Prioridade: pedido confirmado (com número) > qualquer outro
             if (!existing) {
-              map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "", created_at: r.created_at };
+              map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "", created_at: r.created_at, voucher };
             } else if (!existing.numero_pedido && r.numero_pedido) {
-              map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "", created_at: r.created_at };
+              map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "", created_at: r.created_at, voucher };
             }
             // Se já tem confirmado, ignora os demais
           }
