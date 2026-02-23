@@ -239,7 +239,7 @@ const PedidoFornecedorPage: React.FC = () => {
           if (found.codFormatoAro != null && found.codFormatoAro > 0) {
             setFormaArmacao(found.codFormatoAro);
           }
-          setUsuarioFinal(found.paciente || found.cliente || "");
+          setUsuarioFinal(found.paciente || paramPaciente || found.cliente || "");
 
           // FASE 5: Mark prescription as auto-filled if data exists
           if (hasAnyPrescData) {
