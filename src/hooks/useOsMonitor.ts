@@ -6,6 +6,8 @@ import { calculateOsMetrics, OsMetrics, sortOsByPriority } from "../utils/osMetr
 import { EmpresaParam } from "@/services/firebirdBridge";
 
 export type OsStatusFilter = "TODOS" | StatusAtraso | "ATRASADAS";
+export type OsPedidoFilter = "TODOS" | "COM_PEDIDO" | "SEM_PEDIDO";
+export type OsAtrasoSort = "default" | "asc" | "desc";
 
 export interface OsApiFilters {
   empresa: EmpresaParam;
@@ -19,6 +21,8 @@ export interface OsFilterState {
   empresaVisual: string | null;
   etapa: string | null;
   busca: string;
+  pedido: OsPedidoFilter;
+  atrasoSort: OsAtrasoSort;
 }
 
 // ============================================
@@ -32,6 +36,8 @@ let cachedFilters: OsFilterState = {
   empresaVisual: null,
   etapa: null,
   busca: "",
+  pedido: "TODOS",
+  atrasoSort: "default",
 };
 
 export function useOsMonitor() {
@@ -74,7 +80,18 @@ export function useOsMonitor() {
       );
     }
 
-    return sortOsByPriority(result);
+    // Note: pedido filter is applied in the layout component since it needs pedidosMap
+
+    // Apply atraso sort
+    if (filters.atrasoSort === "default") {
+      return sortOsByPriority(result);
+    }
+    
+    const sorted = [...result].sort((a, b) => {
+      if (filters.atrasoSort === "asc") return a.atrasoDias - b.atrasoDias;
+      return b.atrasoDias - a.atrasoDias;
+    });
+    return sorted;
   }, [data, filters]);
 
   const metrics: OsMetrics = useMemo(() => calculateOsMetrics(data), [data]);
@@ -101,7 +118,6 @@ export function useOsMonitor() {
       });
       setData(result);
       setLoaded(true);
-      // No default etapa filter — show all etapas by default
     } catch (err: unknown) {
       console.error('[useOsMonitor] Error:', err);
       setError(err instanceof Error ? err.message : "Erro ao carregar monitor de OS");
