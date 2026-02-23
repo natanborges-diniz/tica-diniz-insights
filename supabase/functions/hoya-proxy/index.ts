@@ -718,15 +718,48 @@ serve(async (req) => {
         });
       }
 
-      // F4.6: Consultar XML da nota fiscal
+      // F4.6: Consultar XML da nota fiscal (usa chave DANFE, não número do pedido)
+      // Endpoint Hoya: GET /pedido/xml/{chaveDanfe}
       case "consultar-xml": {
-        const numPedidoXml = params.numeroPedido;
-        if (!numPedidoXml) {
-          return new Response(JSON.stringify({ error: "numeroPedido obrigatório", code: HOYA_ERROR_CODES.API_ERROR, correlationId }), {
-            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        // Aceita chaveDanfe diretamente OU numeroPedido (nesse caso, busca tracking para extrair a chave)
+        let chaveDanfe = params.chaveDanfe as string | undefined;
+
+        if (!chaveDanfe && params.numeroPedido) {
+          // Busca tracking para extrair chave NF automaticamente
+          console.log(`[hoya-proxy] [${correlationId}] consultar-xml: buscando tracking para extrair chave NF do pedido ${params.numeroPedido}`);
+          const trackUrlXml = `${HOYA_BASE_URL}/pedido/tracking/${params.numeroPedido}`;
+          try {
+            const trackRespXml = await fetchWithRetry(
+              trackUrlXml,
+              { method: "GET", headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" } },
+              { action: "consultar-xml-tracking-lookup", correlationId }
+            );
+            if (trackRespXml.ok) {
+              const trackDataXml = await trackRespXml.json();
+              const nfArr = trackDataXml?.nf || trackDataXml?.NF || [];
+              if (Array.isArray(nfArr) && nfArr.length > 0) {
+                // NF pode ter campo 'danfe', 'chaveDanfe', 'chave', ou 'chaveNfe'
+                const nf0 = nfArr[0];
+                chaveDanfe = nf0.danfe || nf0.chaveDanfe || nf0.chave || nf0.chaveNfe || nf0.chaveAcesso || null;
+                console.log(`[hoya-proxy] [${correlationId}] Chave DANFE extraída do tracking: ${chaveDanfe}`);
+              }
+            }
+          } catch (e) {
+            console.warn(`[hoya-proxy] [${correlationId}] Falha ao buscar tracking para chave NF:`, e);
+          }
+        }
+
+        if (!chaveDanfe) {
+          return new Response(JSON.stringify({ 
+            error: "Chave DANFE não encontrada. O pedido pode não ter sido faturado ainda.", 
+            code: HOYA_ERROR_CODES.API_ERROR, 
+            correlationId 
+          }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
           });
         }
-        const xmlUrl = `${HOYA_BASE_URL}/pedido/xml/${numPedidoXml}`;
+
+        const xmlUrl = `${HOYA_BASE_URL}/pedido/xml/${chaveDanfe}`;
         const xmlResp = await fetchWithRetry(
           xmlUrl,
           { method: "GET", headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" } },
@@ -746,15 +779,46 @@ serve(async (req) => {
         });
       }
 
-      // F4.6: Consultar DANFE (link PDF da nota)
+      // F4.6: Consultar DANFE — reutiliza o endpoint XML com a chave DANFE
+      // A API Hoya não tem endpoint separado para DANFE; o XML é o documento fiscal
       case "consultar-danfe": {
-        const numPedidoDanfe = params.numeroPedido;
-        if (!numPedidoDanfe) {
-          return new Response(JSON.stringify({ error: "numeroPedido obrigatório", code: HOYA_ERROR_CODES.API_ERROR, correlationId }), {
-            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        let chaveDanfePdf = params.chaveDanfe as string | undefined;
+
+        if (!chaveDanfePdf && params.numeroPedido) {
+          console.log(`[hoya-proxy] [${correlationId}] consultar-danfe: buscando tracking para extrair chave NF do pedido ${params.numeroPedido}`);
+          const trackUrlDanfe = `${HOYA_BASE_URL}/pedido/tracking/${params.numeroPedido}`;
+          try {
+            const trackRespDanfe = await fetchWithRetry(
+              trackUrlDanfe,
+              { method: "GET", headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" } },
+              { action: "consultar-danfe-tracking-lookup", correlationId }
+            );
+            if (trackRespDanfe.ok) {
+              const trackDataDanfe = await trackRespDanfe.json();
+              const nfArrD = trackDataDanfe?.nf || trackDataDanfe?.NF || [];
+              if (Array.isArray(nfArrD) && nfArrD.length > 0) {
+                const nf0d = nfArrD[0];
+                chaveDanfePdf = nf0d.danfe || nf0d.chaveDanfe || nf0d.chave || nf0d.chaveNfe || nf0d.chaveAcesso || null;
+                console.log(`[hoya-proxy] [${correlationId}] Chave DANFE extraída: ${chaveDanfePdf}`);
+              }
+            }
+          } catch (e) {
+            console.warn(`[hoya-proxy] [${correlationId}] Falha ao buscar tracking para chave NF:`, e);
+          }
+        }
+
+        if (!chaveDanfePdf) {
+          return new Response(JSON.stringify({ 
+            error: "Chave DANFE não encontrada. O pedido pode não ter sido faturado ainda.", 
+            code: HOYA_ERROR_CODES.API_ERROR, 
+            correlationId 
+          }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
           });
         }
-        const danfeUrl = `${HOYA_BASE_URL}/pedido/danfe/${numPedidoDanfe}`;
+
+        // Usa o mesmo endpoint XML — retorna o XML da NF-e
+        const danfeUrl = `${HOYA_BASE_URL}/pedido/xml/${chaveDanfePdf}`;
         const danfeResp = await fetchWithRetry(
           danfeUrl,
           { method: "GET", headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" } },
