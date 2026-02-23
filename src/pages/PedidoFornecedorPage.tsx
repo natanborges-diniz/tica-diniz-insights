@@ -139,6 +139,7 @@ const PedidoFornecedorPage: React.FC = () => {
   const [formaArmacao, setFormaArmacao] = useState(1);
   const [observacao, setObservacao] = useState("");
   const [usuarioFinal, setUsuarioFinal] = useState("");
+  const [inicialUsuario, setInicialUsuario] = useState("");
   const [valorMontagem, setValorMontagem] = useState(0);
   const [voucher, setVoucher] = useState("");
   const [voucherSugerido, setVoucherSugerido] = useState<string | null>(null);
@@ -244,6 +245,9 @@ const PedidoFornecedorPage: React.FC = () => {
             setFormaArmacao(found.codFormatoAro);
           }
           setUsuarioFinal(found.paciente || paramPaciente || found.cliente || "");
+          // Auto-gerar iniciais a partir do nome
+          const nomeBase = found.paciente || paramPaciente || found.cliente || "";
+          setInicialUsuario(nomeBase.split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 3).toUpperCase() || "US");
 
           // Lookup voucher by CPF
           const cpfToSearch = found.cpf || paramCpf;
@@ -564,7 +568,7 @@ const PedidoFornecedorPage: React.FC = () => {
         condicaoPagamento: "30/60",
         garantia: {
           usuarioFinal: usuarioFinal || os.paciente || os.cliente || "",
-          inicialUsuario: (usuarioFinal || os.paciente || os.cliente || "").split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 3).toUpperCase() || "US",
+          inicialUsuario: inicialUsuario || (usuarioFinal || os.paciente || os.cliente || "").split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 3).toUpperCase() || "US",
         },
         // F4.4: Campos complementares
         camposComplementares: produtoSelecionado.camposComplementares?.length
@@ -1495,6 +1499,16 @@ const PedidoFornecedorPage: React.FC = () => {
               <div>
                 <Label className="text-[10px] uppercase">Usuário Final (Garantia)</Label>
                 <Input value={usuarioFinal} onChange={(e) => setUsuarioFinal(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-[10px] uppercase">Iniciais (Personalização)</Label>
+                <Input
+                  value={inicialUsuario}
+                  onChange={(e) => setInicialUsuario(e.target.value.toUpperCase().substring(0, 3))}
+                  className="h-8 text-sm font-mono uppercase"
+                  placeholder="Ex: HFP"
+                  maxLength={3}
+                />
               </div>
               <div>
                 <Label className="text-[10px] uppercase flex items-center gap-1">
