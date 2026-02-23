@@ -1,6 +1,6 @@
 // src/components/sales-dashboard/VendasDashboardLayout.tsx
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { RefreshCw, AlertCircle, Building2, Users, Info, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -25,8 +25,10 @@ import { StoreTable } from "./StoreTable";
 import { PaymentMethodsChart } from "./PaymentMethodsChart";
 import { PaymentMethodsTable } from "./PaymentMethodsTable";
 import { VendasDiariasTable } from "./VendasDiariasTable";
-
-
+import { useModuleInsights } from "@/hooks/useModuleInsights";
+import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
+import { registerAction, unregisterAction, createNavigationHandler } from "@/lib/actionCatalog";
+import { useNavigate } from "react-router-dom";
 interface VendasDashboardLayoutProps {
   // Dados
   dadosPorLoja: ResumoLoja[];
@@ -164,10 +166,31 @@ export function VendasDashboardLayout({
   forceRefresh,
   vendasDiarias,
 }: VendasDashboardLayoutProps) {
+  const navigate = useNavigate();
   const isLoading = loading;
   const showEmptyState = !dataLoaded && !loading;
   const [usarVendasSemCreditos, setUsarVendasSemCreditos] = useState(true);
   const [viewTab, setViewTab] = useState<"resumo" | "diario">("resumo");
+
+  // IA Insights
+  const { insights, loading: insightsLoading, error: insightsError, refetch: refetchInsights } = useModuleInsights({
+    module: "vendas",
+    period: { from: filters.dataInicio, to: filters.dataFim },
+    filters: { empresa: filters.empresa },
+    enabled: dataLoaded,
+  });
+
+  // Register actions for this module
+  useEffect(() => {
+    registerAction("NAVIGATE_INTELIGENCIA_VENDAS", () => navigate("/vendas/inteligencia"));
+    registerAction("OPEN_RANKING_STORES", () => setFilters(p => ({ ...p, viewMode: "loja" as any })));
+    registerAction("OPEN_RANKING_SELLERS", () => setFilters(p => ({ ...p, viewMode: "vendedor" as any })));
+    return () => {
+      unregisterAction("NAVIGATE_INTELIGENCIA_VENDAS");
+      unregisterAction("OPEN_RANKING_STORES");
+      unregisterAction("OPEN_RANKING_SELLERS");
+    };
+  }, [navigate, setFilters]);
 
   // Hook para filtros interativos dos gráficos
   const chartFilter = useChartFilter<string>();
@@ -306,6 +329,16 @@ export function VendasDashboardLayout({
           Atualizar
         </Button>
       </div>
+
+      {/* IA Insights */}
+      {dataLoaded && (
+        <ModuleInsightsPanel
+          insights={insights}
+          loading={insightsLoading}
+          error={insightsError}
+          onRetry={refetchInsights}
+        />
+      )}
 
       {/* Filtros */}
       <SalesFilters
