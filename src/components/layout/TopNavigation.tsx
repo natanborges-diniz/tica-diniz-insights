@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { BarChart3, Package, ClipboardList, Wallet, Settings, Database, Brain, LogOut, Shield } from "lucide-react";
+import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain, LogOut, Shield } from "lucide-react";
+import logoInfoco from "@/assets/logo-infoco.png";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -42,13 +43,10 @@ export function TopNavigation({ activeModule }: TopNavigationProps) {
         <div className="flex items-center gap-2 mr-4">
           <button
             onClick={() => navigate("/home")}
-            className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-muted transition-colors duration-150"
+            className="flex items-center rounded-lg p-1 hover:bg-muted transition-colors duration-150"
             aria-label="Ir para o início"
           >
-            <div className="p-1 rounded-lg bg-primary/10">
-              <Database className="h-5 w-5 text-primary" />
-            </div>
-            <span className="font-bold text-sm hidden sm:inline tracking-tight">INFOCO</span>
+            <img src={logoInfoco} alt="InFoco Optical Business" className="h-7 w-auto" />
           </button>
         </div>
 
