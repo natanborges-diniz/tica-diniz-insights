@@ -1370,6 +1370,9 @@ app.get('/api/v1/os/hub-receitas', async (req, res) => {
         cli.NOME AS CLIENTE,
         os.COD_CLIENTE,
         cli.TELEFONE,
+        cli.IDENTIFICADOR AS CPF,
+        cli.DATANASCIMENTO AS DATA_NASCIMENTO,
+        os.PACIENTE,
         COALESCE(ose.DESCRICAO, '') AS ETAPA,
         CASE
           WHEN os.DATAPREVISAO IS NULL THEN 'SEM_DATA'
@@ -1446,6 +1449,9 @@ app.get('/api/v1/os/hub-receitas', async (req, res) => {
       cliente: (row.CLIENTE || '').trim(),
       cod_cliente: row.COD_CLIENTE,
       telefone: (row.TELEFONE || '').trim(),
+      cpf: (row.CPF || '').trim(),
+      data_nascimento: row.DATA_NASCIMENTO || null,
+      paciente: (row.PACIENTE || '').trim(),
       etapa: (row.ETAPA || '').trim(),
       status_atraso: row.STATUS_ATRASO,
       atraso_dias: row.ATRASO_DIAS || 0,

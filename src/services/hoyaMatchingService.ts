@@ -46,14 +46,14 @@ export interface MatchResult {
 // ============================================
 
 /** Map ERP material index to Hoya material field */
-const MATERIAL_MAP: Record<string, string> = {
-  "1.50": "150",
-  "1.53": "TVX",
-  "1.56": "156",
-  "1.59": "159",
-  "1.60": "160",
-  "1.67": "167",
-  "1.74": "174",
+const MATERIAL_MAP: Record<string, string[]> = {
+  "1.50": ["150"],
+  "1.53": ["TVX", "153", "Trivex"],
+  "1.56": ["156"],
+  "1.59": ["159"],
+  "1.60": ["160"],
+  "1.67": ["167"],
+  "1.74": ["174"],
 };
 
 /** Known lens design names in Hoya catalog */
@@ -114,11 +114,15 @@ export function parseErpDescription(desc: string): ParsedLensDescription {
 
   // Material index
   let materialIndex: string | null = null;
-  for (const [erpIdx, hoyaIdx] of Object.entries(MATERIAL_MAP)) {
+  for (const [erpIdx, hoyaValues] of Object.entries(MATERIAL_MAP)) {
     if (upper.includes(erpIdx)) {
-      materialIndex = hoyaIdx;
+      materialIndex = hoyaValues[0]; // primary match value
       break;
     }
+  }
+  // Also check for TRIVEX keyword directly
+  if (!materialIndex && (upper.includes("TRIVEX") || upper.includes("TVX"))) {
+    materialIndex = "TVX";
   }
 
   // Desenho (match known names case-insensitively)
@@ -255,10 +259,15 @@ function calcScore(
     details.push(`Desenho "${produto.desenho}" ✓ (+35)`);
   }
 
-  // Material match
-  if (parsed.materialIndex && produto.material === parsed.materialIndex) {
-    score += 25;
-    details.push(`Material "${produto.material}" ✓ (+25)`);
+  // Material match — check if product material matches any of the mapped values
+  if (parsed.materialIndex) {
+    const parsedEntry = Object.entries(MATERIAL_MAP).find(([, vals]) => vals.includes(parsed.materialIndex!));
+    const acceptableValues = parsedEntry ? parsedEntry[1] : [parsed.materialIndex];
+    
+    if (acceptableValues.some(v => String(produto.material).toUpperCase() === v.toUpperCase())) {
+      score += 25;
+      details.push(`Material "${produto.material}" ✓ (+25)`);
+    }
   }
 
   // Treatment match
