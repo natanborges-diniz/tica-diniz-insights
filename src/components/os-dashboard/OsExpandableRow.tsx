@@ -188,6 +188,29 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                       </div>
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm flex-1 mt-2">
+                    <div className="flex items-center gap-2">
+                      <User className="h-3.5 w-3.5 text-emerald-500" />
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Paciente</p>
+                        <p className="font-medium text-xs">{os.paciente || os.cliente || "—"}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <User className="h-3.5 w-3.5 text-muted-foreground" />
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">CPF</p>
+                        <p className="font-medium text-xs font-mono">{os.cpf || "—"}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Nascimento</p>
+                        <p className="font-medium text-xs">{formatDate(os.dataNascimento)}</p>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Botão Ver Receita */}
                   <div className="flex items-center gap-2">
