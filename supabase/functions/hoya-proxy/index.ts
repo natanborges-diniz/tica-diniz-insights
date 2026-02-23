@@ -188,8 +188,8 @@ serve(async (req) => {
       }
       user = { userId: "cron" };
     } else {
-      // E0.3: Auth guard — gestor ou admin
-      user = await authGuard(req, { requiredRole: "gestor" });
+      // Auth guard — qualquer usuário autenticado (controle por módulo)
+      user = await authGuard(req, { requiredRole: "authenticated" });
     }
 
     // Load config from DB (fornecedor_configuracao) — fallback to secrets
