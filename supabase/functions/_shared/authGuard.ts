@@ -10,7 +10,7 @@ export const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type RequiredRole = "authenticated" | "gestor" | "admin";
+type RequiredRole = "authenticated" | "admin";
 
 interface AuthResult {
   userId: string;
@@ -92,12 +92,7 @@ export async function authGuard(
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // For 'admin': must have admin role
-    // For 'gestor': must have admin OR gestor role
-    const rolesToCheck =
-      options.requiredRole === "admin"
-        ? ["admin"]
-        : ["admin", "gestor"];
+    const rolesToCheck = ["admin"];
 
     const { data: roles } = await serviceClient
       .from("user_roles")
