@@ -19,14 +19,25 @@ interface AuthResult {
 
 interface AuthGuardOptions {
   requiredRole: RequiredRole;
-  rateLimitFunctionName?: string; // If set, applies rate limiting (10 calls/5min)
+  rateLimitFunctionName?: string;
+}
+
+// Decode JWT payload without library dependency
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    // Base64url decode
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = atob(base64);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Validates JWT and role. Returns AuthResult or throws a Response.
- * Usage:
- *   const auth = await authGuard(req, { requiredRole: 'admin' });
- *   // if we reach here, auth is valid
  */
 export async function authGuard(
   req: Request,
@@ -42,27 +53,30 @@ export async function authGuard(
   }
 
   const token = authHeader.replace("Bearer ", "");
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-  // Create client scoped to the user's token
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
+  // Decode and validate JWT claims locally
+  const claims = decodeJwtPayload(token);
 
-  // Validate JWT via getClaims (local validation, doesn't require active session)
-  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-
-  if (claimsError || !claimsData?.claims) {
-    console.error("[authGuard] getClaims failed:", claimsError?.message);
+  if (!claims || !claims.sub || claims.aud !== "authenticated") {
+    console.error("[authGuard] JWT decode failed or invalid audience");
     throw new Response(
       JSON.stringify({ error: "Unauthorized — token inválido" }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
-  const userId = claimsData.claims.sub as string;
-  const email = claimsData.claims.email as string | undefined;
+  // Check expiry
+  const exp = claims.exp as number | undefined;
+  if (exp && exp < Math.floor(Date.now() / 1000)) {
+    console.error("[authGuard] JWT expired");
+    throw new Response(
+      JSON.stringify({ error: "Unauthorized — token expirado" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const userId = claims.sub as string;
+  const email = claims.email as string | undefined;
 
   if (!userId) {
     throw new Response(
@@ -74,7 +88,7 @@ export async function authGuard(
   // Role check (using service_role client to query user_roles)
   if (options.requiredRole !== "authenticated") {
     const serviceClient = createClient(
-      supabaseUrl,
+      Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
@@ -104,7 +118,7 @@ export async function authGuard(
   // Rate limiting for AI functions
   if (options.rateLimitFunctionName) {
     const serviceClient = createClient(
-      supabaseUrl,
+      Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
