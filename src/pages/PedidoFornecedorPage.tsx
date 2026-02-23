@@ -70,6 +70,20 @@ function formatGrau(v: number | null): string {
   return `${sign}${v.toFixed(2)}`;
 }
 
+/** Remove acentos/diacríticos de uma string */
+function removeAccents(str: string): string {
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/** Detecta tipo de armação (metal/acetato) a partir da referência */
+function detectTipoArmacaoFromRef(ref: string | null | undefined): number | null {
+  if (!ref) return null;
+  const upper = ref.toUpperCase();
+  if (upper.includes("MET")) return 2; // Metal
+  if (upper.includes("ACT") || upper.includes("ACET")) return 1; // Plástica/Acetato
+  return null;
+}
+
 function scoreLabel(score: number): { text: string; color: string } {
   if (score >= 60) return { text: "Alta", color: "text-emerald-600 bg-emerald-500/15 border-emerald-300" };
   if (score >= 35) return { text: "Média", color: "text-amber-600 bg-amber-500/15 border-amber-300" };
@@ -143,6 +157,9 @@ const PedidoFornecedorPage: React.FC = () => {
   const [valorMontagem, setValorMontagem] = useState(0);
   const [voucher, setVoucher] = useState("");
   const [voucherSugerido, setVoucherSugerido] = useState<string | null>(null);
+  const [osNumeroEditavel, setOsNumeroEditavel] = useState("");
+  const [nomeMedico, setNomeMedico] = useState("");
+  const [crmMedico, setCrmMedico] = useState("");
   
 
   // Prescrição editável
@@ -244,10 +261,18 @@ const PedidoFornecedorPage: React.FC = () => {
           if (found.codFormatoAro != null && found.codFormatoAro > 0) {
             setFormaArmacao(found.codFormatoAro);
           }
-          setUsuarioFinal(found.paciente || paramPaciente || found.cliente || "");
-          // Auto-gerar iniciais a partir do nome
+          // Auto-detect tipo armação from referência (MET = Metal, ACT = Acetato)
+          const tipoDetectado = detectTipoArmacaoFromRef(found.referenciaArmacao);
+          if (tipoDetectado !== null) {
+            setTipoArmacao(tipoDetectado);
+          }
+          // Preencher OS editável (número da OS)
+          setOsNumeroEditavel(String(found.numeroOs || found.codOs));
+          // Remover acentos do nome do usuário final
+          setUsuarioFinal(removeAccents(found.paciente || paramPaciente || found.cliente || ""));
+          // Auto-gerar iniciais a partir do nome (máximo 2 caracteres)
           const nomeBase = found.paciente || paramPaciente || found.cliente || "";
-          setInicialUsuario(nomeBase.split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 3).toUpperCase() || "US");
+          setInicialUsuario(removeAccents(nomeBase).split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 2).toUpperCase() || "US");
 
           // Lookup voucher by CPF
           const cpfToSearch = found.cpf || paramCpf;
@@ -510,7 +535,7 @@ const PedidoFornecedorPage: React.FC = () => {
     setTimeout(() => setEnviandoCooldown(false), 3000);
     try {
       const payload: HoyaPedidoPayload = {
-        os: String(os.numeroOs || os.codOs),
+        os: osNumeroEditavel || String(os.numeroOs || os.codOs),
         observacao: observacao || undefined,
         voucher: voucher || undefined,
         especificacoes: {
@@ -567,8 +592,10 @@ const PedidoFornecedorPage: React.FC = () => {
         valorMontagemSemTriangulacao: (tipoServico === 1 || tipoServico === 3) ? valorMontagem : 0,
         condicaoPagamento: "30/60",
         garantia: {
-          usuarioFinal: usuarioFinal || os.paciente || os.cliente || "",
-          inicialUsuario: inicialUsuario || (usuarioFinal || os.paciente || os.cliente || "").split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 3).toUpperCase() || "US",
+          usuarioFinal: removeAccents(usuarioFinal || os.paciente || os.cliente || ""),
+          inicialUsuario: removeAccents(inicialUsuario || (usuarioFinal || os.paciente || os.cliente || "").split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 2).toUpperCase() || "US"),
+          nomeMedico: nomeMedico || null,
+          crmMedico: crmMedico || null,
         },
         // F4.4: Campos complementares
         camposComplementares: produtoSelecionado.camposComplementares?.length
@@ -1599,22 +1626,58 @@ const PedidoFornecedorPage: React.FC = () => {
                 </div>
               )}
               <div>
+                <Label className="text-[10px] uppercase">OS (Pedido Hoya)</Label>
+                <Input
+                  value={osNumeroEditavel}
+                  onChange={(e) => setOsNumeroEditavel(e.target.value)}
+                  className="h-8 text-sm font-mono"
+                  placeholder="Nº OS"
+                />
+                <span className="text-[9px] text-muted-foreground">Pré-preenchido da OS. Acrescente caracteres se necessário.</span>
+              </div>
+              <div>
                 <Label className="text-[10px] uppercase">Observação</Label>
                 <Input value={observacao} onChange={(e) => setObservacao(e.target.value)} placeholder="Até 120 caracteres" maxLength={120} className="h-8 text-sm" />
               </div>
               <div>
                 <Label className="text-[10px] uppercase">Usuário Final (Garantia)</Label>
-                <Input value={usuarioFinal} onChange={(e) => setUsuarioFinal(e.target.value)} className="h-8 text-sm" />
+                <Input
+                  value={usuarioFinal}
+                  onChange={(e) => setUsuarioFinal(removeAccents(e.target.value))}
+                  className="h-8 text-sm"
+                />
+                <span className="text-[9px] text-muted-foreground">Sem caracteres especiais ou acentos</span>
               </div>
               <div>
                 <Label className="text-[10px] uppercase">Iniciais (Personalização)</Label>
                 <Input
                   value={inicialUsuario}
-                  onChange={(e) => setInicialUsuario(e.target.value.toUpperCase().substring(0, 3))}
+                  onChange={(e) => setInicialUsuario(removeAccents(e.target.value).toUpperCase().substring(0, 2))}
                   className="h-8 text-sm font-mono uppercase"
-                  placeholder="Ex: HFP"
-                  maxLength={3}
+                  placeholder="Ex: HF"
+                  maxLength={2}
                 />
+                <span className="text-[9px] text-muted-foreground">Máximo 2 caracteres</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-[10px] uppercase">Médico</Label>
+                  <Input
+                    value={nomeMedico}
+                    onChange={(e) => setNomeMedico(e.target.value)}
+                    className="h-8 text-sm"
+                    placeholder="Nome do médico"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] uppercase">CRM</Label>
+                  <Input
+                    value={crmMedico}
+                    onChange={(e) => setCrmMedico(e.target.value)}
+                    className="h-8 text-sm font-mono"
+                    placeholder="CRM"
+                  />
+                </div>
               </div>
               <div>
                 <Label className="text-[10px] uppercase flex items-center gap-1">

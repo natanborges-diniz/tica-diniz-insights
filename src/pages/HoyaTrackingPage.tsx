@@ -289,11 +289,16 @@ const HoyaTrackingPage: React.FC = () => {
       <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold flex items-center gap-2">
-              <Truck className="h-5 w-5" /> Tracking Hoya
-            </h1>
-            <p className="text-sm text-muted-foreground">Acompanhamento de pedidos enviados ao laboratório</p>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => window.history.back()}>
+              <ChevronDown className="h-5 w-5 rotate-90" />
+            </Button>
+            <div>
+              <h1 className="text-xl font-bold flex items-center gap-2">
+                <Truck className="h-5 w-5" /> Tracking Hoya
+              </h1>
+              <p className="text-sm text-muted-foreground">Acompanhamento de pedidos enviados ao laboratório</p>
+            </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
             <RefreshCw className="h-4 w-4" /> Atualizar Lista
