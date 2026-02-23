@@ -46,6 +46,7 @@ export type PedidoFornecedorInfo = {
   fornecedor: string;
   status: string;
   created_at?: string | null;
+  voucher?: string | null;
 };
 
 // Debounced search input — Enter immediately applies

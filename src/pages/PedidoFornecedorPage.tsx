@@ -623,7 +623,8 @@ const PedidoFornecedorPage: React.FC = () => {
         String(resp.numeroPedido),
         "HOYA",
         resp.status || "enviado",
-        new Date().toISOString()
+        new Date().toISOString(),
+        resp.voucherGerado || null
       );
 
       // Save DE/PARA (persist for future auto-fill)

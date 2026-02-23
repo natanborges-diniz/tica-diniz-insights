@@ -32,7 +32,7 @@ interface Props {
   os: OsRecord;
   onOpenRecipe: (codOs: number, codEmpresa?: number) => void;
   loadingRecipe: boolean;
-  pedidoFornecedor?: { numero_pedido: string | null; fornecedor: string; status: string; created_at?: string | null } | null;
+  pedidoFornecedor?: { numero_pedido: string | null; fornecedor: string; status: string; created_at?: string | null; voucher?: string | null } | null;
 }
 
 function formatDate(value: string | null) {
@@ -93,6 +93,18 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                       <TooltipContent side="right" className="text-xs space-y-1">
                         <p className="font-semibold text-foreground">{pedidoFornecedor!.fornecedor}</p>
                         <p className="font-mono">{pedidoFornecedor!.numero_pedido}</p>
+                        {pedidoFornecedor!.voucher && (
+                          <p
+                            className="font-mono text-primary cursor-pointer hover:underline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(pedidoFornecedor!.voucher!);
+                            }}
+                            title="Clique para copiar"
+                          >
+                            🎟️ Voucher: {pedidoFornecedor!.voucher}
+                          </p>
+                        )}
                         {pedidoFornecedor!.created_at && (
                           <p className="text-muted-foreground">
                             {new Date(pedidoFornecedor!.created_at).toLocaleString("pt-BR")}
