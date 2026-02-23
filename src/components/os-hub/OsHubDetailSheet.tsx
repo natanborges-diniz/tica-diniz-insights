@@ -182,6 +182,9 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
             <div>
               <Field label="Cliente" value={os.cliente} />
+              {os.paciente && <Field label="Paciente" value={os.paciente} />}
+              {os.cpf && <Field label="CPF" value={os.cpf} />}
+              {os.dataNascimento && <Field label="Nascimento" value={new Date(os.dataNascimento).toLocaleDateString('pt-BR')} />}
               <Field label="Empresa" value={os.empresa} />
               <Field label="Etapa" value={os.etapa} />
               <Field label="Vendedor" value={os.vendedor || os.usuario} />

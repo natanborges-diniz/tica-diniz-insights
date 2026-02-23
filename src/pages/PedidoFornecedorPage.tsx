@@ -720,7 +720,7 @@ const PedidoFornecedorPage: React.FC = () => {
 
   if (loadingOs) {
     return (
-      <div className="flex items-center justify-center h-full gap-2">
+      <div className="flex items-center justify-center h-full gap-2 pb-20">
         <Loader2 className="h-5 w-5 animate-spin" />
         <span>Carregando dados da OS...</span>
       </div>
@@ -841,7 +841,11 @@ const PedidoFornecedorPage: React.FC = () => {
             </Button>
             <div>
               <h1 className="text-xl font-bold">Pedido Hoya — OS {os.numeroOs || os.codOs}</h1>
-              <p className="text-sm text-muted-foreground">{os.cliente}</p>
+              <p className="text-sm text-muted-foreground">
+                {os.paciente ? `Paciente: ${os.paciente}` : os.cliente}
+                {os.cpf && <span className="ml-2 text-xs">CPF: {os.cpf}</span>}
+                {os.dataNascimento && <span className="ml-2 text-xs">Nasc: {new Date(os.dataNascimento).toLocaleDateString('pt-BR')}</span>}
+              </p>
             </div>
           </div>
           <Badge className="bg-orange-500/15 text-orange-700 border-orange-300">HOYA</Badge>

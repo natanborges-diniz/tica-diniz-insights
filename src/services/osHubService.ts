@@ -165,6 +165,10 @@ interface OsHubRaw {
   ocr_cod_formatoaro?: number;
   descricao_armacao?: string;
   referencia_armacao?: string;
+  // Dados do cliente
+  cpf?: string;
+  data_nascimento?: string;
+  paciente?: string;
 }
 
 export interface OsHubRecord {
@@ -246,6 +250,10 @@ export interface OsHubRecord {
   codFormatoAro: number | null;
   descricaoArmacao: string | null;
   referenciaArmacao: string | null;
+  // Dados do cliente
+  cpf: string | null;
+  dataNascimento: string | null;
+  paciente: string | null;
   // Flags
   temReceita: boolean;
   temImagem: boolean;
@@ -398,6 +406,9 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     codFormatoAro: coalesce(r.cod_formato_aro, r.otoi_cod_formatoaro, r.ocr_cod_formatoaro),
     descricaoArmacao: r.descricao_armacao?.trim() ?? null,
     referenciaArmacao: r.referencia_armacao?.trim() ?? null,
+    cpf: r.cpf?.trim() ?? null,
+    dataNascimento: r.data_nascimento ?? null,
+    paciente: r.paciente?.trim() ?? null,
     temReceita: hasReceita,
     temImagem: hasImagem,
   };
@@ -642,6 +653,9 @@ export async function loadFromCache(params: {
     codFormatoAro: null,
     descricaoArmacao: null,
     referenciaArmacao: null,
+    cpf: null,
+    dataNascimento: null,
+    paciente: null,
     temReceita: (r.tem_receita as boolean) ?? false,
     temImagem: (r.tem_imagem as boolean) ?? false,
     cacheLoadedAt: (r.cache_loaded_at as string) ?? undefined,
