@@ -1120,7 +1120,7 @@ const PedidoFornecedorPage: React.FC = () => {
                   )}
 
                   {/* Coloração */}
-                  {coloracoesDisponiveis.length > 0 && (
+                  {(coloracoesDisponiveis.length > 0 || produtoSelecionado?.permiteColoracao) && (
                     <div>
                       <Label className="text-[10px] uppercase mb-1 block">Coloração</Label>
                       <Select value={selectedColoracao} onValueChange={setSelectedColoracao}>
@@ -1136,6 +1136,9 @@ const PedidoFornecedorPage: React.FC = () => {
                           ))}
                         </SelectContent>
                       </Select>
+                      {produtoSelecionado?.permiteColoracao && coloracoesDisponiveis.length === 0 && (
+                        <span className="text-[9px] text-amber-600">Produto permite coloração mas nenhuma opção carregada</span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1252,11 +1255,13 @@ const PedidoFornecedorPage: React.FC = () => {
                           handleProductChange(p, "manual");
                           setSelectedGroup(null);
                           setMatchResult(null);
+                          setSelectedColoracao("none");
                         }}
                       >
                         <p className="font-medium truncate">{p.nome}</p>
                         <p className="text-xs text-muted-foreground">
                           Cód: {p.codigoProduto} • {p.tipoLente} • {p.tratamento}
+                          {p.permiteColoracao && <span className="ml-1 text-amber-600">• Coloração disponível</span>}
                         </p>
                       </button>
                     ))}
@@ -1268,6 +1273,107 @@ const PedidoFornecedorPage: React.FC = () => {
               </Card>
             )}
           </div>
+        )}
+
+        {/* Produto selecionado manualmente (sem match group) — exibe detalhes + coloração */}
+        {produtoSelecionado && !selectedGroup && (
+          <Card className="border-primary/30">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Search className="h-4 w-4" /> Produto Selecionado Manualmente
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-primary" />
+                  <p className="font-medium text-sm">{produtoSelecionado.nome}</p>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span>Código: {produtoSelecionado.codigoProduto}</span>
+                  <span>•</span>
+                  <span>{produtoSelecionado.tipoLente}</span>
+                  <span>•</span>
+                  <span>Tratamento: {produtoSelecionado.tratamento}</span>
+                  {produtoSelecionado.altura && <><span>•</span><span>Altura: {produtoSelecionado.altura}mm</span></>}
+                </div>
+                {produtoSelecionado.precos?.length > 0 && (
+                  <div className="flex gap-3 mt-1">
+                    {produtoSelecionado.precos.slice(0, 3).map((p, i) => (
+                      <span key={i} className="text-xs">
+                        {p.lista.substring(0, 25)}: R$ {p.preco.toFixed(2)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Coloração para produto manual */}
+              {coloracoesDisponiveis.length > 0 && (
+                <div>
+                  <Label className="text-[10px] uppercase mb-1 block">Coloração</Label>
+                  <Select value={selectedColoracao} onValueChange={setSelectedColoracao}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Nenhuma" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sem coloração</SelectItem>
+                      {coloracoesDisponiveis.map(c => (
+                        <SelectItem key={c.codigo} value={c.codigo}>
+                          {c.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Indicador de que o produto permite coloração mas não tem opções carregadas */}
+              {produtoSelecionado.permiteColoracao && coloracoesDisponiveis.length === 0 && (
+                <div className="rounded-lg border border-amber-300 bg-amber-500/10 p-3">
+                  <p className="text-sm text-amber-700 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    Este produto permite coloração, mas nenhuma opção foi carregada do catálogo.
+                  </p>
+                </div>
+              )}
+
+              {/* Campos Complementares para produto manual */}
+              {produtoSelecionado.camposComplementares && produtoSelecionado.camposComplementares.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase text-muted-foreground block">Campos Complementares</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {produtoSelecionado.camposComplementares.map(campo => (
+                      <div key={campo.codigo}>
+                        <Label className="text-[10px] uppercase mb-1 block">
+                          {campo.nome}
+                          {campo.obrigatorio && <span className="text-destructive ml-0.5">*</span>}
+                        </Label>
+                        <Input
+                          value={camposComplementaresValues[campo.codigo] ?? String(campo.valorPadrao ?? "")}
+                          onChange={(e) =>
+                            setCamposComplementaresValues(prev => ({
+                              ...prev,
+                              [campo.codigo]: e.target.value,
+                            }))
+                          }
+                          placeholder={`${campo.rangeMinimo} — ${campo.rangeMaximo}`}
+                          className="h-8 text-sm font-mono"
+                          type="number"
+                          step={campo.incremento || "any"}
+                          min={campo.rangeMinimo}
+                          max={campo.rangeMaximo}
+                        />
+                        <span className="text-[9px] text-muted-foreground">
+                          Range: {campo.rangeMinimo} – {campo.rangeMaximo}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {/* Prescrição */}
