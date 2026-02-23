@@ -35,3 +35,32 @@ export function executeAction(action: InsightAction): boolean {
 export function createNavigationHandler(navigate: (path: string) => void, path: string): ActionHandler {
   return () => navigate(path);
 }
+
+// Bulk register navigation actions for a module
+export function registerNavigationActions(
+  navigate: (path: string) => void,
+  actions: Record<string, string>
+) {
+  for (const [actionId, path] of Object.entries(actions)) {
+    registerAction(actionId, createNavigationHandler(navigate, path));
+  }
+}
+
+// Standard navigation actions by module
+export const NAVIGATION_ACTIONS: Record<string, Record<string, string>> = {
+  os: {
+    NAVIGATE_PEDIDO_HOYA: "/os/pedido",
+  },
+  admin: {
+    NAVIGATE_ADMIN_USUARIOS: "/admin/usuarios",
+    NAVIGATE_SYNC: "/admin/sync",
+    NAVIGATE_HEALTH: "/admin/health",
+    NAVIGATE_METAS: "/config/metas",
+  },
+  config: {
+    NAVIGATE_ADMIN_USUARIOS: "/admin/usuarios",
+    NAVIGATE_SYNC: "/admin/sync",
+    NAVIGATE_HEALTH: "/admin/health",
+    NAVIGATE_METAS: "/config/metas",
+  },
+};

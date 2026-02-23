@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useModuleInsights } from "@/hooks/useModuleInsights";
+import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -581,6 +583,7 @@ function UserEditSheet({
 export default function AdminUsuariosPage() {
   const { isAdmin, isLoading: authLoading } = useAuth();
   const { empresas } = useEmpresas();
+  const insightsData = useModuleInsights({ module: "admin", enabled: isAdmin });
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [userRoles, setUserRoles] = useState<RoleRow[]>([]);
   const [modulePerms, setModulePerms] = useState<ModulePermRow[]>([]);
@@ -729,6 +732,15 @@ export default function AdminUsuariosPage() {
             Novo Usuário
           </Button>
         </div>
+
+
+        {/* IA Insights */}
+        <ModuleInsightsPanel
+          insights={insightsData.insights}
+          loading={insightsData.loading}
+          error={insightsData.error}
+          onRetry={insightsData.refetch}
+        />
 
         {/* Legend */}
         <Card className="border-dashed">

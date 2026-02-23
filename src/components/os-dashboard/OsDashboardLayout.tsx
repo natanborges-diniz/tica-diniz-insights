@@ -193,6 +193,13 @@ export const OsDashboardLayout: React.FC<Props> = ({
   const PAGE_SIZE = 100;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
+  // IA Insights
+  const { insights, loading: insightsLoading, error: insightsError, refetch: refetchInsights } = useModuleInsights({
+    module: "os",
+    period: loaded ? { from: format(dataInicio, "yyyy-MM-dd"), to: format(dataFim, "yyyy-MM-dd") } : undefined,
+    enabled: loaded,
+  });
+
   // Sync layout state to module cache
   useEffect(() => {
     _layoutCache = { campoData, dataInicio, dataFim, empresa: empresaSelecionada };
@@ -313,6 +320,8 @@ export const OsDashboardLayout: React.FC<Props> = ({
         </CardContent>
       </Card>
 
+
+
       {/* Se ainda não carregou, mostrar mensagem */}
       {!loaded && !loading && !error && (
         <Card>
@@ -366,6 +375,14 @@ export const OsDashboardLayout: React.FC<Props> = ({
               )}
             </div>
           )}
+
+          {/* IA Insights */}
+          <ModuleInsightsPanel
+            insights={insights}
+            loading={insightsLoading}
+            error={insightsError}
+            onRetry={refetchInsights}
+          />
 
           {/* KPI Cards */}
           <OsKpiCards

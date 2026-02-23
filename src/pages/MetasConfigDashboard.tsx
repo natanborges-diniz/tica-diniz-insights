@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
+import { useModuleInsights } from "@/hooks/useModuleInsights";
+import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -133,6 +135,7 @@ export default function MetasConfigDashboard() {
   // ========== DIRTY GUARD + ACTIONBAR ==========
   const { isDirty, setDirty, setClean, guardClose } = useDirtyGuard();
   const [actionStatus, setActionStatus] = useState<ActionBarStatus>("idle");
+  const configInsights = useModuleInsights({ module: "config" });
 
   // Compute dirty state based on active tab
   const computedDirty = useMemo(() => {
@@ -516,7 +519,15 @@ export default function MetasConfigDashboard() {
       </header>
 
       {/* Conteúdo */}
-      <main className="container mx-auto px-4 py-6">
+      <main className="container mx-auto px-4 py-6 space-y-6">
+        {/* IA Insights */}
+        <ModuleInsightsPanel
+          insights={configInsights.insights}
+          loading={configInsights.loading}
+          error={configInsights.error}
+          onRetry={configInsights.refetch}
+        />
+
         {loading ? (
           <Skeleton className="h-96" />
         ) : (
