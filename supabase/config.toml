@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.bridge-health-check]
 verify_jwt = false
+
+[functions.ai-module-insights]
+verify_jwt = false

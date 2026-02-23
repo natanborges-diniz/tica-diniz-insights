@@ -27,6 +27,11 @@ import {
 } from "lucide-react";
 import { EmptyState, ErrorState, LoadingState } from "@/components/system/states";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
+import { useModuleInsights } from "@/hooks/useModuleInsights";
+import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
+import { useEffect } from "react";
+import { registerAction, unregisterAction } from "@/lib/actionCatalog";
+import { useNavigate } from "react-router-dom";
 
 // KPI Cards Component
 function EstoqueKPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueUnificado>['metricas'] }) {
@@ -281,6 +286,7 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
 }
 
 export default function VisaoEstoquePage() {
+  const navigate = useNavigate();
   const {
     empresas,
     loadingEmpresas,
@@ -300,6 +306,19 @@ export default function VisaoEstoquePage() {
     marcasSemFornecedor,
     carregarDados,
   } = useEstoqueUnificado();
+
+  const { insights, loading: insightsLoading, error: insightsError, refetch: refetchInsights } = useModuleInsights({
+    module: "estoque",
+    period: { from: filters.dataInicio, to: filters.dataFim },
+    filters: { empresa: filters.empresa },
+    enabled: itensProcessados.length > 0,
+  });
+
+  useEffect(() => {
+    registerAction("NAVIGATE_OTB", () => navigate("/estoque/otb"));
+    registerAction("NAVIGATE_ACOES_ESTOQUE", () => navigate("/estoque/acoes"));
+    return () => { unregisterAction("NAVIGATE_OTB"); unregisterAction("NAVIGATE_ACOES_ESTOQUE"); };
+  }, [navigate]);
 
   const empresaSelecionada = empresas.find(e => 
     filters.empresa !== null && 

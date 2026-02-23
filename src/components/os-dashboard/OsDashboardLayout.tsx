@@ -12,6 +12,8 @@ import { OsExpandableRow } from "./OsExpandableRow";
 import { OsHubDetailSheet } from "@/components/os-hub/OsHubDetailSheet";
 import { OsHubRecord } from "@/services/osHubService";
 import { BridgeStatusBanner } from "@/components/ui/bridge-status-banner";
+import { useModuleInsights } from "@/hooks/useModuleInsights";
+import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -1,5 +1,6 @@
 // src/components/financeiro-dashboard/FinanceiroDashboardLayout.tsx
 
+import { useEffect } from "react";
 import { Wallet, RefreshCw, AlertCircle, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,6 +14,10 @@ import { FinanceiroFilters } from "./FinanceiroFilters";
 import { FinanceiroKPICards } from "./FinanceiroKPICards";
 import { FinanceiroVencimentoChart } from "./FinanceiroVencimentoChart";
 import { FinanceiroParcelasTable } from "./FinanceiroParcelasTable";
+import { useModuleInsights } from "@/hooks/useModuleInsights";
+import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
+import { registerAction, unregisterAction } from "@/lib/actionCatalog";
+import { useNavigate } from "react-router-dom";
 
 interface FinanceiroDashboardLayoutProps {
   filters: FiltersType;
@@ -94,6 +99,19 @@ export function FinanceiroDashboardLayout({
     return `${year}-${month}-${day}`;
   };
   
+  const navigate = useNavigate();
+  const { insights, loading: insightsLoading, error: insightsError, refetch: refetchInsights } = useModuleInsights({
+    module: "financeiro",
+    period: { from: filters.dataIni, to: filters.dataFim },
+    enabled: !loading && parcelas.length > 0,
+  });
+
+  useEffect(() => {
+    registerAction("NAVIGATE_DRE", () => navigate("/financeiro/dre"));
+    registerAction("NAVIGATE_FLUXO_CAIXA", () => navigate("/financeiro/fluxo-caixa"));
+    return () => { unregisterAction("NAVIGATE_DRE"); unregisterAction("NAVIGATE_FLUXO_CAIXA"); };
+  }, [navigate]);
+
   const hoje = formatLocalDate(new Date());
   const primeiroDiaMes = formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const ultimoDiaMes = formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
@@ -153,6 +171,16 @@ export function FinanceiroDashboardLayout({
           Atualizar
         </Button>
       </div>
+
+      {/* IA Insights */}
+      {parcelas.length > 0 && (
+        <ModuleInsightsPanel
+          insights={insights}
+          loading={insightsLoading}
+          error={insightsError}
+          onRetry={refetchInsights}
+        />
+      )}
 
       {/* Botões de atalho rápido */}
       <div className="flex flex-wrap gap-2">
