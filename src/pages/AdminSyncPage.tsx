@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useModuleInsights } from "@/hooks/useModuleInsights";
+import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -77,6 +79,7 @@ export default function AdminSyncPage() {
   const [runs, setRuns] = useState<SyncRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const { insights, loading: insightsLoading, error: insightsError, refetch: refetchInsights } = useModuleInsights({ module: "admin", enabled: isAdmin });
 
   // Form state
   const [selectedEmpresa, setSelectedEmpresa] = useState<string>("all");
@@ -174,6 +177,10 @@ export default function AdminSyncPage() {
         <RefreshCw className="h-5 w-5 text-primary" />
         <h1 className="text-2xl font-bold">Sync & Reprocessamento</h1>
       </div>
+
+
+      {/* IA Insights */}
+      <ModuleInsightsPanel insights={insights} loading={insightsLoading} error={insightsError} onRetry={refetchInsights} />
 
       {/* Reprocessing Form */}
       <Card>

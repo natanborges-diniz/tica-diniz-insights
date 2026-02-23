@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useModuleInsights } from "@/hooks/useModuleInsights";
+import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,7 @@ export default function AdminHealthPage() {
   const [logs, setLogs] = useState<HealthLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
+  const { insights, loading: insightsLoading, error: insightsError, refetch: refetchInsights } = useModuleInsights({ module: "admin", enabled: isAdmin });
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -78,6 +81,10 @@ export default function AdminHealthPage() {
           Verificar agora
         </Button>
       </div>
+
+
+      {/* IA Insights */}
+      <ModuleInsightsPanel insights={insights} loading={insightsLoading} error={insightsError} onRetry={refetchInsights} />
 
       {/* Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
