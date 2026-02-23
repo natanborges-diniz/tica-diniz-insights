@@ -274,7 +274,55 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
             </>
           )}
 
-          {/* ── Section 5: Observações ─────────────────── */}
+          {/* ── Section 5: Imagens ─────────────────────── */}
+          {(os.urlImagemReceita || os.urlImagemArmacao || os.imagemTracer) && (
+            <>
+              <SectionHeading>Imagens</SectionHeading>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {os.urlImagemReceita && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Receita</p>
+                    <a href={os.urlImagemReceita} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={os.urlImagemReceita}
+                        alt="Foto da receita"
+                        className="rounded border border-border w-full max-h-64 object-contain bg-muted/30"
+                        loading="lazy"
+                      />
+                    </a>
+                  </div>
+                )}
+                {os.urlImagemArmacao && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Armação</p>
+                    <a href={os.urlImagemArmacao} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={os.urlImagemArmacao}
+                        alt="Foto da armação"
+                        className="rounded border border-border w-full max-h-64 object-contain bg-muted/30"
+                        loading="lazy"
+                      />
+                    </a>
+                  </div>
+                )}
+                {os.imagemTracer && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Tracer</p>
+                    <a href={os.imagemTracer} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={os.imagemTracer}
+                        alt="Imagem do tracer"
+                        className="rounded border border-border w-full max-h-64 object-contain bg-muted/30"
+                        loading="lazy"
+                      />
+                    </a>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── Section 6: Observações ─────────────────── */}
           {(os.observacaoOs || os.observacaoLente || os.observacaoPendencia) && (
             <>
               <SectionHeading>Observações</SectionHeading>
