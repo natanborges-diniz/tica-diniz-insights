@@ -56,6 +56,8 @@ import {
   CheckCircle2,
   Pencil,
   PackageCheck,
+  Copy,
+  Ticket,
 } from "lucide-react";
 
 // ============================================
@@ -138,6 +140,8 @@ const PedidoFornecedorPage: React.FC = () => {
   const [observacao, setObservacao] = useState("");
   const [usuarioFinal, setUsuarioFinal] = useState("");
   const [valorMontagem, setValorMontagem] = useState(0);
+  const [voucher, setVoucher] = useState("");
+  const [voucherSugerido, setVoucherSugerido] = useState<string | null>(null);
   
 
   // Prescrição editável
@@ -240,6 +244,21 @@ const PedidoFornecedorPage: React.FC = () => {
             setFormaArmacao(found.codFormatoAro);
           }
           setUsuarioFinal(found.paciente || paramPaciente || found.cliente || "");
+
+          // Lookup voucher by CPF
+          const cpfToSearch = found.cpf || paramCpf;
+          if (cpfToSearch) {
+            const { data: voucherData } = await supabase
+              .from("voucher_cliente")
+              .select("voucher")
+              .eq("cpf", cpfToSearch)
+              .maybeSingle();
+            if (voucherData?.voucher) {
+              setVoucher(voucherData.voucher);
+              setVoucherSugerido(voucherData.voucher);
+              toast({ title: "Voucher encontrado", description: `Voucher "${voucherData.voucher}" vinculado ao CPF deste cliente.` });
+            }
+          }
 
           // FASE 5: Mark prescription as auto-filled if data exists
           if (hasAnyPrescData) {
@@ -489,6 +508,7 @@ const PedidoFornecedorPage: React.FC = () => {
       const payload: HoyaPedidoPayload = {
         os: String(os.numeroOs || os.codOs),
         observacao: observacao || undefined,
+        voucher: voucher || undefined,
         especificacoes: {
           codigoProduto: produtoSelecionado.codigoProduto,
           tipoServico,
@@ -501,9 +521,9 @@ const PedidoFornecedorPage: React.FC = () => {
         },
         prescricao: {
           direito: {
-            esferico: prescOd.esferico ? Number(prescOd.esferico) : null,
-            cilindrico: prescOd.cilindrico ? Number(prescOd.cilindrico) : null,
-            eixo: prescOd.eixo ? Number(prescOd.eixo) : null,
+            esferico: prescOd.esferico ? Number(prescOd.esferico) : 0,
+            cilindrico: prescOd.cilindrico ? Number(prescOd.cilindrico) : 0,
+            eixo: prescOd.eixo ? Number(prescOd.eixo) : 0,
             adicao: prescOd.adicao ? Number(prescOd.adicao) : null,
             prismaH: prescOd.prismaH ? Number(prescOd.prismaH) : null,
             basePRPrismaH: prescOd.basePrismaH || null,
@@ -514,9 +534,9 @@ const PedidoFornecedorPage: React.FC = () => {
             alturaPupilar: prescOd.alturaPupilar ? Number(prescOd.alturaPupilar) : null,
           },
           esquerdo: {
-            esferico: prescOe.esferico ? Number(prescOe.esferico) : null,
-            cilindrico: prescOe.cilindrico ? Number(prescOe.cilindrico) : null,
-            eixo: prescOe.eixo ? Number(prescOe.eixo) : null,
+            esferico: prescOe.esferico ? Number(prescOe.esferico) : 0,
+            cilindrico: prescOe.cilindrico ? Number(prescOe.cilindrico) : 0,
+            eixo: prescOe.eixo ? Number(prescOe.eixo) : 0,
             adicao: prescOe.adicao ? Number(prescOe.adicao) : null,
             prismaH: prescOe.prismaH ? Number(prescOe.prismaH) : null,
             basePRPrismaH: prescOe.basePrismaH || null,
@@ -543,7 +563,7 @@ const PedidoFornecedorPage: React.FC = () => {
         valorMontagemSemTriangulacao: (tipoServico === 1 || tipoServico === 3) ? valorMontagem : 0,
         garantia: {
           usuarioFinal: usuarioFinal || os.paciente || os.cliente || "",
-          inicialUsuario: (usuarioFinal || os.paciente || os.cliente || "").split(/\s+/).map((w: string) => w.charAt(0)).join("").substring(0, 2).toUpperCase() || "US",
+          inicialUsuario: (usuarioFinal || os.paciente || os.cliente || "").split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 3).toUpperCase() || "US",
         },
         // F4.4: Campos complementares
         camposComplementares: produtoSelecionado.camposComplementares?.length
@@ -616,6 +636,22 @@ const PedidoFornecedorPage: React.FC = () => {
             nome_fornecedor: produtoSelecionado.nome,
           },
           { onConflict: "fornecedor,descricao_local" }
+        );
+      }
+
+      // Save voucher linked to CPF if response contains one
+      const voucherGerado = resp.voucherGerado;
+      const cpfCliente = os.cpf || paramCpf;
+      if (voucherGerado && cpfCliente) {
+        await supabase.from("voucher_cliente").upsert(
+          {
+            cpf: cpfCliente,
+            voucher: voucherGerado,
+            numero_pedido: String(resp.numeroPedido),
+            cod_empresa: os.codEmpresa,
+            cliente_nome: os.paciente || os.cliente || "",
+          },
+          { onConflict: "cpf" }
         );
       }
 
@@ -812,6 +848,10 @@ const PedidoFornecedorPage: React.FC = () => {
 
 
   if (pedidoEnviado) {
+    const handleCopyVoucher = (v: string) => {
+      navigator.clipboard.writeText(v);
+      toast({ title: "Voucher copiado!", description: v });
+    };
     return (
       <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
         <div className="flex items-center justify-center h-16 w-16 rounded-full bg-primary/10">
@@ -825,7 +865,19 @@ const PedidoFornecedorPage: React.FC = () => {
           </p>
           <p className="text-muted-foreground">Status: {pedidoEnviado.status}</p>
           {pedidoEnviado.voucherGerado && (
-            <p className="text-sm text-muted-foreground">Voucher: {pedidoEnviado.voucherGerado}</p>
+            <div className="flex items-center justify-center gap-2 mt-2 p-3 rounded-lg border border-primary/30 bg-primary/5">
+              <Ticket className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Voucher:</span>
+              <span className="font-mono font-bold text-primary">{pedidoEnviado.voucherGerado}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => handleCopyVoucher(pedidoEnviado.voucherGerado!)}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           )}
         </div>
         <div className="flex gap-3">
@@ -1441,6 +1493,26 @@ const PedidoFornecedorPage: React.FC = () => {
               <div>
                 <Label className="text-[10px] uppercase">Usuário Final (Garantia)</Label>
                 <Input value={usuarioFinal} onChange={(e) => setUsuarioFinal(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div>
+                <Label className="text-[10px] uppercase flex items-center gap-1">
+                  <Ticket className="h-3 w-3" /> Voucher
+                  {voucherSugerido && <Badge variant="outline" className="text-[9px] ml-1 bg-primary/10 text-primary border-primary/30">Sugerido</Badge>}
+                </Label>
+                <Input
+                  value={voucher}
+                  onChange={(e) => setVoucher(e.target.value)}
+                  className="h-8 text-sm font-mono"
+                  placeholder="Código do voucher (opcional)"
+                />
+                {voucherSugerido && voucher !== voucherSugerido && (
+                  <button
+                    onClick={() => setVoucher(voucherSugerido)}
+                    className="text-[10px] text-primary hover:underline mt-0.5"
+                  >
+                    Usar voucher sugerido: {voucherSugerido}
+                  </button>
+                )}
               </div>
             </CardContent>
           </Card>

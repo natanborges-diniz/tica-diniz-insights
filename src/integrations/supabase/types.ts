@@ -1241,6 +1241,39 @@ export type Database = {
         }
         Relationships: []
       }
+      voucher_cliente: {
+        Row: {
+          cliente_nome: string | null
+          cod_empresa: number | null
+          cpf: string
+          created_at: string
+          id: string
+          numero_pedido: string | null
+          updated_at: string
+          voucher: string
+        }
+        Insert: {
+          cliente_nome?: string | null
+          cod_empresa?: number | null
+          cpf: string
+          created_at?: string
+          id?: string
+          numero_pedido?: string | null
+          updated_at?: string
+          voucher: string
+        }
+        Update: {
+          cliente_nome?: string | null
+          cod_empresa?: number | null
+          cpf?: string
+          created_at?: string
+          id?: string
+          numero_pedido?: string | null
+          updated_at?: string
+          voucher?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       sync_failures_summary: {
