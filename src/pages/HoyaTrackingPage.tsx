@@ -182,8 +182,13 @@ const HoyaTrackingPage: React.FC = () => {
           setXmlDialog({ open: true, content, title: `DANFE — Pedido #${numero}` });
         }
       }
-    } catch (err) {
-      toast({ title: `Erro ao consultar ${tipo.toUpperCase()}`, description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
+    } catch (err: unknown) {
+      const hoyaErr = err as { code?: string; message?: string };
+      if (hoyaErr?.code === "HOYA_API_ERROR") {
+        toast({ title: `${tipo.toUpperCase()} indisponível`, description: "O pedido ainda não foi faturado ou o documento não está disponível.", className: "border-warning bg-warning-soft text-warning-foreground" });
+      } else {
+        toast({ title: `Erro ao consultar ${tipo.toUpperCase()}`, description: hoyaErr?.message || "Erro desconhecido", variant: "destructive" });
+      }
     } finally {
       setConsultaAvulsaXmlLoading(null);
     }
@@ -259,8 +264,13 @@ const HoyaTrackingPage: React.FC = () => {
       const result = await consultarXmlHoya(numeroPedido);
       const content = result.xml || JSON.stringify(result, null, 2);
       setXmlDialog({ open: true, content, title: `XML — Pedido #${numeroPedido}` });
-    } catch (err) {
-      toast({ title: "Erro ao consultar XML", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
+    } catch (err: unknown) {
+      const hoyaErr = err as { code?: string; message?: string };
+      if (hoyaErr?.code === "HOYA_API_ERROR") {
+        toast({ title: "XML indisponível", description: "O pedido ainda não foi faturado ou o XML não está disponível.", className: "border-warning bg-warning-soft text-warning-foreground" });
+      } else {
+        toast({ title: "Erro ao consultar XML", description: hoyaErr?.message || "Erro desconhecido", variant: "destructive" });
+      }
     } finally {
       setLoadingXml(null);
     }
@@ -277,8 +287,13 @@ const HoyaTrackingPage: React.FC = () => {
         const content = result.danfe || JSON.stringify(result, null, 2);
         setXmlDialog({ open: true, content, title: `DANFE — Pedido #${numeroPedido}` });
       }
-    } catch (err) {
-      toast({ title: "Erro ao consultar DANFE", description: err instanceof Error ? err.message : "Erro", variant: "destructive" });
+    } catch (err: unknown) {
+      const hoyaErr = err as { code?: string; message?: string };
+      if (hoyaErr?.code === "HOYA_API_ERROR" && hoyaErr?.message?.toLowerCase().includes("erro")) {
+        toast({ title: "DANFE indisponível", description: "O pedido ainda não foi faturado ou a DANFE não está disponível.", className: "border-warning bg-warning-soft text-warning-foreground" });
+      } else {
+        toast({ title: "Erro ao consultar DANFE", description: hoyaErr?.message || "Erro desconhecido", variant: "destructive" });
+      }
     } finally {
       setLoadingXml(null);
     }
