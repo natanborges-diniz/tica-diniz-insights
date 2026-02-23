@@ -1309,7 +1309,7 @@ const PedidoFornecedorPage: React.FC = () => {
               </div>
 
               {/* Coloração para produto manual */}
-              {coloracoesDisponiveis.length > 0 && (
+              {(coloracoesDisponiveis.length > 0 || produtoSelecionado.permiteColoracao) && (
                 <div>
                   <Label className="text-[10px] uppercase mb-1 block">Coloração</Label>
                   <Select value={selectedColoracao} onValueChange={setSelectedColoracao}>
