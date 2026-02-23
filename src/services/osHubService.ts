@@ -406,9 +406,9 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     codFormatoAro: coalesce(r.cod_formato_aro, r.otoi_cod_formatoaro, r.ocr_cod_formatoaro),
     descricaoArmacao: r.descricao_armacao?.trim() ?? null,
     referenciaArmacao: r.referencia_armacao?.trim() ?? null,
-    cpf: r.cpf?.trim() ?? null,
-    dataNascimento: r.data_nascimento ?? null,
-    paciente: r.paciente?.trim() ?? null,
+    cpf: r.cpf?.trim() || null,
+    dataNascimento: r.data_nascimento || null,
+    paciente: r.paciente?.trim() || null,
     temReceita: hasReceita,
     temImagem: hasImagem,
   };
