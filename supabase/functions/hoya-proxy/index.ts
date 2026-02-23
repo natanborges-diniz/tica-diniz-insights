@@ -735,7 +735,7 @@ serve(async (req) => {
         const xmlText = await xmlResp.text();
         if (!xmlResp.ok) {
           return new Response(JSON.stringify({ error: "Erro ao consultar XML", details: xmlText, code: HOYA_ERROR_CODES.API_ERROR, correlationId }), {
-            status: xmlResp.status, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
           });
         }
         // Return XML content — could be raw XML or JSON wrapper
@@ -763,7 +763,7 @@ serve(async (req) => {
         const danfeText = await danfeResp.text();
         if (!danfeResp.ok) {
           return new Response(JSON.stringify({ error: "Erro ao consultar DANFE", details: danfeText, code: HOYA_ERROR_CODES.API_ERROR, correlationId }), {
-            status: danfeResp.status, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
           });
         }
         let danfeData: unknown;
