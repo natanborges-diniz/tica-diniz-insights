@@ -561,6 +561,7 @@ const PedidoFornecedorPage: React.FC = () => {
           formaArmacao,
         },
         valorMontagemSemTriangulacao: (tipoServico === 1 || tipoServico === 3) ? valorMontagem : 0,
+        condicaoPagamento: "30/60",
         garantia: {
           usuarioFinal: usuarioFinal || os.paciente || os.cliente || "",
           inicialUsuario: (usuarioFinal || os.paciente || os.cliente || "").split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 3).toUpperCase() || "US",
