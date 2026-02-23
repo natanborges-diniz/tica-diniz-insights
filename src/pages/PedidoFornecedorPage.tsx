@@ -100,6 +100,10 @@ const PedidoFornecedorPage: React.FC = () => {
 
   const codOs = Number(searchParams.get("codOs")) || 0;
   const codEmpresa = Number(searchParams.get("codEmpresa")) || 0;
+  // Patient data passed from recipe sheet as fallback
+  const paramPaciente = searchParams.get("paciente") || "";
+  const paramCpf = searchParams.get("cpf") || "";
+  const paramDataNascimento = searchParams.get("dataNascimento") || "";
 
   const [os, setOs] = useState<OsHubRecord | null>(null);
   const [loadingOs, setLoadingOs] = useState(true);
@@ -182,6 +186,10 @@ const PedidoFornecedorPage: React.FC = () => {
       try {
         const found = await fetchSingleOsRecipe(codOs, codEmpresa);
         if (found) {
+          // Merge patient data from URL params if hub-receitas didn't return them
+          if (!found.cpf && paramCpf) found.cpf = paramCpf;
+          if (!found.paciente && paramPaciente) found.paciente = paramPaciente;
+          if (!found.dataNascimento && paramDataNascimento) found.dataNascimento = paramDataNascimento;
           setOs(found);
           // Map prismas from OS
           const prismas = mapPrismasFromOs(found);

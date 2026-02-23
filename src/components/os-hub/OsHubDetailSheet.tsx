@@ -140,7 +140,15 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
   const handleGerarPedido = () => {
     if (!os) return;
     onClose();
-    navigate(`/os/pedido?codOs=${os.codOs}&codEmpresa=${os.codEmpresa}`);
+    // Pass patient data via URL params as fallback
+    const params = new URLSearchParams({
+      codOs: String(os.codOs),
+      codEmpresa: String(os.codEmpresa),
+    });
+    if (os.paciente) params.set("paciente", os.paciente);
+    if (os.cpf) params.set("cpf", os.cpf);
+    if (os.dataNascimento) params.set("dataNascimento", os.dataNascimento);
+    navigate(`/os/pedido?${params.toString()}`);
   };
 
   // Build subtitle from available context
