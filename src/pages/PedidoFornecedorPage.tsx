@@ -231,7 +231,7 @@ const PedidoFornecedorPage: React.FC = () => {
           if (found.codFormatoAro != null && found.codFormatoAro > 0) {
             setFormaArmacao(found.codFormatoAro);
           }
-          setUsuarioFinal(found.cliente || "");
+          setUsuarioFinal(found.paciente || found.cliente || "");
 
           // FASE 5: Mark prescription as auto-filled if data exists
           if (hasAnyPrescData) {
@@ -534,8 +534,8 @@ const PedidoFornecedorPage: React.FC = () => {
         },
         valorMontagemSemTriangulacao: (tipoServico === 1 || tipoServico === 3) ? valorMontagem : 0,
         garantia: {
-          usuarioFinal: usuarioFinal || os.cliente || "",
-          inicialUsuario: (usuarioFinal || os.cliente || "").split(/\s+/).map((w: string) => w.charAt(0)).join("").substring(0, 2).toUpperCase() || "US",
+          usuarioFinal: usuarioFinal || os.paciente || os.cliente || "",
+          inicialUsuario: (usuarioFinal || os.paciente || os.cliente || "").split(/\s+/).map((w: string) => w.charAt(0)).join("").substring(0, 2).toUpperCase() || "US",
         },
         // F4.4: Campos complementares
         camposComplementares: produtoSelecionado.camposComplementares?.length
