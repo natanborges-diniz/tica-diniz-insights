@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { OsRecord } from "@/services/osService";
 import { CampoDataOs } from "@/services/osService";
 import { OsMetrics } from "@/utils/osMetrics";
-import { OsFilterState, OsStatusFilter, OsApiFilters } from "@/hooks/useOsMonitor";
+import { OsFilterState, OsStatusFilter, OsApiFilters, OsPedidoFilter, OsAtrasoSort } from "@/hooks/useOsMonitor";
 import { OsKpiCards } from "./OsKpiCards";
 import { OsExpandableRow } from "./OsExpandableRow";
 import { OsHubDetailSheet } from "@/components/os-hub/OsHubDetailSheet";
@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { RefreshCw, Search, AlertTriangle, Info, CalendarIcon, Play } from "lucide-react";
+import { RefreshCw, Search, AlertTriangle, Info, CalendarIcon, Play, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -462,12 +462,59 @@ export const OsDashboardLayout: React.FC<Props> = ({
                     <SelectItem value="ENTREGUE">Entregue</SelectItem>
                   </SelectContent>
                 </Select>
+
+                <Select
+                  value={filters.pedido}
+                  onValueChange={(v) => onChangeFilters({ pedido: v as OsPedidoFilter })}
+                >
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Pedido" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TODOS">Todos (Pedido)</SelectItem>
+                    <SelectItem value="COM_PEDIDO">Com Pedido</SelectItem>
+                    <SelectItem value="SEM_PEDIDO">Sem Pedido</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </CardContent>
           </Card>
 
           {/* Tabela */}
-          {data.length > 0 && (
+          {(() => {
+            // Apply pedido filter (needs pedidosMap, so done here)
+            let displayData = data;
+            if (filters.pedido === "COM_PEDIDO") {
+              displayData = data.filter(os => !!pedidosMap[os.codOs]);
+            } else if (filters.pedido === "SEM_PEDIDO") {
+              displayData = data.filter(os => !pedidosMap[os.codOs]);
+            }
+
+            const atrasoSortIcon = filters.atrasoSort === "asc"
+              ? <ArrowUp className="h-3 w-3 ml-1 inline" />
+              : filters.atrasoSort === "desc"
+              ? <ArrowDown className="h-3 w-3 ml-1 inline" />
+              : <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-50" />;
+
+            const cycleAtrasoSort = () => {
+              const next: OsAtrasoSort = filters.atrasoSort === "default" ? "desc" : filters.atrasoSort === "desc" ? "asc" : "default";
+              onChangeFilters({ atrasoSort: next });
+            };
+
+            if (displayData.length === 0 && data.length > 0) {
+              return (
+                <Card>
+                  <CardContent className="py-12">
+                    <div className="flex flex-col items-center justify-center">
+                      <Info className="h-8 w-8 text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">Nenhuma OS encontrada com o filtro de pedido selecionado.</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            }
+
+            return displayData.length > 0 ? (
             <Card>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
@@ -480,12 +527,17 @@ export const OsDashboardLayout: React.FC<Props> = ({
                         <TableHead>Cliente</TableHead>
                         <TableHead>Etapa</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="text-center">Atraso</TableHead>
+                        <TableHead
+                          className="text-center cursor-pointer select-none hover:text-foreground transition-colors"
+                          onClick={cycleAtrasoSort}
+                        >
+                          Atraso {atrasoSortIcon}
+                        </TableHead>
                         <TableHead className="text-right">Total</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {data.slice(0, visibleCount).map((os) => (
+                      {displayData.slice(0, visibleCount).map((os) => (
                         <OsExpandableRow
                           key={os.codOs}
                           os={os}
@@ -497,16 +549,17 @@ export const OsDashboardLayout: React.FC<Props> = ({
                     </TableBody>
                   </Table>
                 </div>
-                {data.length > visibleCount && (
+                {displayData.length > visibleCount && (
                   <div className="flex justify-center py-4 border-t">
                     <Button variant="outline" size="sm" onClick={() => setVisibleCount(c => c + PAGE_SIZE)}>
-                      Carregar mais ({data.length - visibleCount} restantes)
+                      Carregar mais ({displayData.length - visibleCount} restantes)
                     </Button>
                   </div>
                 )}
               </CardContent>
             </Card>
-          )}
+          ) : null;
+          })()}
 
           {/* Empty */}
           {data.length === 0 && !error && (
