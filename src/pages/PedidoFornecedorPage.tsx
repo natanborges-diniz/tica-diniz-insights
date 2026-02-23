@@ -1120,7 +1120,7 @@ const PedidoFornecedorPage: React.FC = () => {
                   )}
 
                   {/* Coloração */}
-                  {(coloracoesDisponiveis.length > 0 || produtoSelecionado?.permiteColoracao) && (
+                  {(coloracoesDisponiveis.length > 0 || produtoSelecionado?.permiteColoracao || selectedGroup.produtos.some(p => p.permiteColoracao)) && (
                     <div>
                       <Label className="text-[10px] uppercase mb-1 block">Coloração</Label>
                       <Select value={selectedColoracao} onValueChange={setSelectedColoracao}>
@@ -1136,8 +1136,8 @@ const PedidoFornecedorPage: React.FC = () => {
                           ))}
                         </SelectContent>
                       </Select>
-                      {produtoSelecionado?.permiteColoracao && coloracoesDisponiveis.length === 0 && (
-                        <span className="text-[9px] text-amber-600">Produto permite coloração mas nenhuma opção carregada</span>
+                      {(produtoSelecionado?.permiteColoracao || selectedGroup.produtos.some(p => p.permiteColoracao)) && coloracoesDisponiveis.length === 0 && (
+                        <span className="text-[9px] text-amber-600">Selecione o produto para carregar as colorações disponíveis</span>
                       )}
                     </div>
                   )}
