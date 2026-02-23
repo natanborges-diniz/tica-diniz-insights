@@ -163,7 +163,6 @@ const OsDashboardPage: React.FC = () => {
     if (data.length === 0) return;
     const newKey = data.map(os => os.codOs).sort().join(",");
     if (newKey === pedidosMapDataKey && Object.keys(pedidosMapCache).length > 0) {
-      // Mesmo conjunto de OS — reutiliza cache sem bater no banco
       setPedidosMap({ ...pedidosMapCache });
       return;
     }
@@ -177,25 +176,59 @@ const OsDashboardPage: React.FC = () => {
           .from("pedidos_fornecedor")
           .select("cod_os, numero_pedido, fornecedor, status, created_at, response")
           .in("cod_os", batch)
-          .order("created_at", { ascending: false }); // mais recente primeiro
+          .order("created_at", { ascending: false });
         if (rows) {
           for (const r of rows) {
             const existing = map[r.cod_os];
             const respObj = r.response as Record<string, unknown> | null;
             const voucher = (respObj?.voucherGerado as string) || null;
-            // Prioridade: pedido confirmado (com número) > qualquer outro
             if (!existing) {
               map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "", created_at: r.created_at, voucher };
             } else if (!existing.numero_pedido && r.numero_pedido) {
               map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "", created_at: r.created_at, voucher };
             }
-            // Se já tem confirmado, ignora os demais
           }
         }
       }
       setPedidosMapCache(map);
       setPedidosMap(map);
     })();
+  }, [data]);
+
+  // Realtime: atualizar badge automaticamente quando um pedido é criado/atualizado
+  useEffect(() => {
+    if (data.length === 0) return;
+    const codOsSet = new Set(data.map(os => os.codOs));
+
+    const channel = supabase
+      .channel('pedidos-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pedidos_fornecedor' },
+        (payload) => {
+          const row = (payload.new as Record<string, unknown>) || {};
+          const codOs = row.cod_os as number;
+          if (!codOs || !codOsSet.has(codOs)) return;
+
+          const respObj = row.response as Record<string, unknown> | null;
+          const voucher = (respObj?.voucherGerado as string) || null;
+          const info: PedidoFornecedorInfo = {
+            numero_pedido: (row.numero_pedido as string) || null,
+            fornecedor: (row.fornecedor as string) || "",
+            status: (row.status as string) || "",
+            created_at: (row.created_at as string) || new Date().toISOString(),
+            voucher,
+          };
+
+          registrarPedidoNoCache(codOs, info.numero_pedido || "", info.fornecedor, info.status, info.created_at, info.voucher);
+          setPedidosMap(prev => ({ ...prev, [codOs]: info }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [data]);
 
   // ============================================================
