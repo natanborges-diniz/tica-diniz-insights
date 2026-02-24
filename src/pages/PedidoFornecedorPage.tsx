@@ -403,9 +403,8 @@ const PedidoFornecedorPage: React.FC = () => {
               setSelectedAltura(String(match.codigoAltura));
             }
             // Sync tratamento
-            const hasCor = match.nome.toUpperCase().includes(" COR");
-            setSelectedTratamento(`${match.codigoTratamento}_${hasCor}`);
-            setIsCor(hasCor);
+            setSelectedTratamento(`${match.codigoTratamento}_false`);
+            setIsCor(false);
             // Sync fotossensivel
             if (match.codigoFotossensivel != null) {
               setSelectedFotossensivel(String(match.codigoFotossensivel));
@@ -438,8 +437,8 @@ const PedidoFornecedorPage: React.FC = () => {
             t.tratamento.toLowerCase().includes(result.parsed.tratamento!.toLowerCase())
           );
           if (matchTrat) {
-            setSelectedTratamento(`${matchTrat.codigoTratamento}_${matchTrat.temCor}`);
-            setIsCor(matchTrat.temCor);
+            setSelectedTratamento(`${matchTrat.codigoTratamento}_false`);
+            setIsCor(false);
           }
         }
         if (result.parsed.isFotossensivel && result.bestGroup.fotossensiveisDisponiveis.length > 0) {
@@ -488,6 +487,63 @@ const PedidoFornecedorPage: React.FC = () => {
     }
     // F4.4: Reset campos complementares when product changes
     setCamposComplementaresValues({});
+  }, [selectedGroup, selectedAltura, selectedTratamento, selectedFotossensivel]);
+
+  // ---- Cascading filtered options based on current selections ----
+  const filteredOptions = useMemo(() => {
+    if (!selectedGroup) return { alturas: [], tratamentos: [], fotossensiveis: [] };
+    const prods = selectedGroup.produtos;
+
+    // Filter products by current selections to derive compatible options
+    const codAltura = selectedAltura ? Number(selectedAltura) : null;
+    const codTrat = selectedTratamento ? Number(selectedTratamento.split("_")[0]) : null;
+    const codFoto = selectedFotossensivel !== "none" ? Number(selectedFotossensivel) : null;
+
+    // Alturas: filter products by selected tratamento + fotossensível
+    const prodsForAlturas = prods.filter(p => {
+      if (codTrat != null && p.codigoTratamento !== codTrat) return false;
+      if (codFoto != null && p.codigoFotossensivel !== codFoto) return false;
+      if (codFoto == null && selectedFotossensivel === "none" && p.codigoFotossensivel != null) return false;
+      return true;
+    });
+    const alturasMap = new Map<number, { altura: number; codigoAltura: number }>();
+    for (const p of prodsForAlturas) {
+      if (p.codigoAltura != null && p.altura != null && !alturasMap.has(p.codigoAltura)) {
+        alturasMap.set(p.codigoAltura, { altura: p.altura, codigoAltura: p.codigoAltura });
+      }
+    }
+    const alturas = Array.from(alturasMap.values()).sort((a, b) => a.altura - b.altura);
+
+    // Tratamentos: filter products by selected altura + fotossensível
+    const prodsForTrat = prods.filter(p => {
+      if (codAltura != null && p.codigoAltura !== codAltura) return false;
+      if (codFoto != null && p.codigoFotossensivel !== codFoto) return false;
+      if (codFoto == null && selectedFotossensivel === "none" && p.codigoFotossensivel != null) return false;
+      return true;
+    });
+    const tratMap = new Map<number, { tratamento: string; codigoTratamento: number }>();
+    for (const p of prodsForTrat) {
+      if (!tratMap.has(p.codigoTratamento)) {
+        tratMap.set(p.codigoTratamento, { tratamento: p.tratamento, codigoTratamento: p.codigoTratamento });
+      }
+    }
+    const tratamentos = Array.from(tratMap.values()).sort((a, b) => a.tratamento.localeCompare(b.tratamento));
+
+    // Fotossensíveis: filter products by selected altura + tratamento
+    const prodsForFoto = prods.filter(p => {
+      if (codAltura != null && p.codigoAltura !== codAltura) return false;
+      if (codTrat != null && p.codigoTratamento !== codTrat) return false;
+      return true;
+    });
+    const fotoMap = new Map<number, { nome: string; codigoFotossensivel: number }>();
+    for (const p of prodsForFoto) {
+      if (p.codigoFotossensivel != null && p.fotossensivel && !fotoMap.has(p.codigoFotossensivel)) {
+        fotoMap.set(p.codigoFotossensivel, { nome: String(p.fotossensivel), codigoFotossensivel: p.codigoFotossensivel });
+      }
+    }
+    const fotossensiveis = Array.from(fotoMap.values());
+
+    return { alturas, tratamentos, fotossensiveis };
   }, [selectedGroup, selectedAltura, selectedTratamento, selectedFotossensivel]);
 
   // ---- Available colorações for selected product ----
@@ -1072,7 +1128,7 @@ const PedidoFornecedorPage: React.FC = () => {
               {selectedGroup && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {/* Altura */}
-                  {selectedGroup.alturasDisponiveis.length > 0 && (
+                  {filteredOptions.alturas.length > 0 && (
                     <div>
                       <Label className="text-[10px] uppercase mb-1 block">
                         Altura <span className="text-destructive">*</span>
@@ -1086,7 +1142,7 @@ const PedidoFornecedorPage: React.FC = () => {
                           <SelectValue placeholder="Escolha..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {selectedGroup.alturasDisponiveis.map(a => (
+                          {filteredOptions.alturas.map(a => (
                             <SelectItem key={a.codigoAltura} value={String(a.codigoAltura)}>
                               {a.altura}mm
                             </SelectItem>
@@ -1113,7 +1169,7 @@ const PedidoFornecedorPage: React.FC = () => {
                         <SelectValue placeholder="Escolha..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {selectedGroup.tratamentosDisponiveis.map(t => (
+                        {filteredOptions.tratamentos.map(t => (
                           <SelectItem key={String(t.codigoTratamento)} value={`${t.codigoTratamento}_false`}>
                             {t.tratamento}
                           </SelectItem>
@@ -1123,7 +1179,7 @@ const PedidoFornecedorPage: React.FC = () => {
                   </div>
 
                   {/* Fotossensível */}
-                  {selectedGroup.fotossensiveisDisponiveis.length > 0 && (
+                  {filteredOptions.fotossensiveis.length > 0 && (
                     <div>
                       <Label className="text-[10px] uppercase mb-1 block">Fotossensível</Label>
                       <Select value={selectedFotossensivel} onValueChange={(v) => {
@@ -1136,7 +1192,7 @@ const PedidoFornecedorPage: React.FC = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">Sem fotossensível</SelectItem>
-                          {selectedGroup.fotossensiveisDisponiveis.map(f => (
+                          {filteredOptions.fotossensiveis.map(f => (
                             <SelectItem key={f.codigoFotossensivel} value={String(f.codigoFotossensivel)}>
                               {f.nome}
                             </SelectItem>
