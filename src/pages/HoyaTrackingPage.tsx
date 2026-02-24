@@ -5,6 +5,7 @@ import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { useUserEmpresas } from "@/hooks/useUserEmpresas";
+import { usePedidoAlertas } from "@/hooks/usePedidoAlertas";
 import {
   PedidoFornecedorRecord,
   HoyaPedidoTracking,
@@ -41,6 +42,7 @@ import {
   FileText,
   FileCode,
   Download,
+  AlertTriangle,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -85,6 +87,7 @@ const HoyaTrackingPage: React.FC = () => {
   const [xmlDialog, setXmlDialog] = useState<{ open: boolean; content: string; title: string; mode: "xml" | "danfe" }>({ open: false, content: "", title: "", mode: "xml" });
   const [loadingXml, setLoadingXml] = useState<string | null>(null);
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
+  const [acknowledgingIds, setAcknowledgingIds] = useState<Set<string>>(new Set());
 
   // Consulta avulsa — resultado de pedidos externos (não na lista local)
   const [consultaAvulsaLoading, setConsultaAvulsaLoading] = useState(false);
@@ -92,6 +95,25 @@ const HoyaTrackingPage: React.FC = () => {
   const [consultaAvulsaError, setConsultaAvulsaError] = useState<string | null>(null);
   const [consultaAvulsaNumero, setConsultaAvulsaNumero] = useState<string | null>(null);
   const [consultaAvulsaXmlLoading, setConsultaAvulsaXmlLoading] = useState<"xml" | "danfe" | null>(null);
+
+  // Alertas de status negativo
+  const { alertas, acknowledgeAlerta } = usePedidoAlertas();
+  const alertasByPedidoFornecedorId = useMemo(() => {
+    const map = new Map<string, string>();
+    alertas.forEach(a => map.set(a.pedido_fornecedor_id, a.id));
+    return map;
+  }, [alertas]);
+
+  const handleAcknowledge = useCallback(async (pedidoFornecedorId: string) => {
+    const alertaId = alertasByPedidoFornecedorId.get(pedidoFornecedorId);
+    if (!alertaId) return;
+    setAcknowledgingIds(prev => new Set(prev).add(pedidoFornecedorId));
+    const success = await acknowledgeAlerta(alertaId);
+    if (success) {
+      toast({ title: "Ciência registrada", description: "O alerta foi marcado como verificado." });
+    }
+    setAcknowledgingIds(prev => { const s = new Set(prev); s.delete(pedidoFornecedorId); return s; });
+  }, [alertasByPedidoFornecedorId, acknowledgeAlerta]);
 
   // Empresas lookup
   const { empresas } = useUserEmpresas();
@@ -554,10 +576,33 @@ const HoyaTrackingPage: React.FC = () => {
                         {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                       </Button>
                     </div>
-                  </div>
+                    </div>
 
-                  {/* Expanded content */}
-                  {isExpanded && (
+                    {/* Alert banner for negative status — requires acknowledgment */}
+                    {alertasByPedidoFornecedorId.has(ped.id) && (
+                      <div className="mt-3 flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/10 p-3">
+                        <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+                        <div className="flex-1 text-sm">
+                          <p className="font-semibold text-destructive">Atenção: pedido com status negativo</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Status detectado: <span className="font-mono font-medium">{ped.status}</span>. Confirme ciência para remover o alerta.
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="shrink-0 gap-1.5"
+                          disabled={acknowledgingIds.has(ped.id)}
+                          onClick={(e) => { e.stopPropagation(); handleAcknowledge(ped.id); }}
+                        >
+                          {acknowledgingIds.has(ped.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                          Ciente
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Expanded content */}
+                    {isExpanded && (
                     <div className="mt-4 pt-4 border-t space-y-4">
 
                       {/* ===== CONFIRMAÇÃO ORIGINAL DA HOYA ===== */}

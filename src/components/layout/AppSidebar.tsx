@@ -2,10 +2,12 @@ import { useLocation } from "react-router-dom";
 import { 
   TrendingUp, BarChart3, Layers, 
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
-  Target, Users, Brain, Eye, RefreshCw, Activity, Truck, FlaskConical
+  Target, Users, Brain, Eye, RefreshCw, Activity, Truck, FlaskConical,
+  AlertTriangle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
+import { usePedidoAlertas } from "@/hooks/usePedidoAlertas";
 import {
   Sidebar,
   SidebarContent,
@@ -106,6 +108,7 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const sections = moduleMenus[activeModule] || [];
+  const { unacknowledgedCount } = usePedidoAlertas();
 
   // Hide sidebar entirely for modules with no menu items
   if (sections.length === 0 || sections.every(s => s.items.length === 0)) {
@@ -149,13 +152,19 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
                           <NavLink
                             to={item.url}
                             className={cn(
-                              "flex items-center gap-3 transition-colors duration-150",
+                              "flex items-center gap-3 transition-colors duration-150 relative",
                               isActive && "border-l-2 border-primary pl-[10px]"
                             )}
                             activeClassName="bg-brand-soft text-primary font-medium"
                           >
                             <item.icon className="h-4 w-4 shrink-0" />
                             {!collapsed && <span className="truncate">{item.title}</span>}
+                            {/* Notification badge for Tracking Hoya */}
+                            {item.url === "/os/tracking" && unacknowledgedCount > 0 && (
+                              <span className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center h-5 min-w-[20px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold animate-pulse">
+                                {unacknowledgedCount > 9 ? "9+" : unacknowledgedCount}
+                              </span>
+                            )}
                           </NavLink>
                         )}
                       </SidebarMenuButton>
