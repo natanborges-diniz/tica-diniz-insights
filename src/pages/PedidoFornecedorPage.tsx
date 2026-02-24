@@ -406,9 +406,10 @@ const PedidoFornecedorPage: React.FC = () => {
             if (match.codigoAltura != null) {
               setSelectedAltura(String(match.codigoAltura));
             }
-            // Sync tratamento
-            setSelectedTratamento(`${match.codigoTratamento}_false`);
-            setIsCor(false);
+            // Sync tratamento – detect if product is COR variant
+            const matchIsCor = match.nome.toUpperCase().includes(" COR");
+            setSelectedTratamento(`${match.codigoTratamento}_${matchIsCor}`);
+            setIsCor(matchIsCor);
             // Sync fotossensivel
             if (match.codigoFotossensivel != null) {
               setSelectedFotossensivel(String(match.codigoFotossensivel));
@@ -461,12 +462,12 @@ const PedidoFornecedorPage: React.FC = () => {
     if (!selectedGroup || !selectedTratamento) return;
     const [tratCod, tratCor] = selectedTratamento.split("_");
     const codTrat = Number(tratCod);
-    const corFlag = tratCor === "true";
+    let corFlag = tratCor === "true";
 
     const codAltura = selectedAltura ? Number(selectedAltura) : null;
     const codFoto = selectedFotossensivel !== "none" ? Number(selectedFotossensivel) : null;
 
-    const exact = findExactProduct(
+    let exact = findExactProduct(
       selectedGroup.produtos,
       selectedGroup.codigoDesenho,
       selectedGroup.codigoMaterial,
@@ -475,6 +476,24 @@ const PedidoFornecedorPage: React.FC = () => {
       codFoto,
       corFlag
     );
+
+    // Fallback: if not found, try the opposite COR flag
+    if (!exact) {
+      exact = findExactProduct(
+        selectedGroup.produtos,
+        selectedGroup.codigoDesenho,
+        selectedGroup.codigoMaterial,
+        codAltura,
+        codTrat,
+        codFoto,
+        !corFlag
+      );
+      if (exact) {
+        corFlag = !corFlag;
+        setIsCor(corFlag);
+        setSelectedTratamento(`${codTrat}_${corFlag}`);
+      }
+    }
 
     if (exact) {
       // Only update if different from current (avoid resetting confirmation on DE/PARA sync)
@@ -525,10 +544,20 @@ const PedidoFornecedorPage: React.FC = () => {
       if (codFoto == null && selectedFotossensivel === "none" && p.codigoFotossensivel != null) return false;
       return true;
     });
-    const tratMap = new Map<number, { tratamento: string; codigoTratamento: number }>();
+    const tratMap = new Map<number, { tratamento: string; codigoTratamento: number; hasCor: boolean; hasNonCor: boolean }>();
     for (const p of prodsForTrat) {
-      if (!tratMap.has(p.codigoTratamento)) {
-        tratMap.set(p.codigoTratamento, { tratamento: p.tratamento, codigoTratamento: p.codigoTratamento });
+      const hasCor = p.nome.toUpperCase().includes(" COR");
+      const existing = tratMap.get(p.codigoTratamento);
+      if (existing) {
+        if (hasCor) existing.hasCor = true;
+        else existing.hasNonCor = true;
+      } else {
+        tratMap.set(p.codigoTratamento, {
+          tratamento: p.tratamento,
+          codigoTratamento: p.codigoTratamento,
+          hasCor: hasCor,
+          hasNonCor: !hasCor,
+        });
       }
     }
     const tratamentos = Array.from(tratMap.values()).sort((a, b) => a.tratamento.localeCompare(b.tratamento));
@@ -557,8 +586,10 @@ const PedidoFornecedorPage: React.FC = () => {
       const codTrat = Number(selectedTratamento.split("_")[0]);
       const tratAvailable = filteredOptions.tratamentos.some(t => t.codigoTratamento === codTrat);
       if (!tratAvailable && filteredOptions.tratamentos.length > 0) {
-        setSelectedTratamento(`${filteredOptions.tratamentos[0].codigoTratamento}_false`);
-        setIsCor(false);
+        const first = filteredOptions.tratamentos[0];
+        const defaultCor = first.hasNonCor ? false : true;
+        setSelectedTratamento(`${first.codigoTratamento}_${defaultCor}`);
+        setIsCor(defaultCor);
       } else if (!tratAvailable && filteredOptions.tratamentos.length === 0) {
         setSelectedTratamento("");
       }
@@ -1228,11 +1259,15 @@ const PedidoFornecedorPage: React.FC = () => {
                         <SelectValue placeholder="Escolha..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {filteredOptions.tratamentos.map(t => (
-                          <SelectItem key={String(t.codigoTratamento)} value={`${t.codigoTratamento}_false`}>
-                            {t.tratamento}
-                          </SelectItem>
-                        ))}
+                      {filteredOptions.tratamentos.map(t => {
+                          // Use COR flag based on availability: prefer non-COR, fallback to COR-only
+                          const defaultCor = t.hasNonCor ? "false" : "true";
+                          return (
+                            <SelectItem key={String(t.codigoTratamento)} value={`${t.codigoTratamento}_${defaultCor}`}>
+                              {t.tratamento}{!t.hasNonCor && t.hasCor ? " (COR)" : ""}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
