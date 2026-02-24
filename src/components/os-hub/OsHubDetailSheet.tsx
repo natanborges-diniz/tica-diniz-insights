@@ -207,6 +207,14 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
           </div>
 
           {/* ── Section 2: Receita ─────────────────────── */}
+          {(os.medico || os.crm) && (
+            <>
+              <SectionHeading>Médico</SectionHeading>
+              <Field label="Médico" value={os.medico} />
+              <Field label="CRM" value={os.crm} />
+            </>
+          )}
+
           <SectionHeading>Prescrição — OD</SectionHeading>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
             <RxGrid
