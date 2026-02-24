@@ -356,6 +356,11 @@ serve(async (req) => {
           pedidoPayload.garantia.nomeMedico = pedidoPayload.garantia.nomeMedico ?? null;
           pedidoPayload.garantia.crmMedico = pedidoPayload.garantia.crmMedico ?? null;
         }
+
+        // Normalize condicaoPagamento → CondicaoPagamento (PascalCase for .NET API)
+        const condPag = pedidoPayload.condicaoPagamento || pedidoPayload.CondicaoPagamento || "30/60";
+        delete pedidoPayload.condicaoPagamento;
+        pedidoPayload.CondicaoPagamento = condPag;
         
         fetchBody = JSON.stringify(pedidoPayload);
         console.log(`[hoya-proxy] [${correlationId}] criar-pedido URL: ${url}`);
