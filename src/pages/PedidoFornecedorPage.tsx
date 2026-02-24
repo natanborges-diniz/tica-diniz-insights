@@ -312,10 +312,19 @@ const PedidoFornecedorPage: React.FC = () => {
   useEffect(() => {
     if (!codOs) return;
     (async () => {
+      // Busca config do fornecedor para saber o ambiente ativo
+      const { data: configRow } = await supabase
+        .from("fornecedor_configuracao")
+        .select("ambiente")
+        .eq("fornecedor", "HOYA")
+        .maybeSingle();
+      const ambienteAtivo = configRow?.ambiente || "production";
+
       const { data: rows } = await supabase
         .from("pedidos_fornecedor")
-        .select("numero_pedido, status, fornecedor, created_at")
+        .select("numero_pedido, status, fornecedor, created_at, hoya_environment")
         .eq("cod_os", codOs)
+        .eq("hoya_environment", ambienteAtivo)
         .order("created_at", { ascending: false });
       if (rows && rows.length > 0) {
         // Prioriza o registro com número de pedido confirmado
