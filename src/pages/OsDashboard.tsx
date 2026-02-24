@@ -169,7 +169,11 @@ const OsDashboardPage: React.FC = () => {
     setPedidosMapDataKey(newKey);
     const codOsList = data.map(os => os.codOs);
     (async () => {
-      const map: Record<number, PedidoFornecedorInfo> = {};
+    const map: Record<number, PedidoFornecedorInfo> = {};
+      const isNegativeStatus = (s: string) => {
+        const lower = s.toLowerCase();
+        return lower.includes("cancel") || lower.includes("rejeit") || lower.includes("falha") || lower.includes("recusa");
+      };
       for (let i = 0; i < codOsList.length; i += 100) {
         const batch = codOsList.slice(i, i + 100);
         const { data: rows } = await supabase
@@ -182,10 +186,19 @@ const OsDashboardPage: React.FC = () => {
             const existing = map[r.cod_os];
             const respObj = r.response as Record<string, unknown> | null;
             const voucher = (respObj?.voucherGerado as string) || null;
+            const info: PedidoFornecedorInfo = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "", created_at: r.created_at, voucher };
             if (!existing) {
-              map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "", created_at: r.created_at, voucher };
+              map[r.cod_os] = info;
             } else if (!existing.numero_pedido && r.numero_pedido) {
-              map[r.cod_os] = { numero_pedido: r.numero_pedido, fornecedor: r.fornecedor, status: r.status || "", created_at: r.created_at, voucher };
+              // Pedido confirmado sempre tem prioridade, EXCETO se for negativo e já existe um positivo
+              if (isNegativeStatus(r.status || "")) {
+                // Não sobrescreve um positivo existente com um negativo
+                if (!existing.numero_pedido || isNegativeStatus(existing.status)) {
+                  map[r.cod_os] = info;
+                }
+              } else {
+                map[r.cod_os] = info;
+              }
             }
           }
         }

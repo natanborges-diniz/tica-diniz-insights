@@ -872,8 +872,13 @@ const PedidoFornecedorPage: React.FC = () => {
     );
   }
 
-  // Pedido já confirmado no banco — bloqueia nova tentativa
-  if (pedidoExistente?.numero_pedido) {
+  // Pedido já confirmado no banco — bloqueia nova tentativa (exceto se cancelado/rejeitado)
+  const isNegativeStatus = (s: string) => {
+    const lower = s.toLowerCase();
+    return lower.includes("cancel") || lower.includes("rejeit") || lower.includes("falha") || lower.includes("recusa");
+  };
+
+  if (pedidoExistente?.numero_pedido && !isNegativeStatus(pedidoExistente.status)) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
         <div className="flex items-center justify-center h-16 w-16 rounded-full bg-primary/10">
@@ -893,6 +898,12 @@ const PedidoFornecedorPage: React.FC = () => {
         </Button>
       </div>
     );
+  }
+
+  // Pedido cancelado/rejeitado — informa mas permite refazer
+  if (pedidoExistente?.numero_pedido && isNegativeStatus(pedidoExistente.status)) {
+    // Don't block — just clear the existing reference and let the form render
+    // Show a warning banner instead (handled below in the form)
   }
 
   // Só erros no banco + a Hoya rejeita como duplicata — oferece recuperação
@@ -1001,6 +1012,18 @@ const PedidoFornecedorPage: React.FC = () => {
         </div>
 
         <Separator />
+
+        {/* Banner de pedido cancelado/rejeitado — permite refazer */}
+        {pedidoExistente?.numero_pedido && isNegativeStatus(pedidoExistente.status) && (
+          <Alert className="border-amber-300 bg-amber-500/10">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-sm">
+              <span className="font-semibold">Pedido anterior #{pedidoExistente.numero_pedido}</span> foi{" "}
+              <span className="font-semibold text-amber-700">{pedidoExistente.status}</span>.
+              Você pode enviar um novo pedido para esta OS.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Confirmation banners removed — now in sticky footer */}
 
