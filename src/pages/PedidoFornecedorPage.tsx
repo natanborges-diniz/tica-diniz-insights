@@ -550,6 +550,38 @@ const PedidoFornecedorPage: React.FC = () => {
     return { alturas, tratamentos, fotossensiveis };
   }, [selectedGroup, selectedAltura, selectedTratamento, selectedFotossensivel]);
 
+  // ---- Auto-reset incompatible selections when filtered options change ----
+  useEffect(() => {
+    if (!selectedGroup) return;
+    if (selectedTratamento) {
+      const codTrat = Number(selectedTratamento.split("_")[0]);
+      const tratAvailable = filteredOptions.tratamentos.some(t => t.codigoTratamento === codTrat);
+      if (!tratAvailable && filteredOptions.tratamentos.length > 0) {
+        setSelectedTratamento(`${filteredOptions.tratamentos[0].codigoTratamento}_false`);
+        setIsCor(false);
+      } else if (!tratAvailable && filteredOptions.tratamentos.length === 0) {
+        setSelectedTratamento("");
+      }
+    }
+    if (selectedAltura) {
+      const codAlt = Number(selectedAltura);
+      const altAvailable = filteredOptions.alturas.some(a => a.codigoAltura === codAlt);
+      if (!altAvailable && filteredOptions.alturas.length > 0) {
+        setSelectedAltura(String(filteredOptions.alturas[0].codigoAltura));
+      } else if (!altAvailable && filteredOptions.alturas.length === 0) {
+        setSelectedAltura("");
+      }
+    }
+    if (selectedFotossensivel !== "none") {
+      const codFoto = Number(selectedFotossensivel);
+      const fotoAvailable = filteredOptions.fotossensiveis.some(f => f.codigoFotossensivel === codFoto);
+      if (!fotoAvailable) {
+        setSelectedFotossensivel("none");
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredOptions]);
+
   // ---- Available colorações for selected product ----
   const coloracoesDisponiveis = useMemo(() => {
     if (!produtoSelecionado?.coloracoes) return [];
