@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
+import { usePedidoAlertas } from "@/hooks/usePedidoAlertas";
 import type { ModuleKey } from "./AppLayout";
 
 interface TopNavigationProps {
@@ -24,6 +25,7 @@ export function TopNavigation({ activeModule }: TopNavigationProps) {
   const navigate = useNavigate();
   const { profile, isAdmin, signOut } = useAuth();
   const { hasAccess } = useModulePermissions();
+  const { unacknowledgedCount } = usePedidoAlertas();
 
   const modules = allModules.filter(m => hasAccess(m.key));
 
@@ -74,6 +76,12 @@ export function TopNavigation({ activeModule }: TopNavigationProps) {
               >
                 <Icon className="h-4 w-4" />
                 <span className="hidden md:inline">{module.label}</span>
+                {/* Alert badge for Monitor module */}
+                {module.key === "monitor" && unacknowledgedCount > 0 && (
+                  <span className="flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold leading-none animate-pulse">
+                    {unacknowledgedCount > 9 ? "9+" : unacknowledgedCount}
+                  </span>
+                )}
                 {/* Active underline indicator */}
                 {isActive && (
                   <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full" />
