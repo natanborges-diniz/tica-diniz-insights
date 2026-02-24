@@ -101,6 +101,8 @@ function mapCacheRowToHubRecord(r: Record<string, unknown>): OsHubRecord {
     cpf: (r.cpf as string)?.trim() || null,
     dataNascimento: (r.data_nascimento as string) || null,
     paciente: (r.paciente as string)?.trim() || null,
+    medico: null,
+    crm: null,
     temReceita: (r.tem_receita as boolean) ?? hasReceita,
     temImagem: (r.tem_imagem as boolean) ?? hasImagem,
     cacheLoadedAt: (r.cache_loaded_at as string) ?? undefined,

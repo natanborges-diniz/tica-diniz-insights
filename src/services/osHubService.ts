@@ -169,6 +169,9 @@ interface OsHubRaw {
   cpf?: string;
   data_nascimento?: string;
   paciente?: string;
+  // Médico
+  medico?: string;
+  crm?: string;
 }
 
 export interface OsHubRecord {
@@ -254,6 +257,9 @@ export interface OsHubRecord {
   cpf: string | null;
   dataNascimento: string | null;
   paciente: string | null;
+  // Médico
+  medico: string | null;
+  crm: string | null;
   // Flags
   temReceita: boolean;
   temImagem: boolean;
@@ -409,6 +415,8 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     cpf: r.cpf?.trim() || null,
     dataNascimento: r.data_nascimento || null,
     paciente: r.paciente?.trim() || null,
+    medico: r.medico?.trim() || null,
+    crm: r.crm?.trim() || null,
     temReceita: hasReceita,
     temImagem: hasImagem,
   };
@@ -656,6 +664,8 @@ export async function loadFromCache(params: {
     cpf: null,
     dataNascimento: null,
     paciente: null,
+    medico: null,
+    crm: null,
     temReceita: (r.tem_receita as boolean) ?? false,
     temImagem: (r.tem_imagem as boolean) ?? false,
     cacheLoadedAt: (r.cache_loaded_at as string) ?? undefined,
