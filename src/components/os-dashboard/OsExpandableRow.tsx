@@ -58,7 +58,7 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
   // pedido cancelado/rejeitado = tem número mas status negativo
   const hasPedidoCancelado = !!pedidoFornecedor?.numero_pedido && isNegativeStatus(pedidoFornecedor.status);
   // tentativa com erro = existe registro mas sem número de pedido
-  const hasPedidoErro = !!pedidoFornecedor && !pedidoFornecedor.numero_pedido && pedidoFornecedor.status === "ERRO";
+  const hasPedidoErro = !!pedidoFornecedor && !pedidoFornecedor.numero_pedido;
 
 
   return (
