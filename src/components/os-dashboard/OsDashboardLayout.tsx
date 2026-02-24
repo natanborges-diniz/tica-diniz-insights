@@ -473,8 +473,8 @@ export const OsDashboardLayout: React.FC<Props> = ({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="TODOS">Todos (Pedido)</SelectItem>
-                    <SelectItem value="COM_PEDIDO">Com Pedido</SelectItem>
-                    <SelectItem value="SEM_PEDIDO">Sem Pedido</SelectItem>
+                    <SelectItem value="COM_PEDIDO">Com Pedido Ativo</SelectItem>
+                    <SelectItem value="SEM_PEDIDO">Sem Pedido / Cancelado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -484,11 +484,20 @@ export const OsDashboardLayout: React.FC<Props> = ({
           {/* Tabela */}
           {(() => {
             // Apply pedido filter (needs pedidosMap, so done here)
+            // Helper: cancelled/rejected orders count as "sem pedido" for filtering
+            const isNegativeStatus = (s: string) => {
+              const lower = s.toLowerCase();
+              return lower.includes("cancel") || lower.includes("rejeit") || lower.includes("falha") || lower.includes("recusa");
+            };
+            const hasActivePedido = (codOs: number) => {
+              const p = pedidosMap[codOs];
+              return p && p.numero_pedido && !isNegativeStatus(p.status);
+            };
             let displayData = data;
             if (filters.pedido === "COM_PEDIDO") {
-              displayData = data.filter(os => !!pedidosMap[os.codOs]);
+              displayData = data.filter(os => hasActivePedido(os.codOs));
             } else if (filters.pedido === "SEM_PEDIDO") {
-              displayData = data.filter(os => !pedidosMap[os.codOs]);
+              displayData = data.filter(os => !hasActivePedido(os.codOs));
             }
 
             const atrasoSortIcon = filters.atrasoSort === "asc"

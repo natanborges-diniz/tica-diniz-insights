@@ -47,10 +47,18 @@ function formatCurrency(value: number) {
 export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingRecipe, pedidoFornecedor }) => {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  // pedido confirmado = tem numero_pedido preenchido
-  const hasPedidoConfirmado = !!pedidoFornecedor?.numero_pedido;
+  // Helper: detecta status negativo (cancelado, rejeitado, etc.)
+  const isNegativeStatus = (s: string) => {
+    const lower = s.toLowerCase();
+    return lower.includes("cancel") || lower.includes("rejeit") || lower.includes("falha") || lower.includes("recusa");
+  };
+
+  // pedido confirmado = tem numero_pedido E status não é negativo
+  const hasPedidoConfirmado = !!pedidoFornecedor?.numero_pedido && !isNegativeStatus(pedidoFornecedor.status);
+  // pedido cancelado/rejeitado = tem número mas status negativo
+  const hasPedidoCancelado = !!pedidoFornecedor?.numero_pedido && isNegativeStatus(pedidoFornecedor.status);
   // tentativa com erro = existe registro mas sem número de pedido
-  const hasPedidoErro = !!pedidoFornecedor && !hasPedidoConfirmado && pedidoFornecedor.status === "ERRO";
+  const hasPedidoErro = !!pedidoFornecedor && !pedidoFornecedor.numero_pedido && pedidoFornecedor.status === "ERRO";
 
 
   return (
@@ -123,6 +131,36 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                       <TooltipContent side="right" className="text-xs space-y-0.5 max-w-[240px]">
                         <p className="font-semibold text-destructive">{pedidoFornecedor!.fornecedor} — Erro no envio</p>
                         <p className="text-muted-foreground">Pedido não confirmado. Verifique e tente novamente.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {hasPedidoCancelado && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/os/tracking?pedido=${pedidoFornecedor!.numero_pedido}`);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") navigate(`/os/tracking?pedido=${pedidoFornecedor!.numero_pedido}`);
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <PackageX className="h-3.5 w-3.5 text-amber-500 shrink-0 hover:scale-110 transition-transform" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="text-xs space-y-1 max-w-[260px]">
+                        <p className="font-semibold text-amber-600">{pedidoFornecedor!.fornecedor} — {pedidoFornecedor!.status}</p>
+                        <p className="font-mono">{pedidoFornecedor!.numero_pedido}</p>
+                        <p className="text-muted-foreground">Pedido cancelado/rejeitado. É possível refazer o pedido.</p>
+                        {pedidoFornecedor!.created_at && (
+                          <p className="text-muted-foreground">
+                            {new Date(pedidoFornecedor!.created_at).toLocaleString("pt-BR")}
+                          </p>
+                        )}
                       </TooltipContent>
                     </Tooltip>
                   )}
