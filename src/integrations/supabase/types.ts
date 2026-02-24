@@ -644,6 +644,47 @@ export type Database = {
         }
         Relationships: []
       }
+      pedido_alertas: {
+        Row: {
+          acknowledged: boolean
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          cod_empresa: number
+          created_at: string
+          id: string
+          pedido_fornecedor_id: string
+          status_detectado: string
+        }
+        Insert: {
+          acknowledged?: boolean
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          cod_empresa: number
+          created_at?: string
+          id?: string
+          pedido_fornecedor_id: string
+          status_detectado: string
+        }
+        Update: {
+          acknowledged?: boolean
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          cod_empresa?: number
+          created_at?: string
+          id?: string
+          pedido_fornecedor_id?: string
+          status_detectado?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pedido_alertas_pedido_fornecedor_id_fkey"
+            columns: ["pedido_fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos_fornecedor"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pedido_status_history: {
         Row: {
           checked_at: string
