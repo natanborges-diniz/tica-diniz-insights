@@ -1812,6 +1812,15 @@ const PedidoFornecedorPage: React.FC = () => {
                 </div>
               </div>
               <div>
+                <Label className="text-[10px] uppercase">Condição de Pagamento</Label>
+                <Input
+                  value="30/60"
+                  readOnly
+                  disabled
+                  className="h-8 text-sm font-mono bg-muted"
+                />
+              </div>
+              <div>
                 <Label className="text-[10px] uppercase flex items-center gap-1">
                   <Ticket className="h-3 w-3" /> Voucher
                   {voucherSugerido && <Badge variant="outline" className="text-[9px] ml-1 bg-primary/10 text-primary border-primary/30">Sugerido</Badge>}
