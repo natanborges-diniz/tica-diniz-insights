@@ -142,7 +142,7 @@ const PedidoFornecedorPage: React.FC = () => {
   const [selectedTratamento, setSelectedTratamento] = useState<string>("");
   const [selectedFotossensivel, setSelectedFotossensivel] = useState<string>("none");
   const [selectedColoracao, setSelectedColoracao] = useState<string>("none");
-  const [isCor, setIsCor] = useState(false);
+  const [noMatchWarning, setNoMatchWarning] = useState(false);
 
   // Campos complementares dinâmicos (F4.4)
   const [camposComplementaresValues, setCamposComplementaresValues] = useState<Record<number, string>>({});
@@ -406,10 +406,8 @@ const PedidoFornecedorPage: React.FC = () => {
             if (match.codigoAltura != null) {
               setSelectedAltura(String(match.codigoAltura));
             }
-            // Sync tratamento – detect if product is COR variant
-            const matchIsCor = match.nome.toUpperCase().includes(" COR");
-            setSelectedTratamento(`${match.codigoTratamento}_${matchIsCor}`);
-            setIsCor(matchIsCor);
+            // Sync tratamento
+            setSelectedTratamento(String(match.codigoTratamento));
             // Sync fotossensivel
             if (match.codigoFotossensivel != null) {
               setSelectedFotossensivel(String(match.codigoFotossensivel));
@@ -442,8 +440,7 @@ const PedidoFornecedorPage: React.FC = () => {
             t.tratamento.toLowerCase().includes(result.parsed.tratamento!.toLowerCase())
           );
           if (matchTrat) {
-            setSelectedTratamento(`${matchTrat.codigoTratamento}_false`);
-            setIsCor(false);
+            setSelectedTratamento(String(matchTrat.codigoTratamento));
           }
         }
         if (result.parsed.isFotossensivel && result.bestGroup.fotossensiveisDisponiveis.length > 0) {
@@ -460,13 +457,12 @@ const PedidoFornecedorPage: React.FC = () => {
   // ---- Resolve exact product from selections ----
   useEffect(() => {
     if (!selectedGroup || !selectedTratamento) return;
-    const [tratCod, tratCor] = selectedTratamento.split("_");
-    const codTrat = Number(tratCod);
-    let corFlag = tratCor === "true";
+    const codTrat = Number(selectedTratamento);
 
     const codAltura = selectedAltura ? Number(selectedAltura) : null;
     const codFoto = selectedFotossensivel !== "none" ? Number(selectedFotossensivel) : null;
 
+    // Try non-COR first, then COR
     let exact = findExactProduct(
       selectedGroup.produtos,
       selectedGroup.codigoDesenho,
@@ -474,10 +470,9 @@ const PedidoFornecedorPage: React.FC = () => {
       codAltura,
       codTrat,
       codFoto,
-      corFlag
+      false
     );
 
-    // Fallback: if not found, try the opposite COR flag
     if (!exact) {
       exact = findExactProduct(
         selectedGroup.produtos,
@@ -486,17 +481,12 @@ const PedidoFornecedorPage: React.FC = () => {
         codAltura,
         codTrat,
         codFoto,
-        !corFlag
+        true
       );
-      if (exact) {
-        corFlag = !corFlag;
-        setIsCor(corFlag);
-        setSelectedTratamento(`${codTrat}_${corFlag}`);
-      }
     }
 
     if (exact) {
-      // Only update if different from current (avoid resetting confirmation on DE/PARA sync)
+      setNoMatchWarning(false);
       if (exact.codigoProduto !== produtoSelecionado?.codigoProduto) {
         setProdutoSelecionado(exact);
         if (autoFillSource !== "depara") {
@@ -507,8 +497,8 @@ const PedidoFornecedorPage: React.FC = () => {
     } else {
       setProdutoSelecionado(null);
       setConfirmedProduct(false);
+      setNoMatchWarning(true);
     }
-    // F4.4: Reset campos complementares when product changes
     setCamposComplementaresValues({});
   }, [selectedGroup, selectedAltura, selectedTratamento, selectedFotossensivel]);
 
@@ -519,7 +509,7 @@ const PedidoFornecedorPage: React.FC = () => {
 
     // Filter products by current selections to derive compatible options
     const codAltura = selectedAltura ? Number(selectedAltura) : null;
-    const codTrat = selectedTratamento ? Number(selectedTratamento.split("_")[0]) : null;
+    const codTrat = selectedTratamento ? Number(selectedTratamento) : null;
     const codFoto = selectedFotossensivel !== "none" ? Number(selectedFotossensivel) : null;
 
     // Alturas: filter products by selected tratamento + fotossensível
@@ -544,19 +534,12 @@ const PedidoFornecedorPage: React.FC = () => {
       if (codFoto == null && selectedFotossensivel === "none" && p.codigoFotossensivel != null) return false;
       return true;
     });
-    const tratMap = new Map<number, { tratamento: string; codigoTratamento: number; hasCor: boolean; hasNonCor: boolean }>();
+    const tratMap = new Map<number, { tratamento: string; codigoTratamento: number }>();
     for (const p of prodsForTrat) {
-      const hasCor = p.nome.toUpperCase().includes(" COR");
-      const existing = tratMap.get(p.codigoTratamento);
-      if (existing) {
-        if (hasCor) existing.hasCor = true;
-        else existing.hasNonCor = true;
-      } else {
+      if (!tratMap.has(p.codigoTratamento)) {
         tratMap.set(p.codigoTratamento, {
           tratamento: p.tratamento,
           codigoTratamento: p.codigoTratamento,
-          hasCor: hasCor,
-          hasNonCor: !hasCor,
         });
       }
     }
@@ -583,13 +566,10 @@ const PedidoFornecedorPage: React.FC = () => {
   useEffect(() => {
     if (!selectedGroup) return;
     if (selectedTratamento) {
-      const codTrat = Number(selectedTratamento.split("_")[0]);
+      const codTrat = Number(selectedTratamento);
       const tratAvailable = filteredOptions.tratamentos.some(t => t.codigoTratamento === codTrat);
       if (!tratAvailable && filteredOptions.tratamentos.length > 0) {
-        const first = filteredOptions.tratamentos[0];
-        const defaultCor = first.hasNonCor ? false : true;
-        setSelectedTratamento(`${first.codigoTratamento}_${defaultCor}`);
-        setIsCor(defaultCor);
+        setSelectedTratamento(String(filteredOptions.tratamentos[0].codigoTratamento));
       } else if (!tratAvailable && filteredOptions.tratamentos.length === 0) {
         setSelectedTratamento("");
       }
@@ -1249,8 +1229,6 @@ const PedidoFornecedorPage: React.FC = () => {
                     </Label>
                     <Select value={selectedTratamento} onValueChange={(v) => {
                       setSelectedTratamento(v);
-                      const [, cor] = v.split("_");
-                      setIsCor(cor === "true");
                       setSelectedColoracao("none");
                       setAutoFillSource("manual");
                       setConfirmedProduct(true);
@@ -1259,15 +1237,11 @@ const PedidoFornecedorPage: React.FC = () => {
                         <SelectValue placeholder="Escolha..." />
                       </SelectTrigger>
                       <SelectContent>
-                      {filteredOptions.tratamentos.map(t => {
-                          // Use COR flag based on availability: prefer non-COR, fallback to COR-only
-                          const defaultCor = t.hasNonCor ? "false" : "true";
-                          return (
-                            <SelectItem key={String(t.codigoTratamento)} value={`${t.codigoTratamento}_${defaultCor}`}>
-                              {t.tratamento}{!t.hasNonCor && t.hasCor ? " (COR)" : ""}
-                            </SelectItem>
-                          );
-                        })}
+                        {filteredOptions.tratamentos.map(t => (
+                          <SelectItem key={String(t.codigoTratamento)} value={String(t.codigoTratamento)}>
+                            {t.tratamento}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1296,26 +1270,37 @@ const PedidoFornecedorPage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Coloração */}
-                  {coloracoesDisponiveis.length > 0 && (
-                    <div>
-                      <Label className="text-[10px] uppercase mb-1 block">Coloração</Label>
-                      <Select value={selectedColoracao} onValueChange={setSelectedColoracao}>
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Nenhuma" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Sem coloração</SelectItem>
-                          {coloracoesDisponiveis.map(c => (
-                            <SelectItem key={c.codigo} value={c.codigo}>
-                              {c.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
+                  {/* Coloração — sempre visível */}
+                  <div>
+                    <Label className="text-[10px] uppercase mb-1 block">Coloração</Label>
+                    <Select value={selectedColoracao} onValueChange={setSelectedColoracao} disabled={coloracoesDisponiveis.length === 0}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder={coloracoesDisponiveis.length === 0 ? "Indisponível" : "Nenhuma"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sem coloração</SelectItem>
+                        {coloracoesDisponiveis.map(c => (
+                          <SelectItem key={c.codigo} value={c.codigo}>
+                            {c.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {coloracoesDisponiveis.length === 0 && produtoSelecionado && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Este produto não possui opções de coloração.</p>
+                    )}
+                  </div>
                 </div>
+              )}
+
+              {/* Warning: combinação não encontrada */}
+              {noMatchWarning && selectedGroup && selectedTratamento && (
+                <Alert className="border-amber-300 bg-amber-500/10">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-sm">
+                    <span className="font-semibold">Combinação indisponível.</span> Não existe produto no catálogo Hoya para a combinação selecionada. Altere uma das opções acima.
+                  </AlertDescription>
+                </Alert>
               )}
 
               {/* Selected product display */}
