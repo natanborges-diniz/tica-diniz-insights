@@ -161,7 +161,21 @@ async function fetchWithRetry(
   throw { code, message, correlationId };
 }
 
-serve(async (req) => {
+// Helper: detect negative/problematic statuses that should trigger alerts
+function isNegativeStatus(status: string): boolean {
+  const s = status.toLowerCase();
+  return (
+    s.includes("cancel") ||
+    s.includes("rejeit") ||
+    s.includes("recusad") ||
+    s.includes("devolv") ||
+    s.includes("negad") ||
+    s.includes("falha") ||
+    s.includes("erro")
+  );
+}
+
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -555,15 +569,24 @@ serve(async (req) => {
 
         // Find pedido_fornecedor if not provided
         let pfId = pedidoFornecedorId;
+        let pfCodEmpresa: number | null = null;
         if (!pfId) {
           const { data: pfRec } = await sbTrack
             .from("pedidos_fornecedor")
-            .select("id")
+            .select("id, cod_empresa")
             .eq("numero_pedido", String(numeroPedido))
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();
           pfId = pfRec?.id;
+          pfCodEmpresa = pfRec?.cod_empresa ?? null;
+        } else {
+          const { data: pfRec2 } = await sbTrack
+            .from("pedidos_fornecedor")
+            .select("cod_empresa")
+            .eq("id", pfId)
+            .maybeSingle();
+          pfCodEmpresa = pfRec2?.cod_empresa ?? null;
         }
 
         if (!pfId) {
@@ -595,6 +618,17 @@ serve(async (req) => {
           // Update pedidos_fornecedor.status
           await sbTrack.from("pedidos_fornecedor").update({ status: newStatus }).eq("id", pfId);
           console.log(`[hoya-proxy] [${correlationId}] Tracking updated for pedido ${numeroPedido}: ${newStatus}`);
+
+          // Auto-create alert for negative statuses
+          if (pfCodEmpresa && isNegativeStatus(newStatus)) {
+            await sbTrack.from("pedido_alertas").upsert({
+              pedido_fornecedor_id: pfId,
+              cod_empresa: pfCodEmpresa,
+              status_detectado: newStatus,
+              acknowledged: false,
+            }, { onConflict: "pedido_fornecedor_id" });
+            console.log(`[hoya-proxy] [${correlationId}] Alert created for pedido ${numeroPedido}: ${newStatus}`);
+          }
         } else {
           console.log(`[hoya-proxy] [${correlationId}] Tracking unchanged for pedido ${numeroPedido}`);
         }
@@ -618,7 +652,7 @@ serve(async (req) => {
 
         const { data: pendingPedidos } = await sbBatch
           .from("pedidos_fornecedor")
-          .select("id, numero_pedido")
+          .select("id, numero_pedido, cod_empresa")
           .eq("fornecedor", "HOYA")
           .not("numero_pedido", "is", null)
           .not("status", "in", '("Entregue","Cancelado","ERRO")')
@@ -667,6 +701,17 @@ serve(async (req) => {
               });
               await sbBatch.from("pedidos_fornecedor").update({ status: tStatus }).eq("id", ped.id);
               updatedCount++;
+
+              // Auto-create alert for negative statuses
+              if (ped.cod_empresa && isNegativeStatus(tStatus)) {
+                await sbBatch.from("pedido_alertas").upsert({
+                  pedido_fornecedor_id: ped.id,
+                  cod_empresa: ped.cod_empresa,
+                  status_detectado: tStatus,
+                  acknowledged: false,
+                }, { onConflict: "pedido_fornecedor_id" });
+                console.log(`[hoya-proxy] [${correlationId}] Batch alert created for pedido ${ped.numero_pedido}: ${tStatus}`);
+              }
             }
           } catch (e) {
             errors.push(`${ped.numero_pedido}: ${e instanceof Error ? e.message : String(e)}`);
