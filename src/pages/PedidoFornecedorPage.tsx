@@ -274,6 +274,10 @@ const PedidoFornecedorPage: React.FC = () => {
           const nomeBase = found.paciente || paramPaciente || found.cliente || "";
           setInicialUsuario(removeAccents(nomeBase).split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 2).toUpperCase() || "US");
 
+          // Auto-preencher médico e CRM da OS
+          if (found.medico) setNomeMedico(removeAccents(found.medico));
+          if (found.crm) setCrmMedico(found.crm);
+
           // Lookup voucher by CPF
           const cpfToSearch = found.cpf || paramCpf;
           if (cpfToSearch) {
