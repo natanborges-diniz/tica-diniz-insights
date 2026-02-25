@@ -21,6 +21,9 @@ import FinanceiroDashboard from "./pages/FinanceiroDashboard";
 import FinanceiroDreDashboard from "./pages/FinanceiroDreDashboard";
 import FluxoCaixaDashboard from "./pages/FluxoCaixaDashboard";
 import BankingExtratoDashboard from "./pages/BankingExtratoDashboard";
+import BankingPagamentosDashboard from "./pages/BankingPagamentosDashboard";
+import BankingCobrancasDashboard from "./pages/BankingCobrancasDashboard";
+import BankingDdaDashboard from "./pages/BankingDdaDashboard";
 import InteligenciaVendasDashboard from "./pages/InteligenciaVendasDashboard";
 import MetasConfigDashboard from "./pages/MetasConfigDashboard";
 import CentralIADashboard from "./pages/CentralIADashboard";
@@ -80,6 +83,9 @@ const App = () => (
                   <Route path="/financeiro/dre" element={<FinanceiroDreDashboard />} />
                   <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaDashboard />} />
                   <Route path="/financeiro/banking/extrato" element={<BankingExtratoDashboard />} />
+                  <Route path="/financeiro/banking/pagamentos" element={<BankingPagamentosDashboard />} />
+                  <Route path="/financeiro/banking/cobrancas" element={<BankingCobrancasDashboard />} />
+                  <Route path="/financeiro/banking/dda" element={<BankingDdaDashboard />} />
                 </Route>
 
                 {/* Config */}
