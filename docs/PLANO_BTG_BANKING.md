@@ -286,7 +286,7 @@ Log de eventos recebidos via webhooks.
 - [ ] Criar tabela `btg_dda_titulos` + RLS
 - [ ] Implementar `btg-dda` Edge Function
 - [ ] Tela: Listagem de títulos DDA recebidos
-- [ ] Conciliação automática: match DDA ↔ parcelas do ERP por valor/CNPJ/vencimento
+- [ ] Conciliação automática: match DDA ↔ parcelas do ERP por valor/CNPJ/vencimento/número do documento
 - [ ] Conciliação manual: interface para parear títulos não conciliados
 - [ ] Indicadores: % conciliado, títulos órfãos, divergências
 
