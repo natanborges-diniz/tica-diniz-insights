@@ -321,7 +321,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
           )}
 
           {/* ── Section 6: Observações ─────────────────── */}
-          {(os.observacaoOs || os.observacaoLente || os.observacaoPendencia) && (
+          {(os.observacaoOs || os.observacaoLente || os.observacaoPendencia || os.observacaoReceita) && (
             <>
               <SectionHeading>Observações</SectionHeading>
               {os.observacaoOs && (
@@ -340,6 +340,12 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
                 <div className="mb-2">
                   <p className="text-xs text-muted-foreground mb-1">Pendência</p>
                   <p className="text-sm bg-warning-soft p-2 rounded border border-warning-muted">{os.observacaoPendencia}</p>
+                </div>
+              )}
+              {os.observacaoReceita && (
+                <div className="mb-2">
+                  <p className="text-xs text-muted-foreground mb-1">Receita</p>
+                  <p className="text-sm bg-primary/5 p-2 rounded border border-primary/20">{os.observacaoReceita}</p>
                 </div>
               )}
             </>

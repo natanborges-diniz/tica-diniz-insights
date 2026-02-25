@@ -1409,6 +1409,7 @@ app.get('/api/v1/os/hub-receitas', async (req, res) => {
         os.OBSERVACAO AS OBSERVACAO_OS,
         os.OBSERVACAO_LENTE,
         os.OBSERVACAO_PENDENCIA,
+        os.OBS_RECEITA AS OBSERVACAO_RECEITA,
         /* F5.2: Lens descriptions from item join */
         item_od.DESCRICAO AS LENTE_OD_DESCRICAO,
         item_oe.DESCRICAO AS LENTE_OE_DESCRICAO
@@ -1489,6 +1490,7 @@ app.get('/api/v1/os/hub-receitas', async (req, res) => {
       observacao_os: (row.OBSERVACAO_OS || '').trim(),
       observacao_lente: (row.OBSERVACAO_LENTE || '').trim(),
       observacao_pendencia: (row.OBSERVACAO_PENDENCIA || '').trim(),
+      observacao_receita: (row.OBSERVACAO_RECEITA || '').trim(),
       lente_od_descricao: (row.LENTE_OD_DESCRICAO || '').trim(),
       lente_oe_descricao: (row.LENTE_OE_DESCRICAO || '').trim(),
     }));
