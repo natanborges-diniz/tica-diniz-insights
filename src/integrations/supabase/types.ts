@@ -41,6 +41,72 @@ export type Database = {
         }
         Relationships: []
       }
+      btg_contas_bancarias: {
+        Row: {
+          account_id: string | null
+          agencia: string | null
+          ativa: boolean
+          cnpj: string | null
+          cod_empresa: number
+          company_id: string | null
+          conta: string | null
+          created_at: string
+          id: string
+        }
+        Insert: {
+          account_id?: string | null
+          agencia?: string | null
+          ativa?: boolean
+          cnpj?: string | null
+          cod_empresa: number
+          company_id?: string | null
+          conta?: string | null
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          account_id?: string | null
+          agencia?: string | null
+          ativa?: boolean
+          cnpj?: string | null
+          cod_empresa?: number
+          company_id?: string | null
+          conta?: string | null
+          created_at?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      btg_tokens: {
+        Row: {
+          access_token: string
+          cod_empresa: number
+          expires_at: string
+          id: string
+          refresh_token: string | null
+          scopes: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          access_token: string
+          cod_empresa: number
+          expires_at: string
+          id?: string
+          refresh_token?: string | null
+          scopes?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string
+          cod_empresa?: number
+          expires_at?: string
+          id?: string
+          refresh_token?: string | null
+          scopes?: string[] | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       calendario_feriados: {
         Row: {
           cidade: string | null
