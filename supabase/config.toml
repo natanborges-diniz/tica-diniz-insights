@@ -65,3 +65,6 @@ verify_jwt = false
 
 [functions.btg-dda]
 verify_jwt = false
+
+[functions.btg-extrato]
+verify_jwt = false

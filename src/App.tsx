@@ -20,6 +20,7 @@ import HoyaTrackingPage from "./pages/HoyaTrackingPage";
 import FinanceiroDashboard from "./pages/FinanceiroDashboard";
 import FinanceiroDreDashboard from "./pages/FinanceiroDreDashboard";
 import FluxoCaixaDashboard from "./pages/FluxoCaixaDashboard";
+import BankingExtratoDashboard from "./pages/BankingExtratoDashboard";
 import InteligenciaVendasDashboard from "./pages/InteligenciaVendasDashboard";
 import MetasConfigDashboard from "./pages/MetasConfigDashboard";
 import CentralIADashboard from "./pages/CentralIADashboard";
@@ -78,6 +79,7 @@ const App = () => (
                   <Route path="/financeiro" element={<FinanceiroDashboard />} />
                   <Route path="/financeiro/dre" element={<FinanceiroDreDashboard />} />
                   <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaDashboard />} />
+                  <Route path="/financeiro/banking/extrato" element={<BankingExtratoDashboard />} />
                 </Route>
 
                 {/* Config */}
