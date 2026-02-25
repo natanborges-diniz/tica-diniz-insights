@@ -77,6 +77,57 @@ export type Database = {
         }
         Relationships: []
       }
+      btg_pagamentos: {
+        Row: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          beneficiario: string | null
+          btg_payment_id: string | null
+          cod_empresa: number
+          created_at: string
+          dados_pagamento: Json | null
+          id: string
+          parcela_id: string | null
+          solicitado_por: string | null
+          status: string
+          tipo: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          beneficiario?: string | null
+          btg_payment_id?: string | null
+          cod_empresa: number
+          created_at?: string
+          dados_pagamento?: Json | null
+          id?: string
+          parcela_id?: string | null
+          solicitado_por?: string | null
+          status?: string
+          tipo: string
+          updated_at?: string
+          valor: number
+        }
+        Update: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          beneficiario?: string | null
+          btg_payment_id?: string | null
+          cod_empresa?: number
+          created_at?: string
+          dados_pagamento?: Json | null
+          id?: string
+          parcela_id?: string | null
+          solicitado_por?: string | null
+          status?: string
+          tipo?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: []
+      }
       btg_tokens: {
         Row: {
           access_token: string

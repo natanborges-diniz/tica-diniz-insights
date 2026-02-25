@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.btg-auth]
 verify_jwt = false
+
+[functions.btg-pagamentos]
+verify_jwt = false
