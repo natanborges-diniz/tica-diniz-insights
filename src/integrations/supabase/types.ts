@@ -131,6 +131,68 @@ export type Database = {
         }
         Relationships: []
       }
+      btg_dda_titulos: {
+        Row: {
+          btg_dda_id: string | null
+          cod_empresa: number
+          conciliado: boolean
+          created_at: string
+          data_vencimento: string
+          documento_emissor: string | null
+          emissor: string | null
+          id: string
+          linha_digitavel: string | null
+          numero_documento: string | null
+          pagamento_id: string | null
+          parcela_id: string | null
+          status: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          btg_dda_id?: string | null
+          cod_empresa: number
+          conciliado?: boolean
+          created_at?: string
+          data_vencimento: string
+          documento_emissor?: string | null
+          emissor?: string | null
+          id?: string
+          linha_digitavel?: string | null
+          numero_documento?: string | null
+          pagamento_id?: string | null
+          parcela_id?: string | null
+          status?: string
+          updated_at?: string
+          valor: number
+        }
+        Update: {
+          btg_dda_id?: string | null
+          cod_empresa?: number
+          conciliado?: boolean
+          created_at?: string
+          data_vencimento?: string
+          documento_emissor?: string | null
+          emissor?: string | null
+          id?: string
+          linha_digitavel?: string | null
+          numero_documento?: string | null
+          pagamento_id?: string | null
+          parcela_id?: string | null
+          status?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "btg_dda_titulos_pagamento_id_fkey"
+            columns: ["pagamento_id"]
+            isOneToOne: false
+            referencedRelation: "btg_pagamentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       btg_pagamentos: {
         Row: {
           aprovado_em: string | null

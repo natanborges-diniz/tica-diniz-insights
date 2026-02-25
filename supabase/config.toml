@@ -62,3 +62,6 @@ verify_jwt = false
 
 [functions.btg-cobrancas]
 verify_jwt = false
+
+[functions.btg-dda]
+verify_jwt = false
