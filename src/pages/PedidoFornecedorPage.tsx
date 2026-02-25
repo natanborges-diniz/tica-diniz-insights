@@ -909,9 +909,9 @@ const PedidoFornecedorPage: React.FC = () => {
 
   if (loadingOs) {
     return (
-      <div className="flex items-center justify-center h-full gap-2 pb-20">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span>Carregando dados da OS...</span>
+      <div className="flex items-center justify-center h-24 gap-2">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Consultando receita...</span>
       </div>
     );
   }
@@ -1822,12 +1822,17 @@ const PedidoFornecedorPage: React.FC = () => {
               </div>
               <div>
                 <Label className="text-[10px] uppercase">Condição de Pagamento</Label>
-                <Input
-                  value="30/60"
-                  readOnly
-                  disabled
-                  className="h-8 text-sm font-mono bg-muted"
-                />
+                <Select value="30/60" disabled>
+                  <SelectTrigger className="h-8 text-sm font-mono bg-muted">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="30/60">30/60</SelectItem>
+                    <SelectItem value="A_VISTA" disabled>À Vista</SelectItem>
+                    <SelectItem value="30" disabled>30 dias</SelectItem>
+                    <SelectItem value="30/60/90" disabled>30/60/90</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label className="text-[10px] uppercase flex items-center gap-1">
