@@ -5,8 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BaseSheet } from "@/components/system/BaseSheet";
-import { InlineInsight } from "@/components/ia/InlineInsight";
-import { useModuleInsights } from "@/hooks/useModuleInsights";
 import { Send, Calendar, User, Building2, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -130,12 +128,6 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
   const navigate = useNavigate();
   const isOpen = !!os;
 
-  const { insights, loading: insightsLoading } = useModuleInsights({
-    module: "os",
-    selection: os ? { osId: os.codOs, codEmpresa: os.codEmpresa } : undefined,
-    enabled: isOpen,
-    topN: 1,
-  });
 
   const handleGerarPedido = () => {
     if (!os) return;
@@ -182,8 +174,6 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
         <DetailSkeleton />
       ) : (
         <div className="space-y-1">
-          {/* ── Inline IA Insight ──────────────────────── */}
-          <InlineInsight insight={insights[0] ?? null} loading={insightsLoading} className="mb-2" />
 
           {/* ── Section 1: Resumo ──────────────────────── */}
           <SectionHeading>Resumo</SectionHeading>
