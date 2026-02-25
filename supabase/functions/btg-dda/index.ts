@@ -153,7 +153,7 @@ async function handleImportar(req: Request) {
 
 // ─── ACTION: conciliar_auto ──────────────────────────────────
 // Conciliação automática: match por valor + CNPJ + vencimento + número do documento
-// Busca parcelas no financeiro do ERP que correspondam aos títulos DDA pendentes
+// Busca parcelas "A PAGAR" + "EM ABERTO" do ERP via Firebird Bridge
 async function handleConciliarAuto(req: Request) {
   const userId = requireAuth(req);
   await requireAdminRole(userId);
@@ -164,7 +164,7 @@ async function handleConciliarAuto(req: Request) {
 
   const db = getServiceClient();
 
-  // Buscar títulos DDA pendentes e não conciliados
+  // 1. Buscar títulos DDA pendentes e não conciliados
   const { data: titulosDda, error: ddaErr } = await db
     .from("btg_dda_titulos")
     .select("*")
@@ -177,22 +177,79 @@ async function handleConciliarAuto(req: Request) {
     return json({ success: true, conciliados: 0, mensagem: "Nenhum título DDA pendente" });
   }
 
-  // Para cada título DDA, tentar encontrar parcela correspondente no financeiro
-  // A conciliação usa 4 critérios: valor, documento_emissor (CNPJ), data_vencimento, numero_documento
-  // 
-  // NOTA: A tabela de parcelas financeiras do ERP ainda não existe no Supabase.
-  // Quando for criada, este trecho fará o match real.
-  // Por ora, retornamos os títulos que precisariam de match para validação do fluxo.
+  // 2. Determinar range de datas dos títulos DDA para buscar parcelas relevantes
+  const vencimentos = titulosDda.map((t) => t.data_vencimento).filter(Boolean).sort();
+  const dataInicio = vencimentos[0] || new Date().toISOString().slice(0, 10);
+  const dataFim = vencimentos[vencimentos.length - 1] || dataInicio;
 
+  // 3. Buscar parcelas "A PAGAR" + "EM ABERTO" do ERP via Firebird Bridge
+  const firebirdBaseUrl = Deno.env.get("FIREBIRD_API_BASE_URL") || "https://firebird-bridge-production.up.railway.app";
+  const parcelasUrl = new URL(`${firebirdBaseUrl}/api/v1/financeiro/parcelas`);
+  parcelasUrl.searchParams.set("empresa", String(cod_empresa));
+  parcelasUrl.searchParams.set("dataInicio", dataInicio);
+  parcelasUrl.searchParams.set("dataFim", dataFim);
+  parcelasUrl.searchParams.set("tipo", "PAGAR");
+  parcelasUrl.searchParams.set("situacao", "EM ABERTO");
+  parcelasUrl.searchParams.set("campoData", "VENCIMENTO");
+
+  let parcelasErp: Array<{
+    lancamento_documento?: string;
+    pessoa_nome?: string;
+    parcela_valor?: number;
+    parcela_data_vencimento?: string;
+    cod_empresa?: number;
+    // CNPJ do emissor virá do campo pessoa se disponível
+    [key: string]: unknown;
+  }> = [];
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const res = await fetch(parcelasUrl.toString(), {
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      const envelope = await res.json();
+      parcelasErp = envelope.ok ? (envelope.data || []) : [];
+    } else {
+      console.warn("[btg-dda] Firebird parcelas error:", res.status);
+    }
+  } catch (e) {
+    console.error("[btg-dda] Erro ao buscar parcelas do ERP:", e);
+    return json({
+      error: "Não foi possível consultar parcelas do ERP para conciliação",
+      details: String(e),
+    }, 502);
+  }
+
+  // 4. Fazer o match: valor + documento_emissor (CNPJ) + data_vencimento + numero_documento
   const resultados: {
     titulo_id: string;
     status: "conciliado" | "sem_match";
-    parcela_id?: string;
+    parcela_documento?: string;
     criterios: { valor: number; cnpj: string | null; vencimento: string; numero_documento: string | null };
   }[] = [];
 
+  // Indexar parcelas do ERP para match rápido
+  // Chave: "valor|vencimento|documento" (numero_documento = lancamento_documento do ERP)
+  const parcelasIndex = new Map<string, typeof parcelasErp[0]>();
+  for (const p of parcelasErp) {
+    const valor = Number(p.parcela_valor || 0).toFixed(2);
+    const venc = (p.parcela_data_vencimento || "").slice(0, 10);
+    const doc = (p.lancamento_documento || "").trim();
+    // Chave composta com os 3 critérios disponíveis no ERP
+    const key = `${valor}|${venc}|${doc}`;
+    if (!parcelasIndex.has(key)) {
+      parcelasIndex.set(key, p);
+    }
+  }
+
+  let conciliadosCount = 0;
+
   for (const titulo of titulosDda) {
-    // Critérios de match
     const criterios = {
       valor: titulo.valor,
       cnpj: titulo.documento_emissor,
@@ -200,33 +257,51 @@ async function handleConciliarAuto(req: Request) {
       numero_documento: titulo.numero_documento,
     };
 
-    // TODO: Quando a tabela de parcelas financeiras existir, fazer o match real:
-    // SELECT id FROM parcelas_financeiras
-    // WHERE cod_empresa = $cod_empresa
-    //   AND valor = $valor
-    //   AND documento_emissor = $cnpj
-    //   AND data_vencimento = $vencimento
-    //   AND numero_documento = $numero_documento
-    //   AND status = 'ABERTA'
-    //   AND tipo = 'PAGAR'
-    // LIMIT 1
+    // Construir chave de match
+    const valorStr = Number(titulo.valor).toFixed(2);
+    const vencStr = (titulo.data_vencimento || "").slice(0, 10);
+    const docStr = (titulo.numero_documento || "").trim();
+    const matchKey = `${valorStr}|${vencStr}|${docStr}`;
 
-    // Por enquanto, registramos como sem_match para revisão manual
-    resultados.push({
-      titulo_id: titulo.id,
-      status: "sem_match",
-      criterios,
-    });
+    const parcelaMatch = parcelasIndex.get(matchKey);
+
+    if (parcelaMatch) {
+      // Match encontrado — atualizar título DDA como conciliado
+      await db
+        .from("btg_dda_titulos")
+        .update({
+          conciliado: true,
+          status: "CONCILIADO",
+        })
+        .eq("id", titulo.id);
+
+      // Remover do índice para evitar match duplo
+      parcelasIndex.delete(matchKey);
+
+      resultados.push({
+        titulo_id: titulo.id,
+        status: "conciliado",
+        parcela_documento: parcelaMatch.lancamento_documento || undefined,
+        criterios,
+      });
+      conciliadosCount++;
+    } else {
+      resultados.push({
+        titulo_id: titulo.id,
+        status: "sem_match",
+        criterios,
+      });
+    }
   }
 
-  const conciliados = resultados.filter((r) => r.status === "conciliado").length;
   const semMatch = resultados.filter((r) => r.status === "sem_match").length;
 
   return json({
     success: true,
-    conciliados,
+    conciliados: conciliadosCount,
     sem_match: semMatch,
     total: titulosDda.length,
+    parcelas_erp_encontradas: parcelasErp.length,
     detalhes: resultados,
   });
 }
