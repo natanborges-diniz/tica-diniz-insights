@@ -122,6 +122,8 @@ interface OsHubRaw {
   observacao_lente?: string;
   observacao_pendencia?: string;
   observacao_receita?: string;
+  observacao_receita_os?: string;
+  observacao_receita_cadastro?: string;
   // Lens product descriptions (from transacao_item → item)
   lente_od_descricao?: string;
   lente_oe_descricao?: string;
@@ -246,6 +248,8 @@ export interface OsHubRecord {
   observacaoLente: string | null;
   observacaoPendencia: string | null;
   observacaoReceita: string | null;
+  observacaoReceitaOs: string | null;
+  observacaoReceitaCadastro: string | null;
   // Lens product descriptions
   lenteOdDescricao: string | null;
   lenteOeDescricao: string | null;
@@ -407,6 +411,8 @@ function mapRawToRecord(r: OsHubRaw): OsHubRecord {
     observacaoLente: r.observacao_lente?.trim() ?? null,
     observacaoPendencia: r.observacao_pendencia?.trim() ?? null,
     observacaoReceita: r.observacao_receita?.trim() ?? r.cliente_observacao_receita?.trim() ?? null,
+    observacaoReceitaOs: r.observacao_receita_os?.trim() ?? null,
+    observacaoReceitaCadastro: r.observacao_receita_cadastro?.trim() ?? null,
     lenteOdDescricao: r.lente_oe_descricao?.trim() ?? r.ocrl_oe_descricaolente?.trim() ?? null,
     lenteOeDescricao: r.lente_od_descricao?.trim() ?? r.ocrl_od_descricaolente?.trim() ?? null,
     codFormatoAro: coalesce(r.cod_formato_aro, r.otoi_cod_formatoaro, r.ocr_cod_formatoaro),
@@ -656,6 +662,8 @@ export async function loadFromCache(params: {
     observacaoLente: (r.observacao_lente as string) ?? null,
     observacaoPendencia: (r.observacao_pendencia as string) ?? null,
     observacaoReceita: null,
+    observacaoReceitaOs: null,
+    observacaoReceitaCadastro: null,
     lenteOdDescricao: null,
     lenteOeDescricao: null,
     codFormatoAro: null,

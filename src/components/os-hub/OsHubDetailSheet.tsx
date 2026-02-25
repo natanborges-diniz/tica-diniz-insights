@@ -321,7 +321,7 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
           )}
 
           {/* ── Section 6: Observações ─────────────────── */}
-          {(os.observacaoOs || os.observacaoLente || os.observacaoPendencia || os.observacaoReceita) && (
+          {(os.observacaoOs || os.observacaoLente || os.observacaoPendencia || os.observacaoReceita || os.observacaoReceitaOs || os.observacaoReceitaCadastro) && (
             <>
               <SectionHeading>Observações</SectionHeading>
               {os.observacaoOs && (
@@ -344,8 +344,20 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
               )}
               {os.observacaoReceita && (
                 <div className="mb-2">
-                  <p className="text-xs text-muted-foreground mb-1">Receita</p>
+                  <p className="text-xs text-muted-foreground mb-1">Receita (consolidada)</p>
                   <p className="text-sm bg-primary/5 p-2 rounded border border-primary/20">{os.observacaoReceita}</p>
+                </div>
+              )}
+              {os.observacaoReceitaOs && os.observacaoReceitaOs !== os.observacaoReceita && (
+                <div className="mb-2">
+                  <p className="text-xs text-muted-foreground mb-1">Receita — OS</p>
+                  <p className="text-sm bg-primary/5 p-2 rounded border border-primary/20">{os.observacaoReceitaOs}</p>
+                </div>
+              )}
+              {os.observacaoReceitaCadastro && os.observacaoReceitaCadastro !== os.observacaoReceita && (
+                <div className="mb-2">
+                  <p className="text-xs text-muted-foreground mb-1">Receita — Cadastro</p>
+                  <p className="text-sm bg-primary/5 p-2 rounded border border-primary/20">{os.observacaoReceitaCadastro}</p>
                 </div>
               )}
             </>
