@@ -209,11 +209,14 @@ export const OsDashboardLayout: React.FC<Props> = ({
   // Reset pagination when filtered data changes
   useEffect(() => { setVisibleCount(PAGE_SIZE); }, [data]);
 
+  // Quando canSeeAll resolver para true, garante default "ALL" se não há cache
   useEffect(() => {
-    if (defaultCodEmpresa && !empresaSelecionada) {
+    if (canSeeAll && empresaSelecionada !== "ALL" && !_layoutCache.empresa) {
+      setEmpresaSelecionada("ALL");
+    } else if (!canSeeAll && defaultCodEmpresa && !empresaSelecionada) {
       setEmpresaSelecionada(String(defaultCodEmpresa));
     }
-  }, [defaultCodEmpresa]);
+  }, [canSeeAll, defaultCodEmpresa]);
 
   const isBridgeDown = bridgeHealth === "down" || bridgeHealth === "timeout";
   const canLoad = !!empresaSelecionada && !loading && !bridgeCircuitOpen;
