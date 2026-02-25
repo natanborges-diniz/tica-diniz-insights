@@ -703,7 +703,7 @@ const PedidoFornecedorPage: React.FC = () => {
           formaArmacao,
         },
         valorMontagemSemTriangulacao: (tipoServico === 1 || tipoServico === 3) ? valorMontagem : 0,
-        condicaoPagamento: "30/60",
+        condicaoPagamento: "30/60/90",
         garantia: {
           usuarioFinal: removeAccents(usuarioFinal || os.paciente || os.cliente || ""),
           inicialUsuario: removeAccents(inicialUsuario || (usuarioFinal || os.paciente || os.cliente || "").split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 2).toUpperCase() || "US"),
@@ -1834,15 +1834,15 @@ const PedidoFornecedorPage: React.FC = () => {
               </div>
               <div>
                 <Label className="text-[10px] uppercase">Condição de Pagamento</Label>
-                <Select value="30/60" onValueChange={() => {}}>
+                <Select value="30/60/90" onValueChange={() => {}}>
                   <SelectTrigger className="h-8 text-sm font-mono bg-muted">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="30/60">30/60</SelectItem>
+                    <SelectItem value="30/60/90">30/60/90</SelectItem>
                     <SelectItem value="A_VISTA" disabled className="opacity-40">À Vista</SelectItem>
                     <SelectItem value="30" disabled className="opacity-40">30 dias</SelectItem>
-                    <SelectItem value="30/60/90" disabled className="opacity-40">30/60/90</SelectItem>
+                    <SelectItem value="30/60" disabled className="opacity-40">30/60</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
