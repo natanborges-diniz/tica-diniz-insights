@@ -358,7 +358,7 @@ serve(async (req) => {
         }
 
         // Normalize condicaoPagamento → CondicaoPagamento (PascalCase for .NET API)
-        const condPag = pedidoPayload.condicaoPagamento || pedidoPayload.CondicaoPagamento || "30/60/90";
+        const condPag = pedidoPayload.condicaoPagamento || pedidoPayload.CondicaoPagamento || "04";
         delete pedidoPayload.condicaoPagamento;
         pedidoPayload.CondicaoPagamento = condPag;
         
