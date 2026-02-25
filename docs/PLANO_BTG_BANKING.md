@@ -90,18 +90,28 @@ App → BTG Id (code + client_id + secret) → access_token + refresh_token
 ## 3. Tabelas do Banco de Dados
 
 ### 3.1 `btg_contas_bancarias`
-Configuração das contas BTG vinculadas às empresas.
+Mapeamento das contas BTG vinculadas às empresas do ERP.
+Um único App BTG (1 client_id/secret) autentica todas as empresas — o `company_id` diferencia cada loja nas chamadas à API.
 
 | Coluna           | Tipo     | Descrição                         |
 |------------------|----------|-----------------------------------|
 | id               | uuid PK  | ID único                          |
-| cod_empresa      | int      | Empresa do sistema                |
+| cod_empresa      | int      | Empresa do ERP (FK lógica)        |
+| cnpj             | text     | CNPJ da empresa                   |
 | account_id       | text     | Account ID no BTG                 |
 | company_id       | text     | Company ID no BTG                 |
 | agencia          | text     | Agência                           |
 | conta            | text     | Número da conta                   |
 | ativa            | boolean  | Se está ativa                     |
 | created_at       | timestamptz | Data de criação                |
+
+> **Mapeamento inicial (Sandbox):**
+> | cod_empresa | Loja ERP      | CNPJ                | company_id BTG |
+> |-------------|---------------|---------------------|----------------|
+> | 1           | PRIMITIVA I   | 12.107.885/0001-01  | *(preencher)*  |
+> | 2           | PRIMITIVA II  | *(cadastrar)*       | *(preencher)*  |
+> | 4           | CARAPICUIBA   | *(cadastrar)*       | *(preencher)*  |
+> | ...         | ...           | ...                 | ...            |
 
 ### 3.2 `btg_tokens`
 Armazenamento seguro dos tokens OAuth (criptografado).
