@@ -193,6 +193,51 @@ export type Database = {
           },
         ]
       }
+      btg_extrato: {
+        Row: {
+          cod_empresa: number
+          conciliado: boolean
+          created_at: string
+          data_lancamento: string
+          descricao: string | null
+          id: string
+          natureza: string | null
+          referencia_id: string | null
+          saldo_apos: number | null
+          tipo: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          cod_empresa: number
+          conciliado?: boolean
+          created_at?: string
+          data_lancamento: string
+          descricao?: string | null
+          id?: string
+          natureza?: string | null
+          referencia_id?: string | null
+          saldo_apos?: number | null
+          tipo?: string
+          updated_at?: string
+          valor: number
+        }
+        Update: {
+          cod_empresa?: number
+          conciliado?: boolean
+          created_at?: string
+          data_lancamento?: string
+          descricao?: string | null
+          id?: string
+          natureza?: string | null
+          referencia_id?: string | null
+          saldo_apos?: number | null
+          tipo?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: []
+      }
       btg_pagamentos: {
         Row: {
           aprovado_em: string | null
@@ -271,6 +316,33 @@ export type Database = {
           refresh_token?: string | null
           scopes?: string[] | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      btg_webhook_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json
+          processed: boolean
+          processed_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          payload?: Json
+          processed?: boolean
+          processed_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed?: boolean
+          processed_at?: string | null
         }
         Relationships: []
       }

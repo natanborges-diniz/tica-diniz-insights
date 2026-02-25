@@ -3,7 +3,7 @@ import {
   TrendingUp, BarChart3, Layers, 
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
   Target, Users, Brain, Eye, RefreshCw, Activity, Truck, FlaskConical,
-  AlertTriangle
+  AlertTriangle, Landmark
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
@@ -78,6 +78,12 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
         { title: "Parcelas a Receber", url: "/financeiro", icon: Wallet },
         { title: "DRE", url: "/financeiro/dre", icon: FileText },
         { title: "Fluxo de Caixa", url: "/financeiro/fluxo-caixa", icon: ArrowLeftRight },
+      ],
+    },
+    {
+      label: "Banking BTG",
+      items: [
+        { title: "Extrato e Batimento", url: "/financeiro/banking/extrato", icon: Landmark },
       ],
     },
   ],
