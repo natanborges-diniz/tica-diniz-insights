@@ -27,6 +27,7 @@ import {
 import { registrarPedidoNoCache } from "@/utils/pedidosMapCache";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1718,19 +1719,30 @@ const PedidoFornecedorPage: React.FC = () => {
                 </Select>
               </div>
               <div>
-                <Label className="text-[10px] uppercase">Forma da Armação</Label>
-                <Select value={String(formaArmacao)} onValueChange={(v) => setFormaArmacao(Number(v))}>
-                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Redonda</SelectItem>
-                    <SelectItem value="2">Quadrada</SelectItem>
-                    <SelectItem value="3">Aviador</SelectItem>
-                    <SelectItem value="4">Retangular</SelectItem>
-                    <SelectItem value="5">Oval</SelectItem>
-                    <SelectItem value="6">Gatinho</SelectItem>
-                    <SelectItem value="7">Outra</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-[10px] uppercase mb-2 block">Forma da Armação</Label>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setFormaArmacao(v)}
+                      className={cn(
+                        "relative rounded-md border p-1 transition-all hover:border-primary/50 cursor-pointer",
+                        formaArmacao === v
+                          ? "border-primary ring-2 ring-primary/30 bg-primary/5"
+                          : "border-border bg-background"
+                      )}
+                      title={`Forma ${v}`}
+                    >
+                      <img
+                        src={`/images/forma-armacao-${v}.png`}
+                        alt={`Forma ${v}`}
+                        className="w-full h-auto object-contain"
+                      />
+                      <span className="absolute bottom-0 right-0.5 text-[8px] text-muted-foreground font-mono">{v}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
