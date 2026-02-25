@@ -41,6 +41,60 @@ export type Database = {
         }
         Relationships: []
       }
+      btg_cobrancas: {
+        Row: {
+          btg_receivable_id: string | null
+          cod_empresa: number
+          created_at: string
+          data_pagamento: string | null
+          data_vencimento: string
+          id: string
+          linha_digitavel: string | null
+          parcela_id: string | null
+          sacado_documento: string | null
+          sacado_nome: string | null
+          status: string
+          updated_at: string
+          url_boleto: string | null
+          valor: number
+          valor_pago: number | null
+        }
+        Insert: {
+          btg_receivable_id?: string | null
+          cod_empresa: number
+          created_at?: string
+          data_pagamento?: string | null
+          data_vencimento: string
+          id?: string
+          linha_digitavel?: string | null
+          parcela_id?: string | null
+          sacado_documento?: string | null
+          sacado_nome?: string | null
+          status?: string
+          updated_at?: string
+          url_boleto?: string | null
+          valor: number
+          valor_pago?: number | null
+        }
+        Update: {
+          btg_receivable_id?: string | null
+          cod_empresa?: number
+          created_at?: string
+          data_pagamento?: string | null
+          data_vencimento?: string
+          id?: string
+          linha_digitavel?: string | null
+          parcela_id?: string | null
+          sacado_documento?: string | null
+          sacado_nome?: string | null
+          status?: string
+          updated_at?: string
+          url_boleto?: string | null
+          valor?: number
+          valor_pago?: number | null
+        }
+        Relationships: []
+      }
       btg_contas_bancarias: {
         Row: {
           account_id: string | null
