@@ -37,6 +37,8 @@ const CONFIG = {
   LIMITE_DIAS_ALERTA: 45,
   /** Limite máximo de dias permitido */
   LIMITE_DIAS_MAXIMO: 90,
+  /** Debounce de filtros em ms */
+  DEBOUNCE_MS: 600,
 };
 
 export interface VendasFiltersState {
@@ -105,6 +107,25 @@ async function getEmpresasMap(): Promise<Map<number, string>> {
   empresasCacheTime = now;
   
   return empresasCache;
+}
+
+// ========================================
+// VALIDAÇÃO DE DATAS
+// ========================================
+
+/** Retorna true se a data é válida e razoável (ano >= 2020) */
+function isDateValid(dateStr: string): boolean {
+  if (!dateStr || dateStr.length < 10) return false;
+  const d = new Date(dateStr + 'T12:00:00');
+  if (isNaN(d.getTime())) return false;
+  const year = d.getFullYear();
+  return year >= 2020 && year <= 2099;
+}
+
+/** Retorna true se ambas as datas são válidas e o range faz sentido */
+function isDateRangeValid(dataInicio: string, dataFim: string): boolean {
+  if (!isDateValid(dataInicio) || !isDateValid(dataFim)) return false;
+  return dataInicio <= dataFim;
 }
 
 function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
@@ -356,6 +377,9 @@ export function useVendasDashboard() {
 
   // Ref para controlar requisições em andamento
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Ref para debounce
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Função de fetch com retry automático
   const fetchComRetry = useCallback(async <T>(
@@ -386,6 +410,19 @@ export function useVendasDashboard() {
     dataInicio: string, 
     dataFim: string
   ) => {
+    // ========================================
+    // GUARD: Validar inputs antes de qualquer fetch
+    // ========================================
+    if (!empresa || empresa === '') {
+      console.log('[useVendasDashboard] ⏳ Aguardando empresa ser definida...');
+      return;
+    }
+    
+    if (!isDateRangeValid(dataInicio, dataFim)) {
+      console.log('[useVendasDashboard] ⏳ Datas inválidas, ignorando fetch:', { dataInicio, dataFim });
+      return;
+    }
+    
     // Cancelar requisição anterior se existir
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -419,8 +456,6 @@ export function useVendasDashboard() {
     try {
       // ========================================
       // ESTRATÉGIA HÍBRIDA: CACHE + FIREBIRD
-      // - Meses FECHADOS: usar cache Supabase (rápido)
-      // - Mês ABERTO: buscar do Firebird (dados frescos)
       // ========================================
       
       const periodoInfo = separarPeriodo(dataInicio, dataFim);
@@ -438,15 +473,24 @@ export function useVendasDashboard() {
       
       // ========================================
       // PASSO 1: Buscar meses fechados do CACHE
+      // Usa .gte()/.lte() com range de datas dos meses fechados
       // ========================================
       if (periodoInfo.mesesFechados.length > 0) {
         console.log('[useVendasDashboard] 📦 Buscando meses fechados do cache...');
         
         try {
+          // Calcular range completo dos meses fechados
+          const ultimoMesFechado = periodoInfo.mesesFechados[0]; // mais recente
+          const primeiroMesFechado = periodoInfo.mesesFechados[periodoInfo.mesesFechados.length - 1]; // mais antigo
+          
+          // Primeiro dia do mês mais antigo
+          const primeiroDia = primeiroMesFechado.substring(0, 7) + '-01';
+          
           let queryCache = supabase
             .from('vendas_agregado_diario')
             .select('*')
-            .in('data', periodoInfo.mesesFechados);
+            .gte('data', primeiroDia)
+            .lte('data', ultimoMesFechado);
           
           if (empresa !== 'ALL') {
             const codEmpresa = typeof empresa === 'string' 
@@ -477,17 +521,11 @@ export function useVendasDashboard() {
             }));
             
             usouCache = true;
-            console.log(`[useVendasDashboard] ✓ Cache: ${dadosCache.length} registros de ${periodoInfo.mesesFechados.length} meses fechados`);
+            console.log(`[useVendasDashboard] ✓ Cache: ${dadosCache.length} registros de meses fechados (${primeiroDia} a ${ultimoMesFechado})`);
           } else {
             console.log('[useVendasDashboard] ⚠ Cache vazio para meses fechados, buscando do Firebird...');
             
             // Se não tem cache, buscar meses fechados do Firebird
-            const primeiroMesFechado = periodoInfo.mesesFechados[periodoInfo.mesesFechados.length - 1];
-            const ultimoMesFechado = periodoInfo.mesesFechados[0];
-            
-            // Calcular primeiro dia do primeiro mês
-            const primeiroDia = primeiroMesFechado.substring(0, 7) + '-01';
-            
             dadosCache = await fetchComRetry(() => getResumoFormasPagamento({
               empresa,
               dataInicio: primeiroDia,
@@ -601,6 +639,13 @@ export function useVendasDashboard() {
       
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      
+      // Ignorar erros de abort (requisição cancelada pelo debounce)
+      if (message.includes('aborted') || message.includes('abort')) {
+        console.log('[useVendasDashboard] Requisição cancelada (debounce/navegação)');
+        return;
+      }
+      
       console.error('[useVendasDashboard] ❌ Erro ao buscar dados:', message);
       
       setError(`Erro ao carregar dados: ${message}`);
@@ -618,16 +663,32 @@ export function useVendasDashboard() {
     }
   }, [fetchComRetry]);
 
-  // Carregar dados ao montar e quando filtros mudam
+  // ========================================
+  // DEBOUNCED EFFECT: Carregar dados com delay
+  // Evita disparos múltiplos ao digitar datas
+  // ========================================
   useEffect(() => {
-    if (filters.empresa && filters.empresa !== 'ALL') {
-      fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
-    } else if (filters.empresa === 'ALL') {
-      fetchData('ALL', filters.dataInicio, filters.dataFim);
+    const { empresa, dataInicio, dataFim } = filters;
+    
+    // Guard rápido: sem empresa ou datas inválidas, não agendar fetch
+    if (!empresa || empresa === '') return;
+    if (!isDateRangeValid(dataInicio, dataFim)) return;
+    
+    // Cancelar debounce anterior
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
     }
     
-    // Cleanup: cancelar requisição ao desmontar
+    // Agendar novo fetch com debounce
+    debounceTimerRef.current = setTimeout(() => {
+      fetchData(empresa, dataInicio, dataFim);
+    }, CONFIG.DEBOUNCE_MS);
+    
+    // Cleanup: cancelar debounce e requisição ao desmontar
     return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
@@ -690,13 +751,19 @@ export function useVendasDashboard() {
     return agruparPorVendedor(dadosFormasPagamento);
   }, [dadosFormasPagamento]);
 
-  // Reload
+  // Reload (imediato, sem debounce)
   const reload = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
     fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
   }, [filters, fetchData]);
 
-  // Force refresh (mesmo comportamento agora, sempre busca do Firebird)
+  // Force refresh (mesmo comportamento)
   const forceRefresh = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
     fetchData(filters.empresa, filters.dataInicio, filters.dataFim);
   }, [filters, fetchData]);
 
