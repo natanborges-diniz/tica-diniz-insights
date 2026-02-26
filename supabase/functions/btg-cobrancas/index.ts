@@ -219,11 +219,12 @@ async function handleCancelar(body: Record<string, unknown>, userId: string) {
     return json({ error: `Não é possível cancelar cobrança com status ${cobranca.status}` }, 400);
   }
 
-  if (cobranca.btg_receivable_id) {
+  const { isSandbox, apiBase } = getBtgUrls();
+
+  if (cobranca.btg_receivable_id && !isSandbox) {
     try {
       const accessToken = await getBtgToken(cobranca.cod_empresa);
       const companyId = await getCompanyId(cobranca.cod_empresa);
-      const { apiBase } = getBtgUrls();
       await fetch(`${apiBase}/banking/v1/companies/${companyId}/receivables/${cobranca.btg_receivable_id}`, {
         method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` },
       });
