@@ -19,8 +19,10 @@ export function useDefaultEmpresa(): {
 } {
   const { codEmpresa, isAdmin } = useAuth();
 
-  // Default é sempre a empresa do profile, nunca ALL
-  const defaultEmpresa: EmpresaParam = codEmpresa ? String(codEmpresa) : '';
+  // Admin com cod_empresa=0 → ALL; usuário normal → sua empresa
+  const defaultEmpresa: EmpresaParam = isAdmin && (!codEmpresa || codEmpresa === 0)
+    ? 'ALL'
+    : codEmpresa ? String(codEmpresa) : '';
 
   return { defaultEmpresa, isAdmin, codEmpresa };
 }
