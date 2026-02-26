@@ -267,9 +267,21 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
     return json({ error: `Só é possível enviar pagamentos com status APROVADO_INTERNO. Atual: ${pagamento.status}` }, 400);
   }
 
+  const { apiBase, isSandbox } = getBtgUrls();
+
+  // Sandbox mode: simulate BTG acceptance
+  if (isSandbox) {
+    const mockBtgId = `sandbox-pay-${Date.now()}`;
+    await db.from("btg_pagamentos").update({
+      status: "ENVIADO_BTG",
+      btg_payment_id: mockBtgId,
+      dados_pagamento: { ...(pagamento.dados_pagamento as Record<string, unknown>), btg_response: { sandbox: true, id: mockBtgId } },
+    }).eq("id", String(id));
+    return json({ success: true, status: "ENVIADO_BTG", btg_payment_id: mockBtgId, sandbox: true });
+  }
+
   const accessToken = await getBtgToken(pagamento.cod_empresa);
   const companyId = await getCompanyId(pagamento.cod_empresa);
-  const { apiBase } = getBtgUrls();
 
   const btgPayload = {
     type: pagamento.tipo,

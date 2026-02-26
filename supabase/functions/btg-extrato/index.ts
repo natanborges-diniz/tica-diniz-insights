@@ -100,8 +100,6 @@ async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
   const codEmpresa = Number(getParam(body, url, "cod_empresa"));
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const accessToken = await getBtgToken(codEmpresa);
-  const companyId = await getCompanyId(codEmpresa);
   const { apiBase, isSandbox } = getBtgUrls();
 
   if (isSandbox) {
@@ -113,6 +111,9 @@ async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
       sandbox: true,
     });
   }
+
+  const accessToken = await getBtgToken(codEmpresa);
+  const companyId = await getCompanyId(codEmpresa);
 
   const res = await fetch(
     `${apiBase}/banking/v1/companies/${companyId}/balance`,
@@ -137,8 +138,6 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
 
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const accessToken = await getBtgToken(codEmpresa);
-  const companyId = await getCompanyId(codEmpresa);
   const { apiBase, isSandbox } = getBtgUrls();
 
   if (isSandbox) {
@@ -150,6 +149,9 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
     ];
     return json({ cod_empresa: codEmpresa, lancamentos: mockEntries, sandbox: true });
   }
+
+  const accessToken = await getBtgToken(codEmpresa);
+  const companyId = await getCompanyId(codEmpresa);
 
   const params = new URLSearchParams();
   if (dataInicio) params.set("startDate", dataInicio);
@@ -179,8 +181,6 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   const data_fim = body.data_fim ? String(body.data_fim) : null;
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const accessToken = await getBtgToken(cod_empresa);
-  const companyId = await getCompanyId(cod_empresa);
   const { apiBase, isSandbox } = getBtgUrls();
 
   let lancamentos: Array<{ date: string; description: string; amount: number; type: string; balance_after?: number }> = [];
@@ -193,6 +193,8 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
       { date: "2026-02-23", description: "PIX RECEBIDO - VENDA OS 92345", amount: 1450.00, type: "CREDITO", balance_after: 129421.00 },
     ];
   } else {
+    const accessToken = await getBtgToken(cod_empresa);
+    const companyId = await getCompanyId(cod_empresa);
     const params = new URLSearchParams();
     if (data_inicio) params.set("startDate", data_inicio);
     if (data_fim) params.set("endDate", data_fim);
