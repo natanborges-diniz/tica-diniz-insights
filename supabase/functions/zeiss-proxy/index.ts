@@ -471,6 +471,85 @@ serve(async (req) => {
         });
       }
 
+      // ── Serviços por Produto ──
+      case "servicos-por-produto": {
+        const codEmpresa = Number(params.codEmpresa);
+        const familia = params.familia;
+        if (!familia) {
+          return new Response(JSON.stringify({ error: "familia obrigatório" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const store = await loadStoreConfig(sbService, codEmpresa);
+        if (!store) {
+          return new Response(JSON.stringify({ error: "Loja não configurada", code: ZEISS_ERROR_CODES.CONFIG_ERROR, correlationId }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const url = `${BASE_URL}/produtos/servicos/1/${familia}/${store.cnpj}`;
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "servicos-por-produto");
+        const data = await resp.json();
+        return new Response(JSON.stringify(data?.sao?.servicos || data), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
+
+      // ── Consulta de Cores ──
+      case "listar-cores": {
+        const familia = params.familia;
+        if (!familia) {
+          return new Response(JSON.stringify({ error: "familia obrigatório" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const url = `${BASE_URL}/coloracao/lista/1/${familia}`;
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-cores");
+        const data = await resp.json();
+        return new Response(JSON.stringify(data?.sao?.cores || data), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
+
+      // ── Sugestão de Base ──
+      case "sugestao-base": {
+        const codEmpresa = Number(params.codEmpresa);
+        const { familia, esf, cil, adicao } = params;
+        if (!familia) {
+          return new Response(JSON.stringify({ error: "familia obrigatório" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const store = await loadStoreConfig(sbService, codEmpresa);
+        if (!store) {
+          return new Response(JSON.stringify({ error: "Loja não configurada", code: ZEISS_ERROR_CODES.CONFIG_ERROR, correlationId }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const url = `${BASE_URL}/pedidos/base/sugestao/1/${store.cnpj}/${familia}/${esf || "0"}/${cil || "0"}/${adicao || "0"}`;
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "sugestao-base");
+        const data = await resp.json();
+        return new Response(JSON.stringify(data), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
+
+      // ── Tabela de Preços ──
+      case "tabela-precos": {
+        const codEmpresa = Number(params.codEmpresa);
+        const store = await loadStoreConfig(sbService, codEmpresa);
+        if (!store) {
+          return new Response(JSON.stringify({ error: "Loja não configurada", code: ZEISS_ERROR_CODES.CONFIG_ERROR, correlationId }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const url = `${BASE_URL}/cliente/tabelapreco/consumidor/1/${store.cnpj}`;
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "tabela-precos");
+        const data = await resp.json();
+        return new Response(JSON.stringify(data), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Ação desconhecida: ${action}` }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
