@@ -1,6 +1,6 @@
 // supabase/functions/btg-pagamentos/index.ts
 // BTG Pactual Banking — Pagamentos (Fase 2)
-// Actions: criar, listar, detalhe, cancelar, aprovar_interno
+// Actions: criar, listar, detalhe, cancelar, aprovar_interno, enviar_btg
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -116,11 +116,14 @@ async function getCompanyId(codEmpresa: number): Promise<string> {
   return data.company_id;
 }
 
+// ─── Param helper: reads from body (POST) or query string ────
+function getParam(body: Record<string, unknown> | null, url: URL, key: string): string | null {
+  if (body && body[key] !== undefined && body[key] !== null) return String(body[key]);
+  return url.searchParams.get(key);
+}
+
 // ─── ACTION: criar ───────────────────────────────────────────
-// Cria um rascunho de pagamento no sistema interno
-async function handleCriar(req: Request) {
-  const userId = requireAuth(req);
-  const body = await req.json();
+async function handleCriar(body: Record<string, unknown>, userId: string) {
   const { cod_empresa, tipo, valor, beneficiario, dados_pagamento, parcela_id } = body;
 
   if (!cod_empresa || !tipo || !valor) {
@@ -128,18 +131,18 @@ async function handleCriar(req: Request) {
   }
 
   const tiposValidos = ["PIX_KEY", "PIX_QR_CODE", "PIX_MANUAL", "TED", "BANKSLIP", "UTILITIES", "DARF", "PIX_REVERSAL"];
-  if (!tiposValidos.includes(tipo)) {
+  if (!tiposValidos.includes(String(tipo))) {
     return json({ error: `Tipo inválido. Válidos: ${tiposValidos.join(", ")}` }, 400);
   }
 
   const db = getServiceClient();
   const { data, error } = await db.from("btg_pagamentos").insert({
-    cod_empresa,
-    tipo,
-    valor,
-    beneficiario: beneficiario || null,
-    dados_pagamento: dados_pagamento || {},
-    parcela_id: parcela_id || null,
+    cod_empresa: Number(cod_empresa),
+    tipo: String(tipo),
+    valor: Number(valor),
+    beneficiario: beneficiario ? String(beneficiario) : null,
+    dados_pagamento: (dados_pagamento as Record<string, unknown>) || {},
+    parcela_id: parcela_id ? String(parcela_id) : null,
     solicitado_por: userId,
     status: "RASCUNHO",
   }).select().single();
@@ -153,16 +156,12 @@ async function handleCriar(req: Request) {
 }
 
 // ─── ACTION: listar ──────────────────────────────────────────
-async function handleListar(req: Request) {
-  const userId = requireAuth(req);
-  const url = new URL(req.url);
-  const codEmpresa = url.searchParams.get("cod_empresa");
-  const status = url.searchParams.get("status");
-  const limit = Number(url.searchParams.get("limit") || "50");
+async function handleListar(body: Record<string, unknown> | null, url: URL, userId: string) {
+  const codEmpresa = getParam(body, url, "cod_empresa");
+  const status = getParam(body, url, "status");
+  const limit = Number(getParam(body, url, "limit") || "50");
 
   const db = getServiceClient();
-
-  // Check user permissions
   const admin = await isAdmin(userId);
   let empresasPermitidas: number[] = [];
 
@@ -172,9 +171,7 @@ async function handleListar(req: Request) {
       .select("cod_empresa")
       .eq("user_id", userId);
     empresasPermitidas = (perms || []).map((p: { cod_empresa: number }) => p.cod_empresa);
-    if (empresasPermitidas.length === 0) {
-      return json([]);
-    }
+    if (empresasPermitidas.length === 0) return json([]);
   }
 
   let query = db
@@ -193,9 +190,7 @@ async function handleListar(req: Request) {
     query = query.in("cod_empresa", empresasPermitidas);
   }
 
-  if (status) {
-    query = query.eq("status", status);
-  }
+  if (status) query = query.eq("status", status);
 
   const { data, error } = await query;
   if (error) {
@@ -206,10 +201,8 @@ async function handleListar(req: Request) {
 }
 
 // ─── ACTION: detalhe ─────────────────────────────────────────
-async function handleDetalhe(req: Request) {
-  requireAuth(req);
-  const url = new URL(req.url);
-  const id = url.searchParams.get("id");
+async function handleDetalhe(body: Record<string, unknown> | null, url: URL) {
+  const id = getParam(body, url, "id");
   if (!id) return json({ error: "id obrigatório" }, 400);
 
   const db = getServiceClient();
@@ -219,29 +212,22 @@ async function handleDetalhe(req: Request) {
     .eq("id", id)
     .single();
 
-  if (error || !data) {
-    return json({ error: "Pagamento não encontrado" }, 404);
-  }
-
+  if (error || !data) return json({ error: "Pagamento não encontrado" }, 404);
   return json(data);
 }
 
 // ─── ACTION: aprovar_interno ─────────────────────────────────
-// Master/admin aprova o pagamento internamente antes de enviar ao BTG
-async function handleAprovarInterno(req: Request) {
-  const userId = requireAuth(req);
+async function handleAprovarInterno(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
-  const { id } = await req.json();
+  const { id } = body;
   if (!id) return json({ error: "id obrigatório" }, 400);
 
   const db = getServiceClient();
-
-  // Verificar status atual
   const { data: pagamento } = await db
     .from("btg_pagamentos")
     .select("status")
-    .eq("id", id)
+    .eq("id", String(id))
     .single();
 
   if (!pagamento) return json({ error: "Pagamento não encontrado" }, 404);
@@ -256,30 +242,24 @@ async function handleAprovarInterno(req: Request) {
       aprovado_por: userId,
       aprovado_em: new Date().toISOString(),
     })
-    .eq("id", id);
+    .eq("id", String(id));
 
-  if (error) {
-    return json({ error: "Erro ao aprovar", details: error.message }, 500);
-  }
-
+  if (error) return json({ error: "Erro ao aprovar", details: error.message }, 500);
   return json({ success: true, status: "APROVADO_INTERNO" });
 }
 
 // ─── ACTION: enviar_btg ──────────────────────────────────────
-// Envia o pagamento aprovado ao BTG (cria iniciação de pagamento)
-async function handleEnviarBtg(req: Request) {
-  const userId = requireAuth(req);
+async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
-  const { id } = await req.json();
+  const { id } = body;
   if (!id) return json({ error: "id obrigatório" }, 400);
 
   const db = getServiceClient();
-
   const { data: pagamento } = await db
     .from("btg_pagamentos")
     .select("*")
-    .eq("id", id)
+    .eq("id", String(id))
     .single();
 
   if (!pagamento) return json({ error: "Pagamento não encontrado" }, 404);
@@ -291,7 +271,6 @@ async function handleEnviarBtg(req: Request) {
   const companyId = await getCompanyId(pagamento.cod_empresa);
   const { apiBase } = getBtgUrls();
 
-  // Build BTG payment payload
   const btgPayload = {
     type: pagamento.tipo,
     amount: pagamento.valor,
@@ -313,87 +292,48 @@ async function handleEnviarBtg(req: Request) {
 
   const btgBody = await btgRes.text();
   let btgData: Record<string, unknown> = {};
-  try {
-    btgData = JSON.parse(btgBody);
-  } catch {
-    // non-JSON response
-  }
+  try { btgData = JSON.parse(btgBody); } catch { /* non-JSON */ }
 
   if (!btgRes.ok) {
     console.error("[btg-pagamentos] BTG API error:", btgRes.status, btgBody);
-
-    // Update status to REJEITADO
-    await db
-      .from("btg_pagamentos")
-      .update({
-        status: "REJEITADO",
-        dados_pagamento: {
-          ...(pagamento.dados_pagamento as Record<string, unknown>),
-          btg_error: btgData,
-        },
-      })
-      .eq("id", id);
-
-    return json({
-      error: "BTG rejeitou o pagamento",
-      btg_status: btgRes.status,
-      details: btgData,
-    }, 502);
+    await db.from("btg_pagamentos").update({
+      status: "REJEITADO",
+      dados_pagamento: { ...(pagamento.dados_pagamento as Record<string, unknown>), btg_error: btgData },
+    }).eq("id", String(id));
+    return json({ error: "BTG rejeitou o pagamento", btg_status: btgRes.status, details: btgData }, 502);
   }
 
-  // Success — update with BTG payment ID
   const btgPaymentId = (btgData.id || btgData.paymentId || btgData.payment_id || "") as string;
-
-  await db
-    .from("btg_pagamentos")
-    .update({
-      status: "ENVIADO_BTG",
-      btg_payment_id: btgPaymentId || null,
-      dados_pagamento: {
-        ...(pagamento.dados_pagamento as Record<string, unknown>),
-        btg_response: btgData,
-      },
-    })
-    .eq("id", id);
-
-  return json({
-    success: true,
+  await db.from("btg_pagamentos").update({
     status: "ENVIADO_BTG",
-    btg_payment_id: btgPaymentId,
-  });
+    btg_payment_id: btgPaymentId || null,
+    dados_pagamento: { ...(pagamento.dados_pagamento as Record<string, unknown>), btg_response: btgData },
+  }).eq("id", String(id));
+
+  return json({ success: true, status: "ENVIADO_BTG", btg_payment_id: btgPaymentId });
 }
 
 // ─── ACTION: cancelar ────────────────────────────────────────
-async function handleCancelar(req: Request) {
-  const userId = requireAuth(req);
+async function handleCancelar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
-  const { id } = await req.json();
+  const { id } = body;
   if (!id) return json({ error: "id obrigatório" }, 400);
 
   const db = getServiceClient();
   const { data: pagamento } = await db
     .from("btg_pagamentos")
     .select("status")
-    .eq("id", id)
+    .eq("id", String(id))
     .single();
 
   if (!pagamento) return json({ error: "Pagamento não encontrado" }, 404);
-
-  const cancelaveis = ["RASCUNHO", "APROVADO_INTERNO"];
-  if (!cancelaveis.includes(pagamento.status)) {
+  if (!["RASCUNHO", "APROVADO_INTERNO"].includes(pagamento.status)) {
     return json({ error: `Não é possível cancelar pagamento com status ${pagamento.status}` }, 400);
   }
 
-  const { error } = await db
-    .from("btg_pagamentos")
-    .update({ status: "CANCELADO" })
-    .eq("id", id);
-
-  if (error) {
-    return json({ error: "Erro ao cancelar", details: error.message }, 500);
-  }
-
+  const { error } = await db.from("btg_pagamentos").update({ status: "CANCELADO" }).eq("id", String(id));
+  if (error) return json({ error: "Erro ao cancelar", details: error.message }, 500);
   return json({ success: true, status: "CANCELADO" });
 }
 
@@ -406,30 +346,31 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     let action = url.searchParams.get("action") || "";
+    let body: Record<string, unknown> | null = null;
 
-    if (!action && req.method === "POST") {
-      const cloned = req.clone();
+    if (req.method === "POST") {
       try {
-        const body = await cloned.json();
-        action = body.action || "";
-      } catch {
-        // no-op
-      }
+        body = await req.json();
+        if (!action && body?.action) action = String(body.action);
+      } catch { /* no-op */ }
     }
+
+    // Auth for all actions
+    const userId = requireAuth(req);
 
     switch (action) {
       case "criar":
-        return await handleCriar(req);
+        return await handleCriar(body || {}, userId);
       case "listar":
-        return await handleListar(req);
+        return await handleListar(body, url, userId);
       case "detalhe":
-        return await handleDetalhe(req);
+        return await handleDetalhe(body, url);
       case "aprovar_interno":
-        return await handleAprovarInterno(req);
+        return await handleAprovarInterno(body || {}, userId);
       case "enviar_btg":
-        return await handleEnviarBtg(req);
+        return await handleEnviarBtg(body || {}, userId);
       case "cancelar":
-        return await handleCancelar(req);
+        return await handleCancelar(body || {}, userId);
       default:
         return json(
           { error: `Ação desconhecida: '${action}'. Use: criar, listar, detalhe, aprovar_interno, enviar_btg, cancelar` },

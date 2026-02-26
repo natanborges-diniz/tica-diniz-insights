@@ -80,18 +80,22 @@ async function getCompanyId(codEmpresa: number): Promise<string> {
   return data.company_id;
 }
 
+// ─── Param helper ────────────────────────────────────────────
+function getParam(body: Record<string, unknown> | null, url: URL, key: string): string | null {
+  if (body && body[key] !== undefined && body[key] !== null) return String(body[key]);
+  return url.searchParams.get(key);
+}
+
 // ─── ACTION: importar ────────────────────────────────────────
-// Busca títulos DDA do BTG e salva/atualiza na tabela local
-async function handleImportar(req: Request) {
-  const userId = requireAuth(req);
+async function handleImportar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
-  const body = await req.json();
   const { cod_empresa } = body;
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const accessToken = await getBtgToken(cod_empresa);
-  const companyId = await getCompanyId(cod_empresa);
+  const ce = Number(cod_empresa);
+  const accessToken = await getBtgToken(ce);
+  const companyId = await getCompanyId(ce);
   const { apiBase } = getBtgUrls();
 
   const btgRes = await fetch(
@@ -120,20 +124,18 @@ async function handleImportar(req: Request) {
   for (const titulo of btgData) {
     const btgDdaId = (titulo.id || titulo.ddaId || "") as string;
 
-    // Verificar duplicata
     if (btgDdaId) {
       const { data: existing } = await db
         .from("btg_dda_titulos")
         .select("id")
         .eq("btg_dda_id", btgDdaId)
-        .eq("cod_empresa", cod_empresa)
+        .eq("cod_empresa", ce)
         .maybeSingle();
-
       if (existing) { duplicados++; continue; }
     }
 
     const { error } = await db.from("btg_dda_titulos").insert({
-      cod_empresa,
+      cod_empresa: ce,
       btg_dda_id: btgDdaId || null,
       emissor: (titulo.issuerName || titulo.emissor || null) as string | null,
       documento_emissor: (titulo.issuerDocument || titulo.documento_emissor || null) as string | null,
@@ -152,55 +154,41 @@ async function handleImportar(req: Request) {
 }
 
 // ─── ACTION: conciliar_auto ──────────────────────────────────
-// Conciliação automática: match por valor + CNPJ + vencimento + número do documento
-// Busca parcelas "A PAGAR" + "EM ABERTO" do ERP via Firebird Bridge
-async function handleConciliarAuto(req: Request) {
-  const userId = requireAuth(req);
+async function handleConciliarAuto(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
-  const body = await req.json();
   const { cod_empresa } = body;
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
+  const ce = Number(cod_empresa);
   const db = getServiceClient();
 
-  // 1. Buscar títulos DDA pendentes e não conciliados
   const { data: titulosDda, error: ddaErr } = await db
     .from("btg_dda_titulos")
     .select("*")
-    .eq("cod_empresa", cod_empresa)
+    .eq("cod_empresa", ce)
     .eq("status", "PENDENTE")
     .eq("conciliado", false);
 
   if (ddaErr) return json({ error: "Erro ao buscar títulos DDA", details: ddaErr.message }, 500);
   if (!titulosDda || titulosDda.length === 0) {
-    return json({ success: true, conciliados: 0, mensagem: "Nenhum título DDA pendente" });
+    return json({ success: true, conciliados: 0, sem_match: 0, mensagem: "Nenhum título DDA pendente" });
   }
 
-  // 2. Determinar range de datas dos títulos DDA para buscar parcelas relevantes
   const vencimentos = titulosDda.map((t) => t.data_vencimento).filter(Boolean).sort();
   const dataInicio = vencimentos[0] || new Date().toISOString().slice(0, 10);
   const dataFim = vencimentos[vencimentos.length - 1] || dataInicio;
 
-  // 3. Buscar parcelas "A PAGAR" + "EM ABERTO" do ERP via Firebird Bridge
   const firebirdBaseUrl = Deno.env.get("FIREBIRD_API_BASE_URL") || "https://firebird-bridge-production.up.railway.app";
   const parcelasUrl = new URL(`${firebirdBaseUrl}/api/v1/financeiro/parcelas`);
-  parcelasUrl.searchParams.set("empresa", String(cod_empresa));
+  parcelasUrl.searchParams.set("empresa", String(ce));
   parcelasUrl.searchParams.set("dataInicio", dataInicio);
   parcelasUrl.searchParams.set("dataFim", dataFim);
   parcelasUrl.searchParams.set("tipo", "PAGAR");
   parcelasUrl.searchParams.set("situacao", "EM ABERTO");
   parcelasUrl.searchParams.set("campoData", "VENCIMENTO");
 
-  let parcelasErp: Array<{
-    lancamento_documento?: string;
-    pessoa_nome?: string;
-    parcela_valor?: number;
-    parcela_data_vencimento?: string;
-    cod_empresa?: number;
-    // CNPJ do emissor virá do campo pessoa se disponível
-    [key: string]: unknown;
-  }> = [];
+  let parcelasErp: Array<Record<string, unknown>> = [];
 
   try {
     const controller = new AbortController();
@@ -219,45 +207,23 @@ async function handleConciliarAuto(req: Request) {
     }
   } catch (e) {
     console.error("[btg-dda] Erro ao buscar parcelas do ERP:", e);
-    return json({
-      error: "Não foi possível consultar parcelas do ERP para conciliação",
-      details: String(e),
-    }, 502);
+    return json({ error: "Não foi possível consultar parcelas do ERP", details: String(e) }, 502);
   }
 
-  // 4. Fazer o match: valor + documento_emissor (CNPJ) + data_vencimento + numero_documento
-  const resultados: {
-    titulo_id: string;
-    status: "conciliado" | "sem_match";
-    parcela_documento?: string;
-    criterios: { valor: number; cnpj: string | null; vencimento: string; numero_documento: string | null };
-  }[] = [];
-
-  // Indexar parcelas do ERP para match rápido
-  // Chave: "valor|vencimento|documento" (numero_documento = lancamento_documento do ERP)
-  const parcelasIndex = new Map<string, typeof parcelasErp[0]>();
+  // Index parcelas for fast matching
+  const parcelasIndex = new Map<string, Record<string, unknown>>();
   for (const p of parcelasErp) {
     const valor = Number(p.parcela_valor || 0).toFixed(2);
-    const venc = (p.parcela_data_vencimento || "").slice(0, 10);
-    const doc = (p.lancamento_documento || "").trim();
-    // Chave composta com os 3 critérios disponíveis no ERP
+    const venc = (String(p.parcela_data_vencimento || "")).slice(0, 10);
+    const doc = (String(p.lancamento_documento || "")).trim();
     const key = `${valor}|${venc}|${doc}`;
-    if (!parcelasIndex.has(key)) {
-      parcelasIndex.set(key, p);
-    }
+    if (!parcelasIndex.has(key)) parcelasIndex.set(key, p);
   }
 
   let conciliadosCount = 0;
+  let semMatch = 0;
 
   for (const titulo of titulosDda) {
-    const criterios = {
-      valor: titulo.valor,
-      cnpj: titulo.documento_emissor,
-      vencimento: titulo.data_vencimento,
-      numero_documento: titulo.numero_documento,
-    };
-
-    // Construir chave de match
     const valorStr = Number(titulo.valor).toFixed(2);
     const vencStr = (titulo.data_vencimento || "").slice(0, 10);
     const docStr = (titulo.numero_documento || "").trim();
@@ -266,35 +232,13 @@ async function handleConciliarAuto(req: Request) {
     const parcelaMatch = parcelasIndex.get(matchKey);
 
     if (parcelaMatch) {
-      // Match encontrado — atualizar título DDA como conciliado
-      await db
-        .from("btg_dda_titulos")
-        .update({
-          conciliado: true,
-          status: "CONCILIADO",
-        })
-        .eq("id", titulo.id);
-
-      // Remover do índice para evitar match duplo
+      await db.from("btg_dda_titulos").update({ conciliado: true, status: "CONCILIADO" }).eq("id", titulo.id);
       parcelasIndex.delete(matchKey);
-
-      resultados.push({
-        titulo_id: titulo.id,
-        status: "conciliado",
-        parcela_documento: parcelaMatch.lancamento_documento || undefined,
-        criterios,
-      });
       conciliadosCount++;
     } else {
-      resultados.push({
-        titulo_id: titulo.id,
-        status: "sem_match",
-        criterios,
-      });
+      semMatch++;
     }
   }
-
-  const semMatch = resultados.filter((r) => r.status === "sem_match").length;
 
   return json({
     success: true,
@@ -302,71 +246,50 @@ async function handleConciliarAuto(req: Request) {
     sem_match: semMatch,
     total: titulosDda.length,
     parcelas_erp_encontradas: parcelasErp.length,
-    detalhes: resultados,
   });
 }
 
 // ─── ACTION: conciliar_manual ────────────────────────────────
-// Vincula manualmente um título DDA a uma parcela do ERP
-async function handleConciliarManual(req: Request) {
-  const userId = requireAuth(req);
+async function handleConciliarManual(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
-  const { titulo_id, parcela_id } = await req.json();
-  if (!titulo_id || !parcela_id) {
-    return json({ error: "titulo_id e parcela_id são obrigatórios" }, 400);
-  }
+  const { titulo_id, parcela_id } = body;
+  if (!titulo_id || !parcela_id) return json({ error: "titulo_id e parcela_id são obrigatórios" }, 400);
 
   const db = getServiceClient();
-
-  const { data: titulo } = await db
-    .from("btg_dda_titulos")
-    .select("id, conciliado")
-    .eq("id", titulo_id)
-    .single();
-
+  const { data: titulo } = await db.from("btg_dda_titulos").select("id, conciliado").eq("id", String(titulo_id)).single();
   if (!titulo) return json({ error: "Título DDA não encontrado" }, 404);
   if (titulo.conciliado) return json({ error: "Título já conciliado" }, 400);
 
-  const { error } = await db
-    .from("btg_dda_titulos")
-    .update({
-      parcela_id,
-      conciliado: true,
-      status: "CONCILIADO",
-    })
-    .eq("id", titulo_id);
+  const { error } = await db.from("btg_dda_titulos").update({
+    parcela_id: String(parcela_id),
+    conciliado: true,
+    status: "CONCILIADO",
+  }).eq("id", String(titulo_id));
 
   if (error) return json({ error: "Erro ao conciliar", details: error.message }, 500);
   return json({ success: true, status: "CONCILIADO" });
 }
 
 // ─── ACTION: ignorar ─────────────────────────────────────────
-async function handleIgnorar(req: Request) {
-  const userId = requireAuth(req);
+async function handleIgnorar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
-  const { titulo_id } = await req.json();
+  const { titulo_id } = body;
   if (!titulo_id) return json({ error: "titulo_id obrigatório" }, 400);
 
   const db = getServiceClient();
-  const { error } = await db
-    .from("btg_dda_titulos")
-    .update({ status: "IGNORADO" })
-    .eq("id", titulo_id);
-
+  const { error } = await db.from("btg_dda_titulos").update({ status: "IGNORADO" }).eq("id", String(titulo_id));
   if (error) return json({ error: "Erro ao ignorar", details: error.message }, 500);
   return json({ success: true, status: "IGNORADO" });
 }
 
 // ─── ACTION: listar ──────────────────────────────────────────
-async function handleListar(req: Request) {
-  const userId = requireAuth(req);
-  const url = new URL(req.url);
-  const codEmpresa = url.searchParams.get("cod_empresa");
-  const status = url.searchParams.get("status");
-  const conciliado = url.searchParams.get("conciliado");
-  const limit = Number(url.searchParams.get("limit") || "100");
+async function handleListar(body: Record<string, unknown> | null, url: URL, userId: string) {
+  const codEmpresa = getParam(body, url, "cod_empresa");
+  const status = getParam(body, url, "status");
+  const conciliado = getParam(body, url, "conciliado");
+  const limit = Number(getParam(body, url, "limit") || "100");
 
   const db = getServiceClient();
   const admin = await isAdmin(userId);
@@ -378,11 +301,7 @@ async function handleListar(req: Request) {
     if (empresasPermitidas.length === 0) return json([]);
   }
 
-  let query = db
-    .from("btg_dda_titulos")
-    .select("*")
-    .order("data_vencimento", { ascending: true })
-    .limit(limit);
+  let query = db.from("btg_dda_titulos").select("*").order("data_vencimento", { ascending: true }).limit(limit);
 
   if (codEmpresa) {
     const ce = Number(codEmpresa);
@@ -403,43 +322,17 @@ async function handleListar(req: Request) {
 }
 
 // ─── ACTION: indicadores ─────────────────────────────────────
-// KPIs de conciliação para uma empresa
-async function handleIndicadores(req: Request) {
-  const userId = requireAuth(req);
-  const url = new URL(req.url);
-  const codEmpresa = url.searchParams.get("cod_empresa");
+async function handleIndicadores(body: Record<string, unknown> | null, url: URL) {
+  const codEmpresa = getParam(body, url, "cod_empresa");
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
   const db = getServiceClient();
   const ce = Number(codEmpresa);
 
-  // Total
-  const { count: total } = await db
-    .from("btg_dda_titulos")
-    .select("id", { count: "exact", head: true })
-    .eq("cod_empresa", ce);
-
-  // Conciliados
-  const { count: conciliados } = await db
-    .from("btg_dda_titulos")
-    .select("id", { count: "exact", head: true })
-    .eq("cod_empresa", ce)
-    .eq("conciliado", true);
-
-  // Pendentes
-  const { count: pendentes } = await db
-    .from("btg_dda_titulos")
-    .select("id", { count: "exact", head: true })
-    .eq("cod_empresa", ce)
-    .eq("status", "PENDENTE")
-    .eq("conciliado", false);
-
-  // Ignorados
-  const { count: ignorados } = await db
-    .from("btg_dda_titulos")
-    .select("id", { count: "exact", head: true })
-    .eq("cod_empresa", ce)
-    .eq("status", "IGNORADO");
+  const { count: total } = await db.from("btg_dda_titulos").select("id", { count: "exact", head: true }).eq("cod_empresa", ce);
+  const { count: conciliados } = await db.from("btg_dda_titulos").select("id", { count: "exact", head: true }).eq("cod_empresa", ce).eq("conciliado", true);
+  const { count: pendentes } = await db.from("btg_dda_titulos").select("id", { count: "exact", head: true }).eq("cod_empresa", ce).eq("status", "PENDENTE").eq("conciliado", false);
+  const { count: ignorados } = await db.from("btg_dda_titulos").select("id", { count: "exact", head: true }).eq("cod_empresa", ce).eq("status", "IGNORADO");
 
   const t = total || 0;
   const c = conciliados || 0;
@@ -450,7 +343,6 @@ async function handleIndicadores(req: Request) {
     pendentes: pendentes || 0,
     ignorados: ignorados || 0,
     percentual_conciliado: t > 0 ? Math.round((c / t) * 100) : 0,
-    orfaos: (pendentes || 0),
   });
 }
 
@@ -463,33 +355,32 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     let action = url.searchParams.get("action") || "";
+    let body: Record<string, unknown> | null = null;
 
-    if (!action && req.method === "POST") {
-      const cloned = req.clone();
+    if (req.method === "POST") {
       try {
-        const body = await cloned.json();
-        action = body.action || "";
+        body = await req.json();
+        if (!action && body?.action) action = String(body.action);
       } catch { /* no-op */ }
     }
 
+    const userId = requireAuth(req);
+
     switch (action) {
       case "importar":
-        return await handleImportar(req);
+        return await handleImportar(body || {}, userId);
       case "listar":
-        return await handleListar(req);
+        return await handleListar(body, url, userId);
       case "conciliar_auto":
-        return await handleConciliarAuto(req);
+        return await handleConciliarAuto(body || {}, userId);
       case "conciliar_manual":
-        return await handleConciliarManual(req);
+        return await handleConciliarManual(body || {}, userId);
       case "ignorar":
-        return await handleIgnorar(req);
+        return await handleIgnorar(body || {}, userId);
       case "indicadores":
-        return await handleIndicadores(req);
+        return await handleIndicadores(body, url);
       default:
-        return json(
-          { error: `Ação desconhecida: '${action}'. Use: importar, listar, conciliar_auto, conciliar_manual, ignorar, indicadores` },
-          400
-        );
+        return json({ error: `Ação desconhecida: '${action}'. Use: importar, listar, conciliar_auto, conciliar_manual, ignorar, indicadores` }, 400);
     }
   } catch (e) {
     if (e instanceof Response) return e;

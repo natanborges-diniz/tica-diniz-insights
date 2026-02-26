@@ -1,6 +1,6 @@
 // supabase/functions/btg-extrato/index.ts
 // BTG Pactual Banking — Extrato + Saldo (Fase 5)
-// Actions: saldo, extrato, importar, listar, classificar, batimento
+// Actions: saldo, extrato, importar, listar, classificar, conciliar, resumo
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -49,84 +49,55 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 
 function requireAuth(req: Request): string {
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    throw json({ error: "Unauthorized" }, 401);
-  }
+  if (!authHeader?.startsWith("Bearer ")) throw json({ error: "Unauthorized" }, 401);
   const claims = decodeJwtPayload(authHeader.replace("Bearer ", ""));
-  if (!claims?.sub || claims.aud !== "authenticated") {
-    throw json({ error: "Unauthorized" }, 401);
-  }
+  if (!claims?.sub || claims.aud !== "authenticated") throw json({ error: "Unauthorized" }, 401);
   const exp = claims.exp as number | undefined;
-  if (exp && exp < Math.floor(Date.now() / 1000)) {
-    throw json({ error: "Token expirado" }, 401);
-  }
+  if (exp && exp < Math.floor(Date.now() / 1000)) throw json({ error: "Token expirado" }, 401);
   return claims.sub as string;
 }
 
 async function isAdmin(userId: string): Promise<boolean> {
   const db = getServiceClient();
-  const { data } = await db
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin");
+  const { data } = await db.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin");
   return !!data && data.length > 0;
 }
 
 async function requireAdminRole(userId: string) {
-  if (!(await isAdmin(userId))) {
-    throw json({ error: "Forbidden — apenas admin" }, 403);
-  }
+  if (!(await isAdmin(userId))) throw json({ error: "Forbidden — apenas admin" }, 403);
 }
 
 async function getUserEmpresas(userId: string, admin: boolean): Promise<number[]> {
   if (admin) return [];
   const db = getServiceClient();
-  const { data } = await db
-    .from("user_empresa_permissions")
-    .select("cod_empresa")
-    .eq("user_id", userId);
+  const { data } = await db.from("user_empresa_permissions").select("cod_empresa").eq("user_id", userId);
   return (data || []).map((p: { cod_empresa: number }) => p.cod_empresa);
 }
 
-// ─── BTG Token + Company helpers ─────────────────────────────
 async function getBtgToken(codEmpresa: number): Promise<string> {
   const db = getServiceClient();
-  const { data } = await db
-    .from("btg_tokens")
-    .select("access_token, expires_at")
-    .eq("cod_empresa", codEmpresa)
-    .single();
-
-  if (!data) {
-    throw json({ error: `Empresa ${codEmpresa} não autenticada no BTG.` }, 400);
-  }
-  if (new Date(data.expires_at) < new Date()) {
-    throw json({ error: `Token BTG expirado para empresa ${codEmpresa}.` }, 401);
-  }
+  const { data } = await db.from("btg_tokens").select("access_token, expires_at").eq("cod_empresa", codEmpresa).single();
+  if (!data) throw json({ error: `Empresa ${codEmpresa} não autenticada no BTG.` }, 400);
+  if (new Date(data.expires_at) < new Date()) throw json({ error: `Token BTG expirado para empresa ${codEmpresa}.` }, 401);
   return data.access_token;
 }
 
 async function getCompanyId(codEmpresa: number): Promise<string> {
   const db = getServiceClient();
-  const { data } = await db
-    .from("btg_contas_bancarias")
-    .select("company_id, account_id")
-    .eq("cod_empresa", codEmpresa)
-    .eq("ativa", true)
-    .single();
-
-  if (!data?.company_id) {
-    throw json({ error: `Conta bancária BTG não configurada para empresa ${codEmpresa}` }, 400);
-  }
+  const { data } = await db.from("btg_contas_bancarias").select("company_id, account_id").eq("cod_empresa", codEmpresa).eq("ativa", true).single();
+  if (!data?.company_id) throw json({ error: `Conta BTG não configurada para empresa ${codEmpresa}` }, 400);
   return data.company_id;
 }
 
+// ─── Param helper ────────────────────────────────────────────
+function getParam(body: Record<string, unknown> | null, url: URL, key: string): string | null {
+  if (body && body[key] !== undefined && body[key] !== null) return String(body[key]);
+  return url.searchParams.get(key);
+}
+
 // ─── ACTION: saldo ───────────────────────────────────────────
-async function handleSaldo(req: Request) {
-  const userId = requireAuth(req);
-  const url = new URL(req.url);
-  const codEmpresa = Number(url.searchParams.get("cod_empresa"));
+async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
+  const codEmpresa = Number(getParam(body, url, "cod_empresa"));
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
   const accessToken = await getBtgToken(codEmpresa);
@@ -134,7 +105,6 @@ async function handleSaldo(req: Request) {
   const { apiBase, isSandbox } = getBtgUrls();
 
   if (isSandbox) {
-    // Sandbox mock
     return json({
       cod_empresa: codEmpresa,
       saldo_disponivel: 125430.50,
@@ -146,15 +116,13 @@ async function handleSaldo(req: Request) {
 
   const res = await fetch(
     `${apiBase}/banking/v1/companies/${companyId}/balance`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-    }
+    { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
   );
 
   if (!res.ok) {
-    const body = await res.text();
-    console.error("[btg-extrato] Saldo error:", res.status, body);
-    return json({ error: "Erro ao consultar saldo", details: body }, 502);
+    const resBody = await res.text();
+    console.error("[btg-extrato] Saldo error:", res.status, resBody);
+    return json({ error: "Erro ao consultar saldo", details: resBody }, 502);
   }
 
   const data = await res.json();
@@ -162,12 +130,10 @@ async function handleSaldo(req: Request) {
 }
 
 // ─── ACTION: extrato (consulta BTG) ─────────────────────────
-async function handleExtrato(req: Request) {
-  const userId = requireAuth(req);
-  const url = new URL(req.url);
-  const codEmpresa = Number(url.searchParams.get("cod_empresa"));
-  const dataInicio = url.searchParams.get("data_inicio");
-  const dataFim = url.searchParams.get("data_fim");
+async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
+  const codEmpresa = Number(getParam(body, url, "cod_empresa"));
+  const dataInicio = getParam(body, url, "data_inicio");
+  const dataFim = getParam(body, url, "data_fim");
 
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
@@ -176,16 +142,11 @@ async function handleExtrato(req: Request) {
   const { apiBase, isSandbox } = getBtgUrls();
 
   if (isSandbox) {
-    // Sandbox mock — retorna lançamentos fake
     const mockEntries = [
       { date: "2026-02-24", description: "TED RECEBIDA - CLIENTE ABC LTDA", amount: 5200.00, type: "CREDITO" },
       { date: "2026-02-24", description: "PIX ENVIADO - FORNECEDOR XYZ", amount: -3100.00, type: "DEBITO" },
       { date: "2026-02-23", description: "BOLETO PAGO - ENERGIA ELETRICA", amount: -890.50, type: "DEBITO" },
       { date: "2026-02-23", description: "PIX RECEBIDO - VENDA OS 92345", amount: 1450.00, type: "CREDITO" },
-      { date: "2026-02-22", description: "TED ENVIADA - SALARIOS", amount: -15600.00, type: "DEBITO" },
-      { date: "2026-02-22", description: "BOLETO RECEBIDO - CLIENTE DEF", amount: 2800.00, type: "CREDITO" },
-      { date: "2026-02-21", description: "PIX RECEBIDO - VENDA OS 92310", amount: 980.00, type: "CREDITO" },
-      { date: "2026-02-21", description: "DEBITO AUTOMATICO - INTERNET", amount: -189.90, type: "DEBITO" },
     ];
     return json({ cod_empresa: codEmpresa, lancamentos: mockEntries, sandbox: true });
   }
@@ -196,15 +157,13 @@ async function handleExtrato(req: Request) {
 
   const res = await fetch(
     `${apiBase}/banking/v1/companies/${companyId}/statements?${params}`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-    }
+    { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
   );
 
   if (!res.ok) {
-    const body = await res.text();
-    console.error("[btg-extrato] Extrato error:", res.status, body);
-    return json({ error: "Erro ao consultar extrato", details: body }, 502);
+    const resBody = await res.text();
+    console.error("[btg-extrato] Extrato error:", res.status, resBody);
+    return json({ error: "Erro ao consultar extrato", details: resBody }, 502);
   }
 
   const data = await res.json();
@@ -212,22 +171,19 @@ async function handleExtrato(req: Request) {
 }
 
 // ─── ACTION: importar ────────────────────────────────────────
-// Importa lançamentos do extrato para btg_extrato
-async function handleImportar(req: Request) {
-  const userId = requireAuth(req);
+async function handleImportar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
-  const { cod_empresa, data_inicio, data_fim } = await req.json();
+  const cod_empresa = Number(body.cod_empresa);
+  const data_inicio = body.data_inicio ? String(body.data_inicio) : null;
+  const data_fim = body.data_fim ? String(body.data_fim) : null;
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
   const accessToken = await getBtgToken(cod_empresa);
   const companyId = await getCompanyId(cod_empresa);
   const { apiBase, isSandbox } = getBtgUrls();
 
-  let lancamentos: Array<{
-    date: string; description: string; amount: number; type: string;
-    balance_after?: number;
-  }> = [];
+  let lancamentos: Array<{ date: string; description: string; amount: number; type: string; balance_after?: number }> = [];
 
   if (isSandbox) {
     lancamentos = [
@@ -243,21 +199,18 @@ async function handleImportar(req: Request) {
 
     const res = await fetch(
       `${apiBase}/banking/v1/companies/${companyId}/statements?${params}`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-      }
+      { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
     );
 
     if (!res.ok) {
-      const body = await res.text();
-      return json({ error: "Erro ao consultar extrato BTG", details: body }, 502);
+      const resBody = await res.text();
+      return json({ error: "Erro ao consultar extrato BTG", details: resBody }, 502);
     }
 
     const data = await res.json();
     lancamentos = Array.isArray(data) ? data : data.entries || data.lancamentos || [];
   }
 
-  // Insert into btg_extrato
   const db = getServiceClient();
   const rows = lancamentos.map((l) => ({
     cod_empresa,
@@ -269,9 +222,7 @@ async function handleImportar(req: Request) {
     conciliado: false,
   }));
 
-  if (rows.length === 0) {
-    return json({ success: true, importados: 0 });
-  }
+  if (rows.length === 0) return json({ success: true, importados: 0 });
 
   const { error } = await db.from("btg_extrato").insert(rows);
   if (error) {
@@ -283,32 +234,22 @@ async function handleImportar(req: Request) {
 }
 
 // ─── ACTION: listar ──────────────────────────────────────────
-// Lista lançamentos já importados na btg_extrato
-async function handleListar(req: Request) {
-  const userId = requireAuth(req);
-  const url = new URL(req.url);
-  const codEmpresa = Number(url.searchParams.get("cod_empresa"));
-  const dataInicio = url.searchParams.get("data_inicio");
-  const dataFim = url.searchParams.get("data_fim");
-  const tipo = url.searchParams.get("tipo");
-  const conciliado = url.searchParams.get("conciliado");
-  const limit = Number(url.searchParams.get("limit") || "200");
+async function handleListar(body: Record<string, unknown> | null, url: URL, userId: string) {
+  const codEmpresa = Number(getParam(body, url, "cod_empresa") || "0");
+  const dataInicio = getParam(body, url, "data_inicio");
+  const dataFim = getParam(body, url, "data_fim");
+  const tipo = getParam(body, url, "tipo");
+  const conciliado = getParam(body, url, "conciliado");
+  const limit = Number(getParam(body, url, "limit") || "200");
 
   const admin = await isAdmin(userId);
   const empresas = await getUserEmpresas(userId, admin);
 
   const db = getServiceClient();
-  let query = db
-    .from("btg_extrato")
-    .select("*")
-    .order("data_lancamento", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  let query = db.from("btg_extrato").select("*").order("data_lancamento", { ascending: false }).order("created_at", { ascending: false }).limit(limit);
 
   if (codEmpresa) {
-    if (!admin && !empresas.includes(codEmpresa)) {
-      return json({ error: "Sem permissão" }, 403);
-    }
+    if (!admin && !empresas.includes(codEmpresa)) return json({ error: "Sem permissão" }, 403);
     query = query.eq("cod_empresa", codEmpresa);
   } else if (!admin) {
     query = query.in("cod_empresa", empresas);
@@ -322,42 +263,28 @@ async function handleListar(req: Request) {
   }
 
   const { data, error } = await query;
-  if (error) {
-    return json({ error: "Erro ao listar extrato", details: error.message }, 500);
-  }
-
+  if (error) return json({ error: "Erro ao listar extrato", details: error.message }, 500);
   return json(data || []);
 }
 
 // ─── ACTION: classificar ────────────────────────────────────
-// Classifica lançamento por natureza contábil
-async function handleClassificar(req: Request) {
-  const userId = requireAuth(req);
+async function handleClassificar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
-  const { id, natureza } = await req.json();
+  const { id, natureza } = body;
   if (!id || !natureza) return json({ error: "id e natureza obrigatórios" }, 400);
 
   const db = getServiceClient();
-  const { error } = await db
-    .from("btg_extrato")
-    .update({ natureza, updated_at: new Date().toISOString() })
-    .eq("id", id);
-
-  if (error) {
-    return json({ error: "Erro ao classificar", details: error.message }, 500);
-  }
-
+  const { error } = await db.from("btg_extrato").update({ natureza: String(natureza), updated_at: new Date().toISOString() }).eq("id", String(id));
+  if (error) return json({ error: "Erro ao classificar", details: error.message }, 500);
   return json({ success: true });
 }
 
 // ─── ACTION: conciliar ──────────────────────────────────────
-// Marca lançamento como conciliado e opcionalmente vincula referência
-async function handleConciliar(req: Request) {
-  const userId = requireAuth(req);
+async function handleConciliar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
-  const { id, conciliado, referencia_id } = await req.json();
+  const { id, conciliado, referencia_id } = body;
   if (!id) return json({ error: "id obrigatório" }, 400);
 
   const db = getServiceClient();
@@ -365,53 +292,35 @@ async function handleConciliar(req: Request) {
     conciliado: conciliado !== false,
     updated_at: new Date().toISOString(),
   };
-  if (referencia_id) updateData.referencia_id = referencia_id;
+  if (referencia_id) updateData.referencia_id = String(referencia_id);
 
-  const { error } = await db.from("btg_extrato").update(updateData).eq("id", id);
-
-  if (error) {
-    return json({ error: "Erro ao conciliar", details: error.message }, 500);
-  }
-
+  const { error } = await db.from("btg_extrato").update(updateData).eq("id", String(id));
+  if (error) return json({ error: "Erro ao conciliar", details: error.message }, 500);
   return json({ success: true });
 }
 
 // ─── ACTION: resumo ─────────────────────────────────────────
-// Resumo do extrato por período (totais crédito/débito, conciliação)
-async function handleResumo(req: Request) {
-  const userId = requireAuth(req);
-  const url = new URL(req.url);
-  const codEmpresa = Number(url.searchParams.get("cod_empresa"));
-  const dataInicio = url.searchParams.get("data_inicio");
-  const dataFim = url.searchParams.get("data_fim");
+async function handleResumo(body: Record<string, unknown> | null, url: URL) {
+  const codEmpresa = Number(getParam(body, url, "cod_empresa") || "0");
+  const dataInicio = getParam(body, url, "data_inicio");
+  const dataFim = getParam(body, url, "data_fim");
 
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
   const db = getServiceClient();
-  let query = db
-    .from("btg_extrato")
-    .select("*")
-    .eq("cod_empresa", codEmpresa);
-
+  let query = db.from("btg_extrato").select("*").eq("cod_empresa", codEmpresa);
   if (dataInicio) query = query.gte("data_lancamento", dataInicio);
   if (dataFim) query = query.lte("data_lancamento", dataFim);
 
   const { data, error } = await query;
-  if (error) {
-    return json({ error: "Erro ao buscar resumo", details: error.message }, 500);
-  }
+  if (error) return json({ error: "Erro ao buscar resumo", details: error.message }, 500);
 
   const lancamentos = data || [];
-  const totalCredito = lancamentos
-    .filter((l: { tipo: string }) => l.tipo === "CREDITO")
-    .reduce((sum: number, l: { valor: number }) => sum + Number(l.valor), 0);
-  const totalDebito = lancamentos
-    .filter((l: { tipo: string }) => l.tipo === "DEBITO")
-    .reduce((sum: number, l: { valor: number }) => sum + Number(l.valor), 0);
+  const totalCredito = lancamentos.filter((l: { tipo: string }) => l.tipo === "CREDITO").reduce((sum: number, l: { valor: number }) => sum + Number(l.valor), 0);
+  const totalDebito = lancamentos.filter((l: { tipo: string }) => l.tipo === "DEBITO").reduce((sum: number, l: { valor: number }) => sum + Number(l.valor), 0);
   const totalConciliado = lancamentos.filter((l: { conciliado: boolean }) => l.conciliado).length;
   const totalNaoConciliado = lancamentos.filter((l: { conciliado: boolean }) => !l.conciliado).length;
 
-  // Group by natureza
   const porNatureza: Record<string, { count: number; total: number }> = {};
   lancamentos.forEach((l: { natureza: string | null; valor: number; tipo: string }) => {
     const nat = l.natureza || "Sem classificação";
@@ -428,9 +337,7 @@ async function handleResumo(req: Request) {
     saldo_periodo: totalCredito - totalDebito,
     total_conciliado: totalConciliado,
     total_nao_conciliado: totalNaoConciliado,
-    percentual_conciliado: lancamentos.length > 0
-      ? Math.round((totalConciliado / lancamentos.length) * 100)
-      : 0,
+    percentual_conciliado: lancamentos.length > 0 ? Math.round((totalConciliado / lancamentos.length) * 100) : 0,
     por_natureza: porNatureza,
   });
 }
@@ -444,37 +351,34 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     let action = url.searchParams.get("action") || "";
+    let body: Record<string, unknown> | null = null;
 
-    if (!action && req.method === "POST") {
-      const cloned = req.clone();
+    if (req.method === "POST") {
       try {
-        const body = await cloned.json();
-        action = body.action || "";
-      } catch {
-        // no-op
-      }
+        body = await req.json();
+        if (!action && body?.action) action = String(body.action);
+      } catch { /* no-op */ }
     }
+
+    const userId = requireAuth(req);
 
     switch (action) {
       case "saldo":
-        return await handleSaldo(req);
+        return await handleSaldo(body, url);
       case "extrato":
-        return await handleExtrato(req);
+        return await handleExtrato(body, url);
       case "importar":
-        return await handleImportar(req);
+        return await handleImportar(body || {}, userId);
       case "listar":
-        return await handleListar(req);
+        return await handleListar(body, url, userId);
       case "classificar":
-        return await handleClassificar(req);
+        return await handleClassificar(body || {}, userId);
       case "conciliar":
-        return await handleConciliar(req);
+        return await handleConciliar(body || {}, userId);
       case "resumo":
-        return await handleResumo(req);
+        return await handleResumo(body, url);
       default:
-        return json(
-          { error: `Ação desconhecida: '${action}'. Use: saldo, extrato, importar, listar, classificar, conciliar, resumo` },
-          400
-        );
+        return json({ error: `Ação desconhecida: '${action}'. Use: saldo, extrato, importar, listar, classificar, conciliar, resumo` }, 400);
     }
   } catch (e) {
     if (e instanceof Response) return e;
