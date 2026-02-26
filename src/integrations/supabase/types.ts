@@ -1620,6 +1620,39 @@ export type Database = {
         }
         Relationships: []
       }
+      zeiss_empresa_config: {
+        Row: {
+          alias: string | null
+          ativo: boolean
+          cnpj: string | null
+          cod_cliente_sao: string | null
+          cod_empresa: number
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          alias?: string | null
+          ativo?: boolean
+          cnpj?: string | null
+          cod_cliente_sao?: string | null
+          cod_empresa: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          alias?: string | null
+          ativo?: boolean
+          cnpj?: string | null
+          cod_cliente_sao?: string | null
+          cod_empresa?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       sync_failures_summary: {
