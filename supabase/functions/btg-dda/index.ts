@@ -94,27 +94,39 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
   const ce = Number(cod_empresa);
-  const accessToken = await getBtgToken(ce);
-  const companyId = await getCompanyId(ce);
   const { apiBase } = getBtgUrls();
-
-  const btgRes = await fetch(
-    `${apiBase}/banking/v1/companies/${companyId}/dda`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-
-  const btgBody = await btgRes.text();
-  if (!btgRes.ok) {
-    console.error("[btg-dda] BTG API error:", btgRes.status, btgBody);
-    return json({ error: "Erro ao consultar DDA no BTG", btg_status: btgRes.status }, 502);
-  }
+  const isSandbox = (Deno.env.get("BTG_ENVIRONMENT") || "sandbox") === "sandbox";
 
   let btgData: Record<string, unknown>[] = [];
-  try {
-    const parsed = JSON.parse(btgBody);
-    btgData = Array.isArray(parsed) ? parsed : (parsed.items || parsed.data || []);
-  } catch {
-    return json({ error: "Resposta inválida do BTG" }, 502);
+
+  if (isSandbox) {
+    // Mock DDA titles for sandbox testing
+    btgData = [
+      { id: `sandbox-dda-${Date.now()}-1`, issuerName: "CEMIG DISTRIBUICAO SA", issuerDocument: "06.981.180/0001-16", documentNumber: "DDA-001", amount: 1890.50, dueDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10), digitableLine: "23793.38128 60000.000003 00000.000402 1 88880000189050" },
+      { id: `sandbox-dda-${Date.now()}-2`, issuerName: "TELEFONICA BRASIL SA", issuerDocument: "02.558.157/0001-62", documentNumber: "DDA-002", amount: 450.00, dueDate: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10), digitableLine: "23793.38128 60000.000004 00000.000403 1 88880000045000" },
+      { id: `sandbox-dda-${Date.now()}-3`, issuerName: "HOYA LENS DO BRASIL LTDA", issuerDocument: "01.722.296/0001-17", documentNumber: "DDA-003", amount: 12350.00, dueDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10), digitableLine: "23793.38128 60000.000005 00000.000404 1 88881001235000" },
+    ];
+  } else {
+    const accessToken = await getBtgToken(ce);
+    const companyId = await getCompanyId(ce);
+
+    const btgRes = await fetch(
+      `${apiBase}/banking/v1/companies/${companyId}/dda`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    const btgBody = await btgRes.text();
+    if (!btgRes.ok) {
+      console.error("[btg-dda] BTG API error:", btgRes.status, btgBody);
+      return json({ error: "Erro ao consultar DDA no BTG", btg_status: btgRes.status }, 502);
+    }
+
+    try {
+      const parsed = JSON.parse(btgBody);
+      btgData = Array.isArray(parsed) ? parsed : (parsed.items || parsed.data || []);
+    } catch {
+      return json({ error: "Resposta inválida do BTG" }, 502);
+    }
   }
 
   const db = getServiceClient();
@@ -150,7 +162,7 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     else console.warn("[btg-dda] Insert error:", error.message);
   }
 
-  return json({ success: true, importados: inseridos, duplicados, total_btg: btgData.length });
+  return json({ success: true, importados: inseridos, duplicados, total_btg: btgData.length, sandbox: isSandbox });
 }
 
 // ─── ACTION: conciliar_auto ──────────────────────────────────

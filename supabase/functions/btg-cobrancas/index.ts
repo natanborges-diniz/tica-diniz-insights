@@ -99,33 +99,44 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
   }
 
   const ce = Number(cod_empresa);
-  const accessToken = await getBtgToken(ce);
-  const companyId = await getCompanyId(ce);
-  const { apiBase } = getBtgUrls();
+  const { apiBase, isSandbox } = getBtgUrls();
 
-  const btgPayload = {
-    amount: Number(valor),
-    dueDate: String(data_vencimento),
-    payer: { name: sacado_nome ? String(sacado_nome) : "", document: String(sacado_documento) },
-  };
+  let btgReceivableId = "";
+  let linhaDigitavel = "";
+  let urlBoleto = "";
 
-  const btgRes = await fetch(
-    `${apiBase}/banking/v1/companies/${companyId}/receivables`,
-    { method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(btgPayload) }
-  );
+  if (isSandbox) {
+    btgReceivableId = `sandbox-rcv-${Date.now()}`;
+    linhaDigitavel = "23793.38128 60000.000003 00000.000402 1 " + String(Math.floor(Math.random() * 9999999999)).padStart(10, "0");
+    urlBoleto = `https://sandbox.btgpactual.com/boleto/${btgReceivableId}`;
+  } else {
+    const accessToken = await getBtgToken(ce);
+    const companyId = await getCompanyId(ce);
 
-  const btgBody = await btgRes.text();
-  let btgData: Record<string, unknown> = {};
-  try { btgData = JSON.parse(btgBody); } catch { /* non-JSON */ }
+    const btgPayload = {
+      amount: Number(valor),
+      dueDate: String(data_vencimento),
+      payer: { name: sacado_nome ? String(sacado_nome) : "", document: String(sacado_documento) },
+    };
 
-  if (!btgRes.ok) {
-    console.error("[btg-cobrancas] BTG API error:", btgRes.status, btgBody);
-    return json({ error: "BTG rejeitou a emissão", btg_status: btgRes.status, details: btgData }, 502);
+    const btgRes = await fetch(
+      `${apiBase}/banking/v1/companies/${companyId}/receivables`,
+      { method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(btgPayload) }
+    );
+
+    const btgBody = await btgRes.text();
+    let btgData: Record<string, unknown> = {};
+    try { btgData = JSON.parse(btgBody); } catch { /* non-JSON */ }
+
+    if (!btgRes.ok) {
+      console.error("[btg-cobrancas] BTG API error:", btgRes.status, btgBody);
+      return json({ error: "BTG rejeitou a emissão", btg_status: btgRes.status, details: btgData }, 502);
+    }
+
+    btgReceivableId = (btgData.id || btgData.receivableId || "") as string;
+    linhaDigitavel = (btgData.digitableLine || btgData.linha_digitavel || "") as string;
+    urlBoleto = (btgData.url || btgData.boletoUrl || "") as string;
   }
-
-  const btgReceivableId = (btgData.id || btgData.receivableId || "") as string;
-  const linhaDigitavel = (btgData.digitableLine || btgData.linha_digitavel || "") as string;
-  const urlBoleto = (btgData.url || btgData.boletoUrl || "") as string;
 
   const db = getServiceClient();
   const { data, error } = await db.from("btg_cobrancas").insert({
@@ -146,7 +157,7 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
     return json({ error: "Erro ao gravar cobrança", details: error.message }, 500);
   }
 
-  return json({ success: true, cobranca: data }, 201);
+  return json({ success: true, cobranca: data, sandbox: isSandbox }, 201);
 }
 
 // ─── ACTION: listar ──────────────────────────────────────────
