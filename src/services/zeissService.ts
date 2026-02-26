@@ -229,3 +229,46 @@ export async function listarHistoricoPedidosZeiss(
 export async function listarTimelinePedidoZeiss(pedidoFornecedorId: string): Promise<StatusHistoryEntry[]> {
   return callZeissProxy<StatusHistoryEntry[]>("timeline-pedido", { pedidoFornecedorId });
 }
+
+// ── Services ──
+
+export async function listarServicosZeiss(): Promise<unknown[]> {
+  return callZeissProxy<unknown[]>("listar-servicos");
+}
+
+export async function listarServicosPorProdutoZeiss(familia: string, codEmpresa: number): Promise<unknown[]> {
+  return callZeissProxy<unknown[]>("servicos-por-produto", { familia, codEmpresa });
+}
+
+// ── Colors ──
+
+export async function listarCoresZeiss(familia: string): Promise<unknown[]> {
+  return callZeissProxy<unknown[]>("listar-cores", { familia });
+}
+
+// ── Base Suggestion ──
+
+export async function sugestaoBaseZeiss(
+  codEmpresa: number,
+  familia: string,
+  esf?: string,
+  cil?: string,
+  adicao?: string
+): Promise<unknown> {
+  return callZeissProxy("sugestao-base", { codEmpresa, familia, esf, cil, adicao });
+}
+
+// ── Price Table ──
+
+export async function tabelaPrecosZeiss(codEmpresa: number): Promise<unknown> {
+  return callZeissProxy("tabela-precos", { codEmpresa });
+}
+
+// ── Cancel Order ──
+
+export async function cancelarPedidoZeiss(
+  numeroPedido: string | number,
+  estabelecimento: string
+): Promise<unknown> {
+  return callZeissProxy("cancelar-pedido", { numeroPedido, estabelecimento });
+}
