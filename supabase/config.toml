@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.btg-extrato]
 verify_jwt = false
+
+[functions.zeiss-proxy]
+verify_jwt = false

@@ -129,10 +129,8 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
   const isOpen = !!os;
 
 
-  const handleGerarPedido = () => {
-    if (!os) return;
-    onClose();
-    // Pass patient data via URL params as fallback
+  const buildPedidoParams = () => {
+    if (!os) return "";
     const params = new URLSearchParams({
       codOs: String(os.codOs),
       codEmpresa: String(os.codEmpresa),
@@ -140,7 +138,19 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
     if (os.paciente) params.set("paciente", os.paciente);
     if (os.cpf) params.set("cpf", os.cpf);
     if (os.dataNascimento) params.set("dataNascimento", os.dataNascimento);
-    navigate(`/os/pedido?${params.toString()}`);
+    return params.toString();
+  };
+
+  const handleGerarPedido = () => {
+    if (!os) return;
+    onClose();
+    navigate(`/os/pedido?${buildPedidoParams()}`);
+  };
+
+  const handleGerarPedidoZeiss = () => {
+    if (!os) return;
+    onClose();
+    navigate(`/os/pedido-zeiss?${buildPedidoParams()}`);
   };
 
   // Build subtitle from available context
@@ -164,7 +174,11 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
             </Button>
             <Button size="sm" onClick={handleGerarPedido} className="gap-1.5">
               <Send className="h-4 w-4" />
-              Gerar Pedido Hoya
+              Pedido Hoya
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleGerarPedidoZeiss} className="gap-1.5">
+              <Send className="h-4 w-4" />
+              Pedido Zeiss
             </Button>
           </>
         ) : undefined
