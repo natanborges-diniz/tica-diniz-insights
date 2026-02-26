@@ -263,7 +263,7 @@ function CredenciaisSection({
 }
 
 // ─────────────────────────────────────────
-// Sub-component: Mapeamento por empresa
+// Sub-component: Mapeamento por empresa (Hoya)
 // ─────────────────────────────────────────
 interface EditingRow {
   cnpj: string;
@@ -291,17 +291,9 @@ function EmpresasSection() {
       setConfigs(rows);
       const initial: Record<string, EditingRow> = {};
       rows.forEach((r) => {
-        // Formata o CNPJ salvo (apenas dígitos) para exibição formatada
         const cnpjDigits = (r.cnpj || "").replace(/\D/g, "");
-        const formatCnpjLocal = (d: string) => {
-          if (d.length <= 2) return d;
-          if (d.length <= 5) return `${d.slice(0,2)}.${d.slice(2)}`;
-          if (d.length <= 8) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5)}`;
-          if (d.length <= 12) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8)}`;
-          return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
-        };
         initial[r.id] = {
-          cnpj: formatCnpjLocal(cnpjDigits),
+          cnpj: formatCnpjDisplay(cnpjDigits),
           cod_cliente_hoya: r.cod_cliente_hoya || "",
           alias: r.alias || "",
         };
@@ -313,21 +305,10 @@ function EmpresasSection() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Formata string de dígitos para XX.XXX.XXX/XXXX-XX
-  const formatCnpj = (digits: string): string => {
-    const d = digits.replace(/\D/g, "").slice(0, 14);
-    if (d.length <= 2) return d;
-    if (d.length <= 5) return `${d.slice(0,2)}.${d.slice(2)}`;
-    if (d.length <= 8) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5)}`;
-    if (d.length <= 12) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8)}`;
-    return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
-  };
-
   const handleChange = (id: string, field: keyof EditingRow, value: string) => {
     if (field === "cnpj") {
       value = formatCnpj(value);
     } else if (field === "cod_cliente_hoya") {
-      // Permite apenas dígitos (incluindo zeros à esquerda)
       value = value.replace(/\D/g, "");
     }
     setEditing((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
@@ -336,9 +317,7 @@ function EmpresasSection() {
   const handleSave = async (config: EmpresaConfig) => {
     const row = editing[config.id];
     if (!row) return;
-    // Salva o código como texto puro — preserva zeros à esquerda (ex: "008602")
     const codClienteStr = row.cod_cliente_hoya.trim();
-    // Remove formatação do CNPJ para salvar apenas dígitos
     const cnpjDigits = row.cnpj.replace(/\D/g, "") || null;
     setSaving(config.id);
     const { error } = await supabase
@@ -371,7 +350,6 @@ function EmpresasSection() {
   const isChanged = (config: EmpresaConfig) => {
     const row = editing[config.id];
     if (!row) return false;
-    // Compara CNPJ normalizando para apenas dígitos
     const cnpjDigitsRow = row.cnpj.replace(/\D/g, "");
     const cnpjDigitsConfig = (config.cnpj || "").replace(/\D/g, "");
     return cnpjDigitsRow !== cnpjDigitsConfig ||
@@ -381,6 +359,219 @@ function EmpresasSection() {
 
   const totalOk = configs.filter((c) => c.cod_cliente_hoya != null && c.cnpj).length;
 
+  return (
+    <EmpresasTable
+      configs={configs}
+      editing={editing}
+      loading={loading}
+      saving={saving}
+      totalOk={totalOk}
+      codLabel="Cód. Cliente Hoya"
+      codField="cod_cliente_hoya"
+      fornecedorName="Hoya"
+      onChange={handleChange}
+      onSave={handleSave}
+      onDelete={handleDelete}
+      isChanged={isChanged}
+    />
+  );
+}
+
+// ─────────────────────────────────────────
+// Sub-component: Mapeamento por empresa (Zeiss)
+// ─────────────────────────────────────────
+interface ZeissEmpresaConfig {
+  id: string;
+  cod_empresa: number;
+  alias: string | null;
+  cnpj: string | null;
+  cod_cliente_sao: string | null;
+  ativo: boolean;
+  updated_at: string;
+}
+
+interface ZeissEditingRow {
+  cnpj: string;
+  cod_cliente_sao: string;
+  alias: string;
+}
+
+function ZeissEmpresasSection() {
+  const [configs, setConfigs] = useState<ZeissEmpresaConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Record<string, ZeissEditingRow>>({});
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("zeiss_empresa_config" as never)
+      .select("*")
+      .order("cod_empresa");
+
+    if (error) {
+      toast({ title: "Erro ao carregar", description: error.message, variant: "destructive" });
+    } else if (data) {
+      const rows = data as ZeissEmpresaConfig[];
+      setConfigs(rows);
+      const initial: Record<string, ZeissEditingRow> = {};
+      rows.forEach((r) => {
+        const cnpjDigits = (r.cnpj || "").replace(/\D/g, "");
+        initial[r.id] = {
+          cnpj: formatCnpjDisplay(cnpjDigits),
+          cod_cliente_sao: r.cod_cliente_sao || "",
+          alias: r.alias || "",
+        };
+      });
+      setEditing(initial);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleChange = (id: string, field: keyof ZeissEditingRow, value: string) => {
+    if (field === "cnpj") {
+      value = formatCnpj(value);
+    } else if (field === "cod_cliente_sao") {
+      value = value.replace(/\D/g, "");
+    }
+    setEditing((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
+  };
+
+  const handleSave = async (config: ZeissEmpresaConfig) => {
+    const row = editing[config.id];
+    if (!row) return;
+    const codClienteStr = row.cod_cliente_sao.trim();
+    const cnpjDigits = row.cnpj.replace(/\D/g, "") || null;
+    setSaving(config.id);
+    const { error } = await supabase
+      .from("zeiss_empresa_config" as never)
+      .update({ cnpj: cnpjDigits, cod_cliente_sao: codClienteStr || null, alias: row.alias.trim() || null } as never)
+      .eq("id", config.id);
+
+    if (error) {
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Empresa ${config.cod_empresa} atualizada` });
+      fetchData();
+    }
+    setSaving(null);
+  };
+
+  const handleDelete = async (config: ZeissEmpresaConfig) => {
+    const { error } = await supabase
+      .from("zeiss_empresa_config" as never)
+      .delete()
+      .eq("id", config.id);
+    if (error) {
+      toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Empresa ${config.cod_empresa} removida` });
+      fetchData();
+    }
+  };
+
+  const isChanged = (config: ZeissEmpresaConfig) => {
+    const row = editing[config.id];
+    if (!row) return false;
+    const cnpjDigitsRow = row.cnpj.replace(/\D/g, "");
+    const cnpjDigitsConfig = (config.cnpj || "").replace(/\D/g, "");
+    return cnpjDigitsRow !== cnpjDigitsConfig ||
+      row.cod_cliente_sao !== (config.cod_cliente_sao || "") ||
+      row.alias !== (config.alias || "");
+  };
+
+  const totalOk = configs.filter((c) => c.cod_cliente_sao != null && c.cnpj).length;
+
+  // Adapt to shared table component
+  const adaptedConfigs = configs.map(c => ({
+    ...c,
+    cod_cliente_hoya: c.cod_cliente_sao,
+  })) as unknown as EmpresaConfig[];
+
+  const adaptedEditing: Record<string, EditingRow> = {};
+  Object.entries(editing).forEach(([k, v]) => {
+    adaptedEditing[k] = { cnpj: v.cnpj, cod_cliente_hoya: v.cod_cliente_sao, alias: v.alias };
+  });
+
+  return (
+    <EmpresasTable
+      configs={adaptedConfigs}
+      editing={adaptedEditing}
+      loading={loading}
+      saving={saving}
+      totalOk={totalOk}
+      codLabel="Cód. Cliente SAO"
+      codField="cod_cliente_hoya"
+      fornecedorName="Zeiss"
+      onChange={(id, field, value) => {
+        const zeissField = field === "cod_cliente_hoya" ? "cod_cliente_sao" : field;
+        handleChange(id, zeissField as keyof ZeissEditingRow, value);
+      }}
+      onSave={(config) => {
+        const original = configs.find(c => c.id === config.id);
+        if (original) handleSave(original);
+      }}
+      onDelete={(config) => {
+        const original = configs.find(c => c.id === config.id);
+        if (original) handleDelete(original);
+      }}
+      isChanged={(config) => {
+        const original = configs.find(c => c.id === config.id);
+        if (original) return isChanged(original);
+        return false;
+      }}
+    />
+  );
+}
+
+// ─────────────────────────────────────────
+// Shared CNPJ helpers
+// ─────────────────────────────────────────
+function formatCnpjDisplay(digits: string): string {
+  const d = digits.replace(/\D/g, "").slice(0, 14);
+  if (d.length <= 2) return d;
+  if (d.length <= 5) return `${d.slice(0,2)}.${d.slice(2)}`;
+  if (d.length <= 8) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5)}`;
+  if (d.length <= 12) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8)}`;
+  return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
+}
+
+function formatCnpj(value: string): string {
+  return formatCnpjDisplay(value);
+}
+
+// ─────────────────────────────────────────
+// Shared: Empresas Table Component
+// ─────────────────────────────────────────
+function EmpresasTable({
+  configs,
+  editing,
+  loading,
+  saving,
+  totalOk,
+  codLabel,
+  codField,
+  fornecedorName,
+  onChange,
+  onSave,
+  onDelete,
+  isChanged,
+}: {
+  configs: EmpresaConfig[];
+  editing: Record<string, EditingRow>;
+  loading: boolean;
+  saving: string | null;
+  totalOk: number;
+  codLabel: string;
+  codField: string;
+  fornecedorName: string;
+  onChange: (id: string, field: keyof EditingRow, value: string) => void;
+  onSave: (config: EmpresaConfig) => void;
+  onDelete: (config: EmpresaConfig) => void;
+  isChanged: (config: EmpresaConfig) => boolean;
+}) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-4">
@@ -405,7 +596,7 @@ function EmpresasSection() {
             Mapeamento por Empresa
           </CardTitle>
           <CardDescription>
-            Associe o CNPJ e o código de cliente Hoya para cada unidade. O alias é usado nos pedidos.
+            Associe o CNPJ e o código de cliente {fornecedorName} para cada unidade. O alias é usado nos pedidos.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -418,7 +609,7 @@ function EmpresasSection() {
                   <TableHead className="w-14">Cód.</TableHead>
                   <TableHead className="w-40">Alias / Nome</TableHead>
                   <TableHead className="w-44">CNPJ</TableHead>
-                  <TableHead className="w-36">Cód. Cliente Hoya</TableHead>
+                  <TableHead className="w-36">{codLabel}</TableHead>
                   <TableHead className="w-24">Status</TableHead>
                   <TableHead className="w-24 text-right">Ações</TableHead>
                 </TableRow>
@@ -433,13 +624,13 @@ function EmpresasSection() {
                     <TableRow key={config.id} className={changed ? "bg-muted/50" : ""}>
                       <TableCell className="font-mono font-bold text-muted-foreground text-sm">{config.cod_empresa}</TableCell>
                       <TableCell>
-                        <Input className="h-8 text-sm" value={row.alias} onChange={(e) => handleChange(config.id, "alias", e.target.value)} placeholder="Nome da loja" />
+                        <Input className="h-8 text-sm" value={row.alias} onChange={(e) => onChange(config.id, "alias", e.target.value)} placeholder="Nome da loja" />
                       </TableCell>
                       <TableCell>
-                        <Input className="h-8 text-sm font-mono" value={row.cnpj} onChange={(e) => handleChange(config.id, "cnpj", e.target.value)} placeholder="00.000.000/0001-00" maxLength={18} />
+                        <Input className="h-8 text-sm font-mono" value={row.cnpj} onChange={(e) => onChange(config.id, "cnpj", e.target.value)} placeholder="00.000.000/0001-00" maxLength={18} />
                       </TableCell>
                       <TableCell>
-                        <Input className="h-8 text-sm font-mono" type="text" inputMode="numeric" value={row.cod_cliente_hoya} onChange={(e) => handleChange(config.id, "cod_cliente_hoya", e.target.value)} placeholder="Ex: 00123" />
+                        <Input className="h-8 text-sm font-mono" type="text" inputMode="numeric" value={row.cod_cliente_hoya} onChange={(e) => onChange(config.id, "cod_cliente_hoya", e.target.value)} placeholder="Ex: 00123" />
                       </TableCell>
                       <TableCell>
                         {ok
@@ -448,7 +639,7 @@ function EmpresasSection() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button size="sm" variant={changed ? "default" : "ghost"} className="h-8" onClick={() => handleSave(config)} disabled={!changed || isSaving}>
+                          <Button size="sm" variant={changed ? "default" : "ghost"} className="h-8" onClick={() => onSave(config)} disabled={!changed || isSaving}>
                             {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                           </Button>
                           <AlertDialog>
@@ -461,14 +652,14 @@ function EmpresasSection() {
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Excluir empresa {config.cod_empresa}?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Esta ação removerá o mapeamento da empresa <strong>{row.alias || config.cod_empresa}</strong> do fornecedor Hoya. Isso não pode ser desfeito.
+                                  Esta ação removerá o mapeamento da empresa <strong>{row.alias || config.cod_empresa}</strong> do fornecedor {fornecedorName}. Isso não pode ser desfeito.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                 <AlertDialogAction
                                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  onClick={() => handleDelete(config)}
+                                  onClick={() => onDelete(config)}
                                 >
                                   Excluir
                                 </AlertDialogAction>
@@ -492,7 +683,7 @@ function EmpresasSection() {
 // ─────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────
-const FORNECEDORES = ["HOYA"] as const; // Adicionar novos fornecedores aqui
+const FORNECEDORES = ["HOYA", "ZEISS"] as const;
 
 export default function AdminFornecedoresPage() {
   const { isAdmin, isLoading: authLoading } = useAuth();
@@ -598,7 +789,7 @@ export default function AdminFornecedoresPage() {
                       <CredenciaisSection config={cfg} onSaved={fetchConfigs} />
                     </TabsContent>
                     <TabsContent value="empresas" className="mt-4">
-                      <EmpresasSection />
+                      {fornecedor === "ZEISS" ? <ZeissEmpresasSection /> : <EmpresasSection />}
                     </TabsContent>
                   </Tabs>
                 </div>
