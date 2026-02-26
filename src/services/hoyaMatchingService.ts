@@ -58,6 +58,13 @@ const MATERIAL_MAP: Record<string, string[]> = {
 
 /** Known lens design names in Hoya catalog */
 const KNOWN_DESENHOS = [
+  "Hoyalux D+ FF",
+  "Hoyalux D FF",
+  "Hoyalux iD FF",
+  "Hoyalux iD LS FF",
+  "Hoyalux iD MyStyle V+",
+  "Hoyalux Sportive FF",
+  "Hoyalux",
   "Argos",
   "MyStyle",
   "iD FreeForm",
