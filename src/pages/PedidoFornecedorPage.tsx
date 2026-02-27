@@ -11,8 +11,6 @@ import {
   listarProdutosHoya,
   criarPedidoHoya,
   recuperarPedidoPorOs,
-  listarCondicoesPagamentoHoya,
-  HoyaCondicaoPagamento,
 } from "@/services/hoyaService";
 import {
   matchProducts,
@@ -163,8 +161,7 @@ const PedidoFornecedorPage: React.FC = () => {
   const [osNumeroEditavel, setOsNumeroEditavel] = useState("");
   const [nomeMedico, setNomeMedico] = useState("");
   const [crmMedico, setCrmMedico] = useState("");
-  // Condições de pagamento dinâmicas
-  const [condicoesPagamento, setCondicoesPagamento] = useState<HoyaCondicaoPagamento[]>([]);
+   // Condições de pagamento: fixada em 30/60/90 (seleção automática nos botões de preço)
   const [condicaoPagamentoSelecionada, setCondicaoPagamentoSelecionada] = useState<string>("default");
   const COND_PAGAMENTO_FIXA = "30/60/90";
   
@@ -374,18 +371,6 @@ const PedidoFornecedorPage: React.FC = () => {
         });
       } finally {
         setLoadingProdutos(false);
-      }
-    })();
-    // Fetch payment conditions
-    (async () => {
-      try {
-        const conds = await listarCondicoesPagamentoHoya();
-        if (Array.isArray(conds) && conds.length > 0) {
-          setCondicoesPagamento(conds);
-          // Don't auto-select — leave empty so API uses client's default
-        }
-      } catch (err) {
-        console.error("[PedidoFornecedor] Error loading payment conditions:", err);
       }
     })();
   }, []);
@@ -1905,23 +1890,6 @@ const PedidoFornecedorPage: React.FC = () => {
                     placeholder="CRM"
                   />
                 </div>
-              </div>
-              <div>
-                <Label className="text-[10px] uppercase">Condição de Pagamento</Label>
-                <Select value={condicaoPagamentoSelecionada} onValueChange={setCondicaoPagamentoSelecionada}>
-                  <SelectTrigger className="h-8 text-sm font-mono">
-                    <SelectValue placeholder="Padrão do cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Padrão do cliente</SelectItem>
-                    {condicoesPagamento.map(c => (
-                      <SelectItem key={c.codigo} value={String(c.codigo)}>
-                        {c.descricao} (cód. {c.codigo})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <span className="text-[9px] text-muted-foreground">Deixe vazio para usar a condição padrão do cliente</span>
               </div>
               <div>
                 <Label className="text-[10px] uppercase flex items-center gap-1">
