@@ -140,12 +140,17 @@ export interface GetResumoFormasPagamentoParams {
   excluirCreditos?: boolean;
   /** Se true, inclui devoluções como registros negativos */
   incluirDevolucoes?: boolean;
+  /** Timeout customizado em ms (padrão: 15000) */
+  timeoutMs?: number;
 }
 
 export async function getResumoFormasPagamento(
   params: GetResumoFormasPagamentoParams
 ): Promise<ResumoFormaPagamento[]> {
-  const options: ApiGetOptions = params.bypassCache ? { cache: false } : {};
+  const options: ApiGetOptions = {
+    ...(params.bypassCache ? { cache: false } : {}),
+    ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
+  };
   
   const queryParams: Record<string, string | number | boolean | undefined> = {
     empresa: formatEmpresaParam(params.empresa),
