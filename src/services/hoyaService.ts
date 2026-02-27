@@ -318,6 +318,16 @@ export async function listarTimelinePedido(pedidoFornecedorId: string): Promise<
   return callHoyaProxy<StatusHistoryEntry[]>("timeline-pedido", { pedidoFornecedorId });
 }
 
+// Payment conditions
+export interface HoyaCondicaoPagamento {
+  codigo: number;
+  descricao: string;
+}
+
+export async function listarCondicoesPagamentoHoya(): Promise<HoyaCondicaoPagamento[]> {
+  return callHoyaProxy<HoyaCondicaoPagamento[]>("consultar-condicoes-pagamento");
+}
+
 export async function listarTiposArmacaoHoya(): Promise<unknown[]> {
   return callHoyaProxy<unknown[]>("tipos-armacao");
 }
