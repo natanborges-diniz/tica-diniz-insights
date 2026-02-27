@@ -65,6 +65,8 @@ const KNOWN_DESENHOS = [
   "Hoyalux iD MyStyle V+",
   "Hoyalux Sportive FF",
   "Hoyalux",
+  "Sync III",
+  "Sync",
   "Argos",
   "MyStyle",
   "iD FreeForm",
@@ -177,11 +179,15 @@ export function parseErpDescription(desc: string): ParsedLensDescription {
   } else if (tokens.some(t => t === "INC" || t.endsWith("INC"))) {
     tratamento = "HV HARD Anti-Risco";
     isINC = true;
+  } else if ((upper.includes("NORISK") || upper.includes("NO RISK")) && (upper.includes("BLUE") || upper.includes("BLUECONTROL"))) {
+    // NORISK BLUE = NoRisk com Bluecontrol
+    tratamento = "NoRisk";
+    isBlue = true;
   } else if (upper.includes("NORISK") || upper.includes("NO RISK")) {
     tratamento = "NoRisk";
   } else if (upper.includes("CLEANEXTRA") || upper.includes("CLEAN EXTRA")) {
     tratamento = "CleanExtra";
-  } else if (upper.includes("BLUECONTROL") || upper.includes("BLUE CONTROL")) {
+  } else if (upper.includes("BLUECONTROL") || upper.includes("BLUE CONTROL") || tokens.some(t => t === "BLUE")) {
     tratamento = "HV LL Bluecontrol";
     isBlue = true;
   } else if (tokens.some(t => t === "LONG")) {
