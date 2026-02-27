@@ -484,26 +484,44 @@ export function useVendasDashboard() {
         const { data: cacheData, error: cacheError } = await queryCache;
         
         if (!cacheError && cacheData && cacheData.length > 0) {
-          // Buscar nomes das empresas
-          const empresasMap = await getEmpresasMap();
+          // Verificar completude do cache antes de usá-lo
+          const uniqueEmpresas = new Set(cacheData.map(d => d.cod_empresa));
+          const uniqueDias = new Set(cacheData.map(d => d.data));
+          const diasEsperados = Math.min(diasNoPeriodo, 31);
+          const coberturaDias = uniqueDias.size / diasEsperados;
           
-          // Converter dados do cache para ResumoFormaPagamento
-          dadosFinais = cacheData.map(d => ({
-            codEmpresa: d.cod_empresa,
-            empresa: empresasMap.get(d.cod_empresa) || `Loja ${d.cod_empresa}`,
-            vendedor: d.vendedor,
-            formaPagamento: d.forma_pagamento,
-            totalGeral: Number(d.total_vendido) || 0,
-            qtdVendas: Number(d.qtd_vendas) || 0,
-            totalBruto: Number(d.total_bruto) || 0,
-            totalDesconto: Number(d.total_desconto) || 0,
-            percentualDesconto: (Number(d.total_bruto) || 0) > 0 
-              ? ((Number(d.total_desconto) || 0) / (Number(d.total_bruto) || 0)) * 100 
-              : 0,
-          }));
+          // Cache é considerado incompleto se:
+          // - ALL empresas mas cache tem <= 1 empresa
+          // - Cobertura de dias < 50%
+          const cacheIncompleto = (
+            (empresa === 'ALL' && uniqueEmpresas.size <= 1 && diasEsperados > 3) ||
+            (coberturaDias < 0.4 && diasEsperados > 5)
+          );
           
-          usouCache = true;
-          console.log(`[useVendasDashboard] ✓ Cache: ${dadosFinais.length} registros`);
+          if (cacheIncompleto) {
+            console.log(`[useVendasDashboard] ⚠ Cache incompleto: ${uniqueEmpresas.size} empresas, ${uniqueDias.size}/${diasEsperados} dias (${(coberturaDias*100).toFixed(0)}%). Buscando do Firebird...`);
+          } else {
+            // Buscar nomes das empresas
+            const empresasMap = await getEmpresasMap();
+            
+            // Converter dados do cache para ResumoFormaPagamento
+            dadosFinais = cacheData.map(d => ({
+              codEmpresa: d.cod_empresa,
+              empresa: empresasMap.get(d.cod_empresa) || `Loja ${d.cod_empresa}`,
+              vendedor: d.vendedor,
+              formaPagamento: d.forma_pagamento,
+              totalGeral: Number(d.total_vendido) || 0,
+              qtdVendas: Number(d.qtd_vendas) || 0,
+              totalBruto: Number(d.total_bruto) || 0,
+              totalDesconto: Number(d.total_desconto) || 0,
+              percentualDesconto: (Number(d.total_bruto) || 0) > 0 
+                ? ((Number(d.total_desconto) || 0) / (Number(d.total_bruto) || 0)) * 100 
+                : 0,
+            }));
+            
+            usouCache = true;
+            console.log(`[useVendasDashboard] ✓ Cache: ${dadosFinais.length} registros (${uniqueEmpresas.size} empresas, ${uniqueDias.size} dias)`);
+          }
         } else {
           console.log('[useVendasDashboard] ⚠ Cache vazio, tentando Firebird...');
         }
@@ -511,7 +529,7 @@ export function useVendasDashboard() {
         console.warn('[useVendasDashboard] Erro no cache:', cacheErr);
       }
       
-      // PASSO 2: Se cache vazio, tentar Firebird como fallback
+      // PASSO 2: Se cache vazio ou incompleto, buscar do Firebird
       if (dadosFinais.length === 0) {
         console.log('[useVendasDashboard] 🔥 Buscando do Firebird...');
         
