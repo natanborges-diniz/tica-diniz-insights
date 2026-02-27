@@ -166,6 +166,7 @@ const PedidoFornecedorPage: React.FC = () => {
   // Condições de pagamento dinâmicas
   const [condicoesPagamento, setCondicoesPagamento] = useState<HoyaCondicaoPagamento[]>([]);
   const [condicaoPagamentoSelecionada, setCondicaoPagamentoSelecionada] = useState<string>("default");
+  const COND_PAGAMENTO_FIXA = "30/60/90";
   
 
 
@@ -194,6 +195,17 @@ const PedidoFornecedorPage: React.FC = () => {
   const [confirmedPrescription, setConfirmedPrescription] = useState(false);
   const [autoFillSource, setAutoFillSource] = useState<AutoFillSource>(null);
   const [prescriptionAutoFilled, setPrescriptionAutoFilled] = useState(false);
+
+  // Auto-select 30/60/90 payment condition when product changes
+  useEffect(() => {
+    if (produtoSelecionado?.precos?.length) {
+      const cond3060 = produtoSelecionado.precos.find(p => p.lista.toLowerCase().includes("30/60/90"));
+      if (cond3060) {
+        const codigo = cond3060.lista.match(/^(\d+)/)?.[1] || "";
+        if (codigo) setCondicaoPagamentoSelecionada(codigo);
+      }
+    }
+  }, [produtoSelecionado]);
 
   // Reset confirmation when product changes
   const handleProductChange = useCallback((produto: HoyaProduto | null, source: AutoFillSource) => {
@@ -1350,18 +1362,25 @@ const PedidoFornecedorPage: React.FC = () => {
                     <div className="flex flex-wrap gap-2 mt-2">
                       {produtoSelecionado.precos.slice(0, 5).map((p, i) => {
                         const codigoCond = p.lista.match(/^(\d+)/)?.[1] || "";
+                        const isCondFixa = p.lista.toLowerCase().includes("30/60/90");
                         const isSelected = condicaoPagamentoSelecionada === codigoCond;
+                        const isDisabled = !isCondFixa;
                         return (
                           <button
                             key={i}
                             type="button"
+                            disabled={isDisabled}
                             onClick={() => {
-                              setCondicaoPagamentoSelecionada(isSelected ? "default" : codigoCond);
+                              if (!isDisabled) {
+                                setCondicaoPagamentoSelecionada(isSelected ? "default" : codigoCond);
+                              }
                             }}
                             className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
                               isSelected
                                 ? "border-primary bg-primary/15 text-primary font-semibold ring-1 ring-primary/30"
-                                : "border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground"
+                                : isDisabled
+                                  ? "border-border bg-muted/50 text-muted-foreground/50 cursor-not-allowed opacity-50"
+                                  : "border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground"
                             }`}
                           >
                             {p.lista.substring(0, 25)}: <span className="font-mono">R$ {p.preco.toFixed(2)}</span>
@@ -1503,18 +1522,25 @@ const PedidoFornecedorPage: React.FC = () => {
                   <div className="flex flex-wrap gap-2 mt-2">
                     {produtoSelecionado.precos.slice(0, 5).map((p, i) => {
                       const codigoCond = p.lista.match(/^(\d+)/)?.[1] || "";
+                      const isCondFixa = p.lista.toLowerCase().includes("30/60/90");
                       const isSelected = condicaoPagamentoSelecionada === codigoCond;
+                      const isDisabled = !isCondFixa;
                       return (
                         <button
                           key={i}
                           type="button"
+                          disabled={isDisabled}
                           onClick={() => {
-                            setCondicaoPagamentoSelecionada(isSelected ? "default" : codigoCond);
+                            if (!isDisabled) {
+                              setCondicaoPagamentoSelecionada(isSelected ? "default" : codigoCond);
+                            }
                           }}
                           className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
                             isSelected
                               ? "border-primary bg-primary/15 text-primary font-semibold ring-1 ring-primary/30"
-                              : "border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground"
+                              : isDisabled
+                                ? "border-border bg-muted/50 text-muted-foreground/50 cursor-not-allowed opacity-50"
+                                : "border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground"
                           }`}
                         >
                           {p.lista.substring(0, 25)}: <span className="font-mono">R$ {p.preco.toFixed(2)}</span>
