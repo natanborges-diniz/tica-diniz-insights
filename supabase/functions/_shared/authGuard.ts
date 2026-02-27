@@ -58,7 +58,7 @@ export async function authGuard(
   const claims = decodeJwtPayload(token);
 
   if (!claims || !claims.sub || claims.aud !== "authenticated") {
-    console.error("[authGuard] JWT decode failed or invalid audience");
+    console.error("[authGuard] JWT decode failed or invalid audience. sub:", claims?.sub, "aud:", claims?.aud, "token length:", token.length);
     throw new Response(
       JSON.stringify({ error: "Unauthorized — token inválido" }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
