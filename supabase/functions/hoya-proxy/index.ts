@@ -892,7 +892,9 @@ serve(async (req) => {
       }
 
       case "consultar-condicoes-pagamento": {
-        const condUrl = `${HOYA_BASE_URL}/pedido/consultar-condicoes-pagamento`;
+        // The payment conditions endpoint uses /servicos/ path, not /api/customer/
+        const baseOrigin = new URL(HOYA_BASE_URL).origin;
+        const condUrl = `${baseOrigin}/servicos/pedido/consultar-condicoes-pagamento`;
         const condResp = await fetchWithRetry(
           condUrl,
           { method: "GET", headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" } },
@@ -902,7 +904,7 @@ serve(async (req) => {
         let condData: unknown;
         try { condData = JSON.parse(condText); } catch { condData = { rawResponse: condText }; }
         return new Response(JSON.stringify(condData), {
-          status: condResp.status,
+          status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
         });
       }
