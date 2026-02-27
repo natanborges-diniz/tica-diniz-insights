@@ -165,7 +165,7 @@ const PedidoFornecedorPage: React.FC = () => {
   const [crmMedico, setCrmMedico] = useState("");
   // Condições de pagamento dinâmicas
   const [condicoesPagamento, setCondicoesPagamento] = useState<HoyaCondicaoPagamento[]>([]);
-  const [condicaoPagamentoSelecionada, setCondicaoPagamentoSelecionada] = useState<string>("");
+  const [condicaoPagamentoSelecionada, setCondicaoPagamentoSelecionada] = useState<string>("default");
   
 
 
@@ -721,7 +721,7 @@ const PedidoFornecedorPage: React.FC = () => {
           formaArmacao,
         },
         valorMontagemSemTriangulacao: (tipoServico === 1 || tipoServico === 3) ? valorMontagem : 0,
-        condicaoPagamento: condicaoPagamentoSelecionada || undefined,
+        condicaoPagamento: condicaoPagamentoSelecionada && condicaoPagamentoSelecionada !== "default" ? condicaoPagamentoSelecionada : undefined,
         garantia: {
           usuarioFinal: removeAccents(usuarioFinal || os.paciente || os.cliente || ""),
           inicialUsuario: removeAccents(inicialUsuario || (usuarioFinal || os.paciente || os.cliente || "").split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 2).toUpperCase() || "US"),
@@ -1857,7 +1857,7 @@ const PedidoFornecedorPage: React.FC = () => {
                     <SelectValue placeholder="Padrão do cliente" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Padrão do cliente</SelectItem>
+                    <SelectItem value="default">Padrão do cliente</SelectItem>
                     {condicoesPagamento.map(c => (
                       <SelectItem key={c.codigo} value={String(c.codigo)}>
                         {c.descricao} (cód. {c.codigo})
