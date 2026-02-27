@@ -481,13 +481,19 @@ export function useVendasDashboard() {
         console.log(`[useVendasDashboard] ✓ Firebird: ${dadosFinais.length} registros`);
       } catch (firebirdErr) {
         const msg = firebirdErr instanceof Error ? firebirdErr.message : String(firebirdErr);
+        const errCode = (firebirdErr as any)?.code as string | undefined;
         
         // Se foi abort (debounce/navegação), propagar sem tentar cache
-        if (msg.includes('aborted') || msg.includes('abort')) {
+        if (msg.includes('aborted') || msg.includes('abort') || errCode === 'REQUEST_CANCELLED') {
           throw firebirdErr;
         }
         
-        console.warn(`[useVendasDashboard] ⚠ Firebird falhou: ${msg}. Tentando cache...`);
+        // Log diferenciado para o novo código de erro do backend
+        if (errCode === 'VENDAS_FORMAS_PAGAMENTO_UNAVAILABLE') {
+          console.warn(`[useVendasDashboard] ⚠ Backend: todas as empresas falharam (${errCode}). Tentando cache Supabase...`);
+        } else {
+          console.warn(`[useVendasDashboard] ⚠ Firebird falhou: ${msg} (${errCode || 'sem código'}). Tentando cache...`);
+        }
         
         // PASSO 2: Fallback para cache se Firebird falhou
         try {
