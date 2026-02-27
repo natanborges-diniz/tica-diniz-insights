@@ -1347,12 +1347,27 @@ const PedidoFornecedorPage: React.FC = () => {
                     {produtoSelecionado.altura && <><span>•</span><span>Altura: {produtoSelecionado.altura}mm</span></>}
                   </div>
                   {produtoSelecionado.precos?.length > 0 && (
-                    <div className="flex gap-3 mt-1">
-                      {produtoSelecionado.precos.slice(0, 3).map((p, i) => (
-                        <span key={i} className="text-xs">
-                          {p.lista.substring(0, 25)}: R$ {p.preco.toFixed(2)}
-                        </span>
-                      ))}
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {produtoSelecionado.precos.slice(0, 5).map((p, i) => {
+                        const codigoCond = p.lista.match(/^(\d+)/)?.[1] || "";
+                        const isSelected = condicaoPagamentoSelecionada === codigoCond;
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => {
+                              setCondicaoPagamentoSelecionada(isSelected ? "default" : codigoCond);
+                            }}
+                            className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
+                              isSelected
+                                ? "border-primary bg-primary/15 text-primary font-semibold ring-1 ring-primary/30"
+                                : "border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {p.lista.substring(0, 25)}: <span className="font-mono">R$ {p.preco.toFixed(2)}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1485,12 +1500,27 @@ const PedidoFornecedorPage: React.FC = () => {
                   {produtoSelecionado.altura && <><span>•</span><span>Altura: {produtoSelecionado.altura}mm</span></>}
                 </div>
                 {produtoSelecionado.precos?.length > 0 && (
-                  <div className="flex gap-3 mt-1">
-                    {produtoSelecionado.precos.slice(0, 3).map((p, i) => (
-                      <span key={i} className="text-xs">
-                        {p.lista.substring(0, 25)}: R$ {p.preco.toFixed(2)}
-                      </span>
-                    ))}
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {produtoSelecionado.precos.slice(0, 5).map((p, i) => {
+                      const codigoCond = p.lista.match(/^(\d+)/)?.[1] || "";
+                      const isSelected = condicaoPagamentoSelecionada === codigoCond;
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            setCondicaoPagamentoSelecionada(isSelected ? "default" : codigoCond);
+                          }}
+                          className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
+                            isSelected
+                              ? "border-primary bg-primary/15 text-primary font-semibold ring-1 ring-primary/30"
+                              : "border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {p.lista.substring(0, 25)}: <span className="font-mono">R$ {p.preco.toFixed(2)}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
