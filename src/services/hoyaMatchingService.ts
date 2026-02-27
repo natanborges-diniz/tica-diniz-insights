@@ -280,15 +280,16 @@ function calcScore(
   // Treatment match
   if (parsed.tratamento) {
     const tratLower = parsed.tratamento.toLowerCase();
-    if (produto.tratamento.toLowerCase().includes(tratLower) ||
-        tratLower.includes(produto.tratamento.toLowerCase())) {
+    const prodTrat = (produto.tratamento ?? "").toLowerCase();
+    if (prodTrat.includes(tratLower) ||
+        tratLower.includes(prodTrat)) {
       score += 20;
       details.push(`Tratamento "${produto.tratamento}" ✓ (+20)`);
     } else {
       // Partial treatment matching
       for (const [, hoyaNames] of Object.entries(TREATMENT_MAP)) {
         if (hoyaNames.some(n => n.toLowerCase() === tratLower)) {
-          if (hoyaNames.some(n => produto.tratamento.toLowerCase().includes(n.toLowerCase()))) {
+          if (hoyaNames.some(n => (produto.tratamento ?? "").toLowerCase().includes(n.toLowerCase()))) {
             score += 15;
             details.push(`Tratamento parcial "${produto.tratamento}" ~ (+15)`);
             break;
@@ -323,7 +324,7 @@ function calcScore(
   // COR variant matching
   if (parsed.isBlue) {
     if (produto.nome.toUpperCase().includes("COR") ||
-        produto.tratamento.toLowerCase().includes("bluecontrol")) {
+        (produto.tratamento ?? "").toLowerCase().includes("bluecontrol")) {
       score += 5;
       details.push(`Bluecontrol/COR ✓ (+5)`);
     }
