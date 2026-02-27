@@ -357,10 +357,14 @@ serve(async (req) => {
           pedidoPayload.garantia.crmMedico = pedidoPayload.garantia.crmMedico ?? null;
         }
 
-        // Normalize condicaoPagamento → CondicaoPagamento (PascalCase for .NET API)
-        const condPag = pedidoPayload.condicaoPagamento || pedidoPayload.CondicaoPagamento || "04";
+        // Normalize condicaoPagamento → codigoCondicaoPagamento (new API field)
+        // If not provided, omit so Hoya uses the client's default payment condition
+        const condPag = pedidoPayload.condicaoPagamento || pedidoPayload.CondicaoPagamento || pedidoPayload.codigoCondicaoPagamento;
         delete pedidoPayload.condicaoPagamento;
-        pedidoPayload.CondicaoPagamento = condPag;
+        delete pedidoPayload.CondicaoPagamento;
+        if (condPag) {
+          pedidoPayload.codigoCondicaoPagamento = Number(condPag) || condPag;
+        }
         
         fetchBody = JSON.stringify(pedidoPayload);
         console.log(`[hoya-proxy] [${correlationId}] criar-pedido URL: ${url}`);
@@ -884,6 +888,22 @@ serve(async (req) => {
         try { danfeData = JSON.parse(danfeText); } catch { danfeData = { danfe: danfeText }; }
         return new Response(JSON.stringify(danfeData), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
+
+      case "consultar-condicoes-pagamento": {
+        const condUrl = `${HOYA_BASE_URL}/pedido/consultar-condicoes-pagamento`;
+        const condResp = await fetchWithRetry(
+          condUrl,
+          { method: "GET", headers: { "x-api-key": HOYA_API_KEY, "Content-Type": "application/json" } },
+          { action: "consultar-condicoes-pagamento", correlationId }
+        );
+        const condText = await condResp.text();
+        let condData: unknown;
+        try { condData = JSON.parse(condText); } catch { condData = { rawResponse: condText }; }
+        return new Response(JSON.stringify(condData), {
+          status: condResp.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
         });
       }
 

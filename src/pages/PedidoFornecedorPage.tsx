@@ -11,6 +11,8 @@ import {
   listarProdutosHoya,
   criarPedidoHoya,
   recuperarPedidoPorOs,
+  listarCondicoesPagamentoHoya,
+  HoyaCondicaoPagamento,
 } from "@/services/hoyaService";
 import {
   matchProducts,
@@ -161,7 +163,11 @@ const PedidoFornecedorPage: React.FC = () => {
   const [osNumeroEditavel, setOsNumeroEditavel] = useState("");
   const [nomeMedico, setNomeMedico] = useState("");
   const [crmMedico, setCrmMedico] = useState("");
+  // Condições de pagamento dinâmicas
+  const [condicoesPagamento, setCondicoesPagamento] = useState<HoyaCondicaoPagamento[]>([]);
+  const [condicaoPagamentoSelecionada, setCondicaoPagamentoSelecionada] = useState<string>("");
   
+
 
   // Prescrição editável
   const [prescOd, setPrescOd] = useState({
@@ -340,7 +346,7 @@ const PedidoFornecedorPage: React.FC = () => {
     })();
   }, [codOs]);
 
-  // ---- Auto-load Hoya products on mount ----
+  // ---- Auto-load Hoya products + payment conditions on mount ----
   useEffect(() => {
     (async () => {
       setLoadingProdutos(true);
@@ -356,6 +362,18 @@ const PedidoFornecedorPage: React.FC = () => {
         });
       } finally {
         setLoadingProdutos(false);
+      }
+    })();
+    // Fetch payment conditions
+    (async () => {
+      try {
+        const conds = await listarCondicoesPagamentoHoya();
+        if (Array.isArray(conds) && conds.length > 0) {
+          setCondicoesPagamento(conds);
+          // Don't auto-select — leave empty so API uses client's default
+        }
+      } catch (err) {
+        console.error("[PedidoFornecedor] Error loading payment conditions:", err);
       }
     })();
   }, []);
@@ -703,7 +721,7 @@ const PedidoFornecedorPage: React.FC = () => {
           formaArmacao,
         },
         valorMontagemSemTriangulacao: (tipoServico === 1 || tipoServico === 3) ? valorMontagem : 0,
-        condicaoPagamento: "04",
+        condicaoPagamento: condicaoPagamentoSelecionada || undefined,
         garantia: {
           usuarioFinal: removeAccents(usuarioFinal || os.paciente || os.cliente || ""),
           inicialUsuario: removeAccents(inicialUsuario || (usuarioFinal || os.paciente || os.cliente || "").split(/\s+/).filter((w: string) => w.length > 0).map((w: string) => w.charAt(0)).join("").substring(0, 2).toUpperCase() || "US"),
@@ -1834,17 +1852,20 @@ const PedidoFornecedorPage: React.FC = () => {
               </div>
               <div>
                 <Label className="text-[10px] uppercase">Condição de Pagamento</Label>
-                <Select value="04" onValueChange={() => {}}>
-                  <SelectTrigger className="h-8 text-sm font-mono bg-muted">
-                    <SelectValue />
+                <Select value={condicaoPagamentoSelecionada} onValueChange={setCondicaoPagamentoSelecionada}>
+                  <SelectTrigger className="h-8 text-sm font-mono">
+                    <SelectValue placeholder="Padrão do cliente" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="04">30/60/90 dd</SelectItem>
-                    <SelectItem value="01" disabled className="opacity-40">À Vista</SelectItem>
-                    <SelectItem value="02" disabled className="opacity-40">30 dd</SelectItem>
-                    <SelectItem value="03" disabled className="opacity-40">30/60 dd</SelectItem>
+                    <SelectItem value="">Padrão do cliente</SelectItem>
+                    {condicoesPagamento.map(c => (
+                      <SelectItem key={c.codigo} value={String(c.codigo)}>
+                        {c.descricao} (cód. {c.codigo})
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                <span className="text-[9px] text-muted-foreground">Deixe vazio para usar a condição padrão do cliente</span>
               </div>
               <div>
                 <Label className="text-[10px] uppercase flex items-center gap-1">
