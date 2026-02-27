@@ -455,56 +455,59 @@ export function useVendasDashboard() {
     
     try {
       // ========================================
-      // ESTRATÉGIA: CACHE-FIRST (sem timeout)
-      // 1. Sempre buscar do cache vendas_agregado_diario
-      // 2. Se cache vazio, tentar Firebird como fallback
+      // ESTRATÉGIA: FIREBIRD-FIRST (dados reais)
+      // 1. Sempre buscar do Firebird (fonte autoritativa)
+      // 2. Se Firebird falhar/timeout, usar cache como fallback
       // ========================================
       
-      console.log('[useVendasDashboard] 📦 Buscando dados do cache...');
+      console.log('[useVendasDashboard] 🔥 Buscando dados do Firebird...');
       
       let dadosFinais: ResumoFormaPagamento[] = [];
       let usouCache = false;
       let usouFirebird = false;
       
+      // PASSO 1: Tentar Firebird primeiro (fonte real)
       try {
-        // PASSO 1: Buscar TUDO do cache para o período completo
-        let queryCache = supabase
-          .from('vendas_agregado_diario')
-          .select('*')
-          .gte('data', dataInicio)
-          .lte('data', dataFim);
+        dadosFinais = await fetchComRetry(() => getResumoFormasPagamento({
+          empresa,
+          dataInicio,
+          dataFim,
+          bypassCache: true,
+          incluirDevolucoes: true,
+        }));
         
-        if (empresa !== 'ALL') {
-          const codEmpresa = typeof empresa === 'string' 
-            ? parseInt(empresa, 10) 
-            : empresa;
-          queryCache = queryCache.eq('cod_empresa', codEmpresa);
+        usouFirebird = true;
+        console.log(`[useVendasDashboard] ✓ Firebird: ${dadosFinais.length} registros`);
+      } catch (firebirdErr) {
+        const msg = firebirdErr instanceof Error ? firebirdErr.message : String(firebirdErr);
+        
+        // Se foi abort (debounce/navegação), propagar sem tentar cache
+        if (msg.includes('aborted') || msg.includes('abort')) {
+          throw firebirdErr;
         }
         
-        const { data: cacheData, error: cacheError } = await queryCache;
+        console.warn(`[useVendasDashboard] ⚠ Firebird falhou: ${msg}. Tentando cache...`);
         
-        if (!cacheError && cacheData && cacheData.length > 0) {
-          // Verificar completude do cache antes de usá-lo
-          const uniqueEmpresas = new Set(cacheData.map(d => d.cod_empresa));
-          const uniqueDias = new Set(cacheData.map(d => d.data));
-          const diasEsperados = Math.min(diasNoPeriodo, 31);
-          const coberturaDias = uniqueDias.size / diasEsperados;
+        // PASSO 2: Fallback para cache se Firebird falhou
+        try {
+          let queryCache = supabase
+            .from('vendas_agregado_diario')
+            .select('*')
+            .gte('data', dataInicio)
+            .lte('data', dataFim);
           
-          // Cache é considerado incompleto se:
-          // - ALL empresas mas cache tem <= 1 empresa
-          // - Cobertura de dias < 50%
-          const cacheIncompleto = (
-            (empresa === 'ALL' && uniqueEmpresas.size <= 1 && diasEsperados > 3) ||
-            (coberturaDias < 0.4 && diasEsperados > 5)
-          );
+          if (empresa !== 'ALL') {
+            const codEmpresa = typeof empresa === 'string' 
+              ? parseInt(empresa, 10) 
+              : empresa;
+            queryCache = queryCache.eq('cod_empresa', codEmpresa);
+          }
           
-          if (cacheIncompleto) {
-            console.log(`[useVendasDashboard] ⚠ Cache incompleto: ${uniqueEmpresas.size} empresas, ${uniqueDias.size}/${diasEsperados} dias (${(coberturaDias*100).toFixed(0)}%). Buscando do Firebird...`);
-          } else {
-            // Buscar nomes das empresas
+          const { data: cacheData, error: cacheError } = await queryCache;
+          
+          if (!cacheError && cacheData && cacheData.length > 0) {
             const empresasMap = await getEmpresasMap();
             
-            // Converter dados do cache para ResumoFormaPagamento
             dadosFinais = cacheData.map(d => ({
               codEmpresa: d.cod_empresa,
               empresa: empresasMap.get(d.cod_empresa) || `Loja ${d.cod_empresa}`,
@@ -520,29 +523,13 @@ export function useVendasDashboard() {
             }));
             
             usouCache = true;
-            console.log(`[useVendasDashboard] ✓ Cache: ${dadosFinais.length} registros (${uniqueEmpresas.size} empresas, ${uniqueDias.size} dias)`);
+            console.log(`[useVendasDashboard] ✓ Cache fallback: ${dadosFinais.length} registros`);
+          } else {
+            console.log('[useVendasDashboard] ⚠ Cache também vazio');
           }
-        } else {
-          console.log('[useVendasDashboard] ⚠ Cache vazio, tentando Firebird...');
+        } catch (cacheErr) {
+          console.warn('[useVendasDashboard] Erro no cache fallback:', cacheErr);
         }
-      } catch (cacheErr) {
-        console.warn('[useVendasDashboard] Erro no cache:', cacheErr);
-      }
-      
-      // PASSO 2: Se cache vazio ou incompleto, buscar do Firebird
-      if (dadosFinais.length === 0) {
-        console.log('[useVendasDashboard] 🔥 Buscando do Firebird...');
-        
-        dadosFinais = await fetchComRetry(() => getResumoFormasPagamento({
-          empresa,
-          dataInicio,
-          dataFim,
-          bypassCache: true,
-          incluirDevolucoes: true,
-        }));
-        
-        usouFirebird = true;
-        console.log(`[useVendasDashboard] ✓ Firebird: ${dadosFinais.length} registros`);
       }
       
       // PASSO 3: Agregar por chave única
