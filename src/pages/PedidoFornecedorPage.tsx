@@ -734,6 +734,9 @@ const PedidoFornecedorPage: React.FC = () => {
           : undefined,
       };
 
+      // DEBUG: Log payload para inspeção
+      console.log("[PedidoFornecedor] PAYLOAD:", JSON.stringify(payload, null, 2));
+
       // E4.1: Validate before sending (F4.4: pass campos complementares + product ranges)
       const validation = validateHoyaPayload(
         payload,
