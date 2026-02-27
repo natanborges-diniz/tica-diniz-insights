@@ -474,6 +474,7 @@ export function useVendasDashboard() {
           dataFim,
           bypassCache: true,
           incluirDevolucoes: true,
+          timeoutMs: CONFIG.TIMEOUT_PRIMEIRA_TENTATIVA,
         }));
         
         usouFirebird = true;
