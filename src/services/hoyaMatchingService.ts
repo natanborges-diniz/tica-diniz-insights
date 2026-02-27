@@ -56,8 +56,8 @@ const MATERIAL_MAP: Record<string, string[]> = {
   "1.74": ["174"],
 };
 
-/** Known lens design names in Hoya catalog */
-const KNOWN_DESENHOS = [
+/** Priority-ordered design names for substring matching (longer/more specific first) */
+const PRIORITY_DESENHOS = [
   "Hoyalux D+ FF",
   "Hoyalux D FF",
   "Hoyalux iD FF",
@@ -82,6 +82,21 @@ const KNOWN_DESENHOS = [
   "Hilux",
 ];
 
+/**
+ * Build a comprehensive list of known designs by merging the priority list
+ * with all unique designs extracted from the catalog.
+ * Catalog designs not in the priority list are appended at the end.
+ */
+export function buildDesenhosFromCatalog(catalogo: { desenho: string }[]): string[] {
+  const catalogDesigns = [...new Set(catalogo.map(p => p.desenho).filter(Boolean))];
+  // Keep priority list first (order matters for substring matching)
+  const priorityUpper = new Set(PRIORITY_DESENHOS.map(d => d.toUpperCase()));
+  const extras = catalogDesigns.filter(d => !priorityUpper.has(d.toUpperCase()));
+  // Sort extras by length descending (longer names first to avoid partial matches)
+  extras.sort((a, b) => b.length - a.length);
+  return [...PRIORITY_DESENHOS, ...extras];
+}
+
 /** Known suppliers by keyword in ERP description */
 const SUPPLIER_KEYWORDS: [string, string][] = [
   ["HOYA", "HOYA"],
@@ -103,9 +118,10 @@ const TREATMENT_MAP: Record<string, string[]> = {
   BLUECONTROL: ["Bluecontrol", "HV LL Bluecontrol"],
 };
 
-export function parseErpDescription(desc: string): ParsedLensDescription {
+export function parseErpDescription(desc: string, knownDesenhos?: string[]): ParsedLensDescription {
   const upper = desc.toUpperCase().trim();
   const tokens = upper.split(/\s+/);
+  const desenhosList = knownDesenhos ?? PRIORITY_DESENHOS;
 
   // Tipo de lente
   const isProgressiva = tokens.some(t => ["PR", "PROG", "PROGRESSIVA", "PROGRESSIVO"].includes(t));
@@ -136,7 +152,7 @@ export function parseErpDescription(desc: string): ParsedLensDescription {
 
   // Desenho (match known names case-insensitively)
   let desenho: string | null = null;
-  for (const d of KNOWN_DESENHOS) {
+  for (const d of desenhosList) {
     if (upper.includes(d.toUpperCase())) {
       desenho = d;
       break;
@@ -353,7 +369,8 @@ export function matchProducts(
   descricaoErp: string,
   prescricao?: PrescricaoFiltro
 ): MatchResult {
-  const parsed = parseErpDescription(descricaoErp);
+  const allDesenhos = buildDesenhosFromCatalog(catalogo);
+  const parsed = parseErpDescription(descricaoErp, allDesenhos);
 
   // Step 1: Filter by prescription compatibility
   let compativeis = prescricao
