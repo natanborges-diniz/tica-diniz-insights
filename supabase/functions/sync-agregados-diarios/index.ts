@@ -93,8 +93,30 @@ Deno.serve(async (req) => {
   }
   
   try {
-    // E0.3: Auth guard — admin only
-    const { userId } = await authGuard(req, { requiredRole: "admin" });
+    // Auth: allow service_role (cron) or admin users
+    let userId = 'cron';
+    const authHeader = req.headers.get('Authorization') || '';
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Check if it's a service_role token (from pg_cron/pg_net)
+    let isServiceRole = false;
+    if (token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+          if (payload.role === 'service_role') {
+            isServiceRole = true;
+            userId = 'cron-service-role';
+          }
+        }
+      } catch {}
+    }
+    
+    if (!isServiceRole) {
+      const result = await authGuard(req, { requiredRole: "admin" });
+      userId = result.userId;
+    }
 
     // E0.4: Accept params from both query string (legacy) and POST body (preferred)
     const url = new URL(req.url);
