@@ -1,7 +1,8 @@
 // src/components/sales-dashboard/VendasDashboardLayout.tsx
 
 import { useState, useMemo, useEffect } from "react";
-import { RefreshCw, AlertCircle, Building2, Users, Info, Calendar } from "lucide-react";
+import { RefreshCw, AlertCircle, Building2, Users, Info, Calendar, Clock } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -171,6 +172,22 @@ export function VendasDashboardLayout({
   const showEmptyState = !dataLoaded && !loading;
   const [usarVendasSemCreditos, setUsarVendasSemCreditos] = useState(true);
   const [viewTab, setViewTab] = useState<"resumo" | "diario">("resumo");
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState<string | null>(null);
+
+  // Buscar última atualização do cache
+  useEffect(() => {
+    async function fetchUltimaAtualizacao() {
+      const { data } = await supabase
+        .from('vendas_agregado_diario')
+        .select('atualizado_em')
+        .order('atualizado_em', { ascending: false })
+        .limit(1);
+      if (data?.[0]?.atualizado_em) {
+        setUltimaAtualizacao(data[0].atualizado_em);
+      }
+    }
+    fetchUltimaAtualizacao();
+  }, [dataLoaded]);
 
   // IA Insights
   const { insights, loading: insightsLoading, error: insightsError, refetch: refetchInsights } = useModuleInsights({
@@ -322,7 +339,15 @@ export function VendasDashboardLayout({
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Dashboard de Vendas</h1>
-          <p className="text-sm text-muted-foreground">Análise de vendas por loja e vendedor</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-muted-foreground">Análise de vendas por loja e vendedor</p>
+            {ultimaAtualizacao && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">
+                <Clock className="h-3 w-3" />
+                Atualizado: {new Date(ultimaAtualizacao).toLocaleDateString('pt-BR')} às {new Date(ultimaAtualizacao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
         </div>
         <Button variant="outline" size="sm" onClick={reload} disabled={isLoading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
