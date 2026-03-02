@@ -674,7 +674,7 @@ export function useVendasDashboard() {
         } else {
           // Sem cache, sem Firebird — erro real
           console.error(`[useVendasDashboard] ❌ Sem cache e Firebird falhou: ${msg}`);
-          setError('Dados indisponíveis no momento. Tente novamente em alguns minutos.');
+          setError('Dados indisponíveis no momento. Clique em Atualizar para tentar novamente.');
           setDadosFormasPagamento([]);
           setFontesDados({
             supabase: false,
@@ -713,7 +713,85 @@ export function useVendasDashboard() {
   }, []);
 
   // ========================================
-  // DEBOUNCED EFFECT: Carregar dados com delay
+  // fetchCacheOnly: Apenas lê cache Supabase (carregamento automático)
+  // ========================================
+  const fetchCacheOnly = useCallback(async (
+    empresa: EmpresaParam,
+    dataInicio: string,
+    dataFim: string
+  ) => {
+    if (!empresa || empresa === '') return;
+    if (!isDateRangeValid(dataInicio, dataFim)) return;
+
+    const diasNoPeriodo = diffInDays(dataInicio, dataFim) + 1;
+    if (diasNoPeriodo > CONFIG.LIMITE_DIAS_MAXIMO) {
+      setAlertaPeriodo(`Período muito longo (${diasNoPeriodo} dias). O máximo recomendado é ${CONFIG.LIMITE_DIAS_MAXIMO} dias.`);
+      setError(`Reduza o período para no máximo ${CONFIG.LIMITE_DIAS_MAXIMO} dias para melhor performance.`);
+      return;
+    } else if (diasNoPeriodo > CONFIG.LIMITE_DIAS_ALERTA) {
+      setAlertaPeriodo(`Período longo (${diasNoPeriodo} dias) pode demorar mais para carregar.`);
+    } else {
+      setAlertaPeriodo(null);
+    }
+
+    setLoading(true);
+    setError(null);
+    setFontesDados({ supabase: false, firebird: false });
+
+    const startTime = performance.now();
+
+    try {
+      console.log('[useVendasDashboard] 📦 Buscando apenas cache Supabase...');
+
+      let queryCache = supabase
+        .from('vendas_agregado_diario')
+        .select('*')
+        .gte('data', dataInicio)
+        .lte('data', dataFim);
+
+      if (empresa !== 'ALL') {
+        const codEmpresa = typeof empresa === 'string' ? parseInt(empresa, 10) : empresa;
+        queryCache = queryCache.eq('cod_empresa', codEmpresa);
+      }
+
+      const { data: cacheData, error: cacheError } = await queryCache;
+
+      if (!cacheError && cacheData && cacheData.length > 0) {
+        const empresasMap = await getEmpresasMap();
+        const dadosCache = cacheToFormasPagamento(cacheData, empresasMap);
+        const dadosAgregados = agregarDados(dadosCache);
+        const tempoMs = Math.round(performance.now() - startTime);
+
+        setDadosFormasPagamento(dadosAgregados);
+        setFontesDados({
+          supabase: true,
+          firebird: false,
+          mensagem: `Cache (${tempoMs}ms)`,
+        });
+        setDataLoaded(true);
+        console.log(`[useVendasDashboard] ✓ Cache: ${dadosCache.length} registros em ${tempoMs}ms`);
+      } else {
+        console.log('[useVendasDashboard] ⚠ Cache vazio — clique em Atualizar para buscar dados');
+        setDadosFormasPagamento([]);
+        setFontesDados({
+          supabase: false,
+          firebird: false,
+          mensagem: 'Sem dados em cache. Clique em Atualizar para buscar.',
+        });
+        setDataLoaded(true);
+      }
+    } catch (err) {
+      console.warn('[useVendasDashboard] Erro ao ler cache:', err);
+      setDadosFormasPagamento([]);
+      setDataLoaded(true);
+    } finally {
+      setLoading(false);
+      setLoadingDesconto(false);
+    }
+  }, []);
+
+  // ========================================
+  // DEBOUNCED EFFECT: Carregar APENAS CACHE ao mudar filtros
   // ========================================
   useEffect(() => {
     const { empresa, dataInicio, dataFim } = filters;
@@ -726,7 +804,7 @@ export function useVendasDashboard() {
     }
     
     debounceTimerRef.current = setTimeout(() => {
-      fetchData(empresa, dataInicio, dataFim);
+      fetchCacheOnly(empresa, dataInicio, dataFim);
     }, CONFIG.DEBOUNCE_MS);
     
     return () => {
@@ -737,7 +815,7 @@ export function useVendasDashboard() {
         abortControllerRef.current.abort();
       }
     };
-  }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchData]);
+  }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchCacheOnly]);
 
   // Calcular métricas
   const metrics = useMemo((): VendasMetrics => {
