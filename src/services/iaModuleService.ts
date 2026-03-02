@@ -70,8 +70,19 @@ export async function fetchModuleInsights(ctx: IAContext): Promise<InsightItem[]
     return cached.data;
   }
 
+  // Ensure we send the user's session token, not the anon key
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+  
+  if (!accessToken) {
+    throw new Error("Sessão não encontrada — faça login novamente");
+  }
+
   const { data, error } = await supabase.functions.invoke("ai-module-insights", {
     body: ctx,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 
   if (error) {
