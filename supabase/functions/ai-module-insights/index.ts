@@ -64,6 +64,20 @@ async function collectModuleData(
     empresas: ctx.empresaIdsPermitidas,
   };
 
+  // Pre-fetch store names
+  const nomeLojaMap = new Map<number, string>();
+  try {
+    const { data: empresas } = await client
+      .from("empresa")
+      .select("cod_empresa, nome_fantasia")
+      .in("cod_empresa", ctx.empresaIdsPermitidas);
+    if (empresas) {
+      empresas.forEach((e: any) => nomeLojaMap.set(e.cod_empresa, e.nome_fantasia || `Loja ${e.cod_empresa}`));
+    }
+  } catch {}
+
+  const getNomeLoja = (cod: number) => nomeLojaMap.get(cod) || `Loja ${cod}`;
+
   try {
     if (ctx.module === "vendas" && ctx.period) {
       // Fetch aggregated sales data
@@ -106,7 +120,7 @@ async function collectModuleData(
           qtdVendas: totalQtd,
           ticketMedio: totalQtd > 0 ? totalFat / totalQtd : 0,
           porLoja: Array.from(byStore.entries()).map(([cod, s]) => ({
-            loja: `Loja ${cod}`,
+            loja: getNomeLoja(cod),
             codEmpresa: cod,
             faturamento: s.faturamento,
             percentualDesconto: s.bruto > 0 ? (s.desconto / s.bruto) * 100 : 0,
@@ -127,7 +141,7 @@ async function collectModuleData(
         
         if (metas && metas.length > 0) {
           data.metas = metas.map((m: any) => ({
-            loja: `Loja ${m.cod_referencia}`,
+            loja: getNomeLoja(m.cod_referencia),
             codEmpresa: m.cod_referencia,
             metaFaturamento: m.meta_faturamento,
             metaTicketMedio: m.meta_ticket_medio,
