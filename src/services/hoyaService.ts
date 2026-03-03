@@ -155,8 +155,18 @@ export interface HoyaProxyError {
 }
 
 async function callHoyaProxy<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
+  // Inject session token to satisfy authGuard JWT validation
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+
+  const headers: Record<string, string> = {};
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  }
+
   const { data, error } = await supabase.functions.invoke("hoya-proxy", {
     body: { action, ...params },
+    headers,
   });
 
   if (error) {
