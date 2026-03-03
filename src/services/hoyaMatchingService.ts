@@ -50,7 +50,7 @@ const MATERIAL_MAP: Record<string, string[]> = {
   "1.50": ["150"],
   "1.53": ["TVX", "153", "Trivex"],
   "1.56": ["156"],
-  "1.59": ["159"],
+  "1.59": ["POLI", "159", "Policarbonato"],
   "1.60": ["160"],
   "1.67": ["167"],
   "1.74": ["174"],
@@ -150,10 +150,17 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
     materialIndex = "TVX";
   }
 
+  // Normalize ERP shorthand: "HOYA D+" → "HOYALUX D+" for matching
+  let normalizedUpper = upper;
+  // "HOYA D+" without "LUX" means "HOYALUX D+"
+  if (/\bHOYA\s+D\+/.test(normalizedUpper) && !normalizedUpper.includes("HOYALUX")) {
+    normalizedUpper = normalizedUpper.replace(/\bHOYA\s+D\+/, "HOYALUX D+");
+  }
+
   // Desenho (match known names case-insensitively)
   let desenho: string | null = null;
   for (const d of desenhosList) {
-    if (upper.includes(d.toUpperCase())) {
+    if (normalizedUpper.includes(d.toUpperCase())) {
       desenho = d;
       break;
     }
