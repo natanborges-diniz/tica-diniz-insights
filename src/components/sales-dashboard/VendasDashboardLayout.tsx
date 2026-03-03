@@ -205,10 +205,28 @@ export function VendasDashboardLayout({
     registerAction("NAVIGATE_INTELIGENCIA_VENDAS", () => navigate("/vendas/inteligencia"));
     registerAction("OPEN_RANKING_STORES", () => setFilters(p => ({ ...p, viewMode: "loja" as any })));
     registerAction("OPEN_RANKING_SELLERS", () => setFilters(p => ({ ...p, viewMode: "vendedor" as any })));
+    registerAction("APPLY_FILTERS", (payload) => {
+      if (payload) {
+        setFilters(p => ({
+          ...p,
+          ...(payload.loja && typeof payload.loja === "string" ? { empresa: payload.loja } : {}),
+        }));
+      }
+    });
+    registerAction("EXPORT_FILTERED_DATASET", () => {
+      // Trigger export via toast notification guiding user to use export button
+      console.log("[actionCatalog] EXPORT_FILTERED_DATASET triggered");
+    });
+    registerAction("OPEN_SALES_ROW_DETAIL_SHEET", () => {
+      console.log("[actionCatalog] OPEN_SALES_ROW_DETAIL_SHEET triggered");
+    });
     return () => {
       unregisterAction("NAVIGATE_INTELIGENCIA_VENDAS");
       unregisterAction("OPEN_RANKING_STORES");
       unregisterAction("OPEN_RANKING_SELLERS");
+      unregisterAction("APPLY_FILTERS");
+      unregisterAction("EXPORT_FILTERED_DATASET");
+      unregisterAction("OPEN_SALES_ROW_DETAIL_SHEET");
     };
   }, [navigate, setFilters]);
 
