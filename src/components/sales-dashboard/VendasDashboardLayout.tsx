@@ -1,7 +1,7 @@
 // src/components/sales-dashboard/VendasDashboardLayout.tsx
 
 import { useState, useMemo, useEffect } from "react";
-import { RefreshCw, AlertCircle, Building2, Users, Info, Calendar, Clock } from "lucide-react";
+import { RefreshCw, AlertCircle, Building2, Users, Info, Calendar, Clock, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -173,20 +173,38 @@ export function VendasDashboardLayout({
   const [usarVendasSemCreditos, setUsarVendasSemCreditos] = useState(true);
   const [viewTab, setViewTab] = useState<"resumo" | "diario">("resumo");
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<string | null>(null);
+  const [cacheRange, setCacheRange] = useState<{ minData: string; maxData: string } | null>(null);
 
-  // Buscar última atualização do cache
+  // Buscar última atualização e range do cache
   useEffect(() => {
-    async function fetchUltimaAtualizacao() {
-      const { data } = await supabase
+    async function fetchCacheInfo() {
+      // Última atualização
+      const { data: lastUpdate } = await supabase
         .from('vendas_agregado_diario')
         .select('atualizado_em')
         .order('atualizado_em', { ascending: false })
         .limit(1);
-      if (data?.[0]?.atualizado_em) {
-        setUltimaAtualizacao(data[0].atualizado_em);
+      if (lastUpdate?.[0]?.atualizado_em) {
+        setUltimaAtualizacao(lastUpdate[0].atualizado_em);
+      }
+      // Data mais antiga e mais recente no cache
+      const { data: minRow } = await supabase
+        .from('vendas_agregado_diario')
+        .select('data')
+        .order('data', { ascending: true })
+        .limit(1);
+      const { data: maxRow } = await supabase
+        .from('vendas_agregado_diario')
+        .select('data')
+        .order('data', { ascending: false })
+        .limit(1);
+      if (minRow?.[0]?.data && maxRow?.[0]?.data) {
+        setCacheRange({ minData: minRow[0].data, maxData: maxRow[0].data });
+      } else {
+        setCacheRange(null);
       }
     }
-    fetchUltimaAtualizacao();
+    fetchCacheInfo();
   }, [dataLoaded]);
 
   // IA Insights
@@ -339,12 +357,18 @@ export function VendasDashboardLayout({
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Dashboard de Vendas</h1>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <p className="text-sm text-muted-foreground">Análise de vendas por loja e vendedor</p>
+            {cacheRange && (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">
+                <Database className="h-3 w-3" />
+                Cache: {new Date(cacheRange.minData + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} — {new Date(cacheRange.maxData + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </span>
+            )}
             {ultimaAtualizacao && (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">
                 <Clock className="h-3 w-3" />
-                Atualizado: {new Date(ultimaAtualizacao).toLocaleDateString('pt-BR')} às {new Date(ultimaAtualizacao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                Sync: {new Date(ultimaAtualizacao).toLocaleDateString('pt-BR')} {new Date(ultimaAtualizacao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
           </div>
