@@ -24,6 +24,7 @@ export default function SalesDashboard() {
     progressoPaginacao,
     reload,
     forceRefresh,
+    cacheDisponivel,
   } = useVendasDashboard();
 
   // Hook para carregamento em 2 níveis (resumos diários + detalhes sob demanda)
@@ -62,6 +63,7 @@ export default function SalesDashboard() {
       forceRefresh={forceRefresh}
       // Props para tabela diária expansível
       vendasDiarias={vendasDiarias}
+      cacheDisponivel={cacheDisponivel}
     />
   );
 }
