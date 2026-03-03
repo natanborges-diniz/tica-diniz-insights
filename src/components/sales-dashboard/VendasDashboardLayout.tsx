@@ -63,6 +63,8 @@ interface VendasDashboardLayoutProps {
   forceRefresh?: () => void;
   // Vendas diárias (tabela expansível)
   vendasDiarias?: UseVendasDiariasResult;
+  // Cache disponível
+  cacheDisponivel?: { minData: string; maxData: string } | null;
 }
 
 function LoadingSkeleton({ progressoPaginacao }: { progressoPaginacao?: ProgressoPaginacao | null }) {
@@ -166,6 +168,7 @@ export function VendasDashboardLayout({
   reload,
   forceRefresh,
   vendasDiarias,
+  cacheDisponivel,
 }: VendasDashboardLayoutProps) {
   const navigate = useNavigate();
   const isLoading = loading;
@@ -173,12 +176,10 @@ export function VendasDashboardLayout({
   const [usarVendasSemCreditos, setUsarVendasSemCreditos] = useState(true);
   const [viewTab, setViewTab] = useState<"resumo" | "diario">("resumo");
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<string | null>(null);
-  const [cacheRange, setCacheRange] = useState<{ minData: string; maxData: string } | null>(null);
 
-  // Buscar última atualização e range do cache
+  // Buscar última atualização do cache
   useEffect(() => {
-    async function fetchCacheInfo() {
-      // Última atualização
+    async function fetchUltimaAtualizacao() {
       const { data: lastUpdate } = await supabase
         .from('vendas_agregado_diario')
         .select('atualizado_em')
@@ -187,24 +188,8 @@ export function VendasDashboardLayout({
       if (lastUpdate?.[0]?.atualizado_em) {
         setUltimaAtualizacao(lastUpdate[0].atualizado_em);
       }
-      // Data mais antiga e mais recente no cache
-      const { data: minRow } = await supabase
-        .from('vendas_agregado_diario')
-        .select('data')
-        .order('data', { ascending: true })
-        .limit(1);
-      const { data: maxRow } = await supabase
-        .from('vendas_agregado_diario')
-        .select('data')
-        .order('data', { ascending: false })
-        .limit(1);
-      if (minRow?.[0]?.data && maxRow?.[0]?.data) {
-        setCacheRange({ minData: minRow[0].data, maxData: maxRow[0].data });
-      } else {
-        setCacheRange(null);
-      }
     }
-    fetchCacheInfo();
+    fetchUltimaAtualizacao();
   }, [dataLoaded]);
 
   // IA Insights
@@ -359,10 +344,10 @@ export function VendasDashboardLayout({
           <h1 className="text-2xl font-bold text-foreground">Dashboard de Vendas</h1>
           <div className="flex items-center gap-3 flex-wrap">
             <p className="text-sm text-muted-foreground">Análise de vendas por loja e vendedor</p>
-            {cacheRange && (
+            {cacheDisponivel && (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">
                 <Database className="h-3 w-3" />
-                Cache: {new Date(cacheRange.minData + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} — {new Date(cacheRange.maxData + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                Cache: {new Date(cacheDisponivel.minData + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} — {new Date(cacheDisponivel.maxData + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
               </span>
             )}
             {ultimaAtualizacao && (
@@ -482,6 +467,25 @@ export function VendasDashboardLayout({
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {/* Alerta: período selecionado sem dados mas cache existe em outro período */}
+      {dataLoaded && !loading && dadosFormasPagamento.length === 0 && cacheDisponivel && (
+        <Alert className="border-warning/50 bg-warning/10">
+          <AlertCircle className="h-4 w-4 text-warning" />
+          <AlertDescription className="text-warning-foreground">
+            <strong>Sem dados para o período selecionado.</strong>{' '}
+            Os dados disponíveis no cache vão de{' '}
+            <strong>
+              {new Date(cacheDisponivel.minData + 'T12:00:00').toLocaleDateString('pt-BR')}
+            </strong>{' '}
+            até{' '}
+            <strong>
+              {new Date(cacheDisponivel.maxData + 'T12:00:00').toLocaleDateString('pt-BR')}
+            </strong>.
+            Ajuste o filtro de datas ou clique em Atualizar para tentar sincronizar dados novos.
+          </AlertDescription>
+        </Alert>
       )}
 
       {loading ? (

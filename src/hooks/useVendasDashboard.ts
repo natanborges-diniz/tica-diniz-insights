@@ -448,12 +448,53 @@ export function useVendasDashboard() {
 
   // Carregar período comercial do banco ao montar
   const periodoCarregado = useRef(false);
+  // Range do cache disponível (para exibição e fallback)
+  const [cacheDisponivel, setCacheDisponivel] = useState<{ minData: string; maxData: string } | null>(null);
+
   useEffect(() => {
     if (periodoCarregado.current) return;
     periodoCarregado.current = true;
-    getPeriodoComercial().then(p => {
-      setFilters(prev => ({ ...prev, dataInicio: p.dataIni, dataFim: p.dataFim }));
-    });
+
+    async function detectarPeriodo() {
+      // 1. Obter período comercial (mês atual por padrão)
+      const periodo = await getPeriodoComercial();
+
+      // 2. Verificar se existe cache para esse período
+      const { count: cacheCount } = await supabase
+        .from('vendas_agregado_diario')
+        .select('id', { count: 'exact', head: true })
+        .gte('data', periodo.dataIni)
+        .lte('data', periodo.dataFim);
+
+      // 3. Buscar range total do cache
+      const [{ data: minRow }, { data: maxRow }] = await Promise.all([
+        supabase.from('vendas_agregado_diario').select('data').order('data', { ascending: true }).limit(1),
+        supabase.from('vendas_agregado_diario').select('data').order('data', { ascending: false }).limit(1),
+      ]);
+
+      const minData = minRow?.[0]?.data;
+      const maxData = maxRow?.[0]?.data;
+      if (minData && maxData) {
+        setCacheDisponivel({ minData, maxData });
+      }
+
+      if ((cacheCount ?? 0) > 0) {
+        // Cache disponível no período comercial — usar normalmente
+        setFilters(prev => ({ ...prev, dataInicio: periodo.dataIni, dataFim: periodo.dataFim }));
+      } else if (maxData) {
+        // Cache vazio no mês atual — ajustar para o último mês com dados
+        const maxDate = new Date(maxData + 'T12:00:00');
+        const fallbackInicio = formatLocalDate(new Date(maxDate.getFullYear(), maxDate.getMonth(), 1));
+        const fallbackFim = formatLocalDate(new Date(maxDate.getFullYear(), maxDate.getMonth() + 1, 0));
+        console.log(`[useVendasDashboard] ⚠ Cache vazio para ${periodo.dataIni}..${periodo.dataFim}, usando último período com dados: ${fallbackInicio}..${fallbackFim}`);
+        setFilters(prev => ({ ...prev, dataInicio: fallbackInicio, dataFim: fallbackFim }));
+      } else {
+        // Nenhum cache — manter período comercial padrão
+        setFilters(prev => ({ ...prev, dataInicio: periodo.dataIni, dataFim: periodo.dataFim }));
+      }
+    }
+
+    detectarPeriodo();
   }, []);
 
   const [dadosFormasPagamento, setDadosFormasPagamento] = useState<ResumoFormaPagamento[]>([]);
@@ -907,6 +948,7 @@ export function useVendasDashboard() {
     progressoPaginacao,
     reload,
     forceRefresh,
+    cacheDisponivel,
     // Estados removidos (mantidos para compatibilidade)
     syncStatus: null,
     isSyncing: false,
