@@ -55,17 +55,27 @@ export function limitarPeriodo(
 }
 
 /**
- * Retorna as datas padrão para o mês atual (dia 1 ao último dia)
+ * Retorna o período comercial padrão baseado no ciclo 21–20.
+ * - Se hoje está entre dia 1 e dia 20: período = 21 do mês anterior até 20 do mês atual
+ * - Se hoje está entre dia 21 e último dia: período = 21 do mês atual até 20 do próximo mês
  */
 export function getDefaultPeriodoMesAtual(): { dataIni: string; dataFim: string } {
   const hoje = new Date();
-  const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-  const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-  
-  return {
-    dataIni: formatLocalDate(primeiroDiaMes),
-    dataFim: formatLocalDate(ultimoDiaMes),
-  };
+  const dia = hoje.getDate();
+  const ano = hoje.getFullYear();
+  const mes = hoje.getMonth(); // 0-indexed
+
+  if (dia <= 20) {
+    // Período: 21 do mês anterior → 20 do mês atual
+    const inicio = new Date(ano, mes - 1, 21);
+    const fim = new Date(ano, mes, 20);
+    return { dataIni: formatLocalDate(inicio), dataFim: formatLocalDate(fim) };
+  } else {
+    // Período: 21 do mês atual → 20 do próximo mês
+    const inicio = new Date(ano, mes, 21);
+    const fim = new Date(ano, mes + 1, 20);
+    return { dataIni: formatLocalDate(inicio), dataFim: formatLocalDate(fim) };
+  }
 }
 
 /**
@@ -93,11 +103,6 @@ export async function getPeriodoComercial(): Promise<{ dataIni: string; dataFim:
     console.warn('Não foi possível carregar período comercial do banco, usando fallback:', err);
   }
 
-  // Fallback: primeiro ao último dia do mês atual
-  const primeiroDia = new Date(anoAtual, mesAtual - 1, 1);
-  const ultimoDia = new Date(anoAtual, mesAtual, 0);
-  return {
-    dataIni: formatLocalDate(primeiroDia),
-    dataFim: formatLocalDate(ultimoDia),
-  };
+  // Fallback: ciclo comercial 21–20
+  return getDefaultPeriodoMesAtual();
 }
