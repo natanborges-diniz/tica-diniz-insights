@@ -9,6 +9,7 @@ import {
   HoyaPedidoPayload,
   HoyaPedidoResponse,
   listarProdutosHoya,
+  consultarProdutoHoya,
   criarPedidoHoya,
   recuperarPedidoPorOs,
 } from "@/services/hoyaService";
@@ -618,11 +619,47 @@ const PedidoFornecedorPage: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredOptions]);
 
+  // ---- Fetch colorações when product allows it but catalog didn't include them ----
+  const [coloracoesCarregadas, setColoracoesCarregadas] = useState<HoyaProduto["coloracoes"]>([]);
+  const [loadingColoracoes, setLoadingColoracoes] = useState(false);
+
+  useEffect(() => {
+    if (!produtoSelecionado) {
+      setColoracoesCarregadas([]);
+      setSelectedColoracao("none");
+      return;
+    }
+    // If catalog already has colorações, use them
+    if (produtoSelecionado.coloracoes && produtoSelecionado.coloracoes.length > 0) {
+      setColoracoesCarregadas(produtoSelecionado.coloracoes);
+      return;
+    }
+    // If product allows coloração but colorações not loaded, fetch individual product
+    if (produtoSelecionado.permiteColoracao) {
+      let cancelled = false;
+      setLoadingColoracoes(true);
+      consultarProdutoHoya(produtoSelecionado.codigoProduto)
+        .then((detalhe) => {
+          if (!cancelled && detalhe.coloracoes && detalhe.coloracoes.length > 0) {
+            setColoracoesCarregadas(detalhe.coloracoes);
+          } else if (!cancelled) {
+            setColoracoesCarregadas([]);
+          }
+        })
+        .catch((err) => {
+          console.warn("[PedidoFornecedor] Erro ao buscar colorações:", err);
+          if (!cancelled) setColoracoesCarregadas([]);
+        })
+        .finally(() => { if (!cancelled) setLoadingColoracoes(false); });
+      return () => { cancelled = true; };
+    }
+    setColoracoesCarregadas([]);
+  }, [produtoSelecionado?.codigoProduto, produtoSelecionado?.permiteColoracao]);
+
   // ---- Available colorações for selected product ----
   const coloracoesDisponiveis = useMemo(() => {
-    if (!produtoSelecionado?.coloracoes) return [];
-    return produtoSelecionado.coloracoes;
-  }, [produtoSelecionado]);
+    return coloracoesCarregadas || [];
+  }, [coloracoesCarregadas]);
 
   // ---- Manual search filtered products ----
   const produtosFiltrados = buscaProduto.trim()
@@ -1301,9 +1338,9 @@ const PedidoFornecedorPage: React.FC = () => {
                   {/* Coloração — sempre visível */}
                   <div>
                     <Label className="text-[10px] uppercase mb-1 block">Coloração</Label>
-                    <Select value={selectedColoracao} onValueChange={setSelectedColoracao} disabled={coloracoesDisponiveis.length === 0}>
+                    <Select value={selectedColoracao} onValueChange={setSelectedColoracao} disabled={coloracoesDisponiveis.length === 0 || loadingColoracoes}>
                       <SelectTrigger className="h-9">
-                        <SelectValue placeholder={coloracoesDisponiveis.length === 0 ? "Indisponível" : "Nenhuma"} />
+                        <SelectValue placeholder={loadingColoracoes ? "Carregando..." : coloracoesDisponiveis.length === 0 ? "Indisponível" : "Nenhuma"} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Sem coloração</SelectItem>
@@ -1314,7 +1351,10 @@ const PedidoFornecedorPage: React.FC = () => {
                         ))}
                       </SelectContent>
                     </Select>
-                    {coloracoesDisponiveis.length === 0 && produtoSelecionado && (
+                    {loadingColoracoes && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Buscando colorações...</p>
+                    )}
+                    {!loadingColoracoes && coloracoesDisponiveis.length === 0 && produtoSelecionado && !produtoSelecionado.permiteColoracao && (
                       <p className="text-[10px] text-muted-foreground mt-0.5">Este produto não possui opções de coloração.</p>
                     )}
                   </div>
