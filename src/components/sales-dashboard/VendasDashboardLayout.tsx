@@ -26,6 +26,7 @@ import { StoreTable } from "./StoreTable";
 import { PaymentMethodsChart } from "./PaymentMethodsChart";
 import { PaymentMethodsTable } from "./PaymentMethodsTable";
 import { VendasDiariasTable } from "./VendasDiariasTable";
+import { ComparativoAnualChart } from "./ComparativoAnualChart";
 import { useModuleInsights } from "@/hooks/useModuleInsights";
 import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
 import { registerAction, unregisterAction, createNavigationHandler } from "@/lib/actionCatalog";
@@ -589,6 +590,13 @@ export function VendasDashboardLayout({
                   isLoading={loading} 
                 />
               </div>
+
+              {/* Comparativo Anual */}
+              <ComparativoAnualChart
+                dataInicio={filters.dataInicio}
+                dataFim={filters.dataFim}
+                empresa={filters.empresa}
+              />
             </TabsContent>
 
             <TabsContent value="diario" className="mt-6">
