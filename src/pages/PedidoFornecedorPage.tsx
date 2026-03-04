@@ -707,9 +707,9 @@ const PedidoFornecedorPage: React.FC = () => {
           equilibrioLente: false,
         },
         dadosMedida: {
-          larguraLente: armacao.larguraLente ? Number(armacao.larguraLente) : undefined,
-          alturaLente: armacao.alturaLente ? Number(armacao.alturaLente) : undefined,
-          ponteLente: armacao.ponteLente ? Number(armacao.ponteLente) : undefined,
+          larguraLente: armacao.larguraLente && armacao.larguraLente.trim() !== "" ? Number(armacao.larguraLente) : undefined,
+          alturaLente: armacao.alturaLente && armacao.alturaLente.trim() !== "" ? Number(armacao.alturaLente) : undefined,
+          ponteLente: armacao.ponteLente && armacao.ponteLente.trim() !== "" ? Number(armacao.ponteLente) : undefined,
           distanciaLeitura: null,
         },
         armacao: {
