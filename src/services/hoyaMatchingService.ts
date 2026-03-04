@@ -289,10 +289,10 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
   const rawTokens = extractTokens(normalized);
   const desenhosList = knownDesenhos ?? PRIORITY_DESENHOS;
 
-  // Lente Pronta (LP) — detected between LG and design name
+  // Lente Pronta (LP) — detected from the normalized string before noise removal
   // Pattern: "LG LP HOYA HILUX ..." → isPronta = true
   // If no LP (e.g. "LG VS HOYA HILUX ...") → isPronta = false
-  const isPronta = rawTokens.includes("LP") || normalized.includes(" LP ");
+  const isPronta = /\bLP\b/.test(normalized);
 
   // Tipo de lente
   const isProgressiva = rawTokens.some(t => ["PR", "PROG", "PROGRESSIVA", "PROGRESSIVO", "MULTIFOCAL"].includes(t));
