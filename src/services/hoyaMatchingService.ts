@@ -1,6 +1,6 @@
 // src/services/hoyaMatchingService.ts
 // Intelligent matching between ERP lens descriptions and Hoya catalog products
-// v2 — robust token-based fuzzy matching
+// v3 — Catalog-first matching with fuzzy fallback
 
 import { HoyaProduto } from "./hoyaService";
 
@@ -20,7 +20,6 @@ export interface ParsedLensDescription {
   isINC: boolean;
   fornecedor: string | null;
   rawDescription: string;
-  /** All meaningful tokens extracted from the description */
   tokens: string[];
 }
 
@@ -48,104 +47,137 @@ export interface MatchResult {
 // CONSTANTS & MAPS
 // ============================================
 
-/** Map ERP material index to all known Hoya material field values */
 const MATERIAL_MAP: Record<string, string[]> = {
-  "1.50": ["150", "1.50"],
-  "1.53": ["TVX", "153", "Trivex", "1.53"],
+  "1.50": ["150", "1.50", "CR39", "CR-39"],
+  "1.53": ["TVX", "153", "Trivex", "1.53", "TRIVEX"],
   "1.56": ["156", "1.56"],
-  "1.59": ["POLI", "159", "Policarbonato", "1.59"],
-  "1.60": ["160", "1.60"],
-  "1.67": ["167", "1.67"],
-  "1.74": ["174", "1.74"],
+  "1.59": ["POLI", "159", "Policarbonato", "1.59", "POLICARBONATO", "PC"],
+  "1.60": ["160", "1.60", "MR8"],
+  "1.67": ["167", "1.67", "MR7", "MR-7"],
+  "1.74": ["174", "1.74", "MR174"],
 };
 
-/** Aliases for design names — ERP shorthand → canonical Hoya name(s) */
+/** Reverse material index lookup: given a string like "174", return "1.74" */
+function findMaterialIndex(s: string): string | null {
+  const upper = s.toUpperCase();
+  for (const [idx, aliases] of Object.entries(MATERIAL_MAP)) {
+    if (upper === idx) return idx;
+    if (aliases.some(a => a.toUpperCase() === upper)) return idx;
+  }
+  return null;
+}
+
+/** Design aliases — ERP keywords → canonical Hoya names (ordered by priority) */
 const DESIGN_ALIASES: Record<string, string[]> = {
+  // === Progressivas premium ===
+  "HOYALUX ID MYSTYLE V+": ["Hoyalux iD MyStyle V+"],
+  "ID MYSTYLE V+": ["Hoyalux iD MyStyle V+"],
+  "MYSTYLE V+": ["Hoyalux iD MyStyle V+"],
+  "IDENTIFY V+": ["Hoyalux iD MyStyle V+"],
+  "INDENTIFY V+": ["Hoyalux iD MyStyle V+"],
+  "IDENTIFY": ["Hoyalux iD MyStyle V+", "iD MyStyle"],
+  "INDENTIFY": ["Hoyalux iD MyStyle V+", "iD MyStyle"],
+  "ID MYSTYLE": ["Hoyalux iD MyStyle V+", "iD MyStyle"],
+  "MYSTYLE": ["Hoyalux iD MyStyle V+", "iD MyStyle", "MyStyle"],
+
+  // === Progressivas iD ===
+  "HOYALUX ID LS FF": ["Hoyalux iD LS FF"],
+  "ID LS FF": ["Hoyalux iD LS FF"],
+  "HOYALUX ID FF": ["Hoyalux iD FF"],
+  "ID FF": ["Hoyalux iD FF"],
+  "HOYALUX ID": ["Hoyalux iD FF", "Hoyalux iD LS FF"],
+
+  // === Progressivas D+ / D FF ===
+  "HOYALUX D+ FF": ["Hoyalux D+ FF"],
+  "D+ FF": ["Hoyalux D+ FF"],
+  "HOYALUX D+": ["Hoyalux D+ FF", "Hoyalux D+"],
   "D+": ["Hoyalux D+ FF", "Hoyalux D+"],
   "DFF": ["Hoyalux D FF", "Hoyalux D+ FF"],
   "D FF": ["Hoyalux D FF"],
-  "D+ FF": ["Hoyalux D+ FF"],
-  "HOYALUX D+": ["Hoyalux D+ FF", "Hoyalux D+"],
   "HOYALUX D FF": ["Hoyalux D FF"],
-  "HOYALUX D+ FF": ["Hoyalux D+ FF"],
-  "HOYALUX ID": ["Hoyalux iD FF", "Hoyalux iD LS FF"],
-  "ID FF": ["Hoyalux iD FF"],
-  "ID LS FF": ["Hoyalux iD LS FF"],
-  "IDENTIFY": ["Hoyalux iD MyStyle V+", "iD MyStyle"],
-  "INDENTIFY": ["Hoyalux iD MyStyle V+", "iD MyStyle"],
-  "IDENTIFY V+": ["Hoyalux iD MyStyle V+"],
-  "INDENTIFY V+": ["Hoyalux iD MyStyle V+"],
-  "ID MYSTYLE": ["Hoyalux iD MyStyle V+", "iD MyStyle"],
-  "ID MYSTYLE V+": ["Hoyalux iD MyStyle V+"],
-  "MYSTYLE": ["Hoyalux iD MyStyle V+", "iD MyStyle", "MyStyle"],
-  "MYSTYLE V+": ["Hoyalux iD MyStyle V+"],
-  "WORKSMART": ["WorkSmart", "Worksmart Room", "Worksmart"],
-  "WORKSMART ROOM": ["Worksmart Room"],
-  "WORK SMART": ["WorkSmart", "Worksmart Room"],
-  "WORK SMART ROOM": ["Worksmart Room"],
+
+  // === Sportive ===
+  "HOYALUX SPORTIVE FF": ["Hoyalux Sportive FF"],
+  "HOYALUX SPORTIVE": ["Hoyalux Sportive FF"],
+  "SPORTIVE FF": ["Hoyalux Sportive FF"],
   "SPORTIVE": ["Hoyalux Sportive FF"],
+
+  // === Ocupacionais / WorkSmart ===
+  "WORKSMART ROOM": ["Worksmart Room"],
+  "WORK SMART ROOM": ["Worksmart Room"],
+  "WORKSMART DESK": ["Worksmart Desk"],
+  "WORKSMART SPACE": ["Worksmart Space"],
+  "WORKSMART": ["WorkSmart", "Worksmart Room", "Worksmart Desk", "Worksmart Space"],
+  "WORK SMART": ["WorkSmart", "Worksmart Room"],
+
+  // === Sync ===
   "SYNC III": ["Sync III"],
   "SYNC 3": ["Sync III"],
   "SYNC": ["Sync III", "Sync"],
+
+  // === Monofocais ===
+  "NULUX EP": ["Nulux EP"],
+  "NULUX": ["Nulux"],
+  "HILUX": ["Hilux"],
+  "ARGOS": ["Argos"],
+
+  // === Outras famílias ===
   "BALANSIS": ["Balansis"],
   "AMPLITUDE": ["Amplitude"],
+  "SUMMIT PRO": ["Summit Pro"],
   "SUMMIT": ["Summit"],
   "LIFESTYLE": ["Lifestyle"],
   "TRUEFORM": ["TrueForm"],
   "ARRAY": ["Array"],
   "PRECISION": ["Precision"],
-  "NULUX": ["Nulux"],
-  "HILUX": ["Hilux"],
-  "ARGOS": ["Argos"],
 };
 
-/** Priority-ordered design names for substring matching (longer/more specific first) */
+/** Priority-ordered designs for substring matching (longest first) */
 const PRIORITY_DESENHOS = [
-  "Worksmart Room",
-  "WorkSmart",
   "Hoyalux iD MyStyle V+",
   "Hoyalux iD LS FF",
   "Hoyalux iD FF",
   "Hoyalux D+ FF",
   "Hoyalux D FF",
   "Hoyalux Sportive FF",
-  "Hoyalux",
+  "Worksmart Room",
+  "Worksmart Desk",
+  "Worksmart Space",
+  "WorkSmart",
   "Sync III",
   "Sync",
-  "Argos",
   "iD MyStyle V+",
   "iD MyStyle",
   "iD FreeForm",
   "MyStyle",
+  "Nulux EP",
+  "Nulux",
+  "Hilux",
+  "Argos",
   "Amplitude",
+  "Summit Pro",
   "Summit",
   "Balansis",
   "Lifestyle",
   "TrueForm",
   "Array",
   "Precision",
-  "Nulux",
-  "Hilux",
 ];
 
-/** Treatment mapping — ERP keywords → Hoya treatment names (ordered by specificity) */
-const TREATMENT_ALIASES: [string[], string[]][] = [
-  // Most specific first
-  [["MEIRYO"], ["Meiryo", "MEIRYO"]],
-  [["LONGBLUE", "LONG BLUE"], ["HV LL Bluecontrol", "Bluecontrol"]],
-  [["NORISK BLUE", "NO RISK BLUE"], ["NoRisk", "Bluecontrol"]],
-  [["BLUECONTROL", "BLUE CONTROL", "BLUE"], ["HV LL Bluecontrol", "Bluecontrol"]],
-  [["LONGLIFE", "LONG LIFE", "LONG"], ["HV LongLife", "LongLife"]],
-  [["NORISK", "NO RISK"], ["NoRisk"]],
-  [["CLEANEXTRA", "CLEAN EXTRA"], ["CleanExtra"]],
-  [["INC", "HARD"], ["HV HARD Anti-Risco", "HARD Anti-Risco", "Anti-Risco"]],
-  [["SUN PRO"], ["Sun Pro", "Sensity"]],
-  [["SENSITY DARK"], ["Sensity Dark"]],
-  [["SENSITY 2"], ["Sensity 2"]],
-  [["SENSITY"], ["Sensity"]],
+/** Treatment aliases — ERP keywords → Hoya treatment names (most specific first) */
+const TREATMENT_ALIASES: { keywords: string[]; hoyaNames: string[]; isBlue?: boolean; isINC?: boolean }[] = [
+  { keywords: ["MEIRYO"], hoyaNames: ["Meiryo", "MEIRYO"] },
+  { keywords: ["LONGBLUE", "LONG BLUE", "LL BLUE", "LLBLUE"], hoyaNames: ["HV LL Bluecontrol", "Bluecontrol"], isBlue: true },
+  { keywords: ["NORISK BLUE", "NO RISK BLUE", "NORISC BLUE"], hoyaNames: ["NoRisk", "Bluecontrol"], isBlue: true },
+  { keywords: ["BLUECONTROL", "BLUE CONTROL", "BLUCONTROL"], hoyaNames: ["HV LL Bluecontrol", "Bluecontrol", "BlueControl"], isBlue: true },
+  { keywords: ["LONGLIFE", "LONG LIFE", "LL", "LONG"], hoyaNames: ["HV LongLife", "LongLife"] },
+  { keywords: ["NORISK", "NO RISK", "NORISC"], hoyaNames: ["NoRisk"] },
+  { keywords: ["CLEANEXTRA", "CLEAN EXTRA"], hoyaNames: ["CleanExtra"] },
+  { keywords: ["HARD", "INC", "ANTI RISCO", "ANTIRISCO"], hoyaNames: ["HV HARD Anti-Risco", "HARD Anti-Risco", "Anti-Risco"], isINC: true },
+  { keywords: ["BLUE"], hoyaNames: ["HV LL Bluecontrol", "Bluecontrol"], isBlue: true },
 ];
 
-/** Known suppliers by keyword in ERP description */
+/** Known suppliers */
 const SUPPLIER_KEYWORDS: [string, string][] = [
   ["HOYA", "HOYA"],
   ["ZEISS", "ZEISS"],
@@ -156,14 +188,14 @@ const SUPPLIER_KEYWORDS: [string, string][] = [
   ["DNZ", "PROPRIA"],
 ];
 
-/** Photochromic/photosensitive keywords */
+/** Photochromic keywords (most specific first) */
 const PHOTO_KEYWORDS = [
-  { keywords: ["SUN PRO"], tipo: "Sun Pro", isFoto: true },
-  { keywords: ["SENSITY DARK"], tipo: "Dark", isFoto: true },
-  { keywords: ["SENSITY 2", "SENSITY2"], tipo: "2", isFoto: true },
-  { keywords: ["SENSITY ORIGINAL"], tipo: "Original", isFoto: true },
-  { keywords: ["SENSITY"], tipo: "Original", isFoto: true },
-  { keywords: ["TRANSITIONS", "FOTOSSENSIVEL", "FOTOSSENSÍVEL", "PHOTO"], tipo: "Original", isFoto: true },
+  { keywords: ["SUN PRO", "SUNPRO"], tipo: "Sun Pro" },
+  { keywords: ["SENSITY DARK", "SENSITYDARK"], tipo: "Sensity Dark" },
+  { keywords: ["SENSITY 2", "SENSITY2"], tipo: "Sensity 2" },
+  { keywords: ["SENSITY ORIGINAL"], tipo: "Sensity" },
+  { keywords: ["SENSITY"], tipo: "Sensity" },
+  { keywords: ["TRANSITIONS", "FOTOSSENSIVEL", "FOTOSSENSÍVEL", "PHOTO", "FOTOCROMATICA", "FOTOCROMÁTICA"], tipo: "Sensity" },
 ];
 
 /** Color keywords */
@@ -173,21 +205,49 @@ const COLOR_MAP: Record<string, string> = {
   "VD": "VD", "VERDE": "VD", "GREEN": "VD",
 };
 
-// Noise words to strip from descriptions for matching
 const NOISE_WORDS = new Set([
   "LENTE", "LENTES", "PAR", "DE", "COM", "PARA", "EM", "DO", "DA", "DAS", "DOS",
   "E", "OU", "O", "A", "OS", "AS", "UM", "UMA", "NO", "NA", "AO", "POR",
-  "CADA", "GRAU", "RECEITA", "RX", "COMPLETA", "COMPLETO",
+  "CADA", "GRAU", "RECEITA", "RX", "COMPLETA", "COMPLETO", "HOYA",
 ]);
 
 // ============================================
-// ERP DESCRIPTION PARSER (v2)
+// FUZZY UTILITIES
 // ============================================
 
-/**
- * Build a comprehensive list of known designs by merging the priority list
- * with all unique designs extracted from the catalog.
- */
+/** Levenshtein distance between two strings */
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const d: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) d[i][0] = i;
+  for (let j = 0; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+    }
+  }
+  return d[m][n];
+}
+
+/** Normalized similarity (0..1, 1 = identical) */
+function similarity(a: string, b: string): number {
+  const maxLen = Math.max(a.length, b.length);
+  if (maxLen === 0) return 1;
+  return 1 - levenshtein(a, b) / maxLen;
+}
+
+/** Normalize for comparison */
+function norm(s: string): string {
+  return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+// ============================================
+// ERP DESCRIPTION PARSER (v3)
+// ============================================
+
 export function buildDesenhosFromCatalog(catalogo: { desenho: string }[]): string[] {
   const catalogDesigns = [...new Set(catalogo.map(p => p.desenho).filter(Boolean))];
   const priorityUpper = new Set(PRIORITY_DESENHOS.map(d => d.toUpperCase()));
@@ -196,10 +256,8 @@ export function buildDesenhosFromCatalog(catalogo: { desenho: string }[]): strin
   return [...PRIORITY_DESENHOS, ...extras];
 }
 
-/** Normalize an ERP description for matching */
 function normalizeDescription(desc: string): string {
   let s = desc.toUpperCase().trim();
-  // Normalize common shorthand
   s = s.replace(/\bHOYA\s+D\+/g, "HOYALUX D+");
   s = s.replace(/\bHOYA\s+D\s+FF\b/g, "HOYALUX D FF");
   s = s.replace(/\bINDENTIFY\b/g, "IDENTIFY");
@@ -207,10 +265,17 @@ function normalizeDescription(desc: string): string {
   s = s.replace(/\bWORK\s*SMART\b/g, "WORKSMART");
   s = s.replace(/\bSYNC\s*3\b/g, "SYNC III");
   s = s.replace(/\bSUN\s*PRO\b/g, "SUN PRO");
+  s = s.replace(/\bSENSITY\s*DARK\b/g, "SENSITY DARK");
+  s = s.replace(/\bSENSITY\s*2\b/g, "SENSITY 2");
+  s = s.replace(/\bLONG\s*LIFE\b/g, "LONGLIFE");
+  s = s.replace(/\bLONG\s*BLUE\b/g, "LONGBLUE");
+  s = s.replace(/\bNO\s*RISK\b/g, "NORISK");
+  s = s.replace(/\bCLEAN\s*EXTRA\b/g, "CLEANEXTRA");
+  s = s.replace(/\bANTI\s*RISCO\b/g, "ANTIRISCO");
+  s = s.replace(/\bBLUE\s*CONTROL\b/g, "BLUECONTROL");
   return s;
 }
 
-/** Extract meaningful tokens from a description */
 function extractTokens(normalized: string): string[] {
   return normalized
     .split(/[\s\-\/\(\)\[\],;:\.]+/)
@@ -224,7 +289,7 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
 
   // Tipo de lente
   const isProgressiva = rawTokens.some(t => ["PR", "PROG", "PROGRESSIVA", "PROGRESSIVO", "MULTIFOCAL"].includes(t));
-  const isMonofocal = rawTokens.some(t => ["MONO", "MONOFOCAL", "VS", "SV", "VISAO SIMPLES"].includes(t));
+  const isMonofocal = rawTokens.some(t => ["MONO", "MONOFOCAL", "VS", "SV"].includes(t)) || normalized.includes("VISAO SIMPLES");
   const tipoLente = isProgressiva ? "progressiva" : isMonofocal ? "monofocal" : "unknown";
 
   // Fornecedor
@@ -233,28 +298,28 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
     if (normalized.includes(kw)) { fornecedor = sup; break; }
   }
 
-  // Material index
+  // Material index — scan tokens for known indices
   let materialIndex: string | null = null;
-  for (const [erpIdx, hoyaValues] of Object.entries(MATERIAL_MAP)) {
-    if (normalized.includes(erpIdx)) { materialIndex = hoyaValues[0]; break; }
+  for (const token of rawTokens) {
+    const found = findMaterialIndex(token);
+    if (found) { materialIndex = found; break; }
   }
-  if (!materialIndex && (normalized.includes("TRIVEX") || normalized.includes("TVX"))) {
-    materialIndex = "TVX";
+  // Also check raw string for patterns like "1.74", "1.67"
+  if (!materialIndex) {
+    const idxMatch = normalized.match(/\b1\.(50|53|56|59|60|67|74)\b/);
+    if (idxMatch) materialIndex = `1.${idxMatch[1]}`;
   }
-  if (!materialIndex && (normalized.includes("POLI"))) {
-    materialIndex = "POLI";
-  }
+  if (!materialIndex && (normalized.includes("TRIVEX") || normalized.includes("TVX"))) materialIndex = "1.53";
+  if (!materialIndex && normalized.includes("POLI")) materialIndex = "1.59";
 
-  // Desenho — try alias map first (most specific), then substring
+  // Desenho — 1) alias map (longest key first), 2) substring, 3) fuzzy
   let desenho: string | null = null;
 
-  // 1. Check aliases (from longest key to shortest for specificity)
   const aliasKeys = Object.keys(DESIGN_ALIASES).sort((a, b) => b.length - a.length);
   for (const aliasKey of aliasKeys) {
     if (normalized.includes(aliasKey)) {
-      // Find first alias that exists in the catalog
       const candidates = DESIGN_ALIASES[aliasKey];
-      const found = candidates.find(c => 
+      const found = candidates.find(c =>
         desenhosList.some(d => d.toUpperCase() === c.toUpperCase())
       );
       desenho = found ?? candidates[0];
@@ -262,12 +327,31 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
     }
   }
 
-  // 2. Fallback: substring match against known designs
   if (!desenho) {
     for (const d of desenhosList) {
       if (normalized.includes(d.toUpperCase())) {
         desenho = d;
         break;
+      }
+    }
+  }
+
+  // Fuzzy fallback: find best Levenshtein match among catalog designs
+  if (!desenho) {
+    const meaningfulTokens = rawTokens.filter(t => t.length >= 3 && !["150", "153", "156", "159", "160", "167", "174"].includes(t));
+    const joined = meaningfulTokens.join(" ");
+    if (joined.length >= 3) {
+      let bestSim = 0;
+      let bestDesign: string | null = null;
+      for (const d of desenhosList) {
+        const sim = similarity(norm(joined), norm(d));
+        if (sim > bestSim) {
+          bestSim = sim;
+          bestDesign = d;
+        }
+      }
+      if (bestSim >= 0.5 && bestDesign) {
+        desenho = bestDesign;
       }
     }
   }
@@ -278,34 +362,28 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
   let fotossensivelCor: string | null = null;
   for (const ph of PHOTO_KEYWORDS) {
     if (ph.keywords.some(kw => normalized.includes(kw))) {
-      isFotossensivel = ph.isFoto;
+      isFotossensivel = true;
       fotossensivelTipo = ph.tipo;
       break;
     }
   }
-  // Color detection after photochromic keyword
   if (isFotossensivel) {
     for (const [kw, cor] of Object.entries(COLOR_MAP)) {
       if (rawTokens.includes(kw)) { fotossensivelCor = cor; break; }
     }
   }
 
-  // Treatment — scan aliases in order (most specific first)
+  // Treatment
   let tratamento: string | null = null;
   let isBlue = false;
   let isINC = false;
-  for (const [keywords, hoyaNames] of TREATMENT_ALIASES) {
-    if (keywords.some(kw => normalized.includes(kw))) {
-      tratamento = hoyaNames[0];
-      if (hoyaNames.some(n => n.toLowerCase().includes("blue"))) isBlue = true;
-      if (hoyaNames.some(n => n.toLowerCase().includes("anti-risco") || n.toLowerCase().includes("hard"))) isINC = true;
+  for (const tAlias of TREATMENT_ALIASES) {
+    if (tAlias.keywords.some(kw => normalized.includes(kw))) {
+      tratamento = tAlias.hoyaNames[0];
+      if (tAlias.isBlue) isBlue = true;
+      if (tAlias.isINC) isINC = true;
       break;
     }
-  }
-  // Also check individual token for BLUE
-  if (!isBlue && rawTokens.includes("BLUE")) {
-    isBlue = true;
-    if (!tratamento) tratamento = "HV LL Bluecontrol";
   }
 
   return {
@@ -318,7 +396,7 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
 }
 
 // ============================================
-// SCORING ENGINE (v2 — multi-signal)
+// PRESCRIPTION FILTER
 // ============================================
 
 interface PrescricaoFiltro {
@@ -335,12 +413,10 @@ function isGrauCompativel(produto: HoyaProduto, prescricao: PrescricaoFiltro): b
   const esfOe = prescricao.esfericoOe ?? 0;
   if (esfOd < produto.esfericoMinimo || esfOd > produto.esfericoMaximo) return false;
   if (esfOe < produto.esfericoMinimo || esfOe > produto.esfericoMaximo) return false;
-
   const cilOd = prescricao.cilindricoOd ?? 0;
   const cilOe = prescricao.cilindricoOe ?? 0;
   if (cilOd < produto.cilindricoMinimo || cilOd > produto.cilindricoMaximo) return false;
   if (cilOe < produto.cilindricoMinimo || cilOe > produto.cilindricoMaximo) return false;
-
   if (produto.adicaoMinima > 0 || produto.adicaoMaxima > 0) {
     const adicOd = prescricao.adicaoOd ?? 0;
     const adicOe = prescricao.adicaoOe ?? 0;
@@ -350,126 +426,69 @@ function isGrauCompativel(produto: HoyaProduto, prescricao: PrescricaoFiltro): b
   return true;
 }
 
-/** Normalize a string for fuzzy comparison */
-function norm(s: string): string {
-  return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
+// ============================================
+// SCORING ENGINE (v3 — Catalog-First)
+// ============================================
 
-/** Check if a product field contains any of the candidate strings */
-function fieldContainsAny(field: string | number | null | undefined, candidates: string[]): boolean {
-  if (field == null) return false;
-  const f = String(field).toUpperCase();
-  return candidates.some(c => f.includes(c.toUpperCase()));
-}
-
-/** Token overlap score — how many description tokens appear in the product name/desenho */
-function tokenOverlapScore(tokens: string[], produto: HoyaProduto): number {
-  const productText = [
-    produto.nome, produto.desenho, String(produto.material), produto.tratamento,
-    produto.fotossensivel ? String(produto.fotossensivel) : "",
-  ].join(" ").toUpperCase();
-
-  let hits = 0;
-  for (const t of tokens) {
-    if (NOISE_WORDS.has(t)) continue;
-    if (t.length < 2) continue;
-    if (productText.includes(t)) hits++;
-  }
-  return hits;
-}
-
-function calcScore(
-  parsed: ParsedLensDescription,
-  produto: HoyaProduto
-): { score: number; details: string[] } {
+/**
+ * v3 scoring: The key insight is that we score DESIGN + MATERIAL as primary signals,
+ * and then ENRICH the group with ALL available treatments/photos from the catalog.
+ * Treatment/photo are used as ranking bonuses but NEVER as exclusion filters.
+ */
+function calcDesignScore(parsed: ParsedLensDescription, produto: HoyaProduto): { score: number; details: string[] } {
   let score = 0;
   const details: string[] = [];
 
-  // === Drawing match (highest weight) ===
+  // === 1. DESIGN MATCH (primary signal, max 50) ===
   if (parsed.desenho) {
     const parsedNorm = norm(parsed.desenho);
     const prodNorm = norm(produto.desenho);
     if (parsedNorm === prodNorm) {
-      score += 40;
-      details.push(`Desenho exato "${produto.desenho}" ✓ (+40)`);
+      score += 50;
+      details.push(`Desenho exato "${produto.desenho}" ✓ (+50)`);
     } else if (prodNorm.includes(parsedNorm) || parsedNorm.includes(prodNorm)) {
-      score += 30;
-      details.push(`Desenho parcial "${produto.desenho}" ~ (+30)`);
-    }
-  }
-
-  // === Material match ===
-  if (parsed.materialIndex) {
-    const parsedEntry = Object.entries(MATERIAL_MAP).find(([, vals]) => vals.some(v => v.toUpperCase() === parsed.materialIndex!.toUpperCase()));
-    const acceptableValues = parsedEntry ? parsedEntry[1] : [parsed.materialIndex];
-    if (acceptableValues.some(v => norm(String(produto.material)) === norm(v))) {
-      score += 25;
-      details.push(`Material "${produto.material}" ✓ (+25)`);
-    }
-  }
-
-  // === Treatment match ===
-  if (parsed.tratamento) {
-    const tratNorm = norm(parsed.tratamento);
-    const prodTrat = norm(produto.tratamento ?? "");
-    if (tratNorm === prodTrat || prodTrat.includes(tratNorm) || tratNorm.includes(prodTrat)) {
-      score += 20;
-      details.push(`Tratamento "${produto.tratamento}" ✓ (+20)`);
+      score += 35;
+      details.push(`Desenho parcial "${produto.desenho}" ~ (+35)`);
     } else {
-      // Check all aliases for the parsed treatment
-      for (const [, hoyaNames] of TREATMENT_ALIASES) {
-        const matchesParsed = hoyaNames.some(n => norm(n) === tratNorm || norm(n).includes(tratNorm));
-        if (matchesParsed) {
-          const matchesProd = hoyaNames.some(n => {
-            const nn = norm(n);
-            return prodTrat.includes(nn) || nn.includes(prodTrat);
-          });
-          if (matchesProd) {
-            score += 15;
-            details.push(`Tratamento alias "${produto.tratamento}" ~ (+15)`);
-            break;
-          }
-        }
-      }
-      // Also check if product treatment contains a known variation of parsed.tratamento
-      if (produto.tratamento && parsed.tokens.some(t => norm(produto.tratamento!).includes(norm(t)) && t.length >= 4)) {
-        score += 10;
-        details.push(`Tratamento token overlap "${produto.tratamento}" ~ (+10)`);
-      }
-    }
-  }
-
-  // === Photochromic match ===
-  if (parsed.isFotossensivel) {
-    if (produto.codigoFotossensivel != null && produto.fotossensivel) {
-      score += 15;
-      details.push(`Fotossensível ✓ (+15)`);
-      if (parsed.fotossensivelTipo) {
-        const fotoStr = String(produto.fotossensivel).toUpperCase();
-        if (fotoStr.includes(parsed.fotossensivelTipo.toUpperCase())) {
-          score += 5;
-          details.push(`Tipo "${parsed.fotossensivelTipo}" ✓ (+5)`);
-        }
+      // Fuzzy design similarity
+      const sim = similarity(parsedNorm, prodNorm);
+      if (sim >= 0.6) {
+        const pts = Math.round(sim * 25);
+        score += pts;
+        details.push(`Desenho fuzzy "${produto.desenho}" (${Math.round(sim * 100)}%) (+${pts})`);
       }
     }
   } else {
-    if (produto.codigoFotossensivel == null) {
-      score += 5;
-      details.push(`Não-fotossensível ✓ (+5)`);
+    // No design parsed — use token overlap against product name
+    const prodText = `${produto.desenho} ${produto.nome}`.toUpperCase();
+    const meaningfulTokens = parsed.tokens.filter(t => t.length >= 3);
+    let hits = 0;
+    for (const t of meaningfulTokens) {
+      if (prodText.includes(t)) hits++;
+    }
+    if (hits > 0) {
+      const pts = Math.min(hits * 8, 30);
+      score += pts;
+      details.push(`Token overlap (${hits} hits) (+${pts})`);
     }
   }
 
-  // === COR/Bluecontrol variant ===
-  if (parsed.isBlue) {
-    const prodNome = produto.nome.toUpperCase();
-    const prodTrat = (produto.tratamento ?? "").toUpperCase();
-    if (prodNome.includes("COR") || prodTrat.includes("BLUE")) {
-      score += 5;
-      details.push(`Bluecontrol/COR ✓ (+5)`);
+  // === 2. MATERIAL MATCH (secondary signal, max 30) ===
+  if (parsed.materialIndex) {
+    const prodMatStr = String(produto.material).toUpperCase();
+    const expectedAliases = MATERIAL_MAP[parsed.materialIndex] ?? [parsed.materialIndex];
+    const matches = expectedAliases.some(a => {
+      const aN = norm(a);
+      const pN = norm(prodMatStr);
+      return aN === pN || pN.includes(aN) || aN.includes(pN);
+    });
+    if (matches) {
+      score += 30;
+      details.push(`Material "${produto.material}" ✓ (+30)`);
     }
   }
 
-  // === Tipo lente ===
+  // === 3. TIPO LENTE bonus (max 5) ===
   if (parsed.tipoLente === "progressiva" && produto.tipoLente === "Visao Progressiva") {
     score += 5;
     details.push(`Tipo Progressiva ✓ (+5)`);
@@ -478,21 +497,70 @@ function calcScore(
     details.push(`Tipo Monofocal ✓ (+5)`);
   }
 
-  // === Token overlap bonus (fuzzy affinity) ===
-  const overlap = tokenOverlapScore(parsed.tokens, produto);
-  if (overlap >= 3) {
-    const bonus = Math.min(overlap * 2, 10);
-    score += bonus;
-    details.push(`Token overlap (${overlap} hits) (+${bonus})`);
+  // === 4. TREATMENT BONUS (ranking aid, max 15) ===
+  if (parsed.tratamento) {
+    const prodTrat = norm(produto.tratamento ?? "");
+    const parsedTratNorm = norm(parsed.tratamento);
+    if (parsedTratNorm && prodTrat) {
+      if (parsedTratNorm === prodTrat || prodTrat.includes(parsedTratNorm) || parsedTratNorm.includes(prodTrat)) {
+        score += 15;
+        details.push(`Tratamento "${produto.tratamento}" ✓ (+15)`);
+      } else {
+        // Check aliases
+        for (const tAlias of TREATMENT_ALIASES) {
+          const matchesParsed = tAlias.hoyaNames.some(n => {
+            const nn = norm(n);
+            return nn === parsedTratNorm || nn.includes(parsedTratNorm) || parsedTratNorm.includes(nn);
+          });
+          if (matchesParsed) {
+            const matchesProd = tAlias.hoyaNames.some(n => {
+              const nn = norm(n);
+              return prodTrat.includes(nn) || nn.includes(prodTrat);
+            });
+            if (matchesProd) {
+              score += 10;
+              details.push(`Tratamento alias "${produto.tratamento}" ~ (+10)`);
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // === 5. PHOTOCHROMIC BONUS (max 10) ===
+  if (parsed.isFotossensivel) {
+    if (produto.codigoFotossensivel != null && produto.fotossensivel) {
+      score += 10;
+      details.push(`Fotossensível ✓ (+10)`);
+      if (parsed.fotossensivelTipo) {
+        const fotoStr = String(produto.fotossensivel).toUpperCase();
+        if (fotoStr.includes(parsed.fotossensivelTipo.toUpperCase())) {
+          score += 5;
+          details.push(`Tipo foto "${parsed.fotossensivelTipo}" ✓ (+5)`);
+        }
+      }
+    }
   }
 
   return { score, details };
 }
 
 // ============================================
-// MATCHING ENGINE (v2)
+// MATCHING ENGINE (v3 — Catalog-First)
 // ============================================
 
+/**
+ * The v3 engine works in 3 phases:
+ * 
+ * Phase 1: Parse description → extract design, material, treatment, photo hints
+ * Phase 2: Score ALL products by design + material affinity (catalog-first)
+ * Phase 3: Group by design+material family, ENRICH each group with ALL available
+ *          treatments/photos from the catalog (not just matched ones)
+ * 
+ * This ensures that even if "Meiryo" isn't in the ERP description,
+ * it still appears as an available treatment for a Hilux 1.50 group.
+ */
 export function matchProducts(
   catalogo: HoyaProduto[],
   descricaoErp: string,
@@ -501,12 +569,12 @@ export function matchProducts(
   const allDesenhos = buildDesenhosFromCatalog(catalogo);
   const parsed = parseErpDescription(descricaoErp, allDesenhos);
 
-  // Step 1: Filter by prescription compatibility
+  // Phase 1: Filter by prescription compatibility
   let compativeis = prescricao
     ? catalogo.filter(p => isGrauCompativel(p, prescricao))
     : [...catalogo];
 
-  // Step 2: Filter by tipo lente (soft — only if results exist)
+  // Soft filter by tipo lente
   if (parsed.tipoLente === "progressiva") {
     const filtered = compativeis.filter(p => p.tipoLente === "Visao Progressiva");
     if (filtered.length > 0) compativeis = filtered;
@@ -515,86 +583,104 @@ export function matchProducts(
     if (filtered.length > 0) compativeis = filtered;
   }
 
-  // Step 3: Score each product
+  // Phase 2: Score each product
   const scored = compativeis.map(p => {
-    const { score, details } = calcScore(parsed, p);
+    const { score, details } = calcDesignScore(parsed, p);
     return { produto: p, score, details };
   }).sort((a, b) => b.score - a.score);
 
-  // Step 4: Filter out zero-score products
+  // Phase 3: Build groups — KEY CHANGE: group by design+material,
+  // then enrich with ALL products from catalog for that family
   const meaningful = scored.filter(s => s.score > 0);
-  const results = meaningful.length > 0 ? meaningful : scored.slice(0, 50);
+  const results = meaningful.length > 0 ? meaningful : scored.slice(0, 100);
 
-  // Step 5: Group by desenho + material (unique families)
-  const groupMap = new Map<string, MatchGroup>();
+  // Collect unique design+material families from scored results
+  const familyKeys = new Set<string>();
+  const familyMap = new Map<string, { score: number; details: string[] }>();
 
   for (const { produto, score, details } of results) {
     const key = `${produto.codigoDesenho}_${produto.codigoMaterial}`;
-    if (!groupMap.has(key)) {
-      groupMap.set(key, {
-        desenho: produto.desenho,
-        material: String(produto.material),
-        codigoDesenho: produto.codigoDesenho,
-        codigoMaterial: produto.codigoMaterial,
-        alturasDisponiveis: [],
-        tratamentosDisponiveis: [],
-        fotossensiveisDisponiveis: [],
-        produtos: [],
-        score,
-        scoreDetails: details,
-      });
-    }
-    const group = groupMap.get(key)!;
-    group.produtos.push(produto);
-
-    if (score > group.score) {
-      group.score = score;
-      group.scoreDetails = details;
-    }
-
-    // Unique heights
-    if (produto.altura != null && produto.codigoAltura != null) {
-      if (!group.alturasDisponiveis.some(a => a.codigoAltura === produto.codigoAltura)) {
-        group.alturasDisponiveis.push({ altura: produto.altura, codigoAltura: produto.codigoAltura });
-      }
-    }
-
-    // Unique treatments
-    if (!group.tratamentosDisponiveis.some(t => t.codigoTratamento === produto.codigoTratamento)) {
-      group.tratamentosDisponiveis.push({
-        tratamento: produto.tratamento,
-        codigoTratamento: produto.codigoTratamento,
-        temCor: false,
-      });
-    }
-
-    // Unique photochromic options
-    if (produto.codigoFotossensivel != null && produto.fotossensivel) {
-      if (!group.fotossensiveisDisponiveis.some(f => f.codigoFotossensivel === produto.codigoFotossensivel)) {
-        group.fotossensiveisDisponiveis.push({
-          nome: String(produto.fotossensivel),
-          codigoFotossensivel: produto.codigoFotossensivel,
-        });
-      }
+    familyKeys.add(key);
+    const existing = familyMap.get(key);
+    if (!existing || score > existing.score) {
+      familyMap.set(key, { score, details });
     }
   }
 
-  // Sort groups by score descending
-  const groups = Array.from(groupMap.values()).sort((a, b) => b.score - a.score);
+  // Now build groups by pulling ALL catalog products for each family
+  // This ensures ALL treatments and photos are available, not just matched ones
+  const groupMap = new Map<string, MatchGroup>();
 
-  // Sort sub-items within groups
-  groups.forEach(g => {
-    g.alturasDisponiveis.sort((a, b) => a.altura - b.altura);
-    g.tratamentosDisponiveis.sort((a, b) => a.tratamento.localeCompare(b.tratamento));
-  });
+  for (const key of familyKeys) {
+    const [codDesenho, codMaterial] = key.split("_").map(Number);
+    const familyScore = familyMap.get(key)!;
+
+    // Get ALL products in this family from the full catalog (not just scored ones)
+    const familyProducts = (prescricao
+      ? catalogo.filter(p => isGrauCompativel(p, prescricao))
+      : catalogo
+    ).filter(p => p.codigoDesenho === codDesenho && p.codigoMaterial === codMaterial);
+
+    if (familyProducts.length === 0) continue;
+
+    const group: MatchGroup = {
+      desenho: familyProducts[0].desenho,
+      material: String(familyProducts[0].material),
+      codigoDesenho: codDesenho,
+      codigoMaterial: codMaterial,
+      alturasDisponiveis: [],
+      tratamentosDisponiveis: [],
+      fotossensiveisDisponiveis: [],
+      produtos: familyProducts,
+      score: familyScore.score,
+      scoreDetails: familyScore.details,
+    };
+
+    // Collect ALL unique options from the family
+    const seenAlturas = new Set<number>();
+    const seenTratamentos = new Set<number>();
+    const seenFotos = new Set<number>();
+
+    for (const p of familyProducts) {
+      if (p.altura != null && p.codigoAltura != null && !seenAlturas.has(p.codigoAltura)) {
+        seenAlturas.add(p.codigoAltura);
+        group.alturasDisponiveis.push({ altura: p.altura, codigoAltura: p.codigoAltura });
+      }
+      if (!seenTratamentos.has(p.codigoTratamento)) {
+        seenTratamentos.add(p.codigoTratamento);
+        group.tratamentosDisponiveis.push({
+          tratamento: p.tratamento,
+          codigoTratamento: p.codigoTratamento,
+          temCor: p.nome.toUpperCase().includes(" COR"),
+        });
+      }
+      if (p.codigoFotossensivel != null && p.fotossensivel && !seenFotos.has(p.codigoFotossensivel)) {
+        seenFotos.add(p.codigoFotossensivel);
+        group.fotossensiveisDisponiveis.push({
+          nome: String(p.fotossensivel),
+          codigoFotossensivel: p.codigoFotossensivel,
+        });
+      }
+    }
+
+    // Sort sub-items
+    group.alturasDisponiveis.sort((a, b) => a.altura - b.altura);
+    group.tratamentosDisponiveis.sort((a, b) => a.tratamento.localeCompare(b.tratamento));
+
+    groupMap.set(key, group);
+  }
+
+  const groups = Array.from(groupMap.values()).sort((a, b) => b.score - a.score);
 
   const bestGroup = groups.length > 0 ? groups[0] : null;
   let bestProduct: HoyaProduto | null = null;
-  if (bestGroup && results.length > 0) {
-    bestProduct = results.find(s => {
-      const key = `${s.produto.codigoDesenho}_${s.produto.codigoMaterial}`;
-      return key === `${bestGroup.codigoDesenho}_${bestGroup.codigoMaterial}`;
-    })?.produto ?? null;
+  if (bestGroup) {
+    // Find the best-scored product within the best group
+    const bestGroupProducts = results.filter(s => {
+      return s.produto.codigoDesenho === bestGroup.codigoDesenho &&
+             s.produto.codigoMaterial === bestGroup.codigoMaterial;
+    });
+    bestProduct = bestGroupProducts.length > 0 ? bestGroupProducts[0].produto : bestGroup.produtos[0];
   }
 
   return { parsed, groups, bestGroup, bestProduct };
