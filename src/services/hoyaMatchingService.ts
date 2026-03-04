@@ -18,6 +18,7 @@ export interface ParsedLensDescription {
   fotossensivelCor: string | null;
   isBlue: boolean;
   isINC: boolean;
+  isPronta: boolean;
   fornecedor: string | null;
   rawDescription: string;
   tokens: string[];
@@ -209,6 +210,7 @@ const NOISE_WORDS = new Set([
   "LENTE", "LENTES", "PAR", "DE", "COM", "PARA", "EM", "DO", "DA", "DAS", "DOS",
   "E", "OU", "O", "A", "OS", "AS", "UM", "UMA", "NO", "NA", "AO", "POR",
   "CADA", "GRAU", "RECEITA", "RX", "COMPLETA", "COMPLETO", "HOYA",
+  "LG", "LP", "VS",
 ]);
 
 // ============================================
@@ -286,6 +288,11 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
   const normalized = normalizeDescription(desc);
   const rawTokens = extractTokens(normalized);
   const desenhosList = knownDesenhos ?? PRIORITY_DESENHOS;
+
+  // Lente Pronta (LP) — detected between LG and design name
+  // Pattern: "LG LP HOYA HILUX ..." → isPronta = true
+  // If no LP (e.g. "LG VS HOYA HILUX ...") → isPronta = false
+  const isPronta = rawTokens.includes("LP") || normalized.includes(" LP ");
 
   // Tipo de lente
   const isProgressiva = rawTokens.some(t => ["PR", "PROG", "PROGRESSIVA", "PROGRESSIVO", "MULTIFOCAL"].includes(t));
@@ -386,10 +393,20 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
     }
   }
 
+  // If isPronta and we found a design, append " Pronta" to prefer that variant
+  if (isPronta && desenho) {
+    const prontaVariant = desenho + " Pronta";
+    // Check if the pronta variant exists in the catalog designs list
+    if (desenhosList.some(d => d.toUpperCase() === prontaVariant.toUpperCase())) {
+      desenho = prontaVariant;
+    }
+    // Otherwise keep original — scoring will handle via token overlap
+  }
+
   return {
     tipoLente, desenho, materialIndex, tratamento,
     isFotossensivel, fotossensivelTipo, fotossensivelCor,
-    isBlue, isINC, fornecedor,
+    isBlue, isINC, isPronta, fornecedor,
     rawDescription: desc,
     tokens: rawTokens,
   };
@@ -495,6 +512,23 @@ function calcDesignScore(parsed: ParsedLensDescription, produto: HoyaProduto): {
   } else if (parsed.tipoLente === "monofocal" && produto.tipoLente === "Visao Simples") {
     score += 5;
     details.push(`Tipo Monofocal ✓ (+5)`);
+  }
+
+  // === 3b. LENTE PRONTA (LP) bonus/penalty (max +15 / -20) ===
+  const prodNomePronta = produto.nome.toUpperCase().includes("PRONTA") || produto.desenho.toUpperCase().includes("PRONTA");
+  if (parsed.isPronta) {
+    if (prodNomePronta) {
+      score += 15;
+      details.push(`Lente Pronta (LP) match ✓ (+15)`);
+    } else {
+      score -= 20;
+      details.push(`Lente Pronta (LP) mas produto sem "Pronta" (-20)`);
+    }
+  } else {
+    if (prodNomePronta) {
+      score -= 20;
+      details.push(`Produto "Pronta" mas ERP sem LP (-20)`);
+    }
   }
 
   // === 4. TREATMENT BONUS (ranking aid, max 15) ===
