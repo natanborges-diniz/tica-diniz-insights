@@ -210,7 +210,7 @@ const NOISE_WORDS = new Set([
   "LENTE", "LENTES", "PAR", "DE", "COM", "PARA", "EM", "DO", "DA", "DAS", "DOS",
   "E", "OU", "O", "A", "OS", "AS", "UM", "UMA", "NO", "NA", "AO", "POR",
   "CADA", "GRAU", "RECEITA", "RX", "COMPLETA", "COMPLETO", "HOYA",
-  "LG", "LP", "VS",
+  "LG", "LP", "VS", "EST", "PREMIUM", "RES", "SURF", "PRONTA",
 ]);
 
 // ============================================
@@ -260,6 +260,9 @@ export function buildDesenhosFromCatalog(catalogo: { desenho: string }[]): strin
 
 function normalizeDescription(desc: string): string {
   let s = desc.toUpperCase().trim();
+  // Separate stuck-together tokens like "HILUX1.50" → "HILUX 1.50"
+  s = s.replace(/([A-Z])(\d+\.\d+)/g, "$1 $2");
+  s = s.replace(/(\d+\.\d+)([A-Z])/g, "$1 $2");
   s = s.replace(/\bHOYA\s+D\+/g, "HOYALUX D+");
   s = s.replace(/\bHOYA\s+D\s+FF\b/g, "HOYALUX D FF");
   s = s.replace(/\bINDENTIFY\b/g, "IDENTIFY");
@@ -444,7 +447,17 @@ function isGrauCompativel(produto: HoyaProduto, prescricao: PrescricaoFiltro): b
  * v3 scoring: The key insight is that we score DESIGN + MATERIAL as primary signals,
  * and then ENRICH the group with ALL available treatments/photos from the catalog.
  * Treatment/photo are used as ranking bonuses but NEVER as exclusion filters.
+ *
+ * v3.1 fix: Material match is now a HARD signal — explicit material mismatch
+ * incurs a heavy penalty to prevent e.g. Trivex from outranking 1.50.
+ * DG/LP penalties are capped so they never override a material match.
  */
+
+/** Detect if a product is surfaçada (DG) */
+function produtoIsDG(produto: HoyaProduto): boolean {
+  return /\bDG\b/i.test(produto.nome) || /\bDG\b/i.test(produto.desenho);
+}
+
 function calcDesignScore(parsed: ParsedLensDescription, produto: HoyaProduto): { score: number; details: string[] } {
   let score = 0;
   const details: string[] = [];
@@ -483,7 +496,9 @@ function calcDesignScore(parsed: ParsedLensDescription, produto: HoyaProduto): {
     }
   }
 
-  // === 2. MATERIAL MATCH (secondary signal, max 30) ===
+  // === 2. MATERIAL MATCH (primary signal, max 30 / penalty -25) ===
+  // When the ERP explicitly states a material index (e.g. "1.50"),
+  // a mismatch is a STRONG negative signal — prevents Trivex from beating 1.50.
   if (parsed.materialIndex) {
     const prodMatStr = String(produto.material).toUpperCase();
     const expectedAliases = MATERIAL_MAP[parsed.materialIndex] ?? [parsed.materialIndex];
@@ -495,6 +510,10 @@ function calcDesignScore(parsed: ParsedLensDescription, produto: HoyaProduto): {
     if (matches) {
       score += 30;
       details.push(`Material "${produto.material}" ✓ (+30)`);
+    } else {
+      // Explicit material mismatch — heavy penalty
+      score -= 25;
+      details.push(`Material "${produto.material}" ≠ esperado ${parsed.materialIndex} (-25)`);
     }
   }
 
@@ -509,22 +528,23 @@ function calcDesignScore(parsed: ParsedLensDescription, produto: HoyaProduto): {
 
   // === 3b. LENTE PRONTA (LP) vs SURFAÇADA (DG) bonus/penalty ===
   // "DG" in product name = surfaçada (custom-ground). Without "DG" = pronta (ready-made).
-  const prodIsDG = /\bDG\b/i.test(produto.nome) || /\bDG\b/i.test(produto.desenho);
+  // Penalties are moderate so they NEVER override an explicit material match.
+  const isDG = produtoIsDG(produto);
   if (parsed.isPronta) {
-    if (!prodIsDG) {
-      score += 15;
-      details.push(`Lente Pronta (LP) — produto sem DG ✓ (+15)`);
+    if (!isDG) {
+      score += 10;
+      details.push(`Lente Pronta (LP) — produto sem DG ✓ (+10)`);
     } else {
-      score -= 20;
-      details.push(`Lente Pronta (LP) mas produto DG (surfaçada) (-20)`);
+      score -= 10;
+      details.push(`Lente Pronta (LP) mas produto DG (surfaçada) (-10)`);
     }
   } else {
-    if (prodIsDG) {
+    if (isDG) {
       score += 5;
       details.push(`Produto DG (surfaçada) para item não-LP ✓ (+5)`);
     } else {
-      score -= 10;
-      details.push(`Produto sem DG (pronta) para item não-LP (-10)`);
+      score -= 5;
+      details.push(`Produto sem DG (pronta) para item não-LP (-5)`);
     }
   }
 
@@ -625,12 +645,15 @@ export function matchProducts(
   const meaningful = scored.filter(s => s.score > 0);
   const results = meaningful.length > 0 ? meaningful : scored.slice(0, 100);
 
-  // Collect unique design+material families from scored results
+  // Collect unique design+material+DG families from scored results
+  // v3.1: We now include DG/non-DG as a separate dimension to avoid
+  // mixing surfaçadas and prontas under the same family name
   const familyKeys = new Set<string>();
   const familyMap = new Map<string, { score: number; details: string[] }>();
 
   for (const { produto, score, details } of results) {
-    const key = `${produto.codigoDesenho}_${produto.codigoMaterial}`;
+    const isDG = produtoIsDG(produto);
+    const key = `${produto.codigoDesenho}_${produto.codigoMaterial}_${isDG ? "DG" : "LP"}`;
     familyKeys.add(key);
     const existing = familyMap.get(key);
     if (!existing || score > existing.score) {
@@ -643,20 +666,35 @@ export function matchProducts(
   const groupMap = new Map<string, MatchGroup>();
 
   for (const key of familyKeys) {
-    const [codDesenho, codMaterial] = key.split("_").map(Number);
+    const parts = key.split("_");
+    const codDesenho = Number(parts[0]);
+    const codMaterial = Number(parts[1]);
+    const keyDG = parts[2] === "DG";
     const familyScore = familyMap.get(key)!;
 
     // Get ALL products in this family from the full catalog (not just scored ones)
     const familyProducts = (prescricao
       ? catalogo.filter(p => isGrauCompativel(p, prescricao))
       : catalogo
-    ).filter(p => p.codigoDesenho === codDesenho && p.codigoMaterial === codMaterial);
+    ).filter(p => 
+      p.codigoDesenho === codDesenho && 
+      p.codigoMaterial === codMaterial &&
+      produtoIsDG(p) === keyDG
+    );
 
     if (familyProducts.length === 0) continue;
 
+    // Build display-friendly material name
+    const rawMaterial = String(familyProducts[0].material);
+    const materialLabel = rawMaterial;
+
+    // Build display name with DG/Pronta indicator
+    const dgLabel = keyDG ? " (Surfaçada)" : " (Pronta)";
+    const displayDesenho = familyProducts[0].desenho + dgLabel;
+
     const group: MatchGroup = {
-      desenho: familyProducts[0].desenho,
-      material: String(familyProducts[0].material),
+      desenho: displayDesenho,
+      material: materialLabel,
       codigoDesenho: codDesenho,
       codigoMaterial: codMaterial,
       alturasDisponiveis: [],
