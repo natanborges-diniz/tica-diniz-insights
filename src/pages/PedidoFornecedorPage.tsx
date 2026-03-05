@@ -789,6 +789,7 @@ const PedidoFornecedorPage: React.FC = () => {
           adicaoMinima: produtoSelecionado.adicaoMinima,
           adicaoMaxima: produtoSelecionado.adicaoMaxima,
         },
+        produtoSelecionado.nome,
       );
       setValidationResult(validation);
 

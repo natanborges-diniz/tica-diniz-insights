@@ -290,8 +290,8 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
   const desenhosList = knownDesenhos ?? PRIORITY_DESENHOS;
 
   // Lente Pronta (LP) — detected from the normalized string before noise removal
-  // Pattern: "LG LP HOYA HILUX ..." → isPronta = true
-  // If no LP (e.g. "LG VS HOYA HILUX ...") → isPronta = false
+  // NOTE: LP products in Hoya do NOT have "Pronta" in the name.
+  // "DG" in product name = surfaçada (custom). Without "DG" = pronta (ready-made).
   const isPronta = /\bLP\b/.test(normalized);
 
   // Tipo de lente
@@ -393,15 +393,8 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
     }
   }
 
-  // If isPronta and we found a design, append " Pronta" to prefer that variant
-  if (isPronta && desenho) {
-    const prontaVariant = desenho + " Pronta";
-    // Check if the pronta variant exists in the catalog designs list
-    if (desenhosList.some(d => d.toUpperCase() === prontaVariant.toUpperCase())) {
-      desenho = prontaVariant;
-    }
-    // Otherwise keep original — scoring will handle via token overlap
-  }
+  // LP detection: do NOT append "Pronta" — the scoring engine
+  // uses DG presence/absence to rank products correctly
 
   return {
     tipoLente, desenho, materialIndex, tratamento,
@@ -514,20 +507,24 @@ function calcDesignScore(parsed: ParsedLensDescription, produto: HoyaProduto): {
     details.push(`Tipo Monofocal ✓ (+5)`);
   }
 
-  // === 3b. LENTE PRONTA (LP) bonus/penalty (max +15 / -20) ===
-  const prodNomePronta = produto.nome.toUpperCase().includes("PRONTA") || produto.desenho.toUpperCase().includes("PRONTA");
+  // === 3b. LENTE PRONTA (LP) vs SURFAÇADA (DG) bonus/penalty ===
+  // "DG" in product name = surfaçada (custom-ground). Without "DG" = pronta (ready-made).
+  const prodIsDG = /\bDG\b/i.test(produto.nome) || /\bDG\b/i.test(produto.desenho);
   if (parsed.isPronta) {
-    if (prodNomePronta) {
+    if (!prodIsDG) {
       score += 15;
-      details.push(`Lente Pronta (LP) match ✓ (+15)`);
+      details.push(`Lente Pronta (LP) — produto sem DG ✓ (+15)`);
     } else {
       score -= 20;
-      details.push(`Lente Pronta (LP) mas produto sem "Pronta" (-20)`);
+      details.push(`Lente Pronta (LP) mas produto DG (surfaçada) (-20)`);
     }
   } else {
-    if (prodNomePronta) {
-      score -= 20;
-      details.push(`Produto "Pronta" mas ERP sem LP (-20)`);
+    if (prodIsDG) {
+      score += 5;
+      details.push(`Produto DG (surfaçada) para item não-LP ✓ (+5)`);
+    } else {
+      score -= 10;
+      details.push(`Produto sem DG (pronta) para item não-LP (-10)`);
     }
   }
 
