@@ -1,5 +1,6 @@
 // src/services/hoyaValidationService.ts
 // Validação de payload clínico para pedidos Hoya
+// Lentes prontas (sem "DG" no nome) não exigem medidas de armação, DNP ou altura pupilar
 
 import { HoyaPedidoPayload, HoyaPrescricaoOlho } from "./hoyaService";
 import { OsHubRecord } from "./osHubService";
@@ -21,7 +22,8 @@ export interface ValidationResult {
  */
 function validatePrescricaoOlho(
   olho: HoyaPrescricaoOlho,
-  label: string
+  label: string,
+  isSurfacada: boolean,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
 
@@ -41,10 +43,11 @@ function validatePrescricaoOlho(
     });
   }
 
-  if (olho.dnpLonge === null) {
+  // DNP só é obrigatório para lentes surfaçadas (DG)
+  if (isSurfacada && olho.dnpLonge === null) {
     errors.push({
       field: `prescricao.${label}.dnpLonge`,
-      message: `${label}: DNP obrigatório`,
+      message: `${label}: DNP obrigatório para lentes surfaçadas`,
       severity: "error",
     });
   }
@@ -52,14 +55,27 @@ function validatePrescricaoOlho(
   return errors;
 }
 
+/**
+ * Detecta se o produto é surfaçado (DG) com base no nome.
+ * Produtos com "DG" no nome são surfaçados e exigem medidas de armação, DNP, etc.
+ * Produtos sem "DG" são lentes prontas e só precisam de receita.
+ */
+export function isSurfacada(nomeProduto: string): boolean {
+  return /\bDG\b/i.test(nomeProduto);
+}
+
 export function validateHoyaPayload(
   payload: HoyaPedidoPayload,
   produtoCamposComplementares?: { codigo: number; nome: string; obrigatorio: boolean; rangeMinimo: number; rangeMaximo: number; valorPadrao?: number | string | null }[],
   camposValues?: Record<number, string>,
   produtoRanges?: { alturaPupilarMinima: number; alturaPupilarMaxima: number; esfericoMinimo: number; esfericoMaximo: number; cilindricoMinimo: number; cilindricoMaximo: number; adicaoMinima: number; adicaoMaxima: number },
+  nomeProduto?: string,
 ): ValidationResult {
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
+
+  // Detecta se é surfaçada (DG) — se não informado, assume surfaçada por segurança
+  const surfacada = nomeProduto ? isSurfacada(nomeProduto) : true;
 
   // OS number
   if (!payload.os || payload.os === "0") {
@@ -71,9 +87,9 @@ export function validateHoyaPayload(
     errors.push({ field: "especificacoes.codigoProduto", message: "Produto Hoya não selecionado", severity: "error" });
   }
 
-  // Prescription
-  errors.push(...validatePrescricaoOlho(payload.prescricao.direito, "OD"));
-  errors.push(...validatePrescricaoOlho(payload.prescricao.esquerdo, "OE"));
+  // Prescription — DNP obrigatório apenas para surfaçadas
+  errors.push(...validatePrescricaoOlho(payload.prescricao.direito, "OD", surfacada));
+  errors.push(...validatePrescricaoOlho(payload.prescricao.esquerdo, "OE", surfacada));
 
   // Adicao for progressive lenses (warning)
   if (payload.prescricao.direito.adicao === null && payload.prescricao.esquerdo.adicao === null) {
@@ -84,44 +100,45 @@ export function validateHoyaPayload(
     });
   }
 
-  // Altura pupilar — validate against product range
-  if (payload.prescricao.direito.alturaPupilar === null && payload.prescricao.esquerdo.alturaPupilar === null) {
-    warnings.push({
-      field: "prescricao.alturaPupilar",
-      message: "Sem altura pupilar — recomendado para progressivas",
-      severity: "warning",
-    });
-  } else if (produtoRanges) {
-    const { alturaPupilarMinima: apMin, alturaPupilarMaxima: apMax } = produtoRanges;
-    if (payload.prescricao.direito.alturaPupilar != null) {
-      if (payload.prescricao.direito.alturaPupilar < apMin || payload.prescricao.direito.alturaPupilar > apMax) {
-        errors.push({
-          field: "prescricao.direito.alturaPupilar",
-          message: `OD: Altura pupilar (${payload.prescricao.direito.alturaPupilar}) fora do range do produto (${apMin}–${apMax})`,
-          severity: "error",
-        });
+  // Altura pupilar e medidas de armação — só obrigatórios para surfaçadas (DG)
+  if (surfacada) {
+    if (payload.prescricao.direito.alturaPupilar === null && payload.prescricao.esquerdo.alturaPupilar === null) {
+      warnings.push({
+        field: "prescricao.alturaPupilar",
+        message: "Sem altura pupilar — recomendado para progressivas",
+        severity: "warning",
+      });
+    } else if (produtoRanges) {
+      const { alturaPupilarMinima: apMin, alturaPupilarMaxima: apMax } = produtoRanges;
+      if (payload.prescricao.direito.alturaPupilar != null) {
+        if (payload.prescricao.direito.alturaPupilar < apMin || payload.prescricao.direito.alturaPupilar > apMax) {
+          errors.push({
+            field: "prescricao.direito.alturaPupilar",
+            message: `OD: Altura pupilar (${payload.prescricao.direito.alturaPupilar}) fora do range do produto (${apMin}–${apMax})`,
+            severity: "error",
+          });
+        }
+      }
+      if (payload.prescricao.esquerdo.alturaPupilar != null) {
+        if (payload.prescricao.esquerdo.alturaPupilar < apMin || payload.prescricao.esquerdo.alturaPupilar > apMax) {
+          errors.push({
+            field: "prescricao.esquerdo.alturaPupilar",
+            message: `OE: Altura pupilar (${payload.prescricao.esquerdo.alturaPupilar}) fora do range do produto (${apMin}–${apMax})`,
+            severity: "error",
+          });
+        }
       }
     }
-    if (payload.prescricao.esquerdo.alturaPupilar != null) {
-      if (payload.prescricao.esquerdo.alturaPupilar < apMin || payload.prescricao.esquerdo.alturaPupilar > apMax) {
-        errors.push({
-          field: "prescricao.esquerdo.alturaPupilar",
-          message: `OE: Altura pupilar (${payload.prescricao.esquerdo.alturaPupilar}) fora do range do produto (${apMin}–${apMax})`,
-          severity: "error",
-        });
-      }
+
+    // Frame measurements
+    if (payload.dadosMedida?.larguraLente == null) {
+      warnings.push({ field: "dadosMedida.larguraLente", message: "Largura da lente não informada", severity: "warning" });
     }
-  }
-
-  // Frame measurements — use explicit null/undefined check, not falsy (0 is valid for largura)
-  if (payload.dadosMedida?.larguraLente == null) {
-    warnings.push({ field: "dadosMedida.larguraLente", message: "Largura da lente não informada", severity: "warning" });
-  }
-
-  if (payload.dadosMedida?.alturaLente == null) {
-    errors.push({ field: "dadosMedida.alturaLente", message: "Altura da lente obrigatória (18–52mm)", severity: "error" });
-  } else if (payload.dadosMedida.alturaLente < 18 || payload.dadosMedida.alturaLente > 52) {
-    errors.push({ field: "dadosMedida.alturaLente", message: "Altura da lente deve ser entre 18 e 52mm", severity: "error" });
+    if (payload.dadosMedida?.alturaLente == null) {
+      errors.push({ field: "dadosMedida.alturaLente", message: "Altura da lente obrigatória (18–52mm)", severity: "error" });
+    } else if (payload.dadosMedida.alturaLente < 18 || payload.dadosMedida.alturaLente > 52) {
+      errors.push({ field: "dadosMedida.alturaLente", message: "Altura da lente deve ser entre 18 e 52mm", severity: "error" });
+    }
   }
 
   // Garantia
