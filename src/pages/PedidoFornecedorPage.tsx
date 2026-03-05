@@ -23,6 +23,7 @@ import {
 import {
   validateHoyaPayload,
   mapPrismasFromOs,
+  isSurfacada,
   ValidationResult,
 } from "@/services/hoyaValidationService";
 import { registrarPedidoNoCache } from "@/utils/pedidosMapCache";
@@ -669,6 +670,9 @@ const PedidoFornecedorPage: React.FC = () => {
       )
     : produtos.slice(0, 50);
 
+  // Detecta se produto selecionado é surfaçado (DG) — lentes prontas não exigem medidas de armação/DNP/altura
+  const produtoIsSurfacada = produtoSelecionado ? isSurfacada(produtoSelecionado.nome) : true;
+
   // FASE 5: Check if both confirmations are done
   // If prescription was NOT auto-filled, no confirmation needed; if it was, user must confirm
   const isReadyToSubmit = confirmedProduct && (confirmedPrescription || !prescriptionAutoFilled) && !!produtoSelecionado;
@@ -1207,6 +1211,11 @@ const PedidoFornecedorPage: React.FC = () => {
                   <Sparkles className="h-4 w-4 text-primary" /> Produto Hoya — Match Inteligente
                 </CardTitle>
                 <div className="flex items-center gap-2">
+                  {produtoSelecionado && !produtoIsSurfacada && (
+                    <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 border-blue-300">
+                      Lente Pronta
+                    </Badge>
+                  )}
                   {selectedGroup && (
                     <Badge variant="outline" className={scoreLabel(selectedGroup.score).color}>
                       Confiança: {scoreLabel(selectedGroup.score).text}
@@ -1531,6 +1540,11 @@ const PedidoFornecedorPage: React.FC = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Search className="h-4 w-4" /> Produto Selecionado Manualmente
+                {!produtoIsSurfacada && (
+                  <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 border-blue-300 ml-1">
+                    Lente Pronta (sem medidas de armação)
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1672,8 +1686,11 @@ const PedidoFornecedorPage: React.FC = () => {
                 <div className="h-6 w-6 rounded-full bg-blue-500/15 text-blue-700 text-xs font-bold flex items-center justify-center">OD</div>
                 <span className="text-xs font-medium text-muted-foreground">Olho Direito</span>
               </div>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                {(["esferico", "cilindrico", "eixo", "adicao", "dnpLonge", "alturaPupilar"] as const).map(field => (
+              <div className={`grid grid-cols-3 ${produtoIsSurfacada ? "sm:grid-cols-6" : "sm:grid-cols-4"} gap-2`}>
+                {(produtoIsSurfacada
+                  ? ["esferico", "cilindrico", "eixo", "adicao", "dnpLonge", "alturaPupilar"] as const
+                  : ["esferico", "cilindrico", "eixo", "adicao"] as const
+                ).map(field => (
                   <div key={field}>
                     <Label className="text-[10px] uppercase">{field === "dnpLonge" ? "DNP" : field === "alturaPupilar" ? "Altura" : field}</Label>
                     <Input
@@ -1729,8 +1746,11 @@ const PedidoFornecedorPage: React.FC = () => {
                 <div className="h-6 w-6 rounded-full bg-emerald-500/15 text-emerald-700 text-xs font-bold flex items-center justify-center">OE</div>
                 <span className="text-xs font-medium text-muted-foreground">Olho Esquerdo</span>
               </div>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                {(["esferico", "cilindrico", "eixo", "adicao", "dnpLonge", "alturaPupilar"] as const).map(field => (
+              <div className={`grid grid-cols-3 ${produtoIsSurfacada ? "sm:grid-cols-6" : "sm:grid-cols-4"} gap-2`}>
+                {(produtoIsSurfacada
+                  ? ["esferico", "cilindrico", "eixo", "adicao", "dnpLonge", "alturaPupilar"] as const
+                  : ["esferico", "cilindrico", "eixo", "adicao"] as const
+                ).map(field => (
                   <div key={field}>
                     <Label className="text-[10px] uppercase">{field === "dnpLonge" ? "DNP" : field === "alturaPupilar" ? "Altura" : field}</Label>
                     <Input
@@ -1782,7 +1802,8 @@ const PedidoFornecedorPage: React.FC = () => {
         </Card>
 
         {/* Armação + Serviço */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className={`grid grid-cols-1 ${produtoIsSurfacada ? "md:grid-cols-2" : ""} gap-4`}>
+          {produtoIsSurfacada && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Dados de Medida / Armação</CardTitle>
@@ -1849,6 +1870,7 @@ const PedidoFornecedorPage: React.FC = () => {
               </div>
             </CardContent>
           </Card>
+          )}
 
           <Card>
             <CardHeader className="pb-3">
