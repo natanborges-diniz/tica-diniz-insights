@@ -666,8 +666,8 @@ export function matchProducts(
   const familyMap = new Map<string, { score: number; details: string[] }>();
 
   for (const { produto, score, details } of results) {
-    const isDG = produtoIsDG(produto);
-    const key = `${produto.codigoDesenho}_${produto.codigoMaterial}_${isDG ? "DG" : "LP"}`;
+    const pronta = produtoIsPronta(produto);
+    const key = `${produto.codigoDesenho}_${produto.codigoMaterial}_${pronta ? "LP" : "SURF"}`;
     familyKeys.add(key);
     const existing = familyMap.get(key);
     if (!existing || score > existing.score) {
