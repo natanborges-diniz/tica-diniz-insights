@@ -540,25 +540,25 @@ function calcDesignScore(parsed: ParsedLensDescription, produto: HoyaProduto): {
     details.push(`Tipo Monofocal ✓ (+5)`);
   }
 
-  // === 3b. LENTE PRONTA (LP) vs SURFAÇADA (DG) bonus/penalty ===
-  // "DG" in product name = surfaçada (custom-ground). Without "DG" = pronta (ready-made).
+  // === 3b. LENTE PRONTA (LP) vs SURFAÇADA bonus/penalty ===
+  // Only SV lenses without DG are "Prontas". All others are surfaçadas.
   // Penalties are moderate so they NEVER override an explicit material match.
-  const isDG = produtoIsDG(produto);
+  const isPronta = produtoIsPronta(produto);
   if (parsed.isPronta) {
-    if (!isDG) {
+    if (isPronta) {
       score += 10;
-      details.push(`Lente Pronta (LP) — produto sem DG ✓ (+10)`);
+      details.push(`Lente Pronta — produto SV sem DG ✓ (+10)`);
     } else {
       score -= 10;
-      details.push(`Lente Pronta (LP) mas produto DG (surfaçada) (-10)`);
+      details.push(`Lente Pronta (LP) mas produto é surfaçada (-10)`);
     }
   } else {
-    if (isDG) {
+    if (!isPronta) {
       score += 5;
-      details.push(`Produto DG (surfaçada) para item não-LP ✓ (+5)`);
+      details.push(`Produto surfaçada para item não-LP ✓ (+5)`);
     } else {
       score -= 5;
-      details.push(`Produto sem DG (pronta) para item não-LP (-5)`);
+      details.push(`Produto é lente pronta (SV sem DG) para item não-LP (-5)`);
     }
   }
 
