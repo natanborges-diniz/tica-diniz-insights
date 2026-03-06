@@ -56,11 +56,18 @@ function validatePrescricaoOlho(
 }
 
 /**
- * Detecta se o produto é surfaçado (DG) com base no nome.
- * Produtos com "DG" no nome são surfaçados e exigem medidas de armação, DNP, etc.
- * Produtos sem "DG" são lentes prontas e só precisam de receita.
+ * Detecta se o produto é surfaçado com base no nome e tipo.
+ * Regra: Apenas lentes SV (Visão Simples) sem "DG" no nome são "Prontas".
+ * Todas as outras (PR/Progressivas, Lifestyle, etc.) são SEMPRE surfaçadas.
+ * Dentro do universo SV: com DG = surfaçada, sem DG = pronta.
  */
-export function isSurfacada(nomeProduto: string): boolean {
+export function isSurfacada(nomeProduto: string, tipoLente?: string): boolean {
+  // Se não é SV / Visão Simples, é sempre surfaçada
+  const isSV = tipoLente
+    ? tipoLente === "Visao Simples"
+    : /\bSV\b/i.test(nomeProduto);
+  if (!isSV) return true;
+  // Dentro de SV: DG = surfaçada
   return /\bDG\b/i.test(nomeProduto);
 }
 

@@ -702,9 +702,9 @@ export function matchProducts(
     const rawMaterial = String(familyProducts[0].material);
     const materialLabel = rawMaterial;
 
-    // Build display name with DG/Pronta indicator
-    const dgLabel = keyDG ? " (Surfaçada)" : " (Pronta)";
-    const displayDesenho = familyProducts[0].desenho + dgLabel;
+    // Build display name with Pronta indicator (only for SV lenses)
+    const typeLabel = keyIsPronta ? " (Pronta)" : "";
+    const displayDesenho = familyProducts[0].desenho + typeLabel;
 
     const group: MatchGroup = {
       desenho: displayDesenho,
