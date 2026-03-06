@@ -292,9 +292,8 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
   const rawTokens = extractTokens(normalized);
   const desenhosList = knownDesenhos ?? PRIORITY_DESENHOS;
 
-  // Lente Pronta (LP) — detected from the normalized string before noise removal
-  // NOTE: LP products in Hoya do NOT have "Pronta" in the name.
-  // "DG" in product name = surfaçada (custom). Without "DG" = pronta (ready-made).
+  // Lente Pronta (LP) — detected from the normalized ERP string
+  // Only applies to SV (Visão Simples) lenses; PR/Progressive are always surfaçadas
   const isPronta = /\bLP\b/.test(normalized);
 
   // Tipo de lente
@@ -453,9 +452,23 @@ function isGrauCompativel(produto: HoyaProduto, prescricao: PrescricaoFiltro): b
  * DG/LP penalties are capped so they never override a material match.
  */
 
-/** Detect if a product is surfaçada (DG) */
-function produtoIsDG(produto: HoyaProduto): boolean {
-  return /\bDG\b/i.test(produto.nome) || /\bDG\b/i.test(produto.desenho);
+/**
+ * Detect if a product is surfaçada (custom-ground).
+ * Rule: Only SV (Visão Simples) lenses WITHOUT "DG" in the name are "Prontas".
+ * ALL other lenses (PR/Progressive, Lifestyle, etc.) are ALWAYS surfaçadas,
+ * regardless of whether they have "DG" in the name or not.
+ */
+function produtoIsSurfacada(produto: HoyaProduto): boolean {
+  const isSV = produto.tipoLente === "Visao Simples";
+  if (!isSV) return true; // Non-SV lenses are ALWAYS surfaçadas
+  // Within SV: DG = surfaçada, no DG = pronta
+  const hasDG = /\bDG\b/i.test(produto.nome) || /\bDG\b/i.test(produto.desenho);
+  return hasDG;
+}
+
+/** Convenience: is this product a "Lente Pronta"? */
+function produtoIsPronta(produto: HoyaProduto): boolean {
+  return !produtoIsSurfacada(produto);
 }
 
 function calcDesignScore(parsed: ParsedLensDescription, produto: HoyaProduto): { score: number; details: string[] } {
@@ -526,25 +539,25 @@ function calcDesignScore(parsed: ParsedLensDescription, produto: HoyaProduto): {
     details.push(`Tipo Monofocal ✓ (+5)`);
   }
 
-  // === 3b. LENTE PRONTA (LP) vs SURFAÇADA (DG) bonus/penalty ===
-  // "DG" in product name = surfaçada (custom-ground). Without "DG" = pronta (ready-made).
+  // === 3b. LENTE PRONTA (LP) vs SURFAÇADA bonus/penalty ===
+  // Only SV lenses without DG are "Prontas". All others are surfaçadas.
   // Penalties are moderate so they NEVER override an explicit material match.
-  const isDG = produtoIsDG(produto);
+  const isPronta = produtoIsPronta(produto);
   if (parsed.isPronta) {
-    if (!isDG) {
+    if (isPronta) {
       score += 10;
-      details.push(`Lente Pronta (LP) — produto sem DG ✓ (+10)`);
+      details.push(`Lente Pronta — produto SV sem DG ✓ (+10)`);
     } else {
       score -= 10;
-      details.push(`Lente Pronta (LP) mas produto DG (surfaçada) (-10)`);
+      details.push(`Lente Pronta (LP) mas produto é surfaçada (-10)`);
     }
   } else {
-    if (isDG) {
+    if (!isPronta) {
       score += 5;
-      details.push(`Produto DG (surfaçada) para item não-LP ✓ (+5)`);
+      details.push(`Produto surfaçada para item não-LP ✓ (+5)`);
     } else {
       score -= 5;
-      details.push(`Produto sem DG (pronta) para item não-LP (-5)`);
+      details.push(`Produto é lente pronta (SV sem DG) para item não-LP (-5)`);
     }
   }
 
@@ -652,8 +665,8 @@ export function matchProducts(
   const familyMap = new Map<string, { score: number; details: string[] }>();
 
   for (const { produto, score, details } of results) {
-    const isDG = produtoIsDG(produto);
-    const key = `${produto.codigoDesenho}_${produto.codigoMaterial}_${isDG ? "DG" : "LP"}`;
+    const pronta = produtoIsPronta(produto);
+    const key = `${produto.codigoDesenho}_${produto.codigoMaterial}_${pronta ? "LP" : "SURF"}`;
     familyKeys.add(key);
     const existing = familyMap.get(key);
     if (!existing || score > existing.score) {
@@ -669,7 +682,7 @@ export function matchProducts(
     const parts = key.split("_");
     const codDesenho = Number(parts[0]);
     const codMaterial = Number(parts[1]);
-    const keyDG = parts[2] === "DG";
+    const keyIsPronta = parts[2] === "LP";
     const familyScore = familyMap.get(key)!;
 
     // Get ALL products in this family from the full catalog (not just scored ones)
@@ -679,7 +692,7 @@ export function matchProducts(
     ).filter(p => 
       p.codigoDesenho === codDesenho && 
       p.codigoMaterial === codMaterial &&
-      produtoIsDG(p) === keyDG
+      produtoIsPronta(p) === keyIsPronta
     );
 
     if (familyProducts.length === 0) continue;
@@ -688,9 +701,9 @@ export function matchProducts(
     const rawMaterial = String(familyProducts[0].material);
     const materialLabel = rawMaterial;
 
-    // Build display name with DG/Pronta indicator
-    const dgLabel = keyDG ? " (Surfaçada)" : " (Pronta)";
-    const displayDesenho = familyProducts[0].desenho + dgLabel;
+    // Build display name with Pronta indicator (only for SV lenses)
+    const typeLabel = keyIsPronta ? " (Pronta)" : "";
+    const displayDesenho = familyProducts[0].desenho + typeLabel;
 
     const group: MatchGroup = {
       desenho: displayDesenho,
