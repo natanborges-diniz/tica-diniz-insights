@@ -683,7 +683,7 @@ export function matchProducts(
     const parts = key.split("_");
     const codDesenho = Number(parts[0]);
     const codMaterial = Number(parts[1]);
-    const keyDG = parts[2] === "DG";
+    const keyIsPronta = parts[2] === "LP";
     const familyScore = familyMap.get(key)!;
 
     // Get ALL products in this family from the full catalog (not just scored ones)
@@ -693,7 +693,7 @@ export function matchProducts(
     ).filter(p => 
       p.codigoDesenho === codDesenho && 
       p.codigoMaterial === codMaterial &&
-      produtoIsDG(p) === keyDG
+      produtoIsPronta(p) === keyIsPronta
     );
 
     if (familyProducts.length === 0) continue;
