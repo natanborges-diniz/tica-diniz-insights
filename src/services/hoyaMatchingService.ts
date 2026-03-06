@@ -292,9 +292,8 @@ export function parseErpDescription(desc: string, knownDesenhos?: string[]): Par
   const rawTokens = extractTokens(normalized);
   const desenhosList = knownDesenhos ?? PRIORITY_DESENHOS;
 
-  // Lente Pronta (LP) — detected from the normalized string before noise removal
-  // NOTE: LP products in Hoya do NOT have "Pronta" in the name.
-  // "DG" in product name = surfaçada (custom). Without "DG" = pronta (ready-made).
+  // Lente Pronta (LP) — detected from the normalized ERP string
+  // Only applies to SV (Visão Simples) lenses; PR/Progressive are always surfaçadas
   const isPronta = /\bLP\b/.test(normalized);
 
   // Tipo de lente
