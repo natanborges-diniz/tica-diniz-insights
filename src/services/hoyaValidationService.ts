@@ -81,8 +81,8 @@ export function validateHoyaPayload(
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
 
-  // Detecta se é surfaçada (DG) — se não informado, assume surfaçada por segurança
-  const surfacada = nomeProduto ? isSurfacada(nomeProduto) : true;
+  // Detecta se é surfaçada — se não informado, assume surfaçada por segurança
+  const surfacada = nomeProduto ? isSurfacada(nomeProduto, undefined) : true;
 
   // OS number
   if (!payload.os || payload.os === "0") {
