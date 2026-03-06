@@ -453,9 +453,23 @@ function isGrauCompativel(produto: HoyaProduto, prescricao: PrescricaoFiltro): b
  * DG/LP penalties are capped so they never override a material match.
  */
 
-/** Detect if a product is surfaçada (DG) */
-function produtoIsDG(produto: HoyaProduto): boolean {
-  return /\bDG\b/i.test(produto.nome) || /\bDG\b/i.test(produto.desenho);
+/**
+ * Detect if a product is surfaçada (custom-ground).
+ * Rule: Only SV (Visão Simples) lenses WITHOUT "DG" in the name are "Prontas".
+ * ALL other lenses (PR/Progressive, Lifestyle, etc.) are ALWAYS surfaçadas,
+ * regardless of whether they have "DG" in the name or not.
+ */
+function produtoIsSurfacada(produto: HoyaProduto): boolean {
+  const isSV = produto.tipoLente === "Visao Simples";
+  if (!isSV) return true; // Non-SV lenses are ALWAYS surfaçadas
+  // Within SV: DG = surfaçada, no DG = pronta
+  const hasDG = /\bDG\b/i.test(produto.nome) || /\bDG\b/i.test(produto.desenho);
+  return hasDG;
+}
+
+/** Convenience: is this product a "Lente Pronta"? */
+function produtoIsPronta(produto: HoyaProduto): boolean {
+  return !produtoIsSurfacada(produto);
 }
 
 function calcDesignScore(parsed: ParsedLensDescription, produto: HoyaProduto): { score: number; details: string[] } {
