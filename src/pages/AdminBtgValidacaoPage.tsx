@@ -323,7 +323,7 @@ export default function AdminBtgValidacaoPage() {
                   return (
                     <TableRow key={conta.id}>
                       <TableCell className="font-medium">
-                        Empresa {conta.cod_empresa}
+                        {getEmpresaNome(conta.cod_empresa)}
                       </TableCell>
                       <TableCell className="font-mono text-xs">
                         {conta.cnpj || "—"}
