@@ -192,8 +192,7 @@ export default function AdminBtgValidacaoPage() {
     <div className="space-y-6">
       <ModuleHeader
         title="Validação BTG Banking"
-        description="Teste de autenticação OAuth, status de tokens e extrato bancário"
-        icon={<Shield className="h-5 w-5" />}
+        subtitle="Teste de autenticação OAuth, status de tokens e extrato bancário"
       />
 
       {/* ── Etapas do Plano ────────────────────────────────── */}
