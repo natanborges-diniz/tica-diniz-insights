@@ -35,6 +35,7 @@ import AdminHealthPage from "./pages/AdminHealthPage";
 import AdminPedidosAuditoriaPage from "./pages/AdminPedidosAuditoriaPage";
 import AdminHoyaConfigPage from "./pages/AdminHoyaConfigPage";
 import AdminFornecedoresPage from "./pages/AdminFornecedoresPage";
+import AdminBtgValidacaoPage from "./pages/AdminBtgValidacaoPage";
 import SystemPlayground from "./pages/_SystemPlayground";
 import NotFound from "./pages/NotFound";
 
