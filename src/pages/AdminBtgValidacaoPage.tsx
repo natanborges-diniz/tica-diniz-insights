@@ -90,6 +90,26 @@ export default function AdminBtgValidacaoPage() {
   const queryClient = useQueryClient();
   const [extratoResult, setExtratoResult] = useState<ExtratoTestResult | null>(null);
 
+  // Fetch empresas for name resolution
+  const { data: empresas = [] } = useQuery({
+    queryKey: ["empresas-btg"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("empresa")
+        .select("cod_empresa, nome_fantasia")
+        .eq("ativa", true)
+        .order("cod_empresa");
+      if (error) throw error;
+      return data as { cod_empresa: number; nome_fantasia: string | null }[];
+    },
+    enabled: isAdmin,
+  });
+
+  const getEmpresaNome = (codEmpresa: number) => {
+    const emp = empresas.find(e => e.cod_empresa === codEmpresa);
+    return emp?.nome_fantasia || `Loja ${codEmpresa}`;
+  };
+
   // Fetch contas bancárias
   const { data: contas = [], isLoading: loadingContas } = useQuery({
     queryKey: ["btg-contas"],
