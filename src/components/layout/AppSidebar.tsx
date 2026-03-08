@@ -108,6 +108,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
         { title: "Fornecedores", url: "/admin/fornecedores", icon: FlaskConical },
         { title: "Sync & Reprocessamento", url: "/admin/sync", icon: RefreshCw },
         { title: "Bridge Health", url: "/admin/health", icon: Activity },
+        { title: "Validação BTG", url: "/admin/btg-validacao", icon: Shield },
       ],
     },
   ],
