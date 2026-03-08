@@ -3,7 +3,7 @@ import {
   TrendingUp, BarChart3, Layers, 
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
   Target, Users, Brain, Eye, RefreshCw, Activity, Truck, FlaskConical,
-  AlertTriangle, Landmark, CreditCard, Receipt, FileSearch
+  AlertTriangle, Landmark, CreditCard, Receipt, FileSearch, Shield
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
