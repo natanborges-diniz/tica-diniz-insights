@@ -3,7 +3,7 @@ import {
   TrendingUp, BarChart3, Layers, 
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
   Target, Users, Brain, Eye, RefreshCw, Activity, Truck, FlaskConical,
-  AlertTriangle, Landmark, CreditCard, Receipt, FileSearch
+  AlertTriangle, Landmark, CreditCard, Receipt, FileSearch, Shield
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
@@ -108,6 +108,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
         { title: "Fornecedores", url: "/admin/fornecedores", icon: FlaskConical },
         { title: "Sync & Reprocessamento", url: "/admin/sync", icon: RefreshCw },
         { title: "Bridge Health", url: "/admin/health", icon: Activity },
+        { title: "Validação BTG", url: "/admin/btg-validacao", icon: Shield },
       ],
     },
   ],
