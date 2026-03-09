@@ -94,7 +94,8 @@ function BtgCredenciaisSection() {
   const [config, setConfig] = useState<{
     id: string; api_key: string | null; api_key_staging: string | null;
     api_key_production: string | null; base_url_staging: string | null;
-    base_url_production: string | null; ambiente: string;
+    base_url_production: string | null; redirect_uri_staging: string | null;
+    redirect_uri_production: string | null; ambiente: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -104,23 +105,27 @@ function BtgCredenciaisSection() {
   const [form, setForm] = useState({
     api_key: "", api_key_staging: "", api_key_production: "",
     base_url_staging: "", base_url_production: "",
+    redirect_uri_staging: "", redirect_uri_production: "",
   });
 
   useEffect(() => {
     (async () => {
       const { data } = await supabase
         .from("fornecedor_configuracao")
-        .select("id, api_key, api_key_staging, api_key_production, base_url_staging, base_url_production, ambiente")
+        .select("id, api_key, api_key_staging, api_key_production, base_url_staging, base_url_production, redirect_uri_staging, redirect_uri_production, ambiente")
         .eq("fornecedor", "btg")
         .single();
       if (data) {
         setConfig(data as typeof config);
+        const d = data as Record<string, string | null>;
         setForm({
-          api_key: (data as Record<string, string | null>).api_key || "",
-          api_key_staging: (data as Record<string, string | null>).api_key_staging || "",
-          api_key_production: (data as Record<string, string | null>).api_key_production || "",
-          base_url_staging: (data as Record<string, string | null>).base_url_staging || "",
-          base_url_production: (data as Record<string, string | null>).base_url_production || "",
+          api_key: d.api_key || "",
+          api_key_staging: d.api_key_staging || "",
+          api_key_production: d.api_key_production || "",
+          base_url_staging: d.base_url_staging || "",
+          base_url_production: d.base_url_production || "",
+          redirect_uri_staging: d.redirect_uri_staging || "",
+          redirect_uri_production: d.redirect_uri_production || "",
         });
       }
       setLoading(false);
@@ -138,6 +143,8 @@ function BtgCredenciaisSection() {
         api_key_production: form.api_key_production || null,
         base_url_staging: form.base_url_staging || null,
         base_url_production: form.base_url_production || null,
+        redirect_uri_staging: form.redirect_uri_staging || null,
+        redirect_uri_production: form.redirect_uri_production || null,
       })
       .eq("id", config.id);
     setSaving(false);
@@ -252,17 +259,24 @@ function BtgCredenciaisSection() {
         </CardContent>
       </Card>
 
-      {/* URLs */}
+      {/* URLs de Autorização */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Globe className="h-4 w-4 text-primary" />
-            URLs de Autorização
+            URLs de Autorização (Auth Base)
           </CardTitle>
+          <CardDescription>
+            Endpoints do BTG ID para cada ambiente. Usado no fluxo OAuth (/oauth2/authorize e /oauth2/token).
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label className="text-sm">URL Homologação</Label>
+            <Label className="text-sm flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block" />
+              Auth URL — Homologação
+              {config.ambiente !== "production" && <span className="text-xs font-medium text-primary">(ativa)</span>}
+            </Label>
             <Input
               value={form.base_url_staging}
               onChange={(e) => setForm((f) => ({ ...f, base_url_staging: e.target.value }))}
@@ -271,7 +285,11 @@ function BtgCredenciaisSection() {
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-sm">URL Produção</Label>
+            <Label className="text-sm flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+              Auth URL — Produção
+              {config.ambiente === "production" && <span className="text-xs font-medium text-primary">(ativa)</span>}
+            </Label>
             <Input
               value={form.base_url_production}
               onChange={(e) => setForm((f) => ({ ...f, base_url_production: e.target.value }))}
@@ -279,6 +297,50 @@ function BtgCredenciaisSection() {
               className="font-mono text-sm"
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Redirect URIs */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ExternalLink className="h-4 w-4 text-primary" />
+            Redirect URI (Callback)
+          </CardTitle>
+          <CardDescription>
+            URL de retorno após autorização OAuth. Deve ser a mesma cadastrada no Portal do Desenvolvedor BTG, separada por ambiente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block" />
+              Redirect URI — Homologação
+              {config.ambiente !== "production" && <span className="text-xs font-medium text-primary">(ativa)</span>}
+            </Label>
+            <Input
+              value={form.redirect_uri_staging}
+              onChange={(e) => setForm((f) => ({ ...f, redirect_uri_staging: e.target.value }))}
+              placeholder="https://...supabase.co/functions/v1/btg-auth"
+              className="font-mono text-sm"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+              Redirect URI — Produção
+              {config.ambiente === "production" && <span className="text-xs font-medium text-primary">(ativa)</span>}
+            </Label>
+            <Input
+              value={form.redirect_uri_production}
+              onChange={(e) => setForm((f) => ({ ...f, redirect_uri_production: e.target.value }))}
+              placeholder="https://...supabase.co/functions/v1/btg-auth"
+              className="font-mono text-sm"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            ⚠️ A URI deve ser idêntica à cadastrada no portal BTG para cada ambiente, incluindo protocolo e path.
+          </p>
         </CardContent>
       </Card>
 
