@@ -106,7 +106,7 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
   }
 
   const ce = Number(cod_empresa);
-  const { apiBase, isSandbox } = getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgUrls();
 
   let btgReceivableId = "";
   let linhaDigitavel = "";
