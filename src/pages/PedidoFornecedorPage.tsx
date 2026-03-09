@@ -1210,9 +1210,9 @@ const PedidoFornecedorPage: React.FC = () => {
                   <Sparkles className="h-4 w-4 text-primary" /> Produto Hoya — Match Inteligente
                 </CardTitle>
                 <div className="flex items-center gap-2">
-                  {produtoSelecionado && !produtoIsSurfacada && (
+                  {produtoSelecionado && productReqs.isLentePronta && (
                     <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 border-blue-300">
-                      Lente Pronta
+                      {productReqs.tipoLabel}
                     </Badge>
                   )}
                   {selectedGroup && (
