@@ -150,6 +150,7 @@ async function handleAuthorize(req: Request) {
     redirect_uri: creds.redirectUri,
     scope: scopes,
     state: stateB64,
+    prompt: "login",
   });
 
   const authorizeUrl = `${creds.authBase}/oauth2/authorize?${params.toString()}`;
