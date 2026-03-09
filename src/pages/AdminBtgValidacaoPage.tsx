@@ -89,6 +89,8 @@ export default function AdminBtgValidacaoPage() {
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [extratoResult, setExtratoResult] = useState<ExtratoTestResult | null>(null);
+  const [authDiagnostico, setAuthDiagnostico] = useState<Record<string, unknown> | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Fetch empresas for name resolution
   const { data: empresas = [] } = useQuery({
