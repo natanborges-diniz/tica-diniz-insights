@@ -788,7 +788,7 @@ export default function AdminFornecedoresPage() {
             const isProduction = cfg?.ambiente === "production";
             return (
               <TabsTrigger key={f} value={f} className="flex items-center gap-2">
-                {f}
+                {FORNECEDOR_LABELS[f] || f}
                 {cfg && (
                   <span className={`h-2 w-2 rounded-full ${isProduction ? "bg-primary" : "bg-yellow-500"}`} />
                 )}
