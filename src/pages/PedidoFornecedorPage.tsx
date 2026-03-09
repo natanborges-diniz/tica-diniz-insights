@@ -1539,9 +1539,9 @@ const PedidoFornecedorPage: React.FC = () => {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Search className="h-4 w-4" /> Produto Selecionado Manualmente
-                {!produtoIsSurfacada && (
+                {productReqs.isLentePronta && (
                   <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 border-blue-300 ml-1">
-                    Lente Pronta (sem medidas de armação)
+                    {productReqs.tipoLabel} (sem medidas de armação)
                   </Badge>
                 )}
               </CardTitle>
