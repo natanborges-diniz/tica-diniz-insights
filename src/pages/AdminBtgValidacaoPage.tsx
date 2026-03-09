@@ -89,6 +89,209 @@ async function callBtgExtrato(codEmpresa: number) {
   return data;
 }
 
+// ─── BTG Credentials Section ─────────────────────────────────
+function BtgCredenciaisSection() {
+  const [config, setConfig] = useState<{
+    id: string; api_key: string | null; api_key_staging: string | null;
+    api_key_production: string | null; base_url_staging: string | null;
+    base_url_production: string | null; ambiente: string;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showClientId, setShowClientId] = useState(false);
+  const [showKeySt, setShowKeySt] = useState(false);
+  const [showKeyProd, setShowKeyProd] = useState(false);
+  const [form, setForm] = useState({
+    api_key: "", api_key_staging: "", api_key_production: "",
+    base_url_staging: "", base_url_production: "",
+  });
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("fornecedor_configuracao")
+        .select("id, api_key, api_key_staging, api_key_production, base_url_staging, base_url_production, ambiente")
+        .eq("fornecedor", "btg")
+        .single();
+      if (data) {
+        setConfig(data as typeof config);
+        setForm({
+          api_key: (data as Record<string, string | null>).api_key || "",
+          api_key_staging: (data as Record<string, string | null>).api_key_staging || "",
+          api_key_production: (data as Record<string, string | null>).api_key_production || "",
+          base_url_staging: (data as Record<string, string | null>).base_url_staging || "",
+          base_url_production: (data as Record<string, string | null>).base_url_production || "",
+        });
+      }
+      setLoading(false);
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    if (!config) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("fornecedor_configuracao")
+      .update({
+        api_key: form.api_key || null,
+        api_key_staging: form.api_key_staging || null,
+        api_key_production: form.api_key_production || null,
+        base_url_staging: form.base_url_staging || null,
+        base_url_production: form.base_url_production || null,
+      })
+      .eq("id", config.id);
+    setSaving(false);
+    if (error) {
+      toast.error("Erro ao salvar: " + error.message);
+    } else {
+      toast.success("Credenciais BTG salvas com sucesso");
+    }
+  };
+
+  if (loading) return null;
+  if (!config) return null;
+
+  return (
+    <div className="space-y-4">
+      {/* Client ID */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-primary" />
+            Client ID (OAuth)
+          </CardTitle>
+          <CardDescription>
+            Identificador do aplicativo registrado no portal BTG. Mesmo valor para ambos os ambientes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2">
+            <Input
+              type={showClientId ? "text" : "password"}
+              value={form.api_key}
+              onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              className="font-mono text-sm flex-1"
+            />
+            <Button variant="outline" size="icon" onClick={() => setShowClientId((v) => !v)} type="button">
+              {showClientId ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+          </div>
+          {config.api_key && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-2">
+              <CheckCircle2 className="h-3 w-3 text-primary" />
+              Client ID configurado.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Client Secrets por ambiente */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-primary" />
+            Client Secret (OAuth)
+          </CardTitle>
+          <CardDescription>
+            Chave secreta do aplicativo BTG, separada por ambiente. Apenas a chave do ambiente ativo será utilizada.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2 text-sm">
+              <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block" />
+              Client Secret — Homologação (Staging)
+              {config.ambiente !== "production" && <span className="text-xs font-medium text-primary ml-1">(ativa)</span>}
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                type={showKeySt ? "text" : "password"}
+                value={form.api_key_staging}
+                onChange={(e) => setForm((f) => ({ ...f, api_key_staging: e.target.value }))}
+                placeholder="••••••••••••••••••••"
+                className="font-mono text-sm flex-1"
+              />
+              <Button variant="outline" size="icon" onClick={() => setShowKeySt((v) => !v)} type="button">
+                {showKeySt ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            {config.api_key_staging && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3 text-primary" />
+                Client Secret de homologação configurada.
+              </p>
+            )}
+          </div>
+          <div className="border-t" />
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2 text-sm">
+              <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+              Client Secret — Produção
+              {config.ambiente === "production" && <span className="text-xs font-medium text-primary ml-1">(ativa)</span>}
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                type={showKeyProd ? "text" : "password"}
+                value={form.api_key_production}
+                onChange={(e) => setForm((f) => ({ ...f, api_key_production: e.target.value }))}
+                placeholder="••••••••••••••••••••"
+                className="font-mono text-sm flex-1"
+              />
+              <Button variant="outline" size="icon" onClick={() => setShowKeyProd((v) => !v)} type="button">
+                {showKeyProd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            {config.api_key_production && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3 text-primary" />
+                Client Secret de produção configurada.
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* URLs */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Globe className="h-4 w-4 text-primary" />
+            URLs de Autorização
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm">URL Homologação</Label>
+            <Input
+              value={form.base_url_staging}
+              onChange={(e) => setForm((f) => ({ ...f, base_url_staging: e.target.value }))}
+              placeholder="https://id.sandbox.btgpactual.com"
+              className="font-mono text-sm"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm">URL Produção</Label>
+            <Input
+              value={form.base_url_production}
+              onChange={(e) => setForm((f) => ({ ...f, base_url_production: e.target.value }))}
+              placeholder="https://id.btgpactual.com"
+              className="font-mono text-sm"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end">
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+          Salvar Credenciais
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────
 export default function AdminBtgValidacaoPage() {
   const { isAdmin } = useAuth();
