@@ -385,6 +385,8 @@ Deno.serve(async (req) => {
     switch (action) {
       case "authorize":
         return await handleAuthorize(req);
+      case "callback":
+        return await handleCallback(req);
       case "refresh":
         return await handleRefresh(req);
       case "status":
