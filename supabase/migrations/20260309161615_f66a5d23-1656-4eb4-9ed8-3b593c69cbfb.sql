@@ -1,0 +1,1 @@
+UPDATE btg_contas_bancarias SET company_id = cnpj WHERE company_id IS NULL AND cnpj IS NOT NULL;
