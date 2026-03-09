@@ -99,10 +99,10 @@ async function handleAuthorize(req: Request) {
   const { cod_empresa } = await req.json();
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const btgUrls = getBtgUrls();
+  const btgUrls = await getBtgUrls();
   const clientId = Deno.env.get("BTG_CLIENT_ID")!;
   const redirectUri = Deno.env.get("BTG_REDIRECT_URI")!;
-  const env = Deno.env.get("BTG_ENVIRONMENT") || "sandbox";
+  const env = btgUrls.env;
 
   console.log("[btg-auth][authorize] ── DIAGNÓSTICO ──");
   console.log("[btg-auth][authorize] BTG_ENVIRONMENT:", env);
