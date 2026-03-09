@@ -17,8 +17,15 @@ function json(data: unknown, status = 200) {
   });
 }
 
-function getBtgUrls() {
-  const env = Deno.env.get("BTG_ENVIRONMENT") || "sandbox";
+async function getBtgUrls() {
+  const db = getServiceClient();
+  const { data } = await db
+    .from("fornecedor_configuracao")
+    .select("ambiente")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+  const env = data?.ambiente === "production" ? "production" : "sandbox";
   const isSandbox = env === "sandbox";
   return {
     apiBase: isSandbox
@@ -267,7 +274,7 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
     return json({ error: `Só é possível enviar pagamentos com status APROVADO_INTERNO. Atual: ${pagamento.status}` }, 400);
   }
 
-  const { apiBase, isSandbox } = getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgUrls();
 
   // Sandbox mode: simulate BTG acceptance
   if (isSandbox) {

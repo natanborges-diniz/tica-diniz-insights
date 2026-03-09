@@ -17,8 +17,15 @@ function json(data: unknown, status = 200) {
   });
 }
 
-function getBtgUrls() {
-  const env = Deno.env.get("BTG_ENVIRONMENT") || "sandbox";
+async function getBtgUrls() {
+  const db = getServiceClient();
+  const { data } = await db
+    .from("fornecedor_configuracao")
+    .select("ambiente")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+  const env = data?.ambiente === "production" ? "production" : "sandbox";
   const isSandbox = env === "sandbox";
   return {
     apiBase: isSandbox
@@ -99,7 +106,7 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
   }
 
   const ce = Number(cod_empresa);
-  const { apiBase, isSandbox } = getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgUrls();
 
   let btgReceivableId = "";
   let linhaDigitavel = "";
@@ -219,7 +226,7 @@ async function handleCancelar(body: Record<string, unknown>, userId: string) {
     return json({ error: `Não é possível cancelar cobrança com status ${cobranca.status}` }, 400);
   }
 
-  const { isSandbox, apiBase } = getBtgUrls();
+  const { isSandbox, apiBase } = await getBtgUrls();
 
   if (cobranca.btg_receivable_id && !isSandbox) {
     try {
@@ -251,7 +258,7 @@ async function handleSegundaVia(body: Record<string, unknown> | null, url: URL) 
 
   const accessToken = await getBtgToken(cobranca.cod_empresa);
   const companyId = await getCompanyId(cobranca.cod_empresa);
-  const { apiBase } = getBtgUrls();
+  const { apiBase } = await getBtgUrls();
 
   const btgRes = await fetch(
     `${apiBase}/banking/v1/companies/${companyId}/receivables/${cobranca.btg_receivable_id}`,

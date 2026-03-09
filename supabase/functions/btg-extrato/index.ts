@@ -17,8 +17,15 @@ function json(data: unknown, status = 200) {
   });
 }
 
-function getBtgUrls() {
-  const env = Deno.env.get("BTG_ENVIRONMENT") || "sandbox";
+async function getBtgUrls() {
+  const db = getServiceClient();
+  const { data } = await db
+    .from("fornecedor_configuracao")
+    .select("ambiente")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+  const env = data?.ambiente === "production" ? "production" : "sandbox";
   const isSandbox = env === "sandbox";
   return {
     apiBase: isSandbox
@@ -100,7 +107,7 @@ async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
   const codEmpresa = Number(getParam(body, url, "cod_empresa"));
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const { apiBase, isSandbox } = getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgUrls();
 
   if (isSandbox) {
     return json({
@@ -138,7 +145,7 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
 
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const { apiBase, isSandbox } = getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgUrls();
 
   if (isSandbox) {
     const mockEntries = [
@@ -181,7 +188,7 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   const data_fim = body.data_fim ? String(body.data_fim) : null;
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const { apiBase, isSandbox } = getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgUrls();
 
   let lancamentos: Array<{ date: string; description: string; amount: number; type: string; balance_after?: number }> = [];
 

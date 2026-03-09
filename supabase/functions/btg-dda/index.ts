@@ -17,12 +17,21 @@ function json(data: unknown, status = 200) {
   });
 }
 
-function getBtgUrls() {
-  const env = Deno.env.get("BTG_ENVIRONMENT") || "sandbox";
+async function getBtgUrls() {
+  const db = getServiceClient();
+  const { data } = await db
+    .from("fornecedor_configuracao")
+    .select("ambiente")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+  const env = data?.ambiente === "production" ? "production" : "sandbox";
+  const isSandbox = env === "sandbox";
   return {
-    apiBase: env === "sandbox"
+    apiBase: isSandbox
       ? "https://api.sandbox.empresas.btgpactual.com"
       : "https://api.empresas.btgpactual.com",
+    isSandbox,
   };
 }
 
@@ -94,8 +103,7 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
   const ce = Number(cod_empresa);
-  const { apiBase } = getBtgUrls();
-  const isSandbox = (Deno.env.get("BTG_ENVIRONMENT") || "sandbox") === "sandbox";
+  const { apiBase, isSandbox } = await getBtgUrls();
 
   let btgData: Record<string, unknown>[] = [];
 

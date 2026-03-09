@@ -17,8 +17,7 @@ function json(data: unknown, status = 200) {
   });
 }
 
-function getBtgUrls() {
-  const env = Deno.env.get("BTG_ENVIRONMENT") || "sandbox";
+function getBtgUrlsFromEnv(env: string) {
   const isSandbox = env === "sandbox";
   return {
     authBase: isSandbox
@@ -28,7 +27,20 @@ function getBtgUrls() {
       ? "https://api.sandbox.empresas.btgpactual.com"
       : "https://api.empresas.btgpactual.com",
     isSandbox,
+    env,
   };
+}
+
+async function getBtgUrls() {
+  const db = getServiceClient();
+  const { data } = await db
+    .from("fornecedor_configuracao")
+    .select("ambiente")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+  const env = data?.ambiente === "production" ? "production" : "sandbox";
+  return getBtgUrlsFromEnv(env);
 }
 
 function getServiceClient() {
@@ -87,10 +99,10 @@ async function handleAuthorize(req: Request) {
   const { cod_empresa } = await req.json();
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const btgUrls = getBtgUrls();
+  const btgUrls = await getBtgUrls();
   const clientId = Deno.env.get("BTG_CLIENT_ID")!;
   const redirectUri = Deno.env.get("BTG_REDIRECT_URI")!;
-  const env = Deno.env.get("BTG_ENVIRONMENT") || "sandbox";
+  const env = btgUrls.env;
 
   console.log("[btg-auth][authorize] ── DIAGNÓSTICO ──");
   console.log("[btg-auth][authorize] BTG_ENVIRONMENT:", env);
@@ -170,7 +182,7 @@ async function handleCallback(req: Request) {
     );
   }
 
-  const { authBase } = getBtgUrls();
+  const { authBase } = await getBtgUrls();
   const clientId = Deno.env.get("BTG_CLIENT_ID")!;
   const clientSecret = Deno.env.get("BTG_CLIENT_SECRET")!;
   const redirectUri = Deno.env.get("BTG_REDIRECT_URI")!;
@@ -251,7 +263,7 @@ async function handleRefresh(req: Request) {
     return json({ error: "Nenhum refresh_token encontrado. Re-autorize." }, 404);
   }
 
-  const { authBase } = getBtgUrls();
+  const { authBase } = await getBtgUrls();
   const clientId = Deno.env.get("BTG_CLIENT_ID")!;
   const clientSecret = Deno.env.get("BTG_CLIENT_SECRET")!;
 
