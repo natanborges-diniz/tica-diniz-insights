@@ -4,7 +4,8 @@ import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import {
   Shield, CheckCircle2, XCircle, RefreshCw, ExternalLink,
-  Landmark, Clock, AlertTriangle, Zap, Settings2,
+  Landmark, Clock, AlertTriangle, Zap, Settings2, KeyRound,
+  Eye, EyeOff, Save, Loader2, Globe, AlertCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
