@@ -726,7 +726,12 @@ function EmpresasTable({
 // ─────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────
-const FORNECEDORES = ["HOYA", "ZEISS"] as const;
+const FORNECEDORES = ["HOYA", "ZEISS", "btg"] as const;
+const FORNECEDOR_LABELS: Record<string, string> = {
+  HOYA: "Hoya",
+  ZEISS: "Zeiss",
+  btg: "BTG Banking",
+};
 
 export default function AdminFornecedoresPage() {
   const { isAdmin, isLoading: authLoading } = useAuth();
