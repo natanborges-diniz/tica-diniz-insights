@@ -163,15 +163,12 @@ export default function AdminBtgValidacaoPage() {
       }
 
       if (data.authorize_url) {
-        toast.success("URL gerada! Verifique o painel de diagnóstico abaixo.");
-        // Redirect directly to avoid popup/COOP blocks
-        window.location.href = data.authorize_url;
-        }
         setAuthDiagnostico(prev => ({
           ...prev,
           authorize_url: data.authorize_url,
-          popup_opened: !!popup,
         }));
+        toast.success("Redirecionando para autorização BTG...");
+        window.location.href = data.authorize_url;
       }
     },
     onError: (err: Error) => {
