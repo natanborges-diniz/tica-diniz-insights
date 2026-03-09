@@ -188,7 +188,7 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   const data_fim = body.data_fim ? String(body.data_fim) : null;
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const { apiBase, isSandbox } = getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgUrls();
 
   let lancamentos: Array<{ date: string; description: string; amount: number; type: string; balance_after?: number }> = [];
 

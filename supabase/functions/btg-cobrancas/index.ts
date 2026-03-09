@@ -258,7 +258,7 @@ async function handleSegundaVia(body: Record<string, unknown> | null, url: URL) 
 
   const accessToken = await getBtgToken(cobranca.cod_empresa);
   const companyId = await getCompanyId(cobranca.cod_empresa);
-  const { apiBase } = getBtgUrls();
+  const { apiBase } = await getBtgUrls();
 
   const btgRes = await fetch(
     `${apiBase}/banking/v1/companies/${companyId}/receivables/${cobranca.btg_receivable_id}`,

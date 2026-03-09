@@ -274,7 +274,7 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
     return json({ error: `Só é possível enviar pagamentos com status APROVADO_INTERNO. Atual: ${pagamento.status}` }, 400);
   }
 
-  const { apiBase, isSandbox } = getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgUrls();
 
   // Sandbox mode: simulate BTG acceptance
   if (isSandbox) {

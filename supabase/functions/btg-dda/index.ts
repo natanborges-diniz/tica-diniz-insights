@@ -103,8 +103,7 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
   const ce = Number(cod_empresa);
-  const { apiBase } = getBtgUrls();
-  const isSandbox = (Deno.env.get("BTG_ENVIRONMENT") || "sandbox") === "sandbox";
+  const { apiBase, isSandbox } = await getBtgUrls();
 
   let btgData: Record<string, unknown>[] = [];
 
