@@ -674,8 +674,11 @@ const PedidoFornecedorPage: React.FC = () => {
       )
     : produtos.slice(0, 50);
 
-  // Detecta se produto selecionado é surfaçado — lentes prontas (SV sem DG) não exigem medidas de armação/DNP/altura
-  const produtoIsSurfacada = produtoSelecionado ? isSurfacada(produtoSelecionado.nome, produtoSelecionado.tipoLente) : true;
+  // Deriva requisitos do produto a partir dos dados do catálogo (ranges)
+  const productReqs: ProductRequirements = produtoSelecionado
+    ? getProductRequirements(produtoSelecionado)
+    : getDefaultRequirements();
+  const produtoIsSurfacada = !productReqs.isLentePronta;
 
   // FASE 5: Check if both confirmations are done
   // If prescription was NOT auto-filled, no confirmation needed; if it was, user must confirm
