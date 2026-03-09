@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   Shield, CheckCircle2, XCircle, RefreshCw, ExternalLink,
-  Landmark, Clock, AlertTriangle, Zap,
+  Landmark, Clock, AlertTriangle, Zap, Settings2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
