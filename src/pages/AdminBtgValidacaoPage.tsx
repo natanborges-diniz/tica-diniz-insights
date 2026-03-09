@@ -489,18 +489,6 @@ export default function AdminBtgValidacaoPage() {
               <>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <span className="text-muted-foreground">Ambiente:</span>
-                    <Badge variant="outline" className="ml-2">
-                      {String(authDiagnostico.environment || "?")}
-                    </Badge>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Sandbox:</span>
-                    <Badge variant={authDiagnostico.is_sandbox ? "secondary" : "default"} className="ml-2">
-                      {authDiagnostico.is_sandbox ? "Sim (sandbox)" : "Não (produção)"}
-                    </Badge>
-                  </div>
-                  <div>
                     <span className="text-muted-foreground">Auth Base:</span>
                     <code className="ml-2 text-xs bg-muted px-1 py-0.5 rounded">
                       {String(authDiagnostico.auth_base || "?")}
@@ -523,12 +511,6 @@ export default function AdminBtgValidacaoPage() {
                     <code className="ml-2 text-xs bg-muted px-1 py-0.5 rounded">
                       {String(authDiagnostico.client_id_prefix || "?")}...
                     </code>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Popup abriu:</span>
-                    <Badge variant={authDiagnostico.popup_opened ? "default" : "destructive"} className="ml-2">
-                      {authDiagnostico.popup_opened ? "Sim" : "Bloqueado!"}
-                    </Badge>
                   </div>
                 </div>
 
