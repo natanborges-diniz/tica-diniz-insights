@@ -89,6 +89,8 @@ export default function AdminBtgValidacaoPage() {
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [extratoResult, setExtratoResult] = useState<ExtratoTestResult | null>(null);
+  const [authDiagnostico, setAuthDiagnostico] = useState<Record<string, unknown> | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Fetch empresas for name resolution
   const { data: empresas = [] } = useQuery({
@@ -150,15 +152,32 @@ export default function AdminBtgValidacaoPage() {
   // Authorize mutation
   const authorizeMutation = useMutation({
     mutationFn: async (codEmpresa: number) => {
+      setAuthDiagnostico(null);
+      setAuthError(null);
       return callBtgAuth("authorize", { cod_empresa: codEmpresa });
     },
     onSuccess: (data) => {
+      // Store diagnostics
+      if (data._diagnostico) {
+        setAuthDiagnostico(data._diagnostico);
+      }
+
       if (data.authorize_url) {
-        toast.success("URL de autorização gerada! Abrindo...");
-        window.open(data.authorize_url, "_blank", "noopener");
+        toast.success("URL gerada! Verifique o painel de diagnóstico abaixo.");
+        // Try to open, but also show the URL in case popup is blocked
+        const popup = window.open(data.authorize_url, "_blank", "noopener");
+        if (!popup) {
+          toast.warning("Popup bloqueado! Copie a URL do painel abaixo.");
+        }
+        setAuthDiagnostico(prev => ({
+          ...prev,
+          authorize_url: data.authorize_url,
+          popup_opened: !!popup,
+        }));
       }
     },
     onError: (err: Error) => {
+      setAuthError(err.message);
       toast.error(`Erro ao autorizar: ${err.message}`);
     },
   });
@@ -439,6 +458,105 @@ export default function AdminBtgValidacaoPage() {
                 </div>
                 <p className="text-sm text-muted-foreground">{extratoResult.error}</p>
               </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Diagnóstico de Autorização ─────────────────── */}
+      {(authDiagnostico || authError) && (
+        <Card className="border-blue-200 bg-blue-50/30">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Shield className="h-4 w-4 text-blue-600" />
+              Diagnóstico da Autorização
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {authError && (
+              <div className="flex items-center gap-2 text-destructive">
+                <XCircle className="h-4 w-4" />
+                <span className="font-medium">Erro: {authError}</span>
+              </div>
+            )}
+            {authDiagnostico && (
+              <>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Ambiente:</span>
+                    <Badge variant="outline" className="ml-2">
+                      {String(authDiagnostico.environment || "?")}
+                    </Badge>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Sandbox:</span>
+                    <Badge variant={authDiagnostico.is_sandbox ? "secondary" : "default"} className="ml-2">
+                      {authDiagnostico.is_sandbox ? "Sim (sandbox)" : "Não (produção)"}
+                    </Badge>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Auth Base:</span>
+                    <code className="ml-2 text-xs bg-muted px-1 py-0.5 rounded">
+                      {String(authDiagnostico.auth_base || "?")}
+                    </code>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">API Base:</span>
+                    <code className="ml-2 text-xs bg-muted px-1 py-0.5 rounded">
+                      {String(authDiagnostico.api_base || "?")}
+                    </code>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Redirect URI:</span>
+                    <code className="ml-2 text-xs bg-muted px-1 py-0.5 rounded break-all">
+                      {String(authDiagnostico.redirect_uri || "?")}
+                    </code>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Client ID (prefixo):</span>
+                    <code className="ml-2 text-xs bg-muted px-1 py-0.5 rounded">
+                      {String(authDiagnostico.client_id_prefix || "?")}...
+                    </code>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Popup abriu:</span>
+                    <Badge variant={authDiagnostico.popup_opened ? "default" : "destructive"} className="ml-2">
+                      {authDiagnostico.popup_opened ? "Sim" : "Bloqueado!"}
+                    </Badge>
+                  </div>
+                </div>
+
+                {authDiagnostico.scopes && (
+                  <div>
+                    <span className="text-sm text-muted-foreground">Scopes solicitados:</span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {(authDiagnostico.scopes as string[]).map((s, i) => (
+                        <Badge key={i} variant="outline" className="text-[10px]">{s}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {authDiagnostico.authorize_url && (
+                  <div className="mt-2">
+                    <span className="text-sm text-muted-foreground">URL completa (copie se popup bloqueou):</span>
+                    <div className="mt-1 p-2 bg-muted rounded text-xs font-mono break-all select-all max-h-20 overflow-y-auto">
+                      {String(authDiagnostico.authorize_url)}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2"
+                      onClick={() => {
+                        navigator.clipboard.writeText(String(authDiagnostico.authorize_url));
+                        toast.success("URL copiada!");
+                      }}
+                    >
+                      Copiar URL
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

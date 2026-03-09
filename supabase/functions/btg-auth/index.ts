@@ -87,9 +87,19 @@ async function handleAuthorize(req: Request) {
   const { cod_empresa } = await req.json();
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const { authBase } = getBtgUrls();
+  const btgUrls = getBtgUrls();
   const clientId = Deno.env.get("BTG_CLIENT_ID")!;
   const redirectUri = Deno.env.get("BTG_REDIRECT_URI")!;
+  const env = Deno.env.get("BTG_ENVIRONMENT") || "sandbox";
+
+  console.log("[btg-auth][authorize] ── DIAGNÓSTICO ──");
+  console.log("[btg-auth][authorize] BTG_ENVIRONMENT:", env);
+  console.log("[btg-auth][authorize] authBase:", btgUrls.authBase);
+  console.log("[btg-auth][authorize] apiBase:", btgUrls.apiBase);
+  console.log("[btg-auth][authorize] isSandbox:", btgUrls.isSandbox);
+  console.log("[btg-auth][authorize] BTG_CLIENT_ID:", clientId ? `${clientId.substring(0, 8)}...` : "NÃO CONFIGURADO");
+  console.log("[btg-auth][authorize] BTG_REDIRECT_URI:", redirectUri || "NÃO CONFIGURADO");
+  console.log("[btg-auth][authorize] cod_empresa:", cod_empresa);
 
   const scopes = [
     "brn:btg:empresas:payments",
@@ -110,9 +120,22 @@ async function handleAuthorize(req: Request) {
     state: stateB64,
   });
 
-  const authorizeUrl = `${authBase}/oauth2/authorize?${params.toString()}`;
+  const authorizeUrl = `${btgUrls.authBase}/oauth2/authorize?${params.toString()}`;
 
-  return json({ authorize_url: authorizeUrl });
+  console.log("[btg-auth][authorize] URL gerada:", authorizeUrl);
+
+  return json({
+    authorize_url: authorizeUrl,
+    _diagnostico: {
+      environment: env,
+      auth_base: btgUrls.authBase,
+      api_base: btgUrls.apiBase,
+      is_sandbox: btgUrls.isSandbox,
+      redirect_uri: redirectUri,
+      client_id_prefix: clientId ? clientId.substring(0, 8) : null,
+      scopes: scopes.split(" "),
+    },
+  });
 }
 
 // ─── ACTION: callback ────────────────────────────────────────
