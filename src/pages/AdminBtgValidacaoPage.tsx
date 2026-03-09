@@ -94,7 +94,8 @@ function BtgCredenciaisSection() {
   const [config, setConfig] = useState<{
     id: string; api_key: string | null; api_key_staging: string | null;
     api_key_production: string | null; base_url_staging: string | null;
-    base_url_production: string | null; ambiente: string;
+    base_url_production: string | null; redirect_uri_staging: string | null;
+    redirect_uri_production: string | null; ambiente: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -104,6 +105,7 @@ function BtgCredenciaisSection() {
   const [form, setForm] = useState({
     api_key: "", api_key_staging: "", api_key_production: "",
     base_url_staging: "", base_url_production: "",
+    redirect_uri_staging: "", redirect_uri_production: "",
   });
 
   useEffect(() => {
