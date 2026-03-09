@@ -620,3 +620,65 @@ function StepCard({
     </Card>
   );
 }
+
+// ─── Environment Toggle ─────────────────────────────────────
+function BtgEnvironmentToggle() {
+  const { data: config, refetch } = useQuery({
+    queryKey: ["btg-fornecedor-config"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fornecedor_configuracao")
+        .select("id, ambiente, ativo")
+        .eq("fornecedor", "btg")
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const [saving, setSaving] = useState(false);
+
+  const toggleEnvironment = async () => {
+    if (!config) return;
+    setSaving(true);
+    const newAmbiente = config.ambiente === "production" ? "staging" : "production";
+    const { error } = await supabase
+      .from("fornecedor_configuracao")
+      .update({ ambiente: newAmbiente, updated_at: new Date().toISOString() })
+      .eq("id", config.id);
+    setSaving(false);
+    if (error) {
+      toast.error("Erro ao alterar ambiente");
+      return;
+    }
+    toast.success(`Ambiente alterado para ${newAmbiente === "production" ? "Produção" : "Homologação"}`);
+    refetch();
+  };
+
+  const isProduction = config?.ambiente === "production";
+
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <Label className="text-sm font-medium">Ambiente BTG</Label>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {isProduction
+            ? "Conectado ao ambiente de produção do BTG"
+            : "Conectado ao ambiente de homologação (sandbox) do BTG"}
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-muted-foreground">Homologação</span>
+        <Switch
+          checked={isProduction}
+          onCheckedChange={toggleEnvironment}
+          disabled={saving}
+        />
+        <span className="text-xs font-medium">Produção</span>
+        <Badge variant={isProduction ? "default" : "secondary"}>
+          {isProduction ? "PROD" : "SANDBOX"}
+        </Badge>
+      </div>
+    </div>
+  );
+}
