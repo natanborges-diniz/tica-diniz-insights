@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -91,6 +91,17 @@ export default function AdminBtgValidacaoPage() {
   const [extratoResult, setExtratoResult] = useState<ExtratoTestResult | null>(null);
   const [authDiagnostico, setAuthDiagnostico] = useState<Record<string, unknown> | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  // Handle callback redirect from BTG OAuth
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("btg_callback") === "success") {
+      const codEmpresa = params.get("cod_empresa");
+      toast.success(`Autorização BTG concluída para empresa ${codEmpresa}!`);
+      window.history.replaceState({}, "", window.location.pathname);
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["btg-status"] }), 1000);
+    }
+  }, []);
 
   // Fetch empresas for name resolution
   const { data: empresas = [] } = useQuery({
@@ -478,18 +489,6 @@ export default function AdminBtgValidacaoPage() {
               <>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <span className="text-muted-foreground">Ambiente:</span>
-                    <Badge variant="outline" className="ml-2">
-                      {String(authDiagnostico.environment || "?")}
-                    </Badge>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Sandbox:</span>
-                    <Badge variant={authDiagnostico.is_sandbox ? "secondary" : "default"} className="ml-2">
-                      {authDiagnostico.is_sandbox ? "Sim (sandbox)" : "Não (produção)"}
-                    </Badge>
-                  </div>
-                  <div>
                     <span className="text-muted-foreground">Auth Base:</span>
                     <code className="ml-2 text-xs bg-muted px-1 py-0.5 rounded">
                       {String(authDiagnostico.auth_base || "?")}
@@ -512,12 +511,6 @@ export default function AdminBtgValidacaoPage() {
                     <code className="ml-2 text-xs bg-muted px-1 py-0.5 rounded">
                       {String(authDiagnostico.client_id_prefix || "?")}...
                     </code>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Popup abriu:</span>
-                    <Badge variant={authDiagnostico.popup_opened ? "default" : "destructive"} className="ml-2">
-                      {authDiagnostico.popup_opened ? "Sim" : "Bloqueado!"}
-                    </Badge>
                   </div>
                 </div>
 
@@ -562,32 +555,32 @@ export default function AdminBtgValidacaoPage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Clock className="h-4 w-4" />
-            Configuração do Ambiente
+            Configuração
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="text-muted-foreground">BTG_ENVIRONMENT:</span>
-              <Badge variant="outline" className="ml-2">
-                configurado no servidor
+              <span className="text-muted-foreground">Ambiente:</span>
+              <Badge variant="default" className="ml-2">
+                Produção
               </Badge>
             </div>
             <div>
               <span className="text-muted-foreground">BTG_CLIENT_ID:</span>
-              <Badge variant="outline" className="ml-2 bg-emerald-50 text-emerald-700">
+              <Badge variant="outline" className="ml-2">
                 ✓ configurado
               </Badge>
             </div>
             <div>
               <span className="text-muted-foreground">BTG_CLIENT_SECRET:</span>
-              <Badge variant="outline" className="ml-2 bg-emerald-50 text-emerald-700">
+              <Badge variant="outline" className="ml-2">
                 ✓ configurado
               </Badge>
             </div>
             <div>
               <span className="text-muted-foreground">BTG_REDIRECT_URI:</span>
-              <Badge variant="outline" className="ml-2 bg-emerald-50 text-emerald-700">
+              <Badge variant="outline" className="ml-2">
                 ✓ configurado
               </Badge>
             </div>
