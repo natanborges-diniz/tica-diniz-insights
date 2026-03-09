@@ -484,6 +484,8 @@ export type Database = {
           created_at: string
           fornecedor: string
           id: string
+          redirect_uri_production: string | null
+          redirect_uri_staging: string | null
           updated_at: string
         }
         Insert: {
@@ -497,6 +499,8 @@ export type Database = {
           created_at?: string
           fornecedor: string
           id?: string
+          redirect_uri_production?: string | null
+          redirect_uri_staging?: string | null
           updated_at?: string
         }
         Update: {
@@ -510,6 +514,8 @@ export type Database = {
           created_at?: string
           fornecedor?: string
           id?: string
+          redirect_uri_production?: string | null
+          redirect_uri_staging?: string | null
           updated_at?: string
         }
         Relationships: []
