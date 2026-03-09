@@ -226,7 +226,7 @@ async function handleCancelar(body: Record<string, unknown>, userId: string) {
     return json({ error: `Não é possível cancelar cobrança com status ${cobranca.status}` }, 400);
   }
 
-  const { isSandbox, apiBase } = getBtgUrls();
+  const { isSandbox, apiBase } = await getBtgUrls();
 
   if (cobranca.btg_receivable_id && !isSandbox) {
     try {
