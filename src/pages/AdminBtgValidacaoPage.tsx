@@ -164,10 +164,8 @@ export default function AdminBtgValidacaoPage() {
 
       if (data.authorize_url) {
         toast.success("URL gerada! Verifique o painel de diagnóstico abaixo.");
-        // Try to open, but also show the URL in case popup is blocked
-        const popup = window.open(data.authorize_url, "_blank", "noopener");
-        if (!popup) {
-          toast.warning("Popup bloqueado! Copie a URL do painel abaixo.");
+        // Redirect directly to avoid popup/COOP blocks
+        window.location.href = data.authorize_url;
         }
         setAuthDiagnostico(prev => ({
           ...prev,
