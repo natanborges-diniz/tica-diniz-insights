@@ -1746,11 +1746,12 @@ const PedidoFornecedorPage: React.FC = () => {
                 <div className="h-6 w-6 rounded-full bg-emerald-500/15 text-emerald-700 text-xs font-bold flex items-center justify-center">OE</div>
                 <span className="text-xs font-medium text-muted-foreground">Olho Esquerdo</span>
               </div>
-              <div className={`grid grid-cols-3 ${produtoIsSurfacada ? "sm:grid-cols-6" : "sm:grid-cols-4"} gap-2`}>
-                {(produtoIsSurfacada
-                  ? ["esferico", "cilindrico", "eixo", "adicao", "dnpLonge", "alturaPupilar"] as const
-                  : ["esferico", "cilindrico", "eixo", "adicao"] as const
-                ).map(field => (
+              <div className={`grid grid-cols-3 ${productReqs.needsDnp || productReqs.needsAlturaPupilar ? "sm:grid-cols-6" : "sm:grid-cols-4"} gap-2`}>
+                {([
+                  "esferico", "cilindrico", "eixo", "adicao",
+                  ...(productReqs.needsDnp ? ["dnpLonge"] : []),
+                  ...(productReqs.needsAlturaPupilar ? ["alturaPupilar"] : []),
+                ] as const).map(field => (
                   <div key={field}>
                     <Label className="text-[10px] uppercase">{field === "dnpLonge" ? "DNP" : field === "alturaPupilar" ? "Altura" : field}</Label>
                     <Input
