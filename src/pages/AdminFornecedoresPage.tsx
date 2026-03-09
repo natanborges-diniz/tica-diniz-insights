@@ -69,9 +69,11 @@ function CredenciaisSection({
     ambiente: config.ambiente,
     base_url_staging: config.base_url_staging || "",
     base_url_production: config.base_url_production || "",
+    api_key: config.api_key || "",
     api_key_staging: config.api_key_staging || "",
     api_key_production: config.api_key_production || "",
   });
+  const [showClientId, setShowClientId] = useState(false);
   const [showKeySt, setShowKeySt] = useState(false);
   const [showKeyProd, setShowKeyProd] = useState(false);
   const [saving, setSaving] = useState(false);
