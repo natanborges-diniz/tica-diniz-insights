@@ -134,6 +134,7 @@ async function handleAuthorize(req: Request) {
   console.log("[btg-auth][authorize] Credenciais origem:", creds.clientId === Deno.env.get("BTG_CLIENT_ID") ? "env secrets" : "banco de dados");
 
   const scopes = [
+    "openid",
     "brn:btg:empresas:payments",
     "brn:btg:empresas:receivables",
     "brn:btg:empresas:cash-management.readonly",
