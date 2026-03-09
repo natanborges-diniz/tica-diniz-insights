@@ -58,10 +58,13 @@ interface EmpresaConfig {
 function CredenciaisSection({
   config,
   onSaved,
+  fornecedor,
 }: {
   config: FornecedorConfig;
   onSaved: () => void;
+  fornecedor: string;
 }) {
+  const isBtg = fornecedor.toLowerCase() === "btg";
   const [form, setForm] = useState({
     ambiente: config.ambiente,
     base_url_staging: config.base_url_staging || "",
