@@ -556,7 +556,7 @@ export default function AdminBtgValidacaoPage() {
         </Card>
       )}
 
-      {/* ── Configuração do Ambiente ────────────────────── */}
+      {/* ── Configuração do Ambiente & Credenciais ─────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -564,23 +564,12 @@ export default function AdminBtgValidacaoPage() {
             Configuração do Ambiente
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           <BtgEnvironmentToggle />
-          <div className="pt-2 border-t">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/admin/fornecedores")}
-            >
-              <Settings2 className="h-3 w-3 mr-1" />
-              Gerenciar Credenciais BTG (Client ID / Secret)
-            </Button>
-            <p className="text-xs text-muted-foreground mt-2">
-              Client ID e Client Secret são configurados no painel de Fornecedores, aba BTG Banking.
-            </p>
-          </div>
         </CardContent>
       </Card>
+
+      <BtgCredenciaisSection />
     </div>
   );
 }
