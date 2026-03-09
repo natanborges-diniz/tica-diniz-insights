@@ -1,9 +1,10 @@
 // src/services/hoyaValidationService.ts
 // Validação de payload clínico para pedidos Hoya
-// Lentes prontas (sem "DG" no nome) não exigem medidas de armação, DNP ou altura pupilar
+// Usa ProductRequirements derivado dos dados do catálogo para determinar campos obrigatórios
 
 import { HoyaPedidoPayload, HoyaPrescricaoOlho } from "./hoyaService";
 import { OsHubRecord } from "./osHubService";
+import { ProductRequirements, getDefaultRequirements } from "./hoyaProductRequirements";
 
 export interface ValidationError {
   field: string;
@@ -23,7 +24,7 @@ export interface ValidationResult {
 function validatePrescricaoOlho(
   olho: HoyaPrescricaoOlho,
   label: string,
-  isSurfacada: boolean,
+  requirements: ProductRequirements,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
 
@@ -43,11 +44,11 @@ function validatePrescricaoOlho(
     });
   }
 
-  // DNP só é obrigatório para lentes surfaçadas (DG)
-  if (isSurfacada && olho.dnpLonge === null) {
+  // DNP obrigatório apenas quando o produto exige (derivado dos ranges do catálogo)
+  if (requirements.needsDnp && olho.dnpLonge === null) {
     errors.push({
       field: `prescricao.${label}.dnpLonge`,
-      message: `${label}: DNP obrigatório para lentes surfaçadas`,
+      message: `${label}: DNP obrigatório para este produto`,
       severity: "error",
     });
   }
@@ -56,18 +57,14 @@ function validatePrescricaoOlho(
 }
 
 /**
- * Detecta se o produto é surfaçado com base no nome e tipo.
- * Regra: Apenas lentes SV (Visão Simples) sem "DG" no nome são "Prontas".
- * Todas as outras (PR/Progressivas, Lifestyle, etc.) são SEMPRE surfaçadas.
- * Dentro do universo SV: com DG = surfaçada, sem DG = pronta.
+ * @deprecated Use getProductRequirements() do hoyaProductRequirements.ts
+ * Mantido temporariamente para compatibilidade com código legado.
  */
 export function isSurfacada(nomeProduto: string, tipoLente?: string): boolean {
-  // Se não é SV / Visão Simples, é sempre surfaçada
   const isSV = tipoLente
     ? tipoLente === "Visao Simples"
     : /\bSV\b/i.test(nomeProduto);
   if (!isSV) return true;
-  // Dentro de SV: DG = surfaçada
   return /\bDG\b/i.test(nomeProduto);
 }
 
@@ -77,12 +74,17 @@ export function validateHoyaPayload(
   camposValues?: Record<number, string>,
   produtoRanges?: { alturaPupilarMinima: number; alturaPupilarMaxima: number; esfericoMinimo: number; esfericoMaximo: number; cilindricoMinimo: number; cilindricoMaximo: number; adicaoMinima: number; adicaoMaxima: number },
   nomeProduto?: string,
+  /** Requisitos derivados do catálogo — se fornecido, ignora nomeProduto/isSurfacada */
+  requirements?: ProductRequirements,
 ): ValidationResult {
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
 
-  // Detecta se é surfaçada — se não informado, assume surfaçada por segurança
-  const surfacada = nomeProduto ? isSurfacada(nomeProduto, undefined) : true;
+  // Usa requirements do catálogo se disponível; fallback para heurística de nome; default = mais restritivo
+  const reqs: ProductRequirements = requirements
+    ?? (produtoRanges
+      ? deriveRequirementsFromRanges(produtoRanges)
+      : getDefaultRequirements());
 
   // OS number
   if (!payload.os || payload.os === "0") {
@@ -94,12 +96,12 @@ export function validateHoyaPayload(
     errors.push({ field: "especificacoes.codigoProduto", message: "Produto Hoya não selecionado", severity: "error" });
   }
 
-  // Prescription — DNP obrigatório apenas para surfaçadas
-  errors.push(...validatePrescricaoOlho(payload.prescricao.direito, "OD", surfacada));
-  errors.push(...validatePrescricaoOlho(payload.prescricao.esquerdo, "OE", surfacada));
+  // Prescription — DNP obrigatório conforme requisitos do produto
+  errors.push(...validatePrescricaoOlho(payload.prescricao.direito, "OD", reqs));
+  errors.push(...validatePrescricaoOlho(payload.prescricao.esquerdo, "OE", reqs));
 
-  // Adicao for progressive lenses (warning)
-  if (payload.prescricao.direito.adicao === null && payload.prescricao.esquerdo.adicao === null) {
+  // Adicao warning
+  if (reqs.needsAdicao && payload.prescricao.direito.adicao === null && payload.prescricao.esquerdo.adicao === null) {
     warnings.push({
       field: "prescricao.adicao",
       message: "Sem adição — verifique se é lente monofocal",
@@ -107,16 +109,16 @@ export function validateHoyaPayload(
     });
   }
 
-  // Altura pupilar e medidas de armação — só obrigatórios para surfaçadas (DG)
-  if (surfacada) {
+  // Altura pupilar e medidas de armação — conforme requisitos do produto
+  if (reqs.needsAlturaPupilar) {
     if (payload.prescricao.direito.alturaPupilar === null && payload.prescricao.esquerdo.alturaPupilar === null) {
       warnings.push({
         field: "prescricao.alturaPupilar",
-        message: "Sem altura pupilar — recomendado para progressivas",
+        message: "Sem altura pupilar — recomendado para este produto",
         severity: "warning",
       });
-    } else if (produtoRanges) {
-      const { alturaPupilarMinima: apMin, alturaPupilarMaxima: apMax } = produtoRanges;
+    } else if (reqs.alturaPupilarRange) {
+      const { min: apMin, max: apMax } = reqs.alturaPupilarRange;
       if (payload.prescricao.direito.alturaPupilar != null) {
         if (payload.prescricao.direito.alturaPupilar < apMin || payload.prescricao.direito.alturaPupilar > apMax) {
           errors.push({
@@ -136,8 +138,10 @@ export function validateHoyaPayload(
         }
       }
     }
+  }
 
-    // Frame measurements
+  // Frame measurements — only when product requires
+  if (reqs.needsDadosArmacao) {
     if (payload.dadosMedida?.larguraLente == null) {
       warnings.push({ field: "dadosMedida.larguraLente", message: "Largura da lente não informada", severity: "warning" });
     }
@@ -157,7 +161,6 @@ export function validateHoyaPayload(
   if (produtoCamposComplementares && camposValues) {
     for (const campo of produtoCamposComplementares) {
       if (campo.obrigatorio) {
-        // Use user value OR fall back to valorPadrao (matches payload builder logic)
         const val = camposValues[campo.codigo] ?? String(campo.valorPadrao ?? "");
         if (!val || val.trim() === "") {
           errors.push({
@@ -187,6 +190,33 @@ export function validateHoyaPayload(
 }
 
 /**
+ * Deriva ProductRequirements a partir de produtoRanges (backward compat).
+ * Usado quando o caller ainda passa ranges soltos em vez do objeto ProductRequirements.
+ */
+function deriveRequirementsFromRanges(ranges: {
+  alturaPupilarMinima: number;
+  alturaPupilarMaxima: number;
+  adicaoMinima: number;
+  adicaoMaxima: number;
+  [key: string]: number;
+}): ProductRequirements {
+  const hasAP = ranges.alturaPupilarMinima !== 0 || ranges.alturaPupilarMaxima !== 0;
+  const hasAdicao = ranges.adicaoMinima !== 0 || ranges.adicaoMaxima !== 0;
+  const isLentePronta = !hasAP;
+
+  return {
+    needsDnp: !isLentePronta,
+    needsAlturaPupilar: hasAP,
+    needsDadosArmacao: !isLentePronta,
+    needsAdicao: hasAdicao,
+    alturaPupilarRange: hasAP ? { min: ranges.alturaPupilarMinima, max: ranges.alturaPupilarMaxima } : null,
+    adicaoRange: hasAdicao ? { min: ranges.adicaoMinima, max: ranges.adicaoMaxima } : null,
+    tipoLabel: isLentePronta ? "Lente Pronta" : "Lente Surfaçada",
+    isLentePronta,
+  };
+}
+
+/**
  * Mapeia prismas da OS para o payload Hoya
  */
 export function mapPrismasFromOs(os: OsHubRecord): {
@@ -199,8 +229,6 @@ export function mapPrismasFromOs(os: OsHubRecord): {
   oePrismaV: number | null;
   oeBasePRPrismaV: string | null;
 } {
-  // prisma = OD prisma horizontal, prisma1 = OE prisma horizontal
-  // Format from ERP: "0.50 BASE IN" or "1.00 BI" etc.
   const parsePrisma = (prismaStr: string | null): { valor: number | null; base: string | null } => {
     if (!prismaStr || prismaStr.trim() === "") return { valor: null, base: null };
     
@@ -208,7 +236,6 @@ export function mapPrismasFromOs(os: OsHubRecord): {
     const valor = parseFloat(parts[0]);
     if (isNaN(valor) || valor === 0) return { valor: null, base: null };
     
-    // Try to extract base direction
     const baseStr = parts.slice(1).join(" ").toUpperCase();
     let base: string | null = null;
     if (baseStr.includes("IN") || baseStr.includes("BI") || baseStr.includes("NASAL")) base = "IN";
@@ -225,7 +252,7 @@ export function mapPrismasFromOs(os: OsHubRecord): {
   return {
     odPrismaH: odPrisma.valor,
     odBasePRPrismaH: odPrisma.base,
-    odPrismaV: null, // Vertical prisma not separately tracked in current ERP
+    odPrismaV: null,
     odBasePRPrismaV: null,
     oePrismaH: oePrisma.valor,
     oeBasePRPrismaH: oePrisma.base,

@@ -453,22 +453,19 @@ function isGrauCompativel(produto: HoyaProduto, prescricao: PrescricaoFiltro): b
  */
 
 /**
- * Detect if a product is surfaçada (custom-ground).
- * Rule: Only SV (Visão Simples) lenses WITHOUT "DG" in the name are "Prontas".
- * ALL other lenses (PR/Progressive, Lifestyle, etc.) are ALWAYS surfaçadas,
- * regardless of whether they have "DG" in the name or not.
+ * Detect if a product is a "Lente Pronta" based on catalog ranges.
+ * If alturaPupilarMinima and alturaPupilarMaxima are both 0, it's a pronta lens.
+ * Falls back to name-based heuristic if ranges look unreliable.
  */
-function produtoIsSurfacada(produto: HoyaProduto): boolean {
-  const isSV = produto.tipoLente === "Visao Simples";
-  if (!isSV) return true; // Non-SV lenses are ALWAYS surfaçadas
-  // Within SV: DG = surfaçada, no DG = pronta
-  const hasDG = /\bDG\b/i.test(produto.nome) || /\bDG\b/i.test(produto.desenho);
-  return hasDG;
+function produtoIsPronta(produto: HoyaProduto): boolean {
+  const apMin = produto.alturaPupilarMinima ?? 0;
+  const apMax = produto.alturaPupilarMaxima ?? 0;
+  return apMin === 0 && apMax === 0;
 }
 
-/** Convenience: is this product a "Lente Pronta"? */
-function produtoIsPronta(produto: HoyaProduto): boolean {
-  return !produtoIsSurfacada(produto);
+/** Convenience: is this product surfaçada (custom-ground)? */
+function produtoIsSurfacada(produto: HoyaProduto): boolean {
+  return !produtoIsPronta(produto);
 }
 
 function calcDesignScore(parsed: ParsedLensDescription, produto: HoyaProduto): { score: number; details: string[] } {
