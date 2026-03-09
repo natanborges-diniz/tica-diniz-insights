@@ -182,7 +182,7 @@ async function handleCallback(req: Request) {
     );
   }
 
-  const { authBase } = getBtgUrls();
+  const { authBase } = await getBtgUrls();
   const clientId = Deno.env.get("BTG_CLIENT_ID")!;
   const clientSecret = Deno.env.get("BTG_CLIENT_SECRET")!;
   const redirectUri = Deno.env.get("BTG_REDIRECT_URI")!;
