@@ -17,8 +17,7 @@ function json(data: unknown, status = 200) {
   });
 }
 
-function getBtgUrls() {
-  const env = Deno.env.get("BTG_ENVIRONMENT") || "sandbox";
+function getBtgUrlsFromEnv(env: string) {
   const isSandbox = env === "sandbox";
   return {
     authBase: isSandbox
@@ -28,7 +27,20 @@ function getBtgUrls() {
       ? "https://api.sandbox.empresas.btgpactual.com"
       : "https://api.empresas.btgpactual.com",
     isSandbox,
+    env,
   };
+}
+
+async function getBtgUrls() {
+  const db = getServiceClient();
+  const { data } = await db
+    .from("fornecedor_configuracao")
+    .select("ambiente")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+  const env = data?.ambiente === "production" ? "production" : "sandbox";
+  return getBtgUrlsFromEnv(env);
 }
 
 function getServiceClient() {
