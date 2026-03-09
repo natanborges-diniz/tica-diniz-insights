@@ -143,6 +143,8 @@ function BtgCredenciaisSection() {
         api_key_production: form.api_key_production || null,
         base_url_staging: form.base_url_staging || null,
         base_url_production: form.base_url_production || null,
+        redirect_uri_staging: form.redirect_uri_staging || null,
+        redirect_uri_production: form.redirect_uri_production || null,
       })
       .eq("id", config.id);
     setSaving(false);
