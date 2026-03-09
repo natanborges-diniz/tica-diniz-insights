@@ -145,7 +145,7 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
 
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const { apiBase, isSandbox } = getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgUrls();
 
   if (isSandbox) {
     const mockEntries = [
