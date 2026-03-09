@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   Shield, CheckCircle2, XCircle, RefreshCw, ExternalLink,
-  Landmark, Clock, AlertTriangle, Zap,
+  Landmark, Clock, AlertTriangle, Zap, Settings2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 // ─── Types ───────────────────────────────────────────────────
@@ -550,39 +552,28 @@ export default function AdminBtgValidacaoPage() {
         </Card>
       )}
 
-      {/* ── Log de Ambiente ───────────────────────────────── */}
+      {/* ── Configuração do Ambiente ────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Configuração
+            <Settings2 className="h-4 w-4" />
+            Configuração do Ambiente
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Ambiente:</span>
-              <Badge variant="default" className="ml-2">
-                Produção
-              </Badge>
-            </div>
+        <CardContent className="space-y-4">
+          <BtgEnvironmentToggle />
+          <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t">
             <div>
               <span className="text-muted-foreground">BTG_CLIENT_ID:</span>
-              <Badge variant="outline" className="ml-2">
-                ✓ configurado
-              </Badge>
+              <Badge variant="outline" className="ml-2">✓ configurado</Badge>
             </div>
             <div>
               <span className="text-muted-foreground">BTG_CLIENT_SECRET:</span>
-              <Badge variant="outline" className="ml-2">
-                ✓ configurado
-              </Badge>
+              <Badge variant="outline" className="ml-2">✓ configurado</Badge>
             </div>
             <div>
               <span className="text-muted-foreground">BTG_REDIRECT_URI:</span>
-              <Badge variant="outline" className="ml-2">
-                ✓ configurado
-              </Badge>
+              <Badge variant="outline" className="ml-2">✓ configurado</Badge>
             </div>
           </div>
         </CardContent>
@@ -627,5 +618,67 @@ function StepCard({
         <p className="text-xs text-muted-foreground mt-0.5">{detail}</p>
       </CardContent>
     </Card>
+  );
+}
+
+// ─── Environment Toggle ─────────────────────────────────────
+function BtgEnvironmentToggle() {
+  const { data: config, refetch } = useQuery({
+    queryKey: ["btg-fornecedor-config"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fornecedor_configuracao")
+        .select("id, ambiente, ativo")
+        .eq("fornecedor", "btg")
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const [saving, setSaving] = useState(false);
+
+  const toggleEnvironment = async () => {
+    if (!config) return;
+    setSaving(true);
+    const newAmbiente = config.ambiente === "production" ? "staging" : "production";
+    const { error } = await supabase
+      .from("fornecedor_configuracao")
+      .update({ ambiente: newAmbiente, updated_at: new Date().toISOString() })
+      .eq("id", config.id);
+    setSaving(false);
+    if (error) {
+      toast.error("Erro ao alterar ambiente");
+      return;
+    }
+    toast.success(`Ambiente alterado para ${newAmbiente === "production" ? "Produção" : "Homologação"}`);
+    refetch();
+  };
+
+  const isProduction = config?.ambiente === "production";
+
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <Label className="text-sm font-medium">Ambiente BTG</Label>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {isProduction
+            ? "Conectado ao ambiente de produção do BTG"
+            : "Conectado ao ambiente de homologação (sandbox) do BTG"}
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-muted-foreground">Homologação</span>
+        <Switch
+          checked={isProduction}
+          onCheckedChange={toggleEnvironment}
+          disabled={saving}
+        />
+        <span className="text-xs font-medium">Produção</span>
+        <Badge variant={isProduction ? "default" : "secondary"}>
+          {isProduction ? "PROD" : "SANDBOX"}
+        </Badge>
+      </div>
+    </div>
   );
 }
