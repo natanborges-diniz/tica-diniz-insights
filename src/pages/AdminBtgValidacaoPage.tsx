@@ -152,15 +152,32 @@ export default function AdminBtgValidacaoPage() {
   // Authorize mutation
   const authorizeMutation = useMutation({
     mutationFn: async (codEmpresa: number) => {
+      setAuthDiagnostico(null);
+      setAuthError(null);
       return callBtgAuth("authorize", { cod_empresa: codEmpresa });
     },
     onSuccess: (data) => {
+      // Store diagnostics
+      if (data._diagnostico) {
+        setAuthDiagnostico(data._diagnostico);
+      }
+
       if (data.authorize_url) {
-        toast.success("URL de autorização gerada! Abrindo...");
-        window.open(data.authorize_url, "_blank", "noopener");
+        toast.success("URL gerada! Verifique o painel de diagnóstico abaixo.");
+        // Try to open, but also show the URL in case popup is blocked
+        const popup = window.open(data.authorize_url, "_blank", "noopener");
+        if (!popup) {
+          toast.warning("Popup bloqueado! Copie a URL do painel abaixo.");
+        }
+        setAuthDiagnostico(prev => ({
+          ...prev,
+          authorize_url: data.authorize_url,
+          popup_opened: !!popup,
+        }));
       }
     },
     onError: (err: Error) => {
+      setAuthError(err.message);
       toast.error(`Erro ao autorizar: ${err.message}`);
     },
   });
