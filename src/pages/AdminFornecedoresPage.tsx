@@ -85,9 +85,10 @@ function CredenciaisSection({
     const { error } = await supabase
       .from("fornecedor_configuracao" as never)
       .update({
-        ambiente: form.ambiente,
+      ambiente: form.ambiente,
         base_url_staging: form.base_url_staging || null,
         base_url_production: form.base_url_production || null,
+        api_key: form.api_key || null,
         api_key_staging: form.api_key_staging || null,
         api_key_production: form.api_key_production || null,
       } as never)
