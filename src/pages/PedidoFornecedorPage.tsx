@@ -1803,8 +1803,8 @@ const PedidoFornecedorPage: React.FC = () => {
         </Card>
 
         {/* Armação + Serviço */}
-        <div className={`grid grid-cols-1 ${produtoIsSurfacada ? "md:grid-cols-2" : ""} gap-4`}>
-          {produtoIsSurfacada && (
+        <div className={`grid grid-cols-1 ${productReqs.needsDadosArmacao ? "md:grid-cols-2" : ""} gap-4`}>
+          {productReqs.needsDadosArmacao && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Dados de Medida / Armação</CardTitle>
