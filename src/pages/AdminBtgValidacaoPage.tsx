@@ -112,17 +112,20 @@ function BtgCredenciaisSection() {
     (async () => {
       const { data } = await supabase
         .from("fornecedor_configuracao")
-        .select("id, api_key, api_key_staging, api_key_production, base_url_staging, base_url_production, ambiente")
+        .select("id, api_key, api_key_staging, api_key_production, base_url_staging, base_url_production, redirect_uri_staging, redirect_uri_production, ambiente")
         .eq("fornecedor", "btg")
         .single();
       if (data) {
         setConfig(data as typeof config);
+        const d = data as Record<string, string | null>;
         setForm({
-          api_key: (data as Record<string, string | null>).api_key || "",
-          api_key_staging: (data as Record<string, string | null>).api_key_staging || "",
-          api_key_production: (data as Record<string, string | null>).api_key_production || "",
-          base_url_staging: (data as Record<string, string | null>).base_url_staging || "",
-          base_url_production: (data as Record<string, string | null>).base_url_production || "",
+          api_key: d.api_key || "",
+          api_key_staging: d.api_key_staging || "",
+          api_key_production: d.api_key_production || "",
+          base_url_staging: d.base_url_staging || "",
+          base_url_production: d.base_url_production || "",
+          redirect_uri_staging: d.redirect_uri_staging || "",
+          redirect_uri_production: d.redirect_uri_production || "",
         });
       }
       setLoading(false);
