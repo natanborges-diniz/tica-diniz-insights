@@ -259,17 +259,24 @@ function BtgCredenciaisSection() {
         </CardContent>
       </Card>
 
-      {/* URLs */}
+      {/* URLs de Autorização */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Globe className="h-4 w-4 text-primary" />
-            URLs de Autorização
+            URLs de Autorização (Auth Base)
           </CardTitle>
+          <CardDescription>
+            Endpoints do BTG ID para cada ambiente. Usado no fluxo OAuth (/oauth2/authorize e /oauth2/token).
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label className="text-sm">URL Homologação</Label>
+            <Label className="text-sm flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block" />
+              Auth URL — Homologação
+              {config.ambiente !== "production" && <span className="text-xs font-medium text-primary">(ativa)</span>}
+            </Label>
             <Input
               value={form.base_url_staging}
               onChange={(e) => setForm((f) => ({ ...f, base_url_staging: e.target.value }))}
@@ -278,7 +285,11 @@ function BtgCredenciaisSection() {
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-sm">URL Produção</Label>
+            <Label className="text-sm flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+              Auth URL — Produção
+              {config.ambiente === "production" && <span className="text-xs font-medium text-primary">(ativa)</span>}
+            </Label>
             <Input
               value={form.base_url_production}
               onChange={(e) => setForm((f) => ({ ...f, base_url_production: e.target.value }))}
@@ -286,6 +297,50 @@ function BtgCredenciaisSection() {
               className="font-mono text-sm"
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Redirect URIs */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <ExternalLink className="h-4 w-4 text-primary" />
+            Redirect URI (Callback)
+          </CardTitle>
+          <CardDescription>
+            URL de retorno após autorização OAuth. Deve ser a mesma cadastrada no Portal do Desenvolvedor BTG, separada por ambiente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block" />
+              Redirect URI — Homologação
+              {config.ambiente !== "production" && <span className="text-xs font-medium text-primary">(ativa)</span>}
+            </Label>
+            <Input
+              value={form.redirect_uri_staging}
+              onChange={(e) => setForm((f) => ({ ...f, redirect_uri_staging: e.target.value }))}
+              placeholder="https://...supabase.co/functions/v1/btg-auth"
+              className="font-mono text-sm"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+              Redirect URI — Produção
+              {config.ambiente === "production" && <span className="text-xs font-medium text-primary">(ativa)</span>}
+            </Label>
+            <Input
+              value={form.redirect_uri_production}
+              onChange={(e) => setForm((f) => ({ ...f, redirect_uri_production: e.target.value }))}
+              placeholder="https://...supabase.co/functions/v1/btg-auth"
+              className="font-mono text-sm"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            ⚠️ A URI deve ser idêntica à cadastrada no portal BTG para cada ambiente, incluindo protocolo e path.
+          </p>
         </CardContent>
       </Card>
 

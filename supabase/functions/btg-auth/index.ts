@@ -45,7 +45,7 @@ async function getBtgCredentials(): Promise<BtgCredentials> {
   const db = getServiceClient();
   const { data } = await db
     .from("fornecedor_configuracao")
-    .select("ambiente, api_key, api_key_staging, api_key_production, base_url_staging, base_url_production")
+    .select("ambiente, api_key, api_key_staging, api_key_production, base_url_staging, base_url_production, redirect_uri_staging, redirect_uri_production")
     .eq("fornecedor", "btg")
     .eq("ativo", true)
     .single();
@@ -69,7 +69,10 @@ async function getBtgCredentials(): Promise<BtgCredentials> {
     ? "https://api.sandbox.empresas.btgpactual.com"
     : "https://api.empresas.btgpactual.com";
 
-  const redirectUri = Deno.env.get("BTG_REDIRECT_URI")!;
+  // Redirect URI per environment from DB, fallback to env secret
+  const redirectUri = isSandbox
+    ? (data?.redirect_uri_staging || Deno.env.get("BTG_REDIRECT_URI")!)
+    : (data?.redirect_uri_production || Deno.env.get("BTG_REDIRECT_URI")!);
 
   return { clientId, clientSecret, redirectUri, authBase, apiBase, isSandbox, env };
 }
