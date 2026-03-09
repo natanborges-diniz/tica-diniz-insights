@@ -92,6 +92,19 @@ export default function AdminBtgValidacaoPage() {
   const [authDiagnostico, setAuthDiagnostico] = useState<Record<string, unknown> | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  // Handle callback redirect from BTG OAuth
+  useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("btg_callback") === "success") {
+      const codEmpresa = params.get("cod_empresa");
+      toast.success(`Autorização BTG concluída para empresa ${codEmpresa}!`);
+      // Clean up URL params
+      window.history.replaceState({}, "", window.location.pathname);
+      // Refresh status
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["btg-status"] }), 1000);
+    }
+  });
+
   // Fetch empresas for name resolution
   const { data: empresas = [] } = useQuery({
     queryKey: ["empresas-btg"],

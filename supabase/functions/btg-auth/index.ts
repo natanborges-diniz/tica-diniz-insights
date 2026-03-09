@@ -237,8 +237,12 @@ async function handleCallback(req: Request) {
     );
   }
 
+  // Redirect back to the app after successful callback
+  const appUrl = Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", "").replace("https://", "") || "";
+  const redirectTarget = `${req.headers.get("origin") || "https://lens-data-vision.lovable.app"}/admin/btg-validacao?btg_callback=success&cod_empresa=${stateData.cod_empresa}`;
+
   return new Response(
-    `<html><body><h2>✅ Autorização BTG concluída!</h2><p>Empresa ${stateData.cod_empresa} conectada com sucesso. Você pode fechar esta janela.</p></body></html>`,
+    `<html><head><meta http-equiv="refresh" content="2;url=${redirectTarget}"></head><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc"><div style="text-align:center"><h2 style="color:#16a34a">✅ Autorização BTG concluída!</h2><p>Empresa ${stateData.cod_empresa} conectada com sucesso.</p><p style="color:#64748b;font-size:14px">Redirecionando de volta ao sistema...</p><a href="${redirectTarget}" style="color:#2563eb">Clique aqui se não for redirecionado</a></div></body></html>`,
     { status: 200, headers: { "Content-Type": "text/html" } }
   );
 }
