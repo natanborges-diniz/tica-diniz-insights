@@ -785,22 +785,14 @@ const PedidoFornecedorPage: React.FC = () => {
       // DEBUG: Log payload para inspeção
       console.log("[PedidoFornecedor] PAYLOAD:", JSON.stringify(payload, null, 2));
 
-      // E4.1: Validate before sending (F4.4: pass campos complementares + product ranges)
+      // E4.1: Validate before sending — usa requisitos derivados do catálogo
       const validation = validateHoyaPayload(
         payload,
         produtoSelecionado.camposComplementares,
         camposComplementaresValues,
-        {
-          alturaPupilarMinima: produtoSelecionado.alturaPupilarMinima,
-          alturaPupilarMaxima: produtoSelecionado.alturaPupilarMaxima,
-          esfericoMinimo: produtoSelecionado.esfericoMinimo,
-          esfericoMaximo: produtoSelecionado.esfericoMaximo,
-          cilindricoMinimo: produtoSelecionado.cilindricoMinimo,
-          cilindricoMaximo: produtoSelecionado.cilindricoMaximo,
-          adicaoMinima: produtoSelecionado.adicaoMinima,
-          adicaoMaxima: produtoSelecionado.adicaoMaxima,
-        },
-        produtoSelecionado.nome,
+        undefined,
+        undefined,
+        productReqs,
       );
       setValidationResult(validation);
 
