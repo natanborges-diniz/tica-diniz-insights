@@ -573,32 +573,32 @@ export default function AdminBtgValidacaoPage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Clock className="h-4 w-4" />
-            Configuração do Ambiente
+            Configuração
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="text-muted-foreground">BTG_ENVIRONMENT:</span>
-              <Badge variant="outline" className="ml-2">
-                configurado no servidor
+              <span className="text-muted-foreground">Ambiente:</span>
+              <Badge variant="default" className="ml-2">
+                Produção
               </Badge>
             </div>
             <div>
               <span className="text-muted-foreground">BTG_CLIENT_ID:</span>
-              <Badge variant="outline" className="ml-2 bg-emerald-50 text-emerald-700">
+              <Badge variant="outline" className="ml-2">
                 ✓ configurado
               </Badge>
             </div>
             <div>
               <span className="text-muted-foreground">BTG_CLIENT_SECRET:</span>
-              <Badge variant="outline" className="ml-2 bg-emerald-50 text-emerald-700">
+              <Badge variant="outline" className="ml-2">
                 ✓ configurado
               </Badge>
             </div>
             <div>
               <span className="text-muted-foreground">BTG_REDIRECT_URI:</span>
-              <Badge variant="outline" className="ml-2 bg-emerald-50 text-emerald-700">
+              <Badge variant="outline" className="ml-2">
                 ✓ configurado
               </Badge>
             </div>
