@@ -552,39 +552,28 @@ export default function AdminBtgValidacaoPage() {
         </Card>
       )}
 
-      {/* ── Log de Ambiente ───────────────────────────────── */}
+      {/* ── Configuração do Ambiente ────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Configuração
+            <Settings2 className="h-4 w-4" />
+            Configuração do Ambiente
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Ambiente:</span>
-              <Badge variant="default" className="ml-2">
-                Produção
-              </Badge>
-            </div>
+        <CardContent className="space-y-4">
+          <BtgEnvironmentToggle />
+          <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t">
             <div>
               <span className="text-muted-foreground">BTG_CLIENT_ID:</span>
-              <Badge variant="outline" className="ml-2">
-                ✓ configurado
-              </Badge>
+              <Badge variant="outline" className="ml-2">✓ configurado</Badge>
             </div>
             <div>
               <span className="text-muted-foreground">BTG_CLIENT_SECRET:</span>
-              <Badge variant="outline" className="ml-2">
-                ✓ configurado
-              </Badge>
+              <Badge variant="outline" className="ml-2">✓ configurado</Badge>
             </div>
             <div>
               <span className="text-muted-foreground">BTG_REDIRECT_URI:</span>
-              <Badge variant="outline" className="ml-2">
-                ✓ configurado
-              </Badge>
+              <Badge variant="outline" className="ml-2">✓ configurado</Badge>
             </div>
           </div>
         </CardContent>
