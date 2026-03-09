@@ -23,9 +23,13 @@ import {
 import {
   validateHoyaPayload,
   mapPrismasFromOs,
-  isSurfacada,
   ValidationResult,
 } from "@/services/hoyaValidationService";
+import {
+  getProductRequirements,
+  getDefaultRequirements,
+  ProductRequirements,
+} from "@/services/hoyaProductRequirements";
 import { registrarPedidoNoCache } from "@/utils/pedidosMapCache";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { supabase } from "@/integrations/supabase/client";
