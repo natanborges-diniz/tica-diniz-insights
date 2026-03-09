@@ -107,7 +107,7 @@ async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
   const codEmpresa = Number(getParam(body, url, "cod_empresa"));
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const { apiBase, isSandbox } = getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgUrls();
 
   if (isSandbox) {
     return json({
