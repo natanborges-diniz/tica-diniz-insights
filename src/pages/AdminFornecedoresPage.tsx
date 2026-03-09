@@ -726,11 +726,10 @@ function EmpresasTable({
 // ─────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────
-const FORNECEDORES = ["HOYA", "ZEISS", "btg"] as const;
+const FORNECEDORES = ["HOYA", "ZEISS"] as const;
 const FORNECEDOR_LABELS: Record<string, string> = {
   HOYA: "Hoya",
   ZEISS: "Zeiss",
-  btg: "BTG Banking",
 };
 
 export default function AdminFornecedoresPage() {
@@ -822,28 +821,24 @@ export default function AdminFornecedoresPage() {
                   </div>
 
                   {/* Sub-tabs: Credenciais | Empresas */}
-                  {fornecedor.toLowerCase() === "btg" ? (
-                    <CredenciaisSection config={cfg} onSaved={fetchConfigs} fornecedor={fornecedor} />
-                  ) : (
-                    <Tabs defaultValue="credenciais">
-                      <TabsList>
-                        <TabsTrigger value="credenciais" className="flex items-center gap-2">
-                          <KeyRound className="h-3.5 w-3.5" />
-                          Credenciais & Ambiente
-                        </TabsTrigger>
-                        <TabsTrigger value="empresas" className="flex items-center gap-2">
-                          <Building2 className="h-3.5 w-3.5" />
-                          Empresas
-                        </TabsTrigger>
-                      </TabsList>
-                      <TabsContent value="credenciais" className="mt-4">
-                        <CredenciaisSection config={cfg} onSaved={fetchConfigs} fornecedor={fornecedor} />
-                      </TabsContent>
-                      <TabsContent value="empresas" className="mt-4">
-                        {fornecedor === "ZEISS" ? <ZeissEmpresasSection /> : <EmpresasSection />}
-                      </TabsContent>
-                    </Tabs>
-                  )}
+                  <Tabs defaultValue="credenciais">
+                    <TabsList>
+                      <TabsTrigger value="credenciais" className="flex items-center gap-2">
+                        <KeyRound className="h-3.5 w-3.5" />
+                        Credenciais & Ambiente
+                      </TabsTrigger>
+                      <TabsTrigger value="empresas" className="flex items-center gap-2">
+                        <Building2 className="h-3.5 w-3.5" />
+                        Empresas
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="credenciais" className="mt-4">
+                      <CredenciaisSection config={cfg} onSaved={fetchConfigs} fornecedor={fornecedor} />
+                    </TabsContent>
+                    <TabsContent value="empresas" className="mt-4">
+                      {fornecedor === "ZEISS" ? <ZeissEmpresasSection /> : <EmpresasSection />}
+                    </TabsContent>
+                  </Tabs>
                 </div>
               )}
             </TabsContent>
