@@ -17,8 +17,15 @@ function json(data: unknown, status = 200) {
   });
 }
 
-function getBtgUrls() {
-  const env = Deno.env.get("BTG_ENVIRONMENT") || "sandbox";
+async function getBtgUrls() {
+  const db = getServiceClient();
+  const { data } = await db
+    .from("fornecedor_configuracao")
+    .select("ambiente")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+  const env = data?.ambiente === "production" ? "production" : "sandbox";
   const isSandbox = env === "sandbox";
   return {
     apiBase: isSandbox
