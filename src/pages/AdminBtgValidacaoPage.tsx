@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { useNavigate } from "react-router-dom";
 import {
   Shield, CheckCircle2, XCircle, RefreshCw, ExternalLink,
   Landmark, Clock, AlertTriangle, Zap, Settings2,
@@ -90,6 +91,7 @@ async function callBtgExtrato(codEmpresa: number) {
 export default function AdminBtgValidacaoPage() {
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [extratoResult, setExtratoResult] = useState<ExtratoTestResult | null>(null);
   const [authDiagnostico, setAuthDiagnostico] = useState<Record<string, unknown> | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -562,19 +564,18 @@ export default function AdminBtgValidacaoPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <BtgEnvironmentToggle />
-          <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t">
-            <div>
-              <span className="text-muted-foreground">BTG_CLIENT_ID:</span>
-              <Badge variant="outline" className="ml-2">✓ configurado</Badge>
-            </div>
-            <div>
-              <span className="text-muted-foreground">BTG_CLIENT_SECRET:</span>
-              <Badge variant="outline" className="ml-2">✓ configurado</Badge>
-            </div>
-            <div>
-              <span className="text-muted-foreground">BTG_REDIRECT_URI:</span>
-              <Badge variant="outline" className="ml-2">✓ configurado</Badge>
-            </div>
+          <div className="pt-2 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/admin/fornecedores")}
+            >
+              <Settings2 className="h-3 w-3 mr-1" />
+              Gerenciar Credenciais BTG (Client ID / Secret)
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2">
+              Client ID e Client Secret são configurados no painel de Fornecedores, aba BTG Banking.
+            </p>
           </div>
         </CardContent>
       </Card>

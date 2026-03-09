@@ -58,17 +58,22 @@ interface EmpresaConfig {
 function CredenciaisSection({
   config,
   onSaved,
+  fornecedor,
 }: {
   config: FornecedorConfig;
   onSaved: () => void;
+  fornecedor: string;
 }) {
+  const isBtg = fornecedor.toLowerCase() === "btg";
   const [form, setForm] = useState({
     ambiente: config.ambiente,
     base_url_staging: config.base_url_staging || "",
     base_url_production: config.base_url_production || "",
+    api_key: config.api_key || "",
     api_key_staging: config.api_key_staging || "",
     api_key_production: config.api_key_production || "",
   });
+  const [showClientId, setShowClientId] = useState(false);
   const [showKeySt, setShowKeySt] = useState(false);
   const [showKeyProd, setShowKeyProd] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -80,9 +85,10 @@ function CredenciaisSection({
     const { error } = await supabase
       .from("fornecedor_configuracao" as never)
       .update({
-        ambiente: form.ambiente,
+      ambiente: form.ambiente,
         base_url_staging: form.base_url_staging || null,
         base_url_production: form.base_url_production || null,
+        api_key: form.api_key || null,
         api_key_staging: form.api_key_staging || null,
         api_key_production: form.api_key_production || null,
       } as never)
@@ -182,23 +188,60 @@ function CredenciaisSection({
         </CardContent>
       </Card>
 
-      {/* API Keys separadas por ambiente */}
+      {/* Client ID (BTG only) */}
+      {isBtg && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-primary" />
+              Client ID (OAuth)
+            </CardTitle>
+            <CardDescription>
+              Identificador do aplicativo registrado no portal BTG. Mesmo valor para ambos os ambientes.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <Input
+                type={showClientId ? "text" : "password"}
+                value={form.api_key}
+                onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                className="font-mono text-sm flex-1"
+              />
+              <Button variant="outline" size="icon" onClick={() => setShowClientId((v) => !v)} type="button">
+                {showClientId ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            {config.api_key && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-2">
+                <CheckCircle2 className="h-3 w-3 text-primary" />
+                Client ID configurado.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* API Keys / Client Secrets separadas por ambiente */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-primary" />
-            Credenciais de Acesso (API Keys)
+            {isBtg ? "Client Secret (OAuth)" : "Credenciais de Acesso (API Keys)"}
           </CardTitle>
           <CardDescription>
-            Chaves de autenticação fornecidas pelo laboratório, separadas por ambiente. Apenas a chave do ambiente ativo será utilizada.
+            {isBtg
+              ? "Chave secreta do aplicativo BTG, separada por ambiente. Apenas a chave do ambiente ativo será utilizada."
+              : "Chaves de autenticação fornecidas pelo laboratório, separadas por ambiente. Apenas a chave do ambiente ativo será utilizada."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* API Key Homologação */}
+          {/* Key Homologação */}
           <div className="space-y-2">
             <Label className="flex items-center gap-2 text-sm">
               <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block" />
-              API Key — Homologação (Staging)
+              {isBtg ? "Client Secret" : "API Key"} — Homologação (Staging)
               {!isProduction && <span className="text-xs font-medium text-primary ml-1">(ativa)</span>}
             </Label>
             <div className="flex gap-2">
@@ -216,18 +259,18 @@ function CredenciaisSection({
             {config.api_key_staging && (
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <CheckCircle2 className="h-3 w-3 text-primary" />
-                API Key de homologação configurada.
+                {isBtg ? "Client Secret" : "API Key"} de homologação configurada.
               </p>
             )}
           </div>
 
           <div className="border-t" />
 
-          {/* API Key Produção */}
+          {/* Key Produção */}
           <div className="space-y-2">
             <Label className="flex items-center gap-2 text-sm">
               <span className="h-2 w-2 rounded-full bg-primary inline-block" />
-              API Key — Produção
+              {isBtg ? "Client Secret" : "API Key"} — Produção
               {isProduction && <span className="text-xs font-medium text-primary ml-1">(ativa)</span>}
             </Label>
             <div className="flex gap-2">
@@ -245,7 +288,7 @@ function CredenciaisSection({
             {config.api_key_production && (
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <CheckCircle2 className="h-3 w-3 text-primary" />
-                API Key de produção configurada.
+                {isBtg ? "Client Secret" : "API Key"} de produção configurada.
               </p>
             )}
           </div>
@@ -683,7 +726,12 @@ function EmpresasTable({
 // ─────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────
-const FORNECEDORES = ["HOYA", "ZEISS"] as const;
+const FORNECEDORES = ["HOYA", "ZEISS", "btg"] as const;
+const FORNECEDOR_LABELS: Record<string, string> = {
+  HOYA: "Hoya",
+  ZEISS: "Zeiss",
+  btg: "BTG Banking",
+};
 
 export default function AdminFornecedoresPage() {
   const { isAdmin, isLoading: authLoading } = useAuth();
@@ -740,7 +788,7 @@ export default function AdminFornecedoresPage() {
             const isProduction = cfg?.ambiente === "production";
             return (
               <TabsTrigger key={f} value={f} className="flex items-center gap-2">
-                {f}
+                {FORNECEDOR_LABELS[f] || f}
                 {cfg && (
                   <span className={`h-2 w-2 rounded-full ${isProduction ? "bg-primary" : "bg-yellow-500"}`} />
                 )}
@@ -774,24 +822,28 @@ export default function AdminFornecedoresPage() {
                   </div>
 
                   {/* Sub-tabs: Credenciais | Empresas */}
-                  <Tabs defaultValue="credenciais">
-                    <TabsList>
-                      <TabsTrigger value="credenciais" className="flex items-center gap-2">
-                        <KeyRound className="h-3.5 w-3.5" />
-                        Credenciais & Ambiente
-                      </TabsTrigger>
-                      <TabsTrigger value="empresas" className="flex items-center gap-2">
-                        <Building2 className="h-3.5 w-3.5" />
-                        Empresas
-                      </TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="credenciais" className="mt-4">
-                      <CredenciaisSection config={cfg} onSaved={fetchConfigs} />
-                    </TabsContent>
-                    <TabsContent value="empresas" className="mt-4">
-                      {fornecedor === "ZEISS" ? <ZeissEmpresasSection /> : <EmpresasSection />}
-                    </TabsContent>
-                  </Tabs>
+                  {fornecedor.toLowerCase() === "btg" ? (
+                    <CredenciaisSection config={cfg} onSaved={fetchConfigs} fornecedor={fornecedor} />
+                  ) : (
+                    <Tabs defaultValue="credenciais">
+                      <TabsList>
+                        <TabsTrigger value="credenciais" className="flex items-center gap-2">
+                          <KeyRound className="h-3.5 w-3.5" />
+                          Credenciais & Ambiente
+                        </TabsTrigger>
+                        <TabsTrigger value="empresas" className="flex items-center gap-2">
+                          <Building2 className="h-3.5 w-3.5" />
+                          Empresas
+                        </TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="credenciais" className="mt-4">
+                        <CredenciaisSection config={cfg} onSaved={fetchConfigs} fornecedor={fornecedor} />
+                      </TabsContent>
+                      <TabsContent value="empresas" className="mt-4">
+                        {fornecedor === "ZEISS" ? <ZeissEmpresasSection /> : <EmpresasSection />}
+                      </TabsContent>
+                    </Tabs>
+                  )}
                 </div>
               )}
             </TabsContent>

@@ -1,6 +1,7 @@
 // supabase/functions/btg-auth/index.ts
 // BTG Pactual Banking — OAuth2 Authorization Code flow
 // Actions: authorize, callback, refresh, status
+// Credentials read from fornecedor_configuracao table (same pattern as Hoya/Zeiss)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -17,32 +18,6 @@ function json(data: unknown, status = 200) {
   });
 }
 
-function getBtgUrlsFromEnv(env: string) {
-  const isSandbox = env === "sandbox";
-  return {
-    authBase: isSandbox
-      ? "https://id.sandbox.btgpactual.com"
-      : "https://id.btgpactual.com",
-    apiBase: isSandbox
-      ? "https://api.sandbox.empresas.btgpactual.com"
-      : "https://api.empresas.btgpactual.com",
-    isSandbox,
-    env,
-  };
-}
-
-async function getBtgUrls() {
-  const db = getServiceClient();
-  const { data } = await db
-    .from("fornecedor_configuracao")
-    .select("ambiente")
-    .eq("fornecedor", "btg")
-    .eq("ativo", true)
-    .single();
-  const env = data?.ambiente === "production" ? "production" : "sandbox";
-  return getBtgUrlsFromEnv(env);
-}
-
 function getServiceClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -50,7 +25,56 @@ function getServiceClient() {
   );
 }
 
-// Decode JWT for auth validation (reused from authGuard pattern)
+// ─── Credentials from DB ─────────────────────────────────────
+// api_key          → Client ID (same for both envs)
+// api_key_staging  → Client Secret (sandbox)
+// api_key_production → Client Secret (production)
+// base_url_staging → Auth base URL sandbox
+// base_url_production → Auth base URL production
+interface BtgCredentials {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  authBase: string;
+  apiBase: string;
+  isSandbox: boolean;
+  env: string;
+}
+
+async function getBtgCredentials(): Promise<BtgCredentials> {
+  const db = getServiceClient();
+  const { data } = await db
+    .from("fornecedor_configuracao")
+    .select("ambiente, api_key, api_key_staging, api_key_production, base_url_staging, base_url_production")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+
+  const env = data?.ambiente === "production" ? "production" : "sandbox";
+  const isSandbox = env === "sandbox";
+
+  // Client ID from DB, fallback to env secret
+  const clientId = data?.api_key || Deno.env.get("BTG_CLIENT_ID")!;
+
+  // Client Secret per environment from DB, fallback to env secret
+  const clientSecret = isSandbox
+    ? (data?.api_key_staging || Deno.env.get("BTG_CLIENT_SECRET")!)
+    : (data?.api_key_production || Deno.env.get("BTG_CLIENT_SECRET")!);
+
+  const authBase = isSandbox
+    ? (data?.base_url_staging || "https://id.sandbox.btgpactual.com")
+    : (data?.base_url_production || "https://id.btgpactual.com");
+
+  const apiBase = isSandbox
+    ? "https://api.sandbox.empresas.btgpactual.com"
+    : "https://api.empresas.btgpactual.com";
+
+  const redirectUri = Deno.env.get("BTG_REDIRECT_URI")!;
+
+  return { clientId, clientSecret, redirectUri, authBase, apiBase, isSandbox, env };
+}
+
+// Decode JWT for auth validation
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
     const parts = token.split(".");
@@ -91,7 +115,6 @@ async function checkAdmin(userId: string) {
 }
 
 // ─── ACTION: authorize ───────────────────────────────────────
-// Returns the BTG Id authorization URL for the admin to open in browser
 async function handleAuthorize(req: Request) {
   const userId = requireAdmin(req);
   await checkAdmin(userId);
@@ -99,19 +122,16 @@ async function handleAuthorize(req: Request) {
   const { cod_empresa } = await req.json();
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const btgUrls = await getBtgUrls();
-  const clientId = Deno.env.get("BTG_CLIENT_ID")!;
-  const redirectUri = Deno.env.get("BTG_REDIRECT_URI")!;
-  const env = btgUrls.env;
+  const creds = await getBtgCredentials();
 
   console.log("[btg-auth][authorize] ── DIAGNÓSTICO ──");
-  console.log("[btg-auth][authorize] BTG_ENVIRONMENT:", env);
-  console.log("[btg-auth][authorize] authBase:", btgUrls.authBase);
-  console.log("[btg-auth][authorize] apiBase:", btgUrls.apiBase);
-  console.log("[btg-auth][authorize] isSandbox:", btgUrls.isSandbox);
-  console.log("[btg-auth][authorize] BTG_CLIENT_ID:", clientId ? `${clientId.substring(0, 8)}...` : "NÃO CONFIGURADO");
-  console.log("[btg-auth][authorize] BTG_REDIRECT_URI:", redirectUri || "NÃO CONFIGURADO");
-  console.log("[btg-auth][authorize] cod_empresa:", cod_empresa);
+  console.log("[btg-auth][authorize] BTG_ENVIRONMENT:", creds.env);
+  console.log("[btg-auth][authorize] authBase:", creds.authBase);
+  console.log("[btg-auth][authorize] isSandbox:", creds.isSandbox);
+  console.log("[btg-auth][authorize] Client ID (prefixo):", creds.clientId ? `${creds.clientId.substring(0, 8)}...` : "NÃO CONFIGURADO");
+  console.log("[btg-auth][authorize] Client Secret:", creds.clientSecret ? "✓ configurado" : "NÃO CONFIGURADO");
+  console.log("[btg-auth][authorize] Redirect URI:", creds.redirectUri || "NÃO CONFIGURADO");
+  console.log("[btg-auth][authorize] Credenciais origem:", creds.clientId === Deno.env.get("BTG_CLIENT_ID") ? "env secrets" : "banco de dados");
 
   const scopes = [
     "brn:btg:empresas:payments",
@@ -120,38 +140,35 @@ async function handleAuthorize(req: Request) {
     "brn:btg:empresas:dda.readonly",
   ].join(" ");
 
-  // state carries cod_empresa so callback can associate the token
   const state = JSON.stringify({ cod_empresa, user_id: userId });
   const stateB64 = btoa(state);
 
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: clientId,
-    redirect_uri: redirectUri,
+    client_id: creds.clientId,
+    redirect_uri: creds.redirectUri,
     scope: scopes,
     state: stateB64,
   });
 
-  const authorizeUrl = `${btgUrls.authBase}/oauth2/authorize?${params.toString()}`;
-
-  console.log("[btg-auth][authorize] URL gerada:", authorizeUrl);
+  const authorizeUrl = `${creds.authBase}/oauth2/authorize?${params.toString()}`;
 
   return json({
     authorize_url: authorizeUrl,
     _diagnostico: {
-      environment: env,
-      auth_base: btgUrls.authBase,
-      api_base: btgUrls.apiBase,
-      is_sandbox: btgUrls.isSandbox,
-      redirect_uri: redirectUri,
-      client_id_prefix: clientId ? clientId.substring(0, 8) : null,
+      environment: creds.env,
+      auth_base: creds.authBase,
+      api_base: creds.apiBase,
+      is_sandbox: creds.isSandbox,
+      redirect_uri: creds.redirectUri,
+      client_id_prefix: creds.clientId ? creds.clientId.substring(0, 8) : null,
+      credentials_source: creds.clientId === Deno.env.get("BTG_CLIENT_ID") ? "env_secrets" : "database",
       scopes: scopes.split(" "),
     },
   });
 }
 
 // ─── ACTION: callback ────────────────────────────────────────
-// Called by BTG after user authorizes — exchanges code for tokens
 async function handleCallback(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
@@ -182,22 +199,19 @@ async function handleCallback(req: Request) {
     );
   }
 
-  const { authBase } = await getBtgUrls();
-  const clientId = Deno.env.get("BTG_CLIENT_ID")!;
-  const clientSecret = Deno.env.get("BTG_CLIENT_SECRET")!;
-  const redirectUri = Deno.env.get("BTG_REDIRECT_URI")!;
+  const creds = await getBtgCredentials();
 
   // Exchange code for tokens
-  const tokenRes = await fetch(`${authBase}/oauth2/token`, {
+  const tokenRes = await fetch(`${creds.authBase}/oauth2/token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      Authorization: `Basic ${btoa(`${creds.clientId}:${creds.clientSecret}`)}`,
     },
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      redirect_uri: redirectUri,
+      redirect_uri: creds.redirectUri,
     }),
   });
 
@@ -215,7 +229,6 @@ async function handleCallback(req: Request) {
     Date.now() + (tokenData.expires_in || 86400) * 1000
   ).toISOString();
 
-  // Upsert token in btg_tokens
   const db = getServiceClient();
   const { error: dbError } = await db.from("btg_tokens").upsert(
     {
@@ -237,8 +250,6 @@ async function handleCallback(req: Request) {
     );
   }
 
-  // Redirect back to the app after successful callback
-  const appUrl = Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", "").replace("https://", "") || "";
   const redirectTarget = `${req.headers.get("origin") || "https://lens-data-vision.lovable.app"}/admin/btg-validacao?btg_callback=success&cod_empresa=${stateData.cod_empresa}`;
 
   return new Response(
@@ -248,7 +259,6 @@ async function handleCallback(req: Request) {
 }
 
 // ─── ACTION: refresh ─────────────────────────────────────────
-// Refresh an expired token for a given cod_empresa
 async function handleRefresh(req: Request) {
   const userId = requireAdmin(req);
   await checkAdmin(userId);
@@ -267,15 +277,13 @@ async function handleRefresh(req: Request) {
     return json({ error: "Nenhum refresh_token encontrado. Re-autorize." }, 404);
   }
 
-  const { authBase } = await getBtgUrls();
-  const clientId = Deno.env.get("BTG_CLIENT_ID")!;
-  const clientSecret = Deno.env.get("BTG_CLIENT_SECRET")!;
+  const creds = await getBtgCredentials();
 
-  const tokenRes = await fetch(`${authBase}/oauth2/token`, {
+  const tokenRes = await fetch(`${creds.authBase}/oauth2/token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      Authorization: `Basic ${btoa(`${creds.clientId}:${creds.clientSecret}`)}`,
     },
     body: new URLSearchParams({
       grant_type: "refresh_token",
@@ -306,7 +314,6 @@ async function handleRefresh(req: Request) {
 }
 
 // ─── ACTION: status ──────────────────────────────────────────
-// Check token status for all or specific empresa
 async function handleStatus(req: Request) {
   const userId = requireAdmin(req);
   await checkAdmin(userId);
@@ -316,12 +323,10 @@ async function handleStatus(req: Request) {
 
   const db = getServiceClient();
 
-  // Get all btg accounts
   let query = db.from("btg_contas_bancarias").select("*");
   if (codEmpresa) query = query.eq("cod_empresa", Number(codEmpresa));
   const { data: contas } = await query;
 
-  // Get all tokens
   let tokenQuery = db.from("btg_tokens").select("cod_empresa, expires_at, scopes, updated_at");
   if (codEmpresa) tokenQuery = tokenQuery.eq("cod_empresa", Number(codEmpresa));
   const { data: tokens } = await tokenQuery;
@@ -360,15 +365,12 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const path = url.pathname.split("/").pop() || "";
 
-    // callback is a GET from BTG redirect — no auth needed
     if (path === "callback" || url.searchParams.has("code")) {
       return await handleCallback(req);
     }
 
-    // Parse action from body or query
     let action = url.searchParams.get("action") || "";
     if (!action && req.method === "POST") {
-      // Try to peek at body for action field
       const cloned = req.clone();
       try {
         const body = await cloned.json();
