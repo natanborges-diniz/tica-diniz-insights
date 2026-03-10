@@ -69,6 +69,7 @@ export default function BankingExtratoDashboard() {
 
   // ─── Queries ─────────────────────────────────────────────
   const [autoImported, setAutoImported] = useState(false);
+  useEffect(() => setAutoImported(false), [codEmpresa]);
 
   const { data: lancamentos = [], isLoading } = useQuery<ExtratoItem[]>({
     queryKey: ["btg-extrato", codEmpresa, dataInicio, dataFim, filtroTipo, filtroConciliado],

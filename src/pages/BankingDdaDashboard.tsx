@@ -58,6 +58,7 @@ export default function BankingDdaDashboard() {
   const [filtroConciliado, setFiltroConciliado] = useState<string>("todos");
 
   const [autoImported, setAutoImported] = useState(false);
+  useEffect(() => setAutoImported(false), [codEmpresa]);
 
   const { data: titulos = [], isLoading } = useQuery<DdaTitulo[]>({
     queryKey: ["btg-dda", codEmpresa, filtroStatus, filtroConciliado],
