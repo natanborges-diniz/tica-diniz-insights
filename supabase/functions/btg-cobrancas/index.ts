@@ -1,5 +1,6 @@
 // supabase/functions/btg-cobrancas/index.ts
-// BTG Pactual Banking — Cobranças / Boletos (Fase 3)
+// BTG Pactual Banking — Cobranças / Boletos (endpoints oficiais v2)
+// Path: /{CNPJ}/banking/collections
 // Actions: emitir, listar, detalhe, cancelar, segunda_via
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -17,7 +18,14 @@ function json(data: unknown, status = 200) {
   });
 }
 
-async function getBtgUrls() {
+function getServiceClient() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+}
+
+async function getBtgConfig() {
   const db = getServiceClient();
   const { data } = await db
     .from("fornecedor_configuracao")
@@ -33,13 +41,6 @@ async function getBtgUrls() {
       : "https://api.empresas.btgpactual.com",
     isSandbox,
   };
-}
-
-function getServiceClient() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
 }
 
 // ─── Auth helpers ────────────────────────────────────────────
@@ -82,11 +83,13 @@ async function getBtgToken(codEmpresa: number): Promise<string> {
   return data.access_token;
 }
 
-async function getCompanyId(codEmpresa: number): Promise<string> {
+async function getCnpj(codEmpresa: number): Promise<string> {
   const db = getServiceClient();
-  const { data } = await db.from("btg_contas_bancarias").select("company_id").eq("cod_empresa", codEmpresa).eq("ativa", true).single();
-  if (!data?.company_id) throw json({ error: `Conta BTG não configurada para empresa ${codEmpresa}` }, 400);
-  return data.company_id;
+  const { data: conta } = await db.from("btg_contas_bancarias").select("cnpj").eq("cod_empresa", codEmpresa).eq("ativa", true).single();
+  if (conta?.cnpj) return conta.cnpj.replace(/\D/g, "");
+  const { data: emp } = await db.from("empresa").select("cnpj").eq("cod_empresa", codEmpresa).single();
+  if (emp?.cnpj) return emp.cnpj.replace(/\D/g, "");
+  throw json({ error: `CNPJ não encontrado para empresa ${codEmpresa}` }, 400);
 }
 
 // ─── Param helper ────────────────────────────────────────────
@@ -106,7 +109,7 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
   }
 
   const ce = Number(cod_empresa);
-  const { apiBase, isSandbox } = await getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgConfig();
 
   let btgReceivableId = "";
   let linhaDigitavel = "";
@@ -118,16 +121,16 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
     urlBoleto = `https://sandbox.btgpactual.com/boleto/${btgReceivableId}`;
   } else {
     const accessToken = await getBtgToken(ce);
-    const companyId = await getCompanyId(ce);
+    const cnpj = await getCnpj(ce);
 
     const btgPayload = {
       amount: Number(valor),
       dueDate: String(data_vencimento),
-      payer: { name: sacado_nome ? String(sacado_nome) : "", document: String(sacado_documento) },
+      payer: { name: sacado_nome ? String(sacado_nome) : "", taxId: String(sacado_documento) },
     };
 
     const btgRes = await fetch(
-      `${apiBase}/banking/v1/companies/${companyId}/receivables`,
+      `${apiBase}/${cnpj}/banking/collections`,
       { method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(btgPayload) }
     );
 
@@ -140,7 +143,7 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
       return json({ error: "BTG rejeitou a emissão", btg_status: btgRes.status, details: btgData }, 502);
     }
 
-    btgReceivableId = (btgData.id || btgData.receivableId || "") as string;
+    btgReceivableId = (btgData.id || btgData.collectionId || "") as string;
     linhaDigitavel = (btgData.digitableLine || btgData.linha_digitavel || "") as string;
     urlBoleto = (btgData.url || btgData.boletoUrl || "") as string;
   }
@@ -226,13 +229,13 @@ async function handleCancelar(body: Record<string, unknown>, userId: string) {
     return json({ error: `Não é possível cancelar cobrança com status ${cobranca.status}` }, 400);
   }
 
-  const { isSandbox, apiBase } = await getBtgUrls();
+  const { isSandbox, apiBase } = await getBtgConfig();
 
   if (cobranca.btg_receivable_id && !isSandbox) {
     try {
       const accessToken = await getBtgToken(cobranca.cod_empresa);
-      const companyId = await getCompanyId(cobranca.cod_empresa);
-      await fetch(`${apiBase}/banking/v1/companies/${companyId}/receivables/${cobranca.btg_receivable_id}`, {
+      const cnpj = await getCnpj(cobranca.cod_empresa);
+      await fetch(`${apiBase}/${cnpj}/banking/collections/${cobranca.btg_receivable_id}`, {
         method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` },
       });
     } catch (e) {
@@ -257,11 +260,11 @@ async function handleSegundaVia(body: Record<string, unknown> | null, url: URL) 
   if (!cobranca.btg_receivable_id) return json({ error: "Cobrança sem ID BTG" }, 400);
 
   const accessToken = await getBtgToken(cobranca.cod_empresa);
-  const companyId = await getCompanyId(cobranca.cod_empresa);
-  const { apiBase } = await getBtgUrls();
+  const cnpj = await getCnpj(cobranca.cod_empresa);
+  const { apiBase } = await getBtgConfig();
 
   const btgRes = await fetch(
-    `${apiBase}/banking/v1/companies/${companyId}/receivables/${cobranca.btg_receivable_id}`,
+    `${apiBase}/${cnpj}/banking/collections/${cobranca.btg_receivable_id}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 

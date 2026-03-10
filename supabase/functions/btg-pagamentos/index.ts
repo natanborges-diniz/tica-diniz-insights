@@ -107,20 +107,13 @@ async function getBtgToken(codEmpresa: number): Promise<string> {
   return data.access_token;
 }
 
-async function getCompanyId(codEmpresa: number): Promise<string> {
+async function getCnpj(codEmpresa: number): Promise<string> {
   const db = getServiceClient();
-  const { data } = await db
-    .from("btg_contas_bancarias")
-    .select("company_id")
-    .eq("cod_empresa", codEmpresa)
-    .eq("ativa", true)
-    .single();
-
-  if (!data?.company_id) {
-    throw json({ error: `Conta bancária BTG não configurada para empresa ${codEmpresa}` }, 400);
-  }
-
-  return data.company_id;
+  const { data: conta } = await db.from("btg_contas_bancarias").select("cnpj").eq("cod_empresa", codEmpresa).eq("ativa", true).single();
+  if (conta?.cnpj) return conta.cnpj.replace(/\D/g, "");
+  const { data: emp } = await db.from("empresa").select("cnpj").eq("cod_empresa", codEmpresa).single();
+  if (emp?.cnpj) return emp.cnpj.replace(/\D/g, "");
+  throw json({ error: `CNPJ não encontrado para empresa ${codEmpresa}` }, 400);
 }
 
 // ─── Param helper: reads from body (POST) or query string ────
@@ -288,7 +281,7 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
   }
 
   const accessToken = await getBtgToken(pagamento.cod_empresa);
-  const companyId = await getCompanyId(pagamento.cod_empresa);
+  const cnpj = await getCnpj(pagamento.cod_empresa);
 
   const btgPayload = {
     type: pagamento.tipo,
@@ -298,7 +291,7 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
   };
 
   const btgRes = await fetch(
-    `${apiBase}/banking/v1/companies/${companyId}/payments`,
+    `${apiBase}/${cnpj}/banking/payments`,
     {
       method: "POST",
       headers: {
