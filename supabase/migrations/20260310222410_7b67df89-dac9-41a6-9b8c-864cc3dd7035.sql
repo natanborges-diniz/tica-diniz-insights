@@ -1,0 +1,1 @@
+ALTER TABLE public.btg_dda_titulos ADD COLUMN IF NOT EXISTS banco_emissor text;
