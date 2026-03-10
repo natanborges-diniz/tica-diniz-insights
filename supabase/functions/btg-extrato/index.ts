@@ -298,29 +298,24 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     console.log("[btg-extrato] Raw statements response keys:", Object.keys(data || {}));
     console.log("[btg-extrato] Raw statements response (first 500 chars):", JSON.stringify(data).substring(0, 500));
     
-    // Try multiple known BTG response formats
+    // BTG v2: { data: { dailyMovements: [{ date, movements: [...] }] } }
     if (Array.isArray(data)) {
       lancamentos = data;
-    } else if (data?.entries && Array.isArray(data.entries)) {
-      lancamentos = data.entries;
-    } else if (data?.transactions && Array.isArray(data.transactions)) {
-      lancamentos = data.transactions;
-    } else if (data?.lancamentos && Array.isArray(data.lancamentos)) {
-      lancamentos = data.lancamentos;
-    } else if (data?.data && Array.isArray(data.data)) {
-      lancamentos = data.data;
-    } else if (data?.items && Array.isArray(data.items)) {
-      lancamentos = data.items;
-    } else if (data?.statement && Array.isArray(data.statement)) {
-      lancamentos = data.statement;
-    } else {
-      // Last resort: find first array property in response
-      for (const key of Object.keys(data || {})) {
-        if (Array.isArray(data[key]) && data[key].length > 0) {
-          console.log(`[btg-extrato] Found array in key '${key}' with ${data[key].length} items`);
-          lancamentos = data[key];
-          break;
+    } else if (data?.data?.dailyMovements && Array.isArray(data.data.dailyMovements)) {
+      for (const day of data.data.dailyMovements) {
+        const dayDate = day.date ? String(day.date).substring(0, 10) : null;
+        if (Array.isArray(day.movements)) {
+          for (const mov of day.movements) {
+            lancamentos.push({ ...mov, _dayDate: dayDate });
+          }
         }
+      }
+    } else {
+      for (const key of ["entries", "transactions", "lancamentos", "items", "statement"]) {
+        if (Array.isArray(data?.[key])) { lancamentos = data[key]; break; }
+      }
+      if (lancamentos.length === 0 && data?.data && Array.isArray(data.data)) {
+        lancamentos = data.data;
       }
     }
     console.log(`[btg-extrato] Parsed ${lancamentos.length} lancamentos from BTG response`);
