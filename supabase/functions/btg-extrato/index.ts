@@ -225,7 +225,25 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
   }
 
   const data = await res.json();
-  return json({ cod_empresa: codEmpresa, lancamentos: data });
+  console.log("[btg-extrato] handleExtrato raw keys:", Object.keys(data || {}));
+  console.log("[btg-extrato] handleExtrato raw (500ch):", JSON.stringify(data).substring(0, 500));
+
+  // Normalize response to find transaction array
+  let items: unknown[] = [];
+  if (Array.isArray(data)) {
+    items = data;
+  } else {
+    for (const key of ["entries", "transactions", "lancamentos", "data", "items", "statement"]) {
+      if (Array.isArray(data?.[key])) { items = data[key]; break; }
+    }
+    if (items.length === 0) {
+      for (const key of Object.keys(data || {})) {
+        if (Array.isArray(data[key]) && data[key].length > 0) { items = data[key]; break; }
+      }
+    }
+  }
+
+  return json({ cod_empresa: codEmpresa, lancamentos: items, raw_keys: Object.keys(data || {}) });
 }
 
 // ─── ACTION: importar ────────────────────────────────────────
@@ -268,21 +286,73 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     }
 
     const data = await res.json();
-    lancamentos = Array.isArray(data) ? data : data.entries || data.transactions || data.lancamentos || [];
+    console.log("[btg-extrato] Raw statements response keys:", Object.keys(data || {}));
+    console.log("[btg-extrato] Raw statements response (first 500 chars):", JSON.stringify(data).substring(0, 500));
+    
+    // Try multiple known BTG response formats
+    if (Array.isArray(data)) {
+      lancamentos = data;
+    } else if (data?.entries && Array.isArray(data.entries)) {
+      lancamentos = data.entries;
+    } else if (data?.transactions && Array.isArray(data.transactions)) {
+      lancamentos = data.transactions;
+    } else if (data?.lancamentos && Array.isArray(data.lancamentos)) {
+      lancamentos = data.lancamentos;
+    } else if (data?.data && Array.isArray(data.data)) {
+      lancamentos = data.data;
+    } else if (data?.items && Array.isArray(data.items)) {
+      lancamentos = data.items;
+    } else if (data?.statement && Array.isArray(data.statement)) {
+      lancamentos = data.statement;
+    } else {
+      // Last resort: find first array property in response
+      for (const key of Object.keys(data || {})) {
+        if (Array.isArray(data[key]) && data[key].length > 0) {
+          console.log(`[btg-extrato] Found array in key '${key}' with ${data[key].length} items`);
+          lancamentos = data[key];
+          break;
+        }
+      }
+    }
+    console.log(`[btg-extrato] Parsed ${lancamentos.length} lancamentos from BTG response`);
   }
 
   const db = getServiceClient();
-  const rows = lancamentos.map((l) => ({
-    cod_empresa,
-    data_lancamento: l.date,
-    descricao: l.description,
-    valor: Math.abs(l.amount),
-    tipo: l.amount >= 0 ? "CREDITO" : "DEBITO",
-    saldo_apos: l.balance_after || null,
-    conciliado: false,
-  }));
+  
+  // Log first item to understand field structure
+  if (lancamentos.length > 0) {
+    console.log("[btg-extrato] First item keys:", Object.keys(lancamentos[0]));
+    console.log("[btg-extrato] First item:", JSON.stringify(lancamentos[0]).substring(0, 300));
+  }
+  
+  const rows = lancamentos.map((l: Record<string, unknown>) => {
+    // Normalize field names (BTG may use different formats)
+    const date = l.date || l.bookingDate || l.transactionDate || l.data || l.dataLancamento || null;
+    const desc = l.description || l.remittanceInformation || l.descricao || l.detail || l.details || "";
+    const rawAmount = l.amount || l.transactionAmount || l.valor || 0;
+    const amount = typeof rawAmount === 'object' && rawAmount !== null 
+      ? Number((rawAmount as Record<string, unknown>).amount || 0) 
+      : Number(rawAmount);
+    const balanceAfter = l.balance_after || l.balanceAfterTransaction || l.saldo_apos || null;
+    const creditDebit = l.creditDebitIndicator || l.type || l.tipo || (amount >= 0 ? "CRDT" : "DBIT");
+    
+    const isCredit = String(creditDebit).toUpperCase().includes("CRED") || 
+                     String(creditDebit).toUpperCase().includes("CRDT") || 
+                     String(creditDebit).toUpperCase() === "C" ||
+                     amount > 0;
 
-  if (rows.length === 0) return json({ success: true, importados: 0 });
+    return {
+      cod_empresa,
+      data_lancamento: date ? String(date).substring(0, 10) : new Date().toISOString().substring(0, 10),
+      descricao: String(desc),
+      valor: Math.abs(amount),
+      tipo: isCredit ? "CREDITO" : "DEBITO",
+      saldo_apos: balanceAfter != null ? Number(balanceAfter) : null,
+      conciliado: false,
+    };
+  }).filter((r: { data_lancamento: string; valor: number }) => r.data_lancamento && r.valor > 0);
+
+  if (rows.length === 0) return json({ success: true, importados: 0, raw_count: lancamentos.length });
 
   const { error } = await db.from("btg_extrato").insert(rows);
   if (error) {

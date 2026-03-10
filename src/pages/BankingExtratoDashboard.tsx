@@ -74,22 +74,22 @@ export default function BankingExtratoDashboard() {
   const { data: lancamentos = [], isLoading } = useQuery<ExtratoItem[]>({
     queryKey: ["btg-extrato", codEmpresa, dataInicio, dataFim, filtroTipo, filtroConciliado],
     queryFn: async () => {
-      // First try to list from local DB
+      // 1. Try local DB first
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
         body: { action: "listar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
       });
       if (error) throw error;
       let items = Array.isArray(data) ? data : [];
 
-      // Auto-import from BTG if no local data exists
+      // 2. If empty, try auto-import
       if (items.length === 0 && !autoImported) {
         setAutoImported(true);
         try {
           const { data: importResult } = await supabase.functions.invoke("btg-extrato", {
             body: { action: "importar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
           });
+          console.log("[BankingExtrato] Import result:", importResult);
           if (importResult?.importados > 0) {
-            // Re-fetch after import
             const { data: refetched } = await supabase.functions.invoke("btg-extrato", {
               body: { action: "listar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
             });
@@ -98,6 +98,34 @@ export default function BankingExtratoDashboard() {
           }
         } catch (e) {
           console.warn("Auto-import failed:", e);
+        }
+      }
+
+      // 3. If still empty, try fetching directly from BTG API (live query, not persisted)
+      if (items.length === 0) {
+        try {
+          const { data: directData } = await supabase.functions.invoke("btg-extrato", {
+            body: { action: "extrato", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
+          });
+          console.log("[BankingExtrato] Direct extrato result:", directData);
+          const directItems = directData?.lancamentos;
+          if (Array.isArray(directItems) && directItems.length > 0) {
+            // Normalize to ExtratoItem shape for display
+            items = directItems.map((l: Record<string, unknown>, idx: number) => ({
+              id: `live-${idx}`,
+              cod_empresa: codEmpresa,
+              data_lancamento: String(l.date || l.bookingDate || l.transactionDate || ""),
+              descricao: String(l.description || l.remittanceInformation || ""),
+              valor: Math.abs(Number(l.amount || l.transactionAmount || 0)),
+              tipo: Number(l.amount || l.transactionAmount || 0) >= 0 ? "CREDITO" : "DEBITO",
+              natureza: null,
+              conciliado: false,
+              saldo_apos: l.balance_after ? Number(l.balance_after) : null,
+              created_at: new Date().toISOString(),
+            }));
+          }
+        } catch (e) {
+          console.warn("Direct extrato query failed:", e);
         }
       }
 
