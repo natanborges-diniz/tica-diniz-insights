@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
-  CreditCard, Plus, CheckCircle2, XCircle, Send, Clock,
-  Ban, AlertTriangle,
+  CreditCard, Plus, CheckCircle2, Send, Clock,
+  Ban,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -16,9 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose,
-} from "@/components/ui/dialog";
+import { BaseDialog } from "@/components/system/BaseDialog";
 import { toast } from "sonner";
 
 interface Pagamento {
@@ -68,7 +66,15 @@ export default function BankingPagamentosDashboard() {
   const [formTipo, setFormTipo] = useState("PIX_KEY");
   const [formValor, setFormValor] = useState("");
   const [formBeneficiario, setFormBeneficiario] = useState("");
+  // PIX fields
   const [formChavePix, setFormChavePix] = useState("");
+  // Boleto fields
+  const [formBarcode, setFormBarcode] = useState("");
+  // TED fields
+  const [formBanco, setFormBanco] = useState("");
+  const [formAgencia, setFormAgencia] = useState("");
+  const [formConta, setFormConta] = useState("");
+  const [formDocumento, setFormDocumento] = useState("");
 
   const { data: pagamentos = [], isLoading } = useQuery<Pagamento[]>({
     queryKey: ["btg-pagamentos", codEmpresa, filtroStatus],
@@ -81,6 +87,21 @@ export default function BankingPagamentosDashboard() {
     },
   });
 
+  const buildDadosPagamento = () => {
+    switch (formTipo) {
+      case "PIX_KEY":
+        return { chave_pix: formChavePix };
+      case "PIX_MANUAL":
+        return { banco: formBanco, agencia: formAgencia, conta: formConta, documento: formDocumento };
+      case "TED":
+        return { banco: formBanco, agencia: formAgencia, conta: formConta, documento: formDocumento };
+      case "BANKSLIP":
+        return { barcode: formBarcode };
+      default:
+        return {};
+    }
+  };
+
   const criarMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("btg-pagamentos", {
@@ -90,7 +111,7 @@ export default function BankingPagamentosDashboard() {
           tipo: formTipo,
           valor: Number(formValor),
           beneficiario: formBeneficiario || null,
-          dados_pagamento: formChavePix ? { chave_pix: formChavePix } : {},
+          dados_pagamento: buildDadosPagamento(),
         },
       });
       if (error) throw error;
@@ -100,12 +121,16 @@ export default function BankingPagamentosDashboard() {
       toast.success("Pagamento criado como rascunho");
       queryClient.invalidateQueries({ queryKey: ["btg-pagamentos"] });
       setDialogOpen(false);
-      setFormValor("");
-      setFormBeneficiario("");
-      setFormChavePix("");
+      resetForm();
     },
     onError: () => toast.error("Erro ao criar pagamento"),
   });
+
+  const resetForm = () => {
+    setFormValor(""); setFormBeneficiario(""); setFormChavePix("");
+    setFormBarcode(""); setFormBanco(""); setFormAgencia("");
+    setFormConta(""); setFormDocumento("");
+  };
 
   const aprovarMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -153,7 +178,8 @@ export default function BankingPagamentosDashboard() {
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-  // KPI counts
+  const tipoLabel = (tipo: string) => TIPOS.find((t) => t.value === tipo)?.label || tipo;
+
   const rascunhos = pagamentos.filter((p) => p.status === "RASCUNHO").length;
   const aprovados = pagamentos.filter((p) => p.status === "APROVADO_INTERNO").length;
   const enviados = pagamentos.filter((p) => ["ENVIADO_BTG", "AGUARDANDO_APROVACAO_BTG"].includes(p.status)).length;
@@ -166,51 +192,81 @@ export default function BankingPagamentosDashboard() {
         subtitle="Programação de pagamentos via BTG Pactual"
         icon={<CreditCard className="h-5 w-5" />}
         actions={
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Novo Pagamento</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Criar Pagamento</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-2">
-                <div className="space-y-1">
-                  <Label>Tipo</Label>
-                  <Select value={formTipo} onValueChange={setFormTipo}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TIPOS.map((t) => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Valor (R$)</Label>
-                  <Input type="number" step="0.01" value={formValor} onChange={(e) => setFormValor(e.target.value)} placeholder="0,00" />
-                </div>
-                <div className="space-y-1">
-                  <Label>Beneficiário</Label>
-                  <Input value={formBeneficiario} onChange={(e) => setFormBeneficiario(e.target.value)} placeholder="Nome do beneficiário" />
-                </div>
-                {formTipo.startsWith("PIX") && (
-                  <div className="space-y-1">
-                    <Label>Chave PIX</Label>
-                    <Input value={formChavePix} onChange={(e) => setFormChavePix(e.target.value)} placeholder="CPF, email, telefone ou aleatória" />
-                  </div>
-                )}
-              </div>
-              <DialogFooter>
-                <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-                <Button onClick={() => criarMutation.mutate()} disabled={criarMutation.isPending || !formValor}>
-                  Criar Rascunho
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button size="sm" onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" /> Novo Pagamento
+          </Button>
         }
       />
+
+      <BaseDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        title="Criar Pagamento"
+        confirmLabel="Criar Rascunho"
+        onConfirm={() => criarMutation.mutate()}
+        isSubmitting={criarMutation.isPending}
+        disabled={!formValor}
+      >
+        <div className="space-y-4 py-2">
+          <div className="space-y-1">
+            <Label>Tipo</Label>
+            <Select value={formTipo} onValueChange={setFormTipo}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {TIPOS.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Valor (R$)</Label>
+            <Input type="number" step="0.01" value={formValor} onChange={(e) => setFormValor(e.target.value)} placeholder="0,00" />
+          </div>
+          <div className="space-y-1">
+            <Label>Beneficiário</Label>
+            <Input value={formBeneficiario} onChange={(e) => setFormBeneficiario(e.target.value)} placeholder="Nome do beneficiário" />
+          </div>
+
+          {/* Type-specific fields */}
+          {formTipo === "PIX_KEY" && (
+            <div className="space-y-1">
+              <Label>Chave PIX</Label>
+              <Input value={formChavePix} onChange={(e) => setFormChavePix(e.target.value)} placeholder="CPF, email, telefone ou aleatória" />
+            </div>
+          )}
+
+          {formTipo === "BANKSLIP" && (
+            <div className="space-y-1">
+              <Label>Código de barras</Label>
+              <Input value={formBarcode} onChange={(e) => setFormBarcode(e.target.value)} placeholder="Linha digitável ou código de barras" />
+            </div>
+          )}
+
+          {(formTipo === "TED" || formTipo === "PIX_MANUAL") && (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <Label>Banco</Label>
+                  <Input value={formBanco} onChange={(e) => setFormBanco(e.target.value)} placeholder="001" />
+                </div>
+                <div className="space-y-1">
+                  <Label>Agência</Label>
+                  <Input value={formAgencia} onChange={(e) => setFormAgencia(e.target.value)} placeholder="0001" />
+                </div>
+                <div className="space-y-1">
+                  <Label>Conta</Label>
+                  <Input value={formConta} onChange={(e) => setFormConta(e.target.value)} placeholder="12345-6" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>CPF/CNPJ do beneficiário</Label>
+                <Input value={formDocumento} onChange={(e) => setFormDocumento(e.target.value)} placeholder="000.000.000-00" />
+              </div>
+            </>
+          )}
+        </div>
+      </BaseDialog>
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3">
@@ -306,7 +362,7 @@ export default function BankingPagamentosDashboard() {
                     <TableRow key={p.id}>
                       <TableCell className="text-sm">{format(new Date(p.created_at), "dd/MM/yy")}</TableCell>
                       <TableCell className="text-sm">{p.beneficiario || "—"}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{p.tipo}</Badge></TableCell>
+                      <TableCell><Badge variant="outline" className="text-xs">{tipoLabel(p.tipo)}</Badge></TableCell>
                       <TableCell className="text-sm text-right font-medium">{fmtCurrency(p.valor)}</TableCell>
                       <TableCell><Badge variant={sc.variant}>{sc.label}</Badge></TableCell>
                       <TableCell className="text-right">
