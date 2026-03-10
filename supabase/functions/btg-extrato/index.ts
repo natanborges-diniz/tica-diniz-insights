@@ -300,17 +300,41 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   }
 
   const db = getServiceClient();
-  const rows = lancamentos.map((l) => ({
-    cod_empresa,
-    data_lancamento: l.date,
-    descricao: l.description,
-    valor: Math.abs(l.amount),
-    tipo: l.amount >= 0 ? "CREDITO" : "DEBITO",
-    saldo_apos: l.balance_after || null,
-    conciliado: false,
-  }));
+  
+  // Log first item to understand field structure
+  if (lancamentos.length > 0) {
+    console.log("[btg-extrato] First item keys:", Object.keys(lancamentos[0]));
+    console.log("[btg-extrato] First item:", JSON.stringify(lancamentos[0]).substring(0, 300));
+  }
+  
+  const rows = lancamentos.map((l: Record<string, unknown>) => {
+    // Normalize field names (BTG may use different formats)
+    const date = l.date || l.bookingDate || l.transactionDate || l.data || l.dataLancamento || null;
+    const desc = l.description || l.remittanceInformation || l.descricao || l.detail || l.details || "";
+    const rawAmount = l.amount || l.transactionAmount || l.valor || 0;
+    const amount = typeof rawAmount === 'object' && rawAmount !== null 
+      ? Number((rawAmount as Record<string, unknown>).amount || 0) 
+      : Number(rawAmount);
+    const balanceAfter = l.balance_after || l.balanceAfterTransaction || l.saldo_apos || null;
+    const creditDebit = l.creditDebitIndicator || l.type || l.tipo || (amount >= 0 ? "CRDT" : "DBIT");
+    
+    const isCredit = String(creditDebit).toUpperCase().includes("CRED") || 
+                     String(creditDebit).toUpperCase().includes("CRDT") || 
+                     String(creditDebit).toUpperCase() === "C" ||
+                     amount > 0;
 
-  if (rows.length === 0) return json({ success: true, importados: 0 });
+    return {
+      cod_empresa,
+      data_lancamento: date ? String(date).substring(0, 10) : format(new Date(), "yyyy-MM-dd"),
+      descricao: String(desc),
+      valor: Math.abs(amount),
+      tipo: isCredit ? "CREDITO" : "DEBITO",
+      saldo_apos: balanceAfter != null ? Number(balanceAfter) : null,
+      conciliado: false,
+    };
+  }).filter((r: { data_lancamento: string; valor: number }) => r.data_lancamento && r.valor > 0);
+
+  if (rows.length === 0) return json({ success: true, importados: 0, raw_count: lancamentos.length });
 
   const { error } = await db.from("btg_extrato").insert(rows);
   if (error) {
