@@ -226,6 +226,38 @@ export default function AdminBtgValidacaoPage() {
         </span>
       </div>
 
+      {manualAuthorizeUrl && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Autorização manual (Safari)</CardTitle>
+            <CardDescription>
+              Se a navegação automática falhar, abra o BTG pelo botão abaixo.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button asChild>
+              <a href={manualAuthorizeUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-3 w-3 mr-1" />
+                Abrir BTG em nova aba
+              </a>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(manualAuthorizeUrl);
+                  toast.success("URL copiada.");
+                } catch {
+                  toast.error("Não foi possível copiar a URL.");
+                }
+              }}
+            >
+              Copiar URL
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── 1. Ambiente ───────────────────────────────────── */}
       <Card>
         <CardHeader className="pb-3">
