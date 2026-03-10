@@ -172,15 +172,15 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     }
   }
 
-  // Delete old records that have null emissor (bad imports) to allow reimport
+  // Delete old records that have null emissor OR null banco_emissor (bad imports) to allow reimport
   const { count: deletedOld } = await db
     .from("btg_dda_titulos")
     .delete({ count: "exact" })
     .eq("cod_empresa", ce)
-    .is("emissor", null)
+    .or("emissor.is.null,banco_emissor.is.null")
     .eq("status", "PENDENTE");
 
-  console.log(`[btg-dda] Deleted ${deletedOld ?? 0} old records with null emissor for reimport`);
+  console.log(`[btg-dda] Deleted ${deletedOld ?? 0} old records with null emissor/banco for reimport`);
 
   let inseridos = 0;
   let duplicados = 0;
