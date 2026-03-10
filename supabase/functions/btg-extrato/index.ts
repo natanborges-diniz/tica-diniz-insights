@@ -330,20 +330,21 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   }
   
   const rows = lancamentos.map((l: Record<string, unknown>) => {
-    // Normalize field names (BTG may use different formats)
-    const date = l.date || l.bookingDate || l.transactionDate || l.data || l.dataLancamento || null;
-    const desc = l.description || l.remittanceInformation || l.descricao || l.detail || l.details || "";
+    // BTG v2 fields: dateHour, description, amount, type ("credit"/"debit"), _dayDate (injected)
+    const date = l._dayDate || l.dateHour || l.date || l.bookingDate || l.transactionDate || l.data || l.dataLancamento || null;
+    const desc = l.description || l.remittanceInformation || l.descricao || l.detail || "";
     const rawAmount = l.amount || l.transactionAmount || l.valor || 0;
     const amount = typeof rawAmount === 'object' && rawAmount !== null 
       ? Number((rawAmount as Record<string, unknown>).amount || 0) 
       : Number(rawAmount);
     const balanceAfter = l.balance_after || l.balanceAfterTransaction || l.saldo_apos || null;
-    const creditDebit = l.creditDebitIndicator || l.type || l.tipo || (amount >= 0 ? "CRDT" : "DBIT");
+    const rawType = l.type || l.creditDebitIndicator || l.tipo || "";
     
-    const isCredit = String(creditDebit).toUpperCase().includes("CRED") || 
-                     String(creditDebit).toUpperCase().includes("CRDT") || 
-                     String(creditDebit).toUpperCase() === "C" ||
-                     amount > 0;
+    const isCredit = String(rawType).toLowerCase() === "credit" ||
+                     String(rawType).toUpperCase().includes("CRED") || 
+                     String(rawType).toUpperCase().includes("CRDT") || 
+                     String(rawType).toUpperCase() === "C" ||
+                     (!rawType && amount > 0);
 
     return {
       cod_empresa,
