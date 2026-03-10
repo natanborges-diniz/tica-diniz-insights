@@ -428,17 +428,12 @@ export default function AdminBtgValidacaoPage() {
                               </Button>
                             </div>
                           )}
-                          {/* Check balance */}
+                          {/* Account ID configurado — setup completo */}
                           {isAuth && conta.account_id && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => saldoMutation.mutate(conta.cod_empresa)}
-                              disabled={saldoMutation.isPending}
-                            >
-                              {saldoMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Shield className="h-3 w-3 mr-1" />}
-                              Ver Saldo
-                            </Button>
+                            <Badge variant="outline" className="text-emerald-700 border-emerald-300">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Setup completo
+                            </Badge>
                           )}
                           {!isAuth && (
                             <Button
