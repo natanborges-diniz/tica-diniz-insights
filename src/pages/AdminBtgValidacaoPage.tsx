@@ -98,6 +98,7 @@ export default function AdminBtgValidacaoPage() {
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [manualAuthorizeUrl, setManualAuthorizeUrl] = useState<Record<number, string>>({});
+  const [saldoResult, setSaldoResult] = useState<Record<number, unknown>>({});
 
   // Handle callback redirect from BTG OAuth
   useEffect(() => {
