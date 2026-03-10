@@ -171,9 +171,10 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
       if (existing) { duplicados++; continue; }
     }
 
-    // Map BTG API fields — try multiple known field name patterns
-    const emissorVal = (titulo.issuerName || titulo.issuer_name || titulo.payeeName || titulo.payee_name || titulo.beneficiaryName || titulo.emissor || null) as string | null;
-    const docEmissorVal = (titulo.issuerDocument || titulo.issuer_document || titulo.payeeDocument || titulo.payee_document || titulo.beneficiaryDocument || titulo.documento_emissor || null) as string | null;
+    // Map BTG API fields — handle nested payee object and flat patterns
+    const payee = (titulo.payee || {}) as Record<string, unknown>;
+    const emissorVal = (titulo.issuerName || titulo.issuer_name || payee.fantasyName || payee.socialName || titulo.payeeName || titulo.beneficiaryName || titulo.emissor || null) as string | null;
+    const docEmissorVal = (titulo.issuerDocument || titulo.issuer_document || payee.taxId || titulo.payeeDocument || titulo.beneficiaryDocument || titulo.documento_emissor || null) as string | null;
     const numDocVal = (titulo.documentNumber || titulo.document_number || titulo.barCodeNumber || titulo.numero_documento || null) as string | null;
     const valorVal = Number(titulo.amount || titulo.value || titulo.valor || titulo.totalAmount || 0);
     const vencVal = (titulo.dueDate || titulo.due_date || titulo.maturityDate || titulo.data_vencimento || new Date().toISOString().slice(0, 10)) as string;
