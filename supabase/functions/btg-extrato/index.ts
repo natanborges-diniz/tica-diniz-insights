@@ -116,57 +116,36 @@ function getParam(body: Record<string, unknown> | null, url: URL, key: string): 
   return url.searchParams.get(key);
 }
 
-// ─── ACTION: contas (listar contas BTG e salvar account_id) ─
+// ─── ACTION: contas (construir e salvar account_id) ─────────
+// BTG não possui endpoint /accounts. O accountId é construído:
+// formato: CNPJ-208-Agência-Conta
 async function handleContas(body: Record<string, unknown> | null, url: URL, userId: string) {
   await requireAdminRole(userId);
   const codEmpresa = Number(getParam(body, url, "cod_empresa"));
+  const agencia = getParam(body, url, "agencia");
+  const conta = getParam(body, url, "conta");
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
+  if (!agencia || !conta) return json({ error: "agencia e conta são obrigatórios para construir o accountId" }, 400);
 
-  const { apiBase, isSandbox } = await getBtgConfig();
-
-  if (isSandbox) {
-    return json({
-      cod_empresa: codEmpresa,
-      contas: [{ accountId: "12107885000101-208-0001-12345678", bankCode: "208", branchCode: "0001", number: "12345678" }],
-      sandbox: true,
-    });
-  }
-
-  const accessToken = await getBtgToken(codEmpresa);
   const cnpj = await getCnpj(codEmpresa);
+  const accountId = `${cnpj}-208-${agencia}-${conta}`;
 
-  const res = await fetch(`${apiBase}/${cnpj}/banking/accounts`, {
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-  });
+  const db = getServiceClient();
+  const { error } = await db.from("btg_contas_bancarias")
+    .update({
+      account_id: accountId,
+      agencia,
+      conta,
+    })
+    .eq("cod_empresa", codEmpresa);
 
-  if (!res.ok) {
-    const resBody = await res.text();
-    console.error("[btg-extrato] Contas error:", res.status, resBody);
-    return json({ error: "Erro ao listar contas BTG", status: res.status, details: resBody }, 502);
+  if (error) {
+    console.error("[btg-extrato] Erro ao salvar account_id:", error);
+    return json({ error: "Erro ao salvar account_id", details: error.message }, 500);
   }
 
-  const data = await res.json();
-  const contas = Array.isArray(data) ? data : data.accounts || data.data || [data];
-  console.log("[btg-extrato] Contas encontradas:", JSON.stringify(contas).slice(0, 500));
-
-  // Auto-save first account_id if found
-  if (contas.length > 0) {
-    const db = getServiceClient();
-    const firstAccount = contas[0];
-    const accountId = firstAccount.accountId || firstAccount.id || firstAccount.account_id;
-    if (accountId) {
-      await db.from("btg_contas_bancarias")
-        .update({
-          account_id: accountId,
-          agencia: firstAccount.branchCode || firstAccount.agencia || null,
-          conta: firstAccount.number || firstAccount.conta || null,
-        })
-        .eq("cod_empresa", codEmpresa);
-      console.log(`[btg-extrato] Account ID ${accountId} salvo para empresa ${codEmpresa}`);
-    }
-  }
-
-  return json({ cod_empresa: codEmpresa, contas });
+  console.log(`[btg-extrato] Account ID ${accountId} salvo para empresa ${codEmpresa}`);
+  return json({ cod_empresa: codEmpresa, account_id: accountId, success: true });
 }
 
 // ─── ACTION: saldo ───────────────────────────────────────────
