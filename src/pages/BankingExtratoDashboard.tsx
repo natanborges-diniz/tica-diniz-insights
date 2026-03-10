@@ -111,18 +111,22 @@ export default function BankingExtratoDashboard() {
           const directItems = directData?.lancamentos;
           if (Array.isArray(directItems) && directItems.length > 0) {
             // Normalize to ExtratoItem shape for display
-            items = directItems.map((l: Record<string, unknown>, idx: number) => ({
-              id: `live-${idx}`,
-              cod_empresa: codEmpresa,
-              data_lancamento: String(l.date || l.bookingDate || l.transactionDate || ""),
-              descricao: String(l.description || l.remittanceInformation || ""),
-              valor: Math.abs(Number(l.amount || l.transactionAmount || 0)),
-              tipo: Number(l.amount || l.transactionAmount || 0) >= 0 ? "CREDITO" : "DEBITO",
-              natureza: null,
-              conciliado: false,
-              saldo_apos: l.balance_after ? Number(l.balance_after) : null,
-              created_at: new Date().toISOString(),
-            }));
+            items = directItems.map((l: Record<string, unknown>, idx: number) => {
+              const rawType = String(l.type || l.tipo || "");
+              const isCredit = rawType.toLowerCase() === "credit" || rawType.toUpperCase().includes("CRED");
+              return {
+                id: `live-${idx}`,
+                cod_empresa: codEmpresa,
+                data_lancamento: String(l._dayDate || l.dateHour || l.date || l.bookingDate || "").substring(0, 10),
+                descricao: String(l.description || l.remittanceInformation || ""),
+                valor: Math.abs(Number(l.amount || l.transactionAmount || 0)),
+                tipo: isCredit ? "CREDITO" : "DEBITO",
+                natureza: null,
+                conciliado: false,
+                saldo_apos: l.balance_after ? Number(l.balance_after) : null,
+                created_at: new Date().toISOString(),
+              };
+            });
           }
         } catch (e) {
           console.warn("Direct extrato query failed:", e);
