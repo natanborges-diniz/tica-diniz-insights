@@ -1,5 +1,6 @@
 // supabase/functions/btg-extrato/index.ts
-// BTG Pactual Banking — Extrato + Saldo (corrigido com endpoints oficiais)
+// BTG Pactual Banking — Extrato + Saldo (endpoints oficiais v2)
+// Paths: /{CNPJ}/banking/accounts, /{CNPJ}/banking/accounts/{accountId}/balances|statements
 // Actions: contas, saldo, extrato, importar, listar, classificar, conciliar, resumo
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -90,6 +91,18 @@ async function getBtgToken(codEmpresa: number): Promise<string> {
   return data.access_token;
 }
 
+// ─── CNPJ helper (companyId for BTG API = CNPJ sem pontuação) ──
+async function getCnpj(codEmpresa: number): Promise<string> {
+  const db = getServiceClient();
+  // Try btg_contas_bancarias first (has cnpj field)
+  const { data: conta } = await db.from("btg_contas_bancarias").select("cnpj").eq("cod_empresa", codEmpresa).eq("ativa", true).single();
+  if (conta?.cnpj) return conta.cnpj.replace(/\D/g, "");
+  // Fallback to empresa table
+  const { data: emp } = await db.from("empresa").select("cnpj").eq("cod_empresa", codEmpresa).single();
+  if (emp?.cnpj) return emp.cnpj.replace(/\D/g, "");
+  throw json({ error: `CNPJ não encontrado para empresa ${codEmpresa}. Configure na tabela de empresas.` }, 400);
+}
+
 async function getAccountId(codEmpresa: number): Promise<string> {
   const db = getServiceClient();
   const { data } = await db.from("btg_contas_bancarias").select("account_id").eq("cod_empresa", codEmpresa).eq("ativa", true).single();
@@ -120,8 +133,9 @@ async function handleContas(body: Record<string, unknown> | null, url: URL, user
   }
 
   const accessToken = await getBtgToken(codEmpresa);
+  const cnpj = await getCnpj(codEmpresa);
 
-  const res = await fetch(`${apiBase}/accounts`, {
+  const res = await fetch(`${apiBase}/${cnpj}/banking/accounts`, {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });
 
@@ -173,10 +187,11 @@ async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
   }
 
   const accessToken = await getBtgToken(codEmpresa);
+  const cnpj = await getCnpj(codEmpresa);
   const accountId = await getAccountId(codEmpresa);
 
   const res = await fetch(
-    `${apiBase}/accounts/${accountId}/balances`,
+    `${apiBase}/${cnpj}/banking/accounts/${accountId}/balances`,
     { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
   );
 
@@ -211,6 +226,7 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
   }
 
   const accessToken = await getBtgToken(codEmpresa);
+  const cnpj = await getCnpj(codEmpresa);
   const accountId = await getAccountId(codEmpresa);
 
   const params = new URLSearchParams();
@@ -219,7 +235,7 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
 
   const qs = params.toString() ? `?${params}` : "";
   const res = await fetch(
-    `${apiBase}/accounts/${accountId}/statements${qs}`,
+    `${apiBase}/${cnpj}/banking/accounts/${accountId}/statements${qs}`,
     { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
   );
 
@@ -255,6 +271,7 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     ];
   } else {
     const accessToken = await getBtgToken(cod_empresa);
+    const cnpj = await getCnpj(cod_empresa);
     const accountId = await getAccountId(cod_empresa);
     const params = new URLSearchParams();
     if (data_inicio) params.set("startDate", data_inicio);
@@ -262,7 +279,7 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
 
     const qs = params.toString() ? `?${params}` : "";
     const res = await fetch(
-      `${apiBase}/accounts/${accountId}/statements${qs}`,
+      `${apiBase}/${cnpj}/banking/accounts/${accountId}/statements${qs}`,
       { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
     );
 

@@ -1,5 +1,6 @@
 // supabase/functions/btg-dda/index.ts
-// BTG Pactual Banking — DDA + Conciliação (Fase 4)
+// BTG Pactual Banking — DDA + Conciliação (endpoints oficiais v2)
+// Path: /{CNPJ}/banking/direct-debit/debits
 // Actions: importar, listar, conciliar_auto, conciliar_manual, ignorar, indicadores
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -17,7 +18,14 @@ function json(data: unknown, status = 200) {
   });
 }
 
-async function getBtgUrls() {
+function getServiceClient() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+}
+
+async function getBtgConfig() {
   const db = getServiceClient();
   const { data } = await db
     .from("fornecedor_configuracao")
@@ -33,13 +41,6 @@ async function getBtgUrls() {
       : "https://api.empresas.btgpactual.com",
     isSandbox,
   };
-}
-
-function getServiceClient() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
 }
 
 // ─── Auth helpers ────────────────────────────────────────────
@@ -82,11 +83,13 @@ async function getBtgToken(codEmpresa: number): Promise<string> {
   return data.access_token;
 }
 
-async function getCompanyId(codEmpresa: number): Promise<string> {
+async function getCnpj(codEmpresa: number): Promise<string> {
   const db = getServiceClient();
-  const { data } = await db.from("btg_contas_bancarias").select("company_id").eq("cod_empresa", codEmpresa).eq("ativa", true).single();
-  if (!data?.company_id) throw json({ error: `Conta BTG não configurada para empresa ${codEmpresa}` }, 400);
-  return data.company_id;
+  const { data: conta } = await db.from("btg_contas_bancarias").select("cnpj").eq("cod_empresa", codEmpresa).eq("ativa", true).single();
+  if (conta?.cnpj) return conta.cnpj.replace(/\D/g, "");
+  const { data: emp } = await db.from("empresa").select("cnpj").eq("cod_empresa", codEmpresa).single();
+  if (emp?.cnpj) return emp.cnpj.replace(/\D/g, "");
+  throw json({ error: `CNPJ não encontrado para empresa ${codEmpresa}` }, 400);
 }
 
 // ─── Param helper ────────────────────────────────────────────
@@ -103,12 +106,11 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
   const ce = Number(cod_empresa);
-  const { apiBase, isSandbox } = await getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgConfig();
 
   let btgData: Record<string, unknown>[] = [];
 
   if (isSandbox) {
-    // Mock DDA titles for sandbox testing
     btgData = [
       { id: `sandbox-dda-${Date.now()}-1`, issuerName: "CEMIG DISTRIBUICAO SA", issuerDocument: "06.981.180/0001-16", documentNumber: "DDA-001", amount: 1890.50, dueDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10), digitableLine: "23793.38128 60000.000003 00000.000402 1 88880000189050" },
       { id: `sandbox-dda-${Date.now()}-2`, issuerName: "TELEFONICA BRASIL SA", issuerDocument: "02.558.157/0001-62", documentNumber: "DDA-002", amount: 450.00, dueDate: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10), digitableLine: "23793.38128 60000.000004 00000.000403 1 88880000045000" },
@@ -116,22 +118,27 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     ];
   } else {
     const accessToken = await getBtgToken(ce);
-    const companyId = await getCompanyId(ce);
+    const cnpj = await getCnpj(ce);
+
+    const params = new URLSearchParams();
+    params.set("pageNumber", "1");
+    params.set("pageSize", "100");
+    params.set("status", "PENDING");
 
     const btgRes = await fetch(
-      `${apiBase}/banking/v1/companies/${companyId}/dda`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
+      `${apiBase}/${cnpj}/banking/direct-debit/debits?${params}`,
+      { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
     );
 
     const btgBody = await btgRes.text();
     if (!btgRes.ok) {
       console.error("[btg-dda] BTG API error:", btgRes.status, btgBody);
-      return json({ error: "Erro ao consultar DDA no BTG", btg_status: btgRes.status }, 502);
+      return json({ error: "Erro ao consultar DDA no BTG", btg_status: btgRes.status, details: btgBody }, 502);
     }
 
     try {
       const parsed = JSON.parse(btgBody);
-      btgData = Array.isArray(parsed) ? parsed : (parsed.items || parsed.data || []);
+      btgData = Array.isArray(parsed) ? parsed : (parsed.items || parsed.content || parsed.data || []);
     } catch {
       return json({ error: "Resposta inválida do BTG" }, 502);
     }
@@ -157,8 +164,8 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     const { error } = await db.from("btg_dda_titulos").insert({
       cod_empresa: ce,
       btg_dda_id: btgDdaId || null,
-      emissor: (titulo.issuerName || titulo.emissor || null) as string | null,
-      documento_emissor: (titulo.issuerDocument || titulo.documento_emissor || null) as string | null,
+      emissor: (titulo.issuerName || titulo.payeeDocument || titulo.emissor || null) as string | null,
+      documento_emissor: (titulo.issuerDocument || titulo.payeeBankCode || titulo.documento_emissor || null) as string | null,
       numero_documento: (titulo.documentNumber || titulo.numero_documento || null) as string | null,
       valor: Number(titulo.amount || titulo.valor || 0),
       data_vencimento: (titulo.dueDate || titulo.data_vencimento || new Date().toISOString().slice(0, 10)) as string,
@@ -230,7 +237,6 @@ async function handleConciliarAuto(body: Record<string, unknown>, userId: string
     return json({ error: "Não foi possível consultar parcelas do ERP", details: String(e) }, 502);
   }
 
-  // Index parcelas for fast matching
   const parcelasIndex = new Map<string, Record<string, unknown>>();
   for (const p of parcelasErp) {
     const valor = Number(p.parcela_valor || 0).toFixed(2);
