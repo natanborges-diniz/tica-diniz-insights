@@ -138,10 +138,10 @@ async function handleAuthorize(req: Request) {
 
   const scopes = [
     "openid",
-    "brn:btg:empresas:payments",
-    "brn:btg:empresas:receivables",
-    "brn:btg:empresas:cash-management.readonly",
-    "brn:btg:empresas:dda.readonly",
+    "brn:btg:empresas:banking:payments.readonly",
+    "brn:btg:empresas:banking:collections.readonly",
+    "empresas.btgpactual.com/accounts.readonly",
+    "empresas.btgpactual.com/authorized-direct-debits.readonly",
   ].join(" ");
 
   const state = JSON.stringify({ cod_empresa, user_id: userId });
