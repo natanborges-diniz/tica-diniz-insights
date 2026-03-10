@@ -133,13 +133,27 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
 
     try {
       const parsed = JSON.parse(btgBody);
-      btgData = Array.isArray(parsed) ? parsed : (parsed.items || parsed.content || parsed.data || []);
+      console.log("[btg-dda] BTG raw response keys:", JSON.stringify(Object.keys(parsed)));
+      btgData = Array.isArray(parsed) ? parsed : (parsed.items || parsed.content || parsed.data || parsed.debits || []);
+      if (btgData.length > 0) {
+        console.log("[btg-dda] First item keys:", JSON.stringify(Object.keys(btgData[0])));
+        console.log("[btg-dda] First item sample:", JSON.stringify(btgData[0]));
+      }
     } catch {
       return json({ error: "Resposta inválida do BTG" }, 502);
     }
   }
 
-  const db = getServiceClient();
+  // Delete old records that have null emissor (bad imports) to allow reimport
+  const { count: deletedOld } = await db
+    .from("btg_dda_titulos")
+    .delete({ count: "exact" })
+    .eq("cod_empresa", ce)
+    .is("emissor", null)
+    .eq("status", "PENDENTE");
+
+  console.log(`[btg-dda] Deleted ${deletedOld ?? 0} old records with null emissor for reimport`);
+
   let inseridos = 0;
   let duplicados = 0;
 
@@ -156,15 +170,23 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
       if (existing) { duplicados++; continue; }
     }
 
+    // Map BTG API fields — try multiple known field name patterns
+    const emissorVal = (titulo.issuerName || titulo.issuer_name || titulo.payeeName || titulo.payee_name || titulo.beneficiaryName || titulo.emissor || null) as string | null;
+    const docEmissorVal = (titulo.issuerDocument || titulo.issuer_document || titulo.payeeDocument || titulo.payee_document || titulo.beneficiaryDocument || titulo.documento_emissor || null) as string | null;
+    const numDocVal = (titulo.documentNumber || titulo.document_number || titulo.barCodeNumber || titulo.numero_documento || null) as string | null;
+    const valorVal = Number(titulo.amount || titulo.value || titulo.valor || titulo.totalAmount || 0);
+    const vencVal = (titulo.dueDate || titulo.due_date || titulo.maturityDate || titulo.data_vencimento || new Date().toISOString().slice(0, 10)) as string;
+    const linhaVal = (titulo.digitableLine || titulo.digitable_line || titulo.barcode || titulo.linha_digitavel || null) as string | null;
+
     const { error } = await db.from("btg_dda_titulos").insert({
       cod_empresa: ce,
       btg_dda_id: btgDdaId || null,
-      emissor: (titulo.issuerName || titulo.payeeDocument || titulo.emissor || null) as string | null,
-      documento_emissor: (titulo.issuerDocument || titulo.payeeBankCode || titulo.documento_emissor || null) as string | null,
-      numero_documento: (titulo.documentNumber || titulo.numero_documento || null) as string | null,
-      valor: Number(titulo.amount || titulo.valor || 0),
-      data_vencimento: (titulo.dueDate || titulo.data_vencimento || new Date().toISOString().slice(0, 10)) as string,
-      linha_digitavel: (titulo.digitableLine || titulo.linha_digitavel || null) as string | null,
+      emissor: emissorVal,
+      documento_emissor: docEmissorVal,
+      numero_documento: numDocVal,
+      valor: valorVal,
+      data_vencimento: vencVal,
+      linha_digitavel: linhaVal,
       status: "PENDENTE",
     });
 
@@ -172,7 +194,19 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     else console.warn("[btg-dda] Insert error:", error.message);
   }
 
-  return json({ success: true, importados: inseridos, duplicados, total_btg: btgData.length, sandbox: isSandbox });
+  // Include a sample of raw BTG data for debugging field mapping
+  const sampleItem = btgData.length > 0 ? btgData[0] : null;
+
+  return json({
+    success: true,
+    importados: inseridos,
+    duplicados,
+    registros_limpos: deletedOld ?? 0,
+    total_btg: btgData.length,
+    sandbox: isSandbox,
+    _debug_sample_keys: sampleItem ? Object.keys(sampleItem) : [],
+    _debug_sample: sampleItem,
+  });
 }
 
 // ─── ACTION: conciliar_auto ──────────────────────────────────
