@@ -140,30 +140,42 @@ export default function AdminBtgValidacaoPage() {
 
   // Authorize mutation
   const authorizeMutation = useMutation({
-    mutationFn: async (codEmpresa: number) => callBtgAuth("authorize", { cod_empresa: codEmpresa }),
-    onSuccess: (data) => {
-      if (data.authorize_url) {
-        const inIframe = window.self !== window.top;
+    mutationFn: async (codEmpresa: number) =>
+      callBtgAuth("authorize", { cod_empresa: codEmpresa }) as Promise<{ authorize_url?: string }>,
+  });
 
-        if (inIframe) {
-          const newTab = window.open(data.authorize_url as string, "_blank", "noopener,noreferrer");
-          if (!newTab) {
-            navigator.clipboard
-              .writeText(data.authorize_url as string)
-              .then(() => toast.info("URL de autorização copiada. Abra em uma nova aba."))
-              .catch(() => toast.info("Abra a autorização BTG em nova aba pelo link gerado."));
-          } else {
-            toast.success("Autorização aberta em nova aba.");
-          }
+  const handleAuthorize = (codEmpresa: number) => {
+    const inIframe = window.self !== window.top;
+    const authTab = inIframe ? window.open("about:blank", "_blank") : null;
+
+    if (inIframe && !authTab) {
+      toast.error("Safari bloqueou a nova aba. Permita pop-ups para continuar.");
+      return;
+    }
+
+    authorizeMutation.mutate(codEmpresa, {
+      onSuccess: (data) => {
+        if (!data?.authorize_url) {
+          if (authTab && !authTab.closed) authTab.close();
+          toast.error("URL de autorização não retornada.");
+          return;
+        }
+
+        if (authTab && !authTab.closed) {
+          authTab.location.href = data.authorize_url;
+          toast.success("Autorização aberta em nova aba.");
           return;
         }
 
         toast.success("Redirecionando para autorização BTG...");
-        window.location.href = data.authorize_url as string;
-      }
-    },
-    onError: (err: Error) => toast.error(`Erro ao autorizar: ${err.message}`),
-  });
+        window.location.href = data.authorize_url;
+      },
+      onError: (err: Error) => {
+        if (authTab && !authTab.closed) authTab.close();
+        toast.error(`Erro ao autorizar: ${err.message}`);
+      },
+    });
+  };
 
   // Refresh token mutation
   const refreshMutation = useMutation({
@@ -329,7 +341,7 @@ export default function AdminBtgValidacaoPage() {
                           {!isAuth && (
                             <Button
                               size="sm"
-                              onClick={() => authorizeMutation.mutate(conta.cod_empresa)}
+                              onClick={() => handleAuthorize(conta.cod_empresa)}
                               disabled={authorizeMutation.isPending}
                             >
                               <ExternalLink className="h-3 w-3 mr-1" />
