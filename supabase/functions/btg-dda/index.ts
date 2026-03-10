@@ -101,6 +101,7 @@ function getParam(body: Record<string, unknown> | null, url: URL, key: string): 
 // ─── ACTION: importar ────────────────────────────────────────
 async function handleImportar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
+  const db = getServiceClient();
 
   const { cod_empresa } = body;
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
