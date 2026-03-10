@@ -74,7 +74,7 @@ async function callBtgAuth(action: string, body?: Record<string, unknown>) {
 export default function AdminBtgValidacaoPage() {
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
-  const [manualAuthorizeUrl, setManualAuthorizeUrl] = useState<string | null>(null);
+  const [manualAuthorizeUrl, setManualAuthorizeUrl] = useState<Record<number, string>>({});
 
   // Handle callback redirect from BTG OAuth
   useEffect(() => {
@@ -146,7 +146,7 @@ export default function AdminBtgValidacaoPage() {
   });
 
   const handleAuthorize = (codEmpresa: number) => {
-    setManualAuthorizeUrl(null);
+    setManualAuthorizeUrl((prev) => { const next = { ...prev }; delete next[codEmpresa]; return next; });
 
     authorizeMutation.mutate(codEmpresa, {
       onSuccess: (data) => {
@@ -155,11 +155,11 @@ export default function AdminBtgValidacaoPage() {
           return;
         }
 
-        setManualAuthorizeUrl(data.authorize_url);
-
         const inIframe = window.self !== window.top;
         if (inIframe) {
-          toast.info("Safari: use o botão 'Abrir BTG em nova aba' abaixo.");
+          // No iframe (preview), show inline link instead of redirecting
+          setManualAuthorizeUrl((prev) => ({ ...prev, [codEmpresa]: data.authorize_url }));
+          toast.info("Clique em 'Abrir BTG' ao lado do botão Autorizar.");
           return;
         }
 
@@ -226,37 +226,6 @@ export default function AdminBtgValidacaoPage() {
         </span>
       </div>
 
-      {manualAuthorizeUrl && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Autorização manual (Safari)</CardTitle>
-            <CardDescription>
-              Se a navegação automática falhar, abra o BTG pelo botão abaixo.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            <Button asChild>
-              <a href={manualAuthorizeUrl} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-3 w-3 mr-1" />
-                Abrir BTG em nova aba
-              </a>
-            </Button>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(manualAuthorizeUrl);
-                  toast.success("URL copiada.");
-                } catch {
-                  toast.error("Não foi possível copiar a URL.");
-                }
-              }}
-            >
-              Copiar URL
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       {/* ── 1. Ambiente ───────────────────────────────────── */}
       <Card>
@@ -364,7 +333,7 @@ export default function AdminBtgValidacaoPage() {
                           : "—"}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex gap-2 justify-end">
+                        <div className="flex gap-2 justify-end flex-wrap items-center">
                           {!isAuth && (
                             <Button
                               size="sm"
@@ -373,6 +342,14 @@ export default function AdminBtgValidacaoPage() {
                             >
                               <ExternalLink className="h-3 w-3 mr-1" />
                               Autorizar
+                            </Button>
+                          )}
+                          {manualAuthorizeUrl[conta.cod_empresa] && (
+                            <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700" asChild>
+                              <a href={manualAuthorizeUrl[conta.cod_empresa]} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                                Abrir BTG
+                              </a>
                             </Button>
                           )}
                           {(isAuth || isExpired) && (
