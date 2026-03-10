@@ -228,18 +228,27 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
   console.log("[btg-extrato] handleExtrato raw keys:", Object.keys(data || {}));
   console.log("[btg-extrato] handleExtrato raw (500ch):", JSON.stringify(data).substring(0, 500));
 
-  // Normalize response to find transaction array
+  // Normalize response — BTG v2 returns { data: { dailyMovements: [{ date, movements: [...] }] } }
   let items: unknown[] = [];
   if (Array.isArray(data)) {
     items = data;
+  } else if (data?.data?.dailyMovements && Array.isArray(data.data.dailyMovements)) {
+    // Flatten dailyMovements → movements
+    for (const day of data.data.dailyMovements) {
+      const dayDate = day.date ? String(day.date).substring(0, 10) : null;
+      if (Array.isArray(day.movements)) {
+        for (const mov of day.movements) {
+          items.push({ ...mov, _dayDate: dayDate });
+        }
+      }
+    }
+    console.log(`[btg-extrato] Flattened ${items.length} movements from dailyMovements`);
   } else {
-    for (const key of ["entries", "transactions", "lancamentos", "data", "items", "statement"]) {
+    for (const key of ["entries", "transactions", "lancamentos", "items", "statement"]) {
       if (Array.isArray(data?.[key])) { items = data[key]; break; }
     }
-    if (items.length === 0) {
-      for (const key of Object.keys(data || {})) {
-        if (Array.isArray(data[key]) && data[key].length > 0) { items = data[key]; break; }
-      }
+    if (items.length === 0 && data?.data && Array.isArray(data.data)) {
+      items = data.data;
     }
   }
 
