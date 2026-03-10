@@ -476,13 +476,6 @@ export default function AdminBtgValidacaoPage() {
                 })}
               </TableBody>
             </Table>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
           )}
         </CardContent>
       </Card>
