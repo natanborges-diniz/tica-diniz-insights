@@ -325,7 +325,7 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
 
     return {
       cod_empresa,
-      data_lancamento: date ? String(date).substring(0, 10) : format(new Date(), "yyyy-MM-dd"),
+      data_lancamento: date ? String(date).substring(0, 10) : new Date().toISOString().substring(0, 10),
       descricao: String(desc),
       valor: Math.abs(amount),
       tipo: isCredit ? "CREDITO" : "DEBITO",
