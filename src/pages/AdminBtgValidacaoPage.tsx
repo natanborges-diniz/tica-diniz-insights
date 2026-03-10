@@ -146,7 +146,7 @@ export default function AdminBtgValidacaoPage() {
   });
 
   const handleAuthorize = (codEmpresa: number) => {
-    setManualAuthorizeUrl(null);
+    setManualAuthorizeUrl((prev) => { const next = { ...prev }; delete next[codEmpresa]; return next; });
 
     authorizeMutation.mutate(codEmpresa, {
       onSuccess: (data) => {
@@ -155,11 +155,11 @@ export default function AdminBtgValidacaoPage() {
           return;
         }
 
-        setManualAuthorizeUrl(data.authorize_url);
-
         const inIframe = window.self !== window.top;
         if (inIframe) {
-          toast.info("Safari: use o botão 'Abrir BTG em nova aba' abaixo.");
+          // No iframe (preview), show inline link instead of redirecting
+          setManualAuthorizeUrl((prev) => ({ ...prev, [codEmpresa]: data.authorize_url }));
+          toast.info("Clique em 'Abrir BTG' ao lado do botão Autorizar.");
           return;
         }
 
