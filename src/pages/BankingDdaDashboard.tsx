@@ -291,7 +291,7 @@ export default function BankingDdaDashboard() {
                   <TableRow>
                     <TableHead className="w-[90px]">Vencimento</TableHead>
                     <TableHead>Emissor</TableHead>
-                    <TableHead className="w-[150px]">CNPJ</TableHead>
+                    <TableHead className="w-[150px]">Documento</TableHead>
                     <TableHead className="w-[140px]">Banco</TableHead>
                     <TableHead className="w-[120px] text-right">Valor</TableHead>
                     <TableHead className="w-[100px]">Status</TableHead>
