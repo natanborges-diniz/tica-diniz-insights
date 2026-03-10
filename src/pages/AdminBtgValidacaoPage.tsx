@@ -328,7 +328,7 @@ export default function AdminBtgValidacaoPage() {
                           {!isAuth && (
                             <Button
                               size="sm"
-                              onClick={() => authorizeMutation.mutate(conta.cod_empresa)}
+                              onClick={() => handleAuthorize(conta.cod_empresa)}
                               disabled={authorizeMutation.isPending}
                             >
                               <ExternalLink className="h-3 w-3 mr-1" />
