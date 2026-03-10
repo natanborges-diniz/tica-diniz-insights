@@ -148,10 +148,14 @@ export default function BankingCobrancasDashboard() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         title="Emitir Boleto"
-        confirmLabel="Emitir"
-        onConfirm={() => emitirMutation.mutate()}
-        isSubmitting={emitirMutation.isPending}
-        disabled={!formValor || !formVencimento || !formDocumento}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={() => emitirMutation.mutate()} disabled={emitirMutation.isPending || !formValor || !formVencimento || !formDocumento}>
+              Emitir
+            </Button>
+          </>
+        }
       >
         <div className="space-y-4 py-2">
           <div className="space-y-1">

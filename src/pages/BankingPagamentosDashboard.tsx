@@ -202,10 +202,14 @@ export default function BankingPagamentosDashboard() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         title="Criar Pagamento"
-        confirmLabel="Criar Rascunho"
-        onConfirm={() => criarMutation.mutate()}
-        isSubmitting={criarMutation.isPending}
-        disabled={!formValor}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={() => criarMutation.mutate()} disabled={criarMutation.isPending || !formValor}>
+              Criar Rascunho
+            </Button>
+          </>
+        }
       >
         <div className="space-y-4 py-2">
           <div className="space-y-1">
