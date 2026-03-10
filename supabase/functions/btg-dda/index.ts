@@ -113,9 +113,36 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
 
   if (isSandbox) {
     btgData = [
-      { id: `sandbox-dda-${Date.now()}-1`, issuerName: "CEMIG DISTRIBUICAO SA", issuerDocument: "06.981.180/0001-16", documentNumber: "DDA-001", amount: 1890.50, dueDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10), digitableLine: "23793.38128 60000.000003 00000.000402 1 88880000189050" },
-      { id: `sandbox-dda-${Date.now()}-2`, issuerName: "TELEFONICA BRASIL SA", issuerDocument: "02.558.157/0001-62", documentNumber: "DDA-002", amount: 450.00, dueDate: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10), digitableLine: "23793.38128 60000.000004 00000.000403 1 88880000045000" },
-      { id: `sandbox-dda-${Date.now()}-3`, issuerName: "HOYA LENS DO BRASIL LTDA", issuerDocument: "01.722.296/0001-17", documentNumber: "DDA-003", amount: 12350.00, dueDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10), digitableLine: "23793.38128 60000.000005 00000.000404 1 88881001235000" },
+      {
+        id: `sandbox-dda-${Date.now()}-1`,
+        amount: 1890.50,
+        dueDate: new Date(Date.now() + 5 * 86400000).toISOString(),
+        expirationDate: new Date(Date.now() + 10 * 86400000).toISOString(),
+        digitableLine: "23793.38128 60000.000003 00000.000402 1 88880000189050",
+        payee: { document: "06981180000116", fantasyName: "CEMIG DISTRIBUICAO SA", socialName: "CEMIG DISTRIBUICAO SA", bankCode: "001", bankName: "BANCO DO BRASIL" },
+        hidden: false,
+        status: "CREATED",
+      },
+      {
+        id: `sandbox-dda-${Date.now()}-2`,
+        amount: 450.00,
+        dueDate: new Date(Date.now() + 3 * 86400000).toISOString(),
+        expirationDate: new Date(Date.now() + 8 * 86400000).toISOString(),
+        digitableLine: "23793.38128 60000.000004 00000.000403 1 88880000045000",
+        payee: { document: "02558157000162", fantasyName: "TELEFONICA BRASIL SA", socialName: "TELEFONICA BRASIL SA", bankCode: "341", bankName: "ITAU UNIBANCO" },
+        hidden: false,
+        status: "OVERDUE",
+      },
+      {
+        id: `sandbox-dda-${Date.now()}-3`,
+        amount: 12350.00,
+        dueDate: new Date(Date.now() + 7 * 86400000).toISOString(),
+        expirationDate: new Date(Date.now() + 12 * 86400000).toISOString(),
+        digitableLine: "23793.38128 60000.000005 00000.000404 1 88881001235000",
+        payee: { document: "01722296000117", fantasyName: "HOYA LENS DO BRASIL LTDA", socialName: "HOYA LENS DO BRASIL LTDA", bankCode: "208", bankName: "BTG PACTUAL" },
+        hidden: false,
+        status: "CREATED",
+      },
     ];
   } else {
     const accessToken = await getBtgToken(ce);
@@ -135,9 +162,9 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     try {
       const parsed = JSON.parse(btgBody);
       console.log("[btg-dda] BTG raw response keys:", JSON.stringify(Object.keys(parsed)));
-      btgData = Array.isArray(parsed) ? parsed : (parsed.items || parsed.content || parsed.data || parsed.debits || []);
+      // BTG response: { data: [...], _links: {...} }
+      btgData = Array.isArray(parsed) ? parsed : (parsed.data || []);
       if (btgData.length > 0) {
-        console.log("[btg-dda] First item keys:", JSON.stringify(Object.keys(btgData[0])));
         console.log("[btg-dda] First item sample:", JSON.stringify(btgData[0]));
       }
     } catch {
