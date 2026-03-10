@@ -70,6 +70,21 @@ async function callBtgAuth(action: string, body?: Record<string, unknown>) {
   return res.json();
 }
 
+async function callBtgExtrato(action: string, body?: Record<string, unknown>) {
+  const headers = await getAuthHeaders();
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/btg-extrato`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ action, ...body }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `Erro ${res.status}`);
+  }
+  return res.json();
+}
+
 const isEmbeddedPreview = () => {
   try {
     return window.self !== window.top;
