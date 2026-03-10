@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import {
   Shield, CheckCircle2, XCircle, RefreshCw, ExternalLink,
   Landmark, AlertTriangle, Settings2, KeyRound,
-  Eye, EyeOff, Save, Loader2, Globe, ChevronDown, ChevronUp,
+  Eye, EyeOff, Save, Loader2, Globe, ChevronDown, ChevronUp, Copy,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -69,6 +69,14 @@ async function callBtgAuth(action: string, body?: Record<string, unknown>) {
   }
   return res.json();
 }
+
+const isEmbeddedPreview = () => {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+};
 
 // ─── Main Component ─────────────────────────────────────────
 export default function AdminBtgValidacaoPage() {
@@ -155,15 +163,20 @@ export default function AdminBtgValidacaoPage() {
           return;
         }
 
-        const inIframe = window.self !== window.top;
-        if (inIframe) {
-          // No iframe (preview), show inline link instead of redirecting
+        const inEmbeddedPreview = isEmbeddedPreview();
+        if (inEmbeddedPreview) {
+          // Em preview (iframe), tenta sair para navegação top-level para evitar bloqueios de popup/COOP.
           setManualAuthorizeUrl((prev) => ({ ...prev, [codEmpresa]: data.authorize_url }));
+          try {
+            window.top?.location.assign(data.authorize_url);
+          } catch {
+            // mantém fallback manual abaixo do botão
+          }
           return;
         }
 
         toast.success("Redirecionando para autorização BTG...");
-        window.location.href = data.authorize_url;
+        window.location.assign(data.authorize_url);
       },
       onError: (err: Error) => {
         toast.error(`Erro ao autorizar: ${err.message}`);
@@ -344,12 +357,29 @@ export default function AdminBtgValidacaoPage() {
                             </Button>
                           )}
                           {manualAuthorizeUrl[conta.cod_empresa] && (
-                            <Button size="sm" variant="secondary" asChild>
-                              <a href={manualAuthorizeUrl[conta.cod_empresa]} target="_blank" rel="noopener noreferrer">
-                                <ExternalLink className="h-3 w-3 mr-1" />
-                                Abrir BTG
-                              </a>
-                            </Button>
+                            <>
+                              <Button size="sm" variant="secondary" asChild>
+                                <a href={manualAuthorizeUrl[conta.cod_empresa]} target="_top" rel="noreferrer">
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  Abrir BTG
+                                </a>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(manualAuthorizeUrl[conta.cod_empresa]);
+                                    toast.success("URL do BTG copiada.");
+                                  } catch {
+                                    toast.error("Não foi possível copiar a URL.");
+                                  }
+                                }}
+                              >
+                                <Copy className="h-3 w-3 mr-1" />
+                                Copiar URL
+                              </Button>
+                            </>
                           )}
                           {(isAuth || isExpired) && (
                             <Button
