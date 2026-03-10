@@ -333,7 +333,7 @@ export default function AdminBtgValidacaoPage() {
                           : "—"}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex gap-2 justify-end">
+                        <div className="flex gap-2 justify-end flex-wrap items-center">
                           {!isAuth && (
                             <Button
                               size="sm"
@@ -342,6 +342,14 @@ export default function AdminBtgValidacaoPage() {
                             >
                               <ExternalLink className="h-3 w-3 mr-1" />
                               Autorizar
+                            </Button>
+                          )}
+                          {manualAuthorizeUrl[conta.cod_empresa] && (
+                            <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700" asChild>
+                              <a href={manualAuthorizeUrl[conta.cod_empresa]} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                                Abrir BTG
+                              </a>
                             </Button>
                           )}
                           {(isAuth || isExpired) && (
