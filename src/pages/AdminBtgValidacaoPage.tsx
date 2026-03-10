@@ -143,8 +143,23 @@ export default function AdminBtgValidacaoPage() {
     mutationFn: async (codEmpresa: number) => callBtgAuth("authorize", { cod_empresa: codEmpresa }),
     onSuccess: (data) => {
       if (data.authorize_url) {
+        const inIframe = window.self !== window.top;
+
+        if (inIframe) {
+          const newTab = window.open(data.authorize_url as string, "_blank", "noopener,noreferrer");
+          if (!newTab) {
+            navigator.clipboard
+              .writeText(data.authorize_url as string)
+              .then(() => toast.info("URL de autorização copiada. Abra em uma nova aba."))
+              .catch(() => toast.info("Abra a autorização BTG em nova aba pelo link gerado."));
+          } else {
+            toast.success("Autorização aberta em nova aba.");
+          }
+          return;
+        }
+
         toast.success("Redirecionando para autorização BTG...");
-        window.location.href = data.authorize_url;
+        window.location.href = data.authorize_url as string;
       }
     },
     onError: (err: Error) => toast.error(`Erro ao autorizar: ${err.message}`),
