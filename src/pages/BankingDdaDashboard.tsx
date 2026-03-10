@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   FileSearch, Download, RefreshCw, CheckCircle2, XCircle,
-  Link2, AlertTriangle, PieChart, Eye,
+  Link2, AlertTriangle, PieChart,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
 interface DdaTitulo {
@@ -22,7 +23,7 @@ interface DdaTitulo {
   btg_dda_id: string | null;
   emissor: string | null;
   documento_emissor: string | null;
-  numero_documento: string | null;
+  banco_emissor: string | null;
   valor: number;
   data_vencimento: string;
   linha_digitavel: string | null;
@@ -47,6 +48,15 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   IGNORADO: { label: "Ignorado", variant: "secondary" },
   PAGO: { label: "Pago", variant: "default" },
 };
+
+function formatCnpj(raw: string | null): string {
+  if (!raw) return "—";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 14) {
+    return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5,8)}/${digits.slice(8,12)}-${digits.slice(12)}`;
+  }
+  return raw;
+}
 
 export default function BankingDdaDashboard() {
   const { empresas } = useEmpresas();
@@ -155,6 +165,10 @@ export default function BankingDdaDashboard() {
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
+  const totalValorPendente = titulos
+    .filter(t => t.status === "PENDENTE" && !t.conciliado)
+    .reduce((sum, t) => sum + t.valor, 0);
+
   return (
     <div className="space-y-6">
       <ModuleHeader
@@ -237,7 +251,12 @@ export default function BankingDdaDashboard() {
               <AlertTriangle className="h-4 w-4 text-destructive" /> Pendentes
             </CardTitle>
           </CardHeader>
-          <CardContent><p className="text-2xl font-bold text-destructive">{indicadores?.pendentes ?? "—"}</p></CardContent>
+          <CardContent>
+            <p className="text-2xl font-bold text-destructive">{indicadores?.pendentes ?? "—"}</p>
+            {totalValorPendente > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">{fmtCurrency(totalValorPendente)}</p>
+            )}
+          </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
@@ -266,57 +285,71 @@ export default function BankingDdaDashboard() {
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[90px]">Vencimento</TableHead>
-                  <TableHead>Emissor</TableHead>
-                  <TableHead className="w-[140px]">CNPJ Emissor</TableHead>
-                  <TableHead className="w-[100px]">Nº Doc</TableHead>
-                  <TableHead className="w-[120px] text-right">Valor</TableHead>
-                  <TableHead className="w-[120px]">Status</TableHead>
-                  <TableHead className="w-[100px] text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-                ) : titulos.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum título DDA. Importe do BTG.</TableCell></TableRow>
-                ) : titulos.map((t) => {
-                  const sc = STATUS_CONFIG[t.status] || { label: t.status, variant: "outline" as const };
-                  return (
-                    <TableRow key={t.id} className={t.conciliado ? "opacity-60" : ""}>
-                      <TableCell className="text-sm">
-                        {format(new Date(t.data_vencimento + "T12:00:00"), "dd/MM/yy")}
-                      </TableCell>
-                      <TableCell className="text-sm">{t.emissor || "—"}</TableCell>
-                      <TableCell className="text-xs font-mono">{t.documento_emissor || "—"}</TableCell>
-                      <TableCell className="text-sm">{t.numero_documento || "—"}</TableCell>
-                      <TableCell className="text-sm text-right font-medium">{fmtCurrency(t.valor)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Badge variant={sc.variant}>{sc.label}</Badge>
-                          {t.conciliado && <Link2 className="h-3 w-3 text-muted-foreground" />}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {t.status === "PENDENTE" && !t.conciliado && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => ignorarMutation.mutate(t.id)}
-                            disabled={ignorarMutation.isPending}
-                          >
-                            <XCircle className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <TooltipProvider>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[90px]">Vencimento</TableHead>
+                    <TableHead>Emissor</TableHead>
+                    <TableHead className="w-[150px]">CNPJ</TableHead>
+                    <TableHead className="w-[140px]">Banco</TableHead>
+                    <TableHead className="w-[120px] text-right">Valor</TableHead>
+                    <TableHead className="w-[100px]">Status</TableHead>
+                    <TableHead className="w-[80px] text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
+                  ) : titulos.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum título DDA encontrado.</TableCell></TableRow>
+                  ) : titulos.map((t) => {
+                    const sc = STATUS_CONFIG[t.status] || { label: t.status, variant: "outline" as const };
+                    const isOverdue = t.status === "PENDENTE" && new Date(t.data_vencimento + "T12:00:00") < new Date();
+                    return (
+                      <TableRow key={t.id} className={t.conciliado ? "opacity-60" : isOverdue ? "bg-destructive/5" : ""}>
+                        <TableCell className="text-sm">
+                          <span className={isOverdue ? "text-destructive font-medium" : ""}>
+                            {format(new Date(t.data_vencimento + "T12:00:00"), "dd/MM/yy")}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-sm max-w-[200px] truncate" title={t.emissor || undefined}>
+                          {t.emissor || "—"}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono">{formatCnpj(t.documento_emissor)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground truncate max-w-[140px]" title={t.banco_emissor || undefined}>
+                          {t.banco_emissor || "—"}
+                        </TableCell>
+                        <TableCell className="text-sm text-right font-medium">{fmtCurrency(t.valor)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Badge variant={sc.variant}>{sc.label}</Badge>
+                            {t.conciliado && <Link2 className="h-3 w-3 text-muted-foreground" />}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {t.status === "PENDENTE" && !t.conciliado && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => ignorarMutation.mutate(t.id)}
+                                  disabled={ignorarMutation.isPending}
+                                >
+                                  <XCircle className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Ignorar título</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TooltipProvider>
           </div>
         </CardContent>
       </Card>

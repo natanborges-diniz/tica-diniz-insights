@@ -133,6 +133,7 @@ export type Database = {
       }
       btg_dda_titulos: {
         Row: {
+          banco_emissor: string | null
           btg_dda_id: string | null
           cod_empresa: number
           conciliado: boolean
@@ -150,6 +151,7 @@ export type Database = {
           valor: number
         }
         Insert: {
+          banco_emissor?: string | null
           btg_dda_id?: string | null
           cod_empresa: number
           conciliado?: boolean
@@ -167,6 +169,7 @@ export type Database = {
           valor: number
         }
         Update: {
+          banco_emissor?: string | null
           btg_dda_id?: string | null
           cod_empresa?: number
           conciliado?: boolean
