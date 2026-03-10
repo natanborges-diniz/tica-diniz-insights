@@ -357,12 +357,29 @@ export default function AdminBtgValidacaoPage() {
                             </Button>
                           )}
                           {manualAuthorizeUrl[conta.cod_empresa] && (
-                            <Button size="sm" variant="secondary" asChild>
-                              <a href={manualAuthorizeUrl[conta.cod_empresa]} target="_blank" rel="noopener noreferrer">
-                                <ExternalLink className="h-3 w-3 mr-1" />
-                                Abrir BTG
-                              </a>
-                            </Button>
+                            <>
+                              <Button size="sm" variant="secondary" asChild>
+                                <a href={manualAuthorizeUrl[conta.cod_empresa]} target="_top" rel="noreferrer">
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  Abrir BTG
+                                </a>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(manualAuthorizeUrl[conta.cod_empresa]);
+                                    toast.success("URL do BTG copiada.");
+                                  } catch {
+                                    toast.error("Não foi possível copiar a URL.");
+                                  }
+                                }}
+                              >
+                                <Copy className="h-3 w-3 mr-1" />
+                                Copiar URL
+                              </Button>
+                            </>
                           )}
                           {(isAuth || isExpired) && (
                             <Button
