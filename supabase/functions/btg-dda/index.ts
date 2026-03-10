@@ -172,15 +172,15 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     }
   }
 
-  // Delete old records that have null emissor (bad imports) to allow reimport
+  // Delete old records that have null emissor OR null banco_emissor (bad imports) to allow reimport
   const { count: deletedOld } = await db
     .from("btg_dda_titulos")
     .delete({ count: "exact" })
     .eq("cod_empresa", ce)
-    .is("emissor", null)
+    .or("emissor.is.null,banco_emissor.is.null")
     .eq("status", "PENDENTE");
 
-  console.log(`[btg-dda] Deleted ${deletedOld ?? 0} old records with null emissor for reimport`);
+  console.log(`[btg-dda] Deleted ${deletedOld ?? 0} old records with null emissor/banco for reimport`);
 
   let inseridos = 0;
   let duplicados = 0;
@@ -198,10 +198,10 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
       if (existing) { duplicados++; continue; }
     }
 
-    // Map BTG API fields — exact contract: payee.document, payee.fantasyName, payee.bankCode/bankName
+    // Map BTG API fields — production uses taxId, sandbox/docs use document
     const payee = (titulo.payee || {}) as Record<string, unknown>;
     const emissorVal = (payee.fantasyName || payee.socialName || null) as string | null;
-    const docEmissorVal = (payee.document || null) as string | null;
+    const docEmissorVal = (payee.document || payee.taxId || null) as string | null;
     const bancoVal = (payee.bankName || null) as string | null;
     const valorVal = Number(titulo.amount || 0);
     const vencVal = (titulo.dueDate || new Date().toISOString()).toString().slice(0, 10);
