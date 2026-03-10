@@ -198,10 +198,10 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
       if (existing) { duplicados++; continue; }
     }
 
-    // Map BTG API fields — exact contract: payee.document, payee.fantasyName, payee.bankCode/bankName
+    // Map BTG API fields — production uses taxId, sandbox/docs use document
     const payee = (titulo.payee || {}) as Record<string, unknown>;
     const emissorVal = (payee.fantasyName || payee.socialName || null) as string | null;
-    const docEmissorVal = (payee.document || null) as string | null;
+    const docEmissorVal = (payee.document || payee.taxId || null) as string | null;
     const bancoVal = (payee.bankName || null) as string | null;
     const valorVal = Number(titulo.amount || 0);
     const vencVal = (titulo.dueDate || new Date().toISOString()).toString().slice(0, 10);
