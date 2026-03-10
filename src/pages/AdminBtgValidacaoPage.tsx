@@ -159,7 +159,6 @@ export default function AdminBtgValidacaoPage() {
         if (inIframe) {
           // No iframe (preview), show inline link instead of redirecting
           setManualAuthorizeUrl((prev) => ({ ...prev, [codEmpresa]: data.authorize_url }));
-          toast.info("Clique em 'Abrir BTG' ao lado do botão Autorizar.");
           return;
         }
 
