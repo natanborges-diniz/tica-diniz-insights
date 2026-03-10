@@ -133,7 +133,12 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
 
     try {
       const parsed = JSON.parse(btgBody);
-      btgData = Array.isArray(parsed) ? parsed : (parsed.items || parsed.content || parsed.data || []);
+      console.log("[btg-dda] BTG raw response keys:", JSON.stringify(Object.keys(parsed)));
+      btgData = Array.isArray(parsed) ? parsed : (parsed.items || parsed.content || parsed.data || parsed.debits || []);
+      if (btgData.length > 0) {
+        console.log("[btg-dda] First item keys:", JSON.stringify(Object.keys(btgData[0])));
+        console.log("[btg-dda] First item sample:", JSON.stringify(btgData[0]));
+      }
     } catch {
       return json({ error: "Resposta inválida do BTG" }, 502);
     }
