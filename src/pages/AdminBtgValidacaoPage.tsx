@@ -211,14 +211,15 @@ export default function AdminBtgValidacaoPage() {
     onError: (err: Error) => toast.error(`Erro ao renovar: ${err.message}`),
   });
 
-  // Discover accounts mutation
+  // Save account_id mutation (constructs from agencia + conta)
   const contasMutation = useMutation({
-    mutationFn: async (codEmpresa: number) => callBtgExtrato("contas", { cod_empresa: codEmpresa }),
+    mutationFn: async ({ codEmpresa, agencia, conta }: { codEmpresa: number; agencia: string; conta: string }) =>
+      callBtgExtrato("contas", { cod_empresa: codEmpresa, agencia, conta }),
     onSuccess: (data) => {
-      toast.success(`Contas descobertas! ${JSON.stringify(data.contas?.length || 0)} conta(s) encontrada(s).`);
+      toast.success(`Account ID configurado: ${data.account_id}`);
       queryClient.invalidateQueries({ queryKey: ["btg-contas"] });
     },
-    onError: (err: Error) => toast.error(`Erro ao descobrir contas: ${err.message}`),
+    onError: (err: Error) => toast.error(`Erro ao configurar conta: ${err.message}`),
   });
 
   // Check balance mutation
