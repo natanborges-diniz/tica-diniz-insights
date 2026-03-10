@@ -57,8 +57,28 @@ export default function BankingDdaDashboard() {
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [filtroConciliado, setFiltroConciliado] = useState<string>("todos");
 
+  // Auto-import on mount / empresa change
   const [autoImported, setAutoImported] = useState(false);
   useEffect(() => setAutoImported(false), [codEmpresa]);
+
+  useEffect(() => {
+    if (autoImported) return;
+    setAutoImported(true);
+    (async () => {
+      try {
+        const { data: importResult } = await supabase.functions.invoke("btg-dda", {
+          body: { action: "importar", cod_empresa: codEmpresa },
+        });
+        if (importResult?.importados > 0) {
+          toast.success(`${importResult.importados} novos títulos DDA importados`);
+          queryClient.invalidateQueries({ queryKey: ["btg-dda"] });
+          queryClient.invalidateQueries({ queryKey: ["btg-dda-indicadores"] });
+        }
+      } catch (e) {
+        console.warn("Auto-import DDA failed:", e);
+      }
+    })();
+  }, [codEmpresa, autoImported, queryClient]);
 
   const { data: titulos = [], isLoading } = useQuery<DdaTitulo[]>({
     queryKey: ["btg-dda", codEmpresa, filtroStatus, filtroConciliado],
@@ -68,26 +88,6 @@ export default function BankingDdaDashboard() {
       });
       if (error) throw error;
       let items = Array.isArray(data) ? data : [];
-
-      // Auto-import from BTG if no local data exists
-      if (items.length === 0 && !autoImported) {
-        setAutoImported(true);
-        try {
-          const { data: importResult } = await supabase.functions.invoke("btg-dda", {
-            body: { action: "importar", cod_empresa: codEmpresa },
-          });
-          if (importResult?.importados > 0) {
-            const { data: refetched } = await supabase.functions.invoke("btg-dda", {
-              body: { action: "listar", cod_empresa: codEmpresa },
-            });
-            items = Array.isArray(refetched) ? refetched : [];
-            toast.success(`${importResult.importados} títulos DDA importados do BTG`);
-          }
-        } catch (e) {
-          console.warn("Auto-import DDA failed:", e);
-        }
-      }
-
       if (filtroStatus !== "todos") items = items.filter((i: DdaTitulo) => i.status === filtroStatus);
       if (filtroConciliado !== "todos") items = items.filter((i: DdaTitulo) => String(i.conciliado) === filtroConciliado);
       return items;
