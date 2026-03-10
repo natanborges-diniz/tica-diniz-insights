@@ -1,6 +1,6 @@
 // supabase/functions/btg-extrato/index.ts
-// BTG Pactual Banking — Extrato + Saldo (Fase 5)
-// Actions: saldo, extrato, importar, listar, classificar, conciliar, resumo
+// BTG Pactual Banking — Extrato + Saldo (corrigido com endpoints oficiais)
+// Actions: contas, saldo, extrato, importar, listar, classificar, conciliar, resumo
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -17,7 +17,15 @@ function json(data: unknown, status = 200) {
   });
 }
 
-async function getBtgUrls() {
+function getServiceClient() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+}
+
+// ─── Config helpers ─────────────────────────────────────────
+async function getBtgConfig() {
   const db = getServiceClient();
   const { data } = await db
     .from("fornecedor_configuracao")
@@ -33,13 +41,6 @@ async function getBtgUrls() {
       : "https://api.empresas.btgpactual.com",
     isSandbox,
   };
-}
-
-function getServiceClient() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
 }
 
 // ─── Auth helpers ────────────────────────────────────────────
@@ -89,11 +90,11 @@ async function getBtgToken(codEmpresa: number): Promise<string> {
   return data.access_token;
 }
 
-async function getCompanyId(codEmpresa: number): Promise<string> {
+async function getAccountId(codEmpresa: number): Promise<string> {
   const db = getServiceClient();
-  const { data } = await db.from("btg_contas_bancarias").select("company_id, account_id").eq("cod_empresa", codEmpresa).eq("ativa", true).single();
-  if (!data?.company_id) throw json({ error: `Conta BTG não configurada para empresa ${codEmpresa}` }, 400);
-  return data.company_id;
+  const { data } = await db.from("btg_contas_bancarias").select("account_id").eq("cod_empresa", codEmpresa).eq("ativa", true).single();
+  if (!data?.account_id) throw json({ error: `Account ID não configurado para empresa ${codEmpresa}. Execute a action 'contas' primeiro.` }, 400);
+  return data.account_id;
 }
 
 // ─── Param helper ────────────────────────────────────────────
@@ -102,12 +103,64 @@ function getParam(body: Record<string, unknown> | null, url: URL, key: string): 
   return url.searchParams.get(key);
 }
 
+// ─── ACTION: contas (listar contas BTG e salvar account_id) ─
+async function handleContas(body: Record<string, unknown> | null, url: URL, userId: string) {
+  await requireAdminRole(userId);
+  const codEmpresa = Number(getParam(body, url, "cod_empresa"));
+  if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
+
+  const { apiBase, isSandbox } = await getBtgConfig();
+
+  if (isSandbox) {
+    return json({
+      cod_empresa: codEmpresa,
+      contas: [{ accountId: "12107885000101-208-0001-12345678", bankCode: "208", branchCode: "0001", number: "12345678" }],
+      sandbox: true,
+    });
+  }
+
+  const accessToken = await getBtgToken(codEmpresa);
+
+  const res = await fetch(`${apiBase}/accounts`, {
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+  });
+
+  if (!res.ok) {
+    const resBody = await res.text();
+    console.error("[btg-extrato] Contas error:", res.status, resBody);
+    return json({ error: "Erro ao listar contas BTG", status: res.status, details: resBody }, 502);
+  }
+
+  const data = await res.json();
+  const contas = Array.isArray(data) ? data : data.accounts || data.data || [data];
+  console.log("[btg-extrato] Contas encontradas:", JSON.stringify(contas).slice(0, 500));
+
+  // Auto-save first account_id if found
+  if (contas.length > 0) {
+    const db = getServiceClient();
+    const firstAccount = contas[0];
+    const accountId = firstAccount.accountId || firstAccount.id || firstAccount.account_id;
+    if (accountId) {
+      await db.from("btg_contas_bancarias")
+        .update({
+          account_id: accountId,
+          agencia: firstAccount.branchCode || firstAccount.agencia || null,
+          conta: firstAccount.number || firstAccount.conta || null,
+        })
+        .eq("cod_empresa", codEmpresa);
+      console.log(`[btg-extrato] Account ID ${accountId} salvo para empresa ${codEmpresa}`);
+    }
+  }
+
+  return json({ cod_empresa: codEmpresa, contas });
+}
+
 // ─── ACTION: saldo ───────────────────────────────────────────
 async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
   const codEmpresa = Number(getParam(body, url, "cod_empresa"));
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const { apiBase, isSandbox } = await getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgConfig();
 
   if (isSandbox) {
     return json({
@@ -120,17 +173,17 @@ async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
   }
 
   const accessToken = await getBtgToken(codEmpresa);
-  const companyId = await getCompanyId(codEmpresa);
+  const accountId = await getAccountId(codEmpresa);
 
   const res = await fetch(
-    `${apiBase}/banking/v1/companies/${companyId}/balance`,
+    `${apiBase}/accounts/${accountId}/balances`,
     { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
   );
 
   if (!res.ok) {
     const resBody = await res.text();
     console.error("[btg-extrato] Saldo error:", res.status, resBody);
-    return json({ error: "Erro ao consultar saldo", details: resBody }, 502);
+    return json({ error: "Erro ao consultar saldo", status: res.status, details: resBody }, 502);
   }
 
   const data = await res.json();
@@ -145,7 +198,7 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
 
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const { apiBase, isSandbox } = await getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgConfig();
 
   if (isSandbox) {
     const mockEntries = [
@@ -158,21 +211,22 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
   }
 
   const accessToken = await getBtgToken(codEmpresa);
-  const companyId = await getCompanyId(codEmpresa);
+  const accountId = await getAccountId(codEmpresa);
 
   const params = new URLSearchParams();
   if (dataInicio) params.set("startDate", dataInicio);
   if (dataFim) params.set("endDate", dataFim);
 
+  const qs = params.toString() ? `?${params}` : "";
   const res = await fetch(
-    `${apiBase}/banking/v1/companies/${companyId}/statements?${params}`,
+    `${apiBase}/accounts/${accountId}/statements${qs}`,
     { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
   );
 
   if (!res.ok) {
     const resBody = await res.text();
     console.error("[btg-extrato] Extrato error:", res.status, resBody);
-    return json({ error: "Erro ao consultar extrato", details: resBody }, 502);
+    return json({ error: "Erro ao consultar extrato", status: res.status, details: resBody }, 502);
   }
 
   const data = await res.json();
@@ -188,7 +242,7 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   const data_fim = body.data_fim ? String(body.data_fim) : null;
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const { apiBase, isSandbox } = await getBtgUrls();
+  const { apiBase, isSandbox } = await getBtgConfig();
 
   let lancamentos: Array<{ date: string; description: string; amount: number; type: string; balance_after?: number }> = [];
 
@@ -201,13 +255,14 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     ];
   } else {
     const accessToken = await getBtgToken(cod_empresa);
-    const companyId = await getCompanyId(cod_empresa);
+    const accountId = await getAccountId(cod_empresa);
     const params = new URLSearchParams();
     if (data_inicio) params.set("startDate", data_inicio);
     if (data_fim) params.set("endDate", data_fim);
 
+    const qs = params.toString() ? `?${params}` : "";
     const res = await fetch(
-      `${apiBase}/banking/v1/companies/${companyId}/statements?${params}`,
+      `${apiBase}/accounts/${accountId}/statements${qs}`,
       { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
     );
 
@@ -217,7 +272,7 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     }
 
     const data = await res.json();
-    lancamentos = Array.isArray(data) ? data : data.entries || data.lancamentos || [];
+    lancamentos = Array.isArray(data) ? data : data.entries || data.transactions || data.lancamentos || [];
   }
 
   const db = getServiceClient();
@@ -279,7 +334,6 @@ async function handleListar(body: Record<string, unknown> | null, url: URL, user
 // ─── ACTION: classificar ────────────────────────────────────
 async function handleClassificar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
-
   const { id, natureza } = body;
   if (!id || !natureza) return json({ error: "id e natureza obrigatórios" }, 400);
 
@@ -292,7 +346,6 @@ async function handleClassificar(body: Record<string, unknown>, userId: string) 
 // ─── ACTION: conciliar ──────────────────────────────────────
 async function handleConciliar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
-
   const { id, conciliado, referencia_id } = body;
   if (!id) return json({ error: "id obrigatório" }, 400);
 
@@ -372,6 +425,8 @@ Deno.serve(async (req) => {
     const userId = requireAuth(req);
 
     switch (action) {
+      case "contas":
+        return await handleContas(body, url, userId);
       case "saldo":
         return await handleSaldo(body, url);
       case "extrato":
@@ -387,7 +442,7 @@ Deno.serve(async (req) => {
       case "resumo":
         return await handleResumo(body, url);
       default:
-        return json({ error: `Ação desconhecida: '${action}'. Use: saldo, extrato, importar, listar, classificar, conciliar, resumo` }, 400);
+        return json({ error: `Ação desconhecida: '${action}'. Use: contas, saldo, extrato, importar, listar, classificar, conciliar, resumo` }, 400);
     }
   } catch (e) {
     if (e instanceof Response) return e;
