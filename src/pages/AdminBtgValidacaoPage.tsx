@@ -163,15 +163,20 @@ export default function AdminBtgValidacaoPage() {
           return;
         }
 
-        const inIframe = window.self !== window.top;
-        if (inIframe) {
-          // No iframe (preview), show inline link instead of redirecting
+        const inEmbeddedPreview = isEmbeddedPreview();
+        if (inEmbeddedPreview) {
+          // Em preview (iframe), tenta sair para navegação top-level para evitar bloqueios de popup/COOP.
           setManualAuthorizeUrl((prev) => ({ ...prev, [codEmpresa]: data.authorize_url }));
+          try {
+            window.top?.location.assign(data.authorize_url);
+          } catch {
+            // mantém fallback manual abaixo do botão
+          }
           return;
         }
 
         toast.success("Redirecionando para autorização BTG...");
-        window.location.href = data.authorize_url;
+        window.location.assign(data.authorize_url);
       },
       onError: (err: Error) => {
         toast.error(`Erro ao autorizar: ${err.message}`);
