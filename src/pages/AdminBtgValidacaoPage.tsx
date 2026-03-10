@@ -337,7 +337,7 @@ export default function AdminBtgValidacaoPage() {
                   const status = getStatusForEmpresa(conta.cod_empresa);
                   const isAuth = status?.autenticado && !status?.token_expirado;
                   const isExpired = status?.autenticado && status?.token_expirado;
-                  const saldo = saldoResult[conta.cod_empresa] as Record<string, unknown> | undefined;
+                  
 
                   return (
                     <TableRow key={conta.id}>
