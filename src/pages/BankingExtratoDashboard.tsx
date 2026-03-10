@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, subDays } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import {
-  ArrowDownCircle, ArrowUpCircle, RefreshCw, CheckCircle2,
-  XCircle, Download, Filter, Landmark, TrendingUp, TrendingDown,
-  BarChart3, PieChart,
+  ArrowDownCircle, ArrowUpCircle, Download, Landmark, TrendingUp, TrendingDown,
+  BarChart3, PieChart, CheckCircle2, XCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -13,7 +11,6 @@ import { useDefaultEmpresa } from "@/hooks/useDefaultEmpresa";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -44,16 +41,15 @@ interface ResumoExtrato {
   por_natureza: Record<string, { count: number; total: number }>;
 }
 
+interface SaldoResponse {
+  available?: { amount: number; currency: string };
+  blocked?: { amount: number; currency: string };
+  sandbox?: boolean;
+}
+
 const NATUREZAS = [
-  "Vendas",
-  "Fornecedores",
-  "Salários",
-  "Impostos",
-  "Aluguel",
-  "Energia/Água",
-  "Telecom",
-  "Financeiro",
-  "Outros",
+  "Vendas", "Fornecedores", "Salários", "Impostos",
+  "Aluguel", "Energia/Água", "Telecom", "Financeiro", "Outros",
 ];
 
 export default function BankingExtratoDashboard() {
@@ -67,10 +63,10 @@ export default function BankingExtratoDashboard() {
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
   const [filtroConciliado, setFiltroConciliado] = useState<string>("todos");
 
-  // ─── Queries ─────────────────────────────────────────────
   const [autoImported, setAutoImported] = useState(false);
   useEffect(() => setAutoImported(false), [codEmpresa]);
 
+  // ─── Queries ─────────────────────────────────────────────
   const { data: lancamentos = [], isLoading } = useQuery<ExtratoItem[]>({
     queryKey: ["btg-extrato", codEmpresa, dataInicio, dataFim, filtroTipo, filtroConciliado],
     queryFn: async () => {
@@ -88,7 +84,6 @@ export default function BankingExtratoDashboard() {
           const { data: importResult } = await supabase.functions.invoke("btg-extrato", {
             body: { action: "importar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
           });
-          console.log("[BankingExtrato] Import result:", importResult);
           if (importResult?.importados > 0) {
             const { data: refetched } = await supabase.functions.invoke("btg-extrato", {
               body: { action: "listar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
@@ -101,16 +96,14 @@ export default function BankingExtratoDashboard() {
         }
       }
 
-      // 3. If still empty, try fetching directly from BTG API (live query, not persisted)
+      // 3. Fallback: live query from BTG API
       if (items.length === 0) {
         try {
           const { data: directData } = await supabase.functions.invoke("btg-extrato", {
             body: { action: "extrato", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
           });
-          console.log("[BankingExtrato] Direct extrato result:", directData);
           const directItems = directData?.lancamentos;
           if (Array.isArray(directItems) && directItems.length > 0) {
-            // Normalize to ExtratoItem shape for display
             items = directItems.map((l: Record<string, unknown>, idx: number) => {
               const rawType = String(l.type || l.tipo || "");
               const isCredit = rawType.toLowerCase() === "credit" || rawType.toUpperCase().includes("CRED");
@@ -150,14 +143,14 @@ export default function BankingExtratoDashboard() {
     },
   });
 
-  const { data: saldo } = useQuery({
+  const { data: saldo } = useQuery<SaldoResponse>({
     queryKey: ["btg-saldo", codEmpresa],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
         body: { action: "saldo", cod_empresa: codEmpresa },
       });
       if (error) throw error;
-      return data;
+      return data as SaldoResponse;
     },
   });
 
@@ -207,6 +200,9 @@ export default function BankingExtratoDashboard() {
 
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+
+  const saldoDisponivel = saldo?.available?.amount;
+  const saldoBloqueado = saldo?.blocked?.amount;
 
   return (
     <div className="space-y-6">
@@ -277,24 +273,32 @@ export default function BankingExtratoDashboard() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Landmark className="h-4 w-4" /> Saldo Atual
+              <Landmark className="h-4 w-4" /> Saldo Disponível
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">
-              {saldo?.saldo_disponivel != null ? fmtCurrency(saldo.saldo_disponivel) : "—"}
+              {saldoDisponivel != null ? fmtCurrency(saldoDisponivel) : "—"}
             </p>
+            {saldoBloqueado != null && saldoBloqueado > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Bloqueado: {fmtCurrency(saldoBloqueado)}
+              </p>
+            )}
+            {saldo?.sandbox && (
+              <p className="text-xs text-muted-foreground mt-1 italic">Sandbox</p>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-emerald-500" /> Total Créditos
+              <TrendingUp className="h-4 w-4 text-success" /> Total Créditos
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-emerald-600">
+            <p className="text-2xl font-bold text-success">
               {resumo ? fmtCurrency(resumo.total_credito) : "—"}
             </p>
           </CardContent>
@@ -320,7 +324,7 @@ export default function BankingExtratoDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className={`text-2xl font-bold ${(resumo?.saldo_periodo ?? 0) >= 0 ? "text-emerald-600" : "text-destructive"}`}>
+            <p className={`text-2xl font-bold ${(resumo?.saldo_periodo ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
               {resumo ? fmtCurrency(resumo.saldo_periodo) : "—"}
             </p>
           </CardContent>
@@ -383,14 +387,14 @@ export default function BankingExtratoDashboard() {
                       <TableCell className="text-sm">
                         <div className="flex items-center gap-2">
                           {item.tipo === "CREDITO" ? (
-                            <ArrowDownCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                            <ArrowDownCircle className="h-4 w-4 text-success shrink-0" />
                           ) : (
                             <ArrowUpCircle className="h-4 w-4 text-destructive shrink-0" />
                           )}
                           {item.descricao}
                         </div>
                       </TableCell>
-                      <TableCell className={`text-sm text-right font-medium ${item.tipo === "CREDITO" ? "text-emerald-600" : "text-destructive"}`}>
+                      <TableCell className={`text-sm text-right font-medium ${item.tipo === "CREDITO" ? "text-success" : "text-destructive"}`}>
                         {item.tipo === "DEBITO" ? "-" : "+"}{fmtCurrency(item.valor)}
                       </TableCell>
                       <TableCell className="text-sm text-right">
@@ -418,7 +422,7 @@ export default function BankingExtratoDashboard() {
                           onClick={() => conciliarMutation.mutate({ id: item.id, conciliado: !item.conciliado })}
                         >
                           {item.conciliado ? (
-                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                            <CheckCircle2 className="h-4 w-4 text-success" />
                           ) : (
                             <XCircle className="h-4 w-4 text-muted-foreground" />
                           )}
@@ -444,7 +448,7 @@ export default function BankingExtratoDashboard() {
               {Object.entries(resumo.por_natureza).map(([nat, info]) => (
                 <div key={nat} className="p-3 rounded-lg border bg-muted/30">
                   <p className="text-xs font-medium text-muted-foreground">{nat}</p>
-                  <p className={`text-lg font-bold ${info.total >= 0 ? "text-emerald-600" : "text-destructive"}`}>
+                  <p className={`text-lg font-bold ${info.total >= 0 ? "text-success" : "text-destructive"}`}>
                     {fmtCurrency(Math.abs(info.total))}
                   </p>
                   <p className="text-xs text-muted-foreground">{info.count} lançamentos</p>

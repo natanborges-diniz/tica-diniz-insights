@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   Receipt, Plus, XCircle, ExternalLink, Copy, FileText,
-  AlertTriangle, CheckCircle2, Clock,
+  AlertTriangle, CheckCircle2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -16,9 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose,
-} from "@/components/ui/dialog";
+import { BaseDialog } from "@/components/system/BaseDialog";
 import { toast } from "sonner";
 
 interface Cobranca {
@@ -37,11 +35,18 @@ interface Cobranca {
   created_at: string;
 }
 
+// BTG v2 statuses: CREATED, REGISTERED, PAID, OVERDUE, CANCELED, WRITTEN_OFF
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   EMITIDO: { label: "Emitido", variant: "outline" },
+  CREATED: { label: "Criado", variant: "outline" },
+  REGISTERED: { label: "Registrado", variant: "outline" },
   PAGO: { label: "Pago", variant: "default" },
+  PAID: { label: "Pago", variant: "default" },
   VENCIDO: { label: "Vencido", variant: "destructive" },
+  OVERDUE: { label: "Vencido", variant: "destructive" },
   CANCELADO: { label: "Cancelado", variant: "secondary" },
+  CANCELED: { label: "Cancelado", variant: "secondary" },
+  WRITTEN_OFF: { label: "Baixado", variant: "secondary" },
 };
 
 export default function BankingCobrancasDashboard() {
@@ -89,10 +94,7 @@ export default function BankingCobrancasDashboard() {
       toast.success("Boleto emitido com sucesso");
       queryClient.invalidateQueries({ queryKey: ["btg-cobrancas"] });
       setDialogOpen(false);
-      setFormValor("");
-      setFormVencimento("");
-      setFormNome("");
-      setFormDocumento("");
+      setFormValor(""); setFormVencimento(""); setFormNome(""); setFormDocumento("");
     },
     onError: () => toast.error("Erro ao emitir boleto"),
   });
@@ -119,14 +121,15 @@ export default function BankingCobrancasDashboard() {
     toast.success("Copiado!");
   };
 
-  // Detect overdue
   const hoje = new Date().toISOString().slice(0, 10);
-  const emitidos = cobrancas.filter((c) => c.status === "EMITIDO").length;
-  const pagosCount = cobrancas.filter((c) => c.status === "PAGO").length;
-  const vencidos = cobrancas.filter((c) => c.status === "EMITIDO" && c.data_vencimento < hoje).length;
-  const totalEmitido = cobrancas
-    .filter((c) => c.status === "EMITIDO")
+  const abertos = cobrancas.filter((c) => ["EMITIDO", "CREATED", "REGISTERED"].includes(c.status)).length;
+  const pagosCount = cobrancas.filter((c) => ["PAGO", "PAID"].includes(c.status)).length;
+  const vencidos = cobrancas.filter((c) => ["EMITIDO", "CREATED", "REGISTERED"].includes(c.status) && c.data_vencimento < hoje).length;
+  const totalAberto = cobrancas
+    .filter((c) => ["EMITIDO", "CREATED", "REGISTERED"].includes(c.status))
     .reduce((s, c) => s + Number(c.valor), 0);
+
+  const isAberto = (status: string) => ["EMITIDO", "CREATED", "REGISTERED"].includes(status);
 
   return (
     <div className="space-y-6">
@@ -135,42 +138,44 @@ export default function BankingCobrancasDashboard() {
         subtitle="Emissão e gestão de boletos via BTG Pactual"
         icon={<Receipt className="h-5 w-5" />}
         actions={
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Emitir Boleto</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Emitir Boleto</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-2">
-                <div className="space-y-1">
-                  <Label>Valor (R$)</Label>
-                  <Input type="number" step="0.01" value={formValor} onChange={(e) => setFormValor(e.target.value)} placeholder="0,00" />
-                </div>
-                <div className="space-y-1">
-                  <Label>Vencimento</Label>
-                  <Input type="date" value={formVencimento} onChange={(e) => setFormVencimento(e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Nome do Pagador</Label>
-                  <Input value={formNome} onChange={(e) => setFormNome(e.target.value)} placeholder="Razão social ou nome" />
-                </div>
-                <div className="space-y-1">
-                  <Label>CPF/CNPJ do Pagador</Label>
-                  <Input value={formDocumento} onChange={(e) => setFormDocumento(e.target.value)} placeholder="00.000.000/0001-00" />
-                </div>
-              </div>
-              <DialogFooter>
-                <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-                <Button onClick={() => emitirMutation.mutate()} disabled={emitirMutation.isPending || !formValor || !formVencimento || !formDocumento}>
-                  Emitir
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button size="sm" onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" /> Emitir Boleto
+          </Button>
         }
       />
+
+      <BaseDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        title="Emitir Boleto"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={() => emitirMutation.mutate()} disabled={emitirMutation.isPending || !formValor || !formVencimento || !formDocumento}>
+              Emitir
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 py-2">
+          <div className="space-y-1">
+            <Label>Valor (R$)</Label>
+            <Input type="number" step="0.01" value={formValor} onChange={(e) => setFormValor(e.target.value)} placeholder="0,00" />
+          </div>
+          <div className="space-y-1">
+            <Label>Vencimento</Label>
+            <Input type="date" value={formVencimento} onChange={(e) => setFormVencimento(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label>Nome do Pagador</Label>
+            <Input value={formNome} onChange={(e) => setFormNome(e.target.value)} placeholder="Razão social ou nome" />
+          </div>
+          <div className="space-y-1">
+            <Label>CPF/CNPJ do Pagador</Label>
+            <Input value={formDocumento} onChange={(e) => setFormDocumento(e.target.value)} placeholder="00.000.000/0001-00" />
+          </div>
+        </div>
+      </BaseDialog>
 
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3">
@@ -193,9 +198,10 @@ export default function BankingCobrancasDashboard() {
             <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos</SelectItem>
-              {Object.entries(STATUS_CONFIG).map(([k, v]) => (
-                <SelectItem key={k} value={k}>{v.label}</SelectItem>
-              ))}
+              <SelectItem value="EMITIDO">Emitido</SelectItem>
+              <SelectItem value="PAGO">Pago</SelectItem>
+              <SelectItem value="VENCIDO">Vencido</SelectItem>
+              <SelectItem value="CANCELADO">Cancelado</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -206,10 +212,10 @@ export default function BankingCobrancasDashboard() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-              <FileText className="h-4 w-4" /> Emitidos
+              <FileText className="h-4 w-4" /> Em Aberto
             </CardTitle>
           </CardHeader>
-          <CardContent><p className="text-2xl font-bold">{emitidos}</p></CardContent>
+          <CardContent><p className="text-2xl font-bold">{abertos}</p></CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
@@ -233,7 +239,7 @@ export default function BankingCobrancasDashboard() {
               <Receipt className="h-4 w-4" /> Total em Aberto
             </CardTitle>
           </CardHeader>
-          <CardContent><p className="text-2xl font-bold">{fmtCurrency(totalEmitido)}</p></CardContent>
+          <CardContent><p className="text-2xl font-bold">{fmtCurrency(totalAberto)}</p></CardContent>
         </Card>
       </div>
 
@@ -262,7 +268,7 @@ export default function BankingCobrancasDashboard() {
                   <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma cobrança encontrada.</TableCell></TableRow>
                 ) : cobrancas.map((c) => {
                   const sc = STATUS_CONFIG[c.status] || { label: c.status, variant: "outline" as const };
-                  const isVencido = c.status === "EMITIDO" && c.data_vencimento < hoje;
+                  const isVencido = isAberto(c.status) && c.data_vencimento < hoje;
                   return (
                     <TableRow key={c.id} className={isVencido ? "bg-destructive/5" : ""}>
                       <TableCell className="text-sm">
@@ -297,7 +303,7 @@ export default function BankingCobrancasDashboard() {
                               </a>
                             </Button>
                           )}
-                          {c.status === "EMITIDO" && (
+                          {isAberto(c.status) && (
                             <Button size="sm" variant="ghost" onClick={() => cancelarMutation.mutate(c.id)} disabled={cancelarMutation.isPending}>
                               <XCircle className="h-3.5 w-3.5" />
                             </Button>
