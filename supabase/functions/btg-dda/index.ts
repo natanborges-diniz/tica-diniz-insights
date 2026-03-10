@@ -268,13 +268,20 @@ async function handleConciliarAuto(body: Record<string, unknown>, userId: string
     return json({ error: "Não foi possível consultar parcelas do ERP", details: String(e) }, 502);
   }
 
-  const parcelasIndex = new Map<string, Record<string, unknown>>();
+  // Index parcelas by valor+vencimento (primary) and valor-only (fallback)
+  const parcelasIndexExact = new Map<string, Record<string, unknown>>();
+  const parcelasIndexValorVenc = new Map<string, Record<string, unknown>>();
   for (const p of parcelasErp) {
     const valor = Number(p.parcela_valor || 0).toFixed(2);
     const venc = (String(p.parcela_data_vencimento || "")).slice(0, 10);
-    const doc = (String(p.lancamento_documento || "")).trim();
-    const key = `${valor}|${venc}|${doc}`;
-    if (!parcelasIndex.has(key)) parcelasIndex.set(key, p);
+    const keyExact = `${valor}|${venc}`;
+    if (!parcelasIndexExact.has(keyExact)) parcelasIndexExact.set(keyExact, p);
+    // Also index by valor+fornecedor (CNPJ) for CNPJ-based matching
+    const cnpjForn = (String(p.fornecedor_cnpj || p.pessoa_identificador || "")).replace(/\D/g, "");
+    if (cnpjForn) {
+      const keyCnpj = `${valor}|${venc}|${cnpjForn}`;
+      if (!parcelasIndexValorVenc.has(keyCnpj)) parcelasIndexValorVenc.set(keyCnpj, p);
+    }
   }
 
   let conciliadosCount = 0;
@@ -283,14 +290,32 @@ async function handleConciliarAuto(body: Record<string, unknown>, userId: string
   for (const titulo of titulosDda) {
     const valorStr = Number(titulo.valor).toFixed(2);
     const vencStr = (titulo.data_vencimento || "").slice(0, 10);
-    const docStr = (titulo.numero_documento || "").trim();
-    const matchKey = `${valorStr}|${vencStr}|${docStr}`;
+    const cnpjDda = (titulo.documento_emissor || "").replace(/\D/g, "");
 
-    const parcelaMatch = parcelasIndex.get(matchKey);
+    // Try CNPJ + valor + vencimento first (most precise)
+    let parcelaMatch: Record<string, unknown> | undefined;
+    let matchKeyUsed = "";
+
+    if (cnpjDda) {
+      const keyCnpj = `${valorStr}|${vencStr}|${cnpjDda}`;
+      parcelaMatch = parcelasIndexValorVenc.get(keyCnpj);
+      if (parcelaMatch) matchKeyUsed = keyCnpj;
+    }
+
+    // Fallback: valor + vencimento only
+    if (!parcelaMatch) {
+      const keyExact = `${valorStr}|${vencStr}`;
+      parcelaMatch = parcelasIndexExact.get(keyExact);
+      if (parcelaMatch) matchKeyUsed = keyExact;
+    }
 
     if (parcelaMatch) {
       await db.from("btg_dda_titulos").update({ conciliado: true, status: "CONCILIADO" }).eq("id", titulo.id);
-      parcelasIndex.delete(matchKey);
+      if (matchKeyUsed.includes("|") && matchKeyUsed.split("|").length === 3) {
+        parcelasIndexValorVenc.delete(matchKeyUsed);
+      } else {
+        parcelasIndexExact.delete(matchKeyUsed);
+      }
       conciliadosCount++;
     } else {
       semMatch++;
