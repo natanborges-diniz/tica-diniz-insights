@@ -471,17 +471,6 @@ export default function AdminBtgValidacaoPage() {
                             </Button>
                           )}
                         </div>
-                        {/* Saldo result inline */}
-                        {saldo && (
-                          <div className="mt-2 text-left text-xs bg-muted/50 rounded p-2">
-                            <div className="font-medium text-foreground">
-                              Saldo: R$ {Number(
-                                (saldo.available as Record<string, unknown>)?.amount ?? saldo.saldo_disponivel ?? 0
-                              ).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                            </div>
-                            {saldo.sandbox && <span className="text-muted-foreground">(sandbox)</span>}
-                          </div>
-                        )}
                       </TableCell>
                     </TableRow>
                   );
