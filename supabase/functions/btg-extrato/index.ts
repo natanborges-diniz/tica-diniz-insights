@@ -225,7 +225,25 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
   }
 
   const data = await res.json();
-  return json({ cod_empresa: codEmpresa, lancamentos: data });
+  console.log("[btg-extrato] handleExtrato raw keys:", Object.keys(data || {}));
+  console.log("[btg-extrato] handleExtrato raw (500ch):", JSON.stringify(data).substring(0, 500));
+
+  // Normalize response to find transaction array
+  let items: unknown[] = [];
+  if (Array.isArray(data)) {
+    items = data;
+  } else {
+    for (const key of ["entries", "transactions", "lancamentos", "data", "items", "statement"]) {
+      if (Array.isArray(data?.[key])) { items = data[key]; break; }
+    }
+    if (items.length === 0) {
+      for (const key of Object.keys(data || {})) {
+        if (Array.isArray(data[key]) && data[key].length > 0) { items = data[key]; break; }
+      }
+    }
+  }
+
+  return json({ cod_empresa: codEmpresa, lancamentos: items, raw_keys: Object.keys(data || {}) });
 }
 
 // ─── ACTION: importar ────────────────────────────────────────
