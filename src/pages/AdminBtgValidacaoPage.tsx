@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import {
   Shield, CheckCircle2, XCircle, RefreshCw, ExternalLink,
   Landmark, AlertTriangle, Settings2, KeyRound,
-  Eye, EyeOff, Save, Loader2, Globe, ChevronDown, ChevronUp,
+  Eye, EyeOff, Save, Loader2, Globe, ChevronDown, ChevronUp, Copy,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
