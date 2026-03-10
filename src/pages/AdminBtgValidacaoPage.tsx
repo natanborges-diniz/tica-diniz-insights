@@ -70,6 +70,14 @@ async function callBtgAuth(action: string, body?: Record<string, unknown>) {
   return res.json();
 }
 
+const isEmbeddedPreview = () => {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+};
+
 // ─── Main Component ─────────────────────────────────────────
 export default function AdminBtgValidacaoPage() {
   const { isAdmin } = useAuth();
