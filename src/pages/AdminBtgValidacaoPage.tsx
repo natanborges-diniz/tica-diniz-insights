@@ -209,6 +209,28 @@ export default function AdminBtgValidacaoPage() {
     onError: (err: Error) => toast.error(`Erro ao renovar: ${err.message}`),
   });
 
+  // Discover accounts mutation
+  const [saldoResult, setSaldoResult] = useState<Record<number, unknown>>({});
+  const contasMutation = useMutation({
+    mutationFn: async (codEmpresa: number) => callBtgExtrato("contas", { cod_empresa: codEmpresa }),
+    onSuccess: (data) => {
+      toast.success(`Contas descobertas! ${JSON.stringify(data.contas?.length || 0)} conta(s) encontrada(s).`);
+      queryClient.invalidateQueries({ queryKey: ["btg-contas"] });
+    },
+    onError: (err: Error) => toast.error(`Erro ao descobrir contas: ${err.message}`),
+  });
+
+  // Check balance mutation
+  const saldoMutation = useMutation({
+    mutationFn: async (codEmpresa: number) => callBtgExtrato("saldo", { cod_empresa: codEmpresa }),
+    onSuccess: (data, codEmpresa) => {
+      setSaldoResult((prev) => ({ ...prev, [codEmpresa]: data }));
+      const available = data?.available?.amount ?? data?.saldo_disponivel ?? "N/A";
+      toast.success(`Saldo disponível: R$ ${Number(available).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`);
+    },
+    onError: (err: Error) => toast.error(`Erro ao consultar saldo: ${err.message}`),
+  });
+
   const getStatusForEmpresa = (codEmpresa: number) =>
     tokenStatus?.find((t) => t.cod_empresa === codEmpresa);
 
