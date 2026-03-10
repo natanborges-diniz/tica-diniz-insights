@@ -74,7 +74,7 @@ async function callBtgAuth(action: string, body?: Record<string, unknown>) {
 export default function AdminBtgValidacaoPage() {
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
-  const [manualAuthorizeUrl, setManualAuthorizeUrl] = useState<string | null>(null);
+  const [manualAuthorizeUrl, setManualAuthorizeUrl] = useState<Record<number, string>>({});
 
   // Handle callback redirect from BTG OAuth
   useEffect(() => {
