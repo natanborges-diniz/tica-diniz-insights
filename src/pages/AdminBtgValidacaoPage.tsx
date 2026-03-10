@@ -146,25 +146,20 @@ export default function AdminBtgValidacaoPage() {
   });
 
   const handleAuthorize = (codEmpresa: number) => {
-    const inIframe = window.self !== window.top;
-    const authTab = inIframe ? window.open("about:blank", "_blank") : null;
-
-    if (inIframe && !authTab) {
-      toast.error("Safari bloqueou a nova aba. Permita pop-ups para continuar.");
-      return;
-    }
+    setManualAuthorizeUrl(null);
 
     authorizeMutation.mutate(codEmpresa, {
       onSuccess: (data) => {
         if (!data?.authorize_url) {
-          if (authTab && !authTab.closed) authTab.close();
           toast.error("URL de autorização não retornada.");
           return;
         }
 
-        if (authTab && !authTab.closed) {
-          authTab.location.href = data.authorize_url;
-          toast.success("Autorização aberta em nova aba.");
+        setManualAuthorizeUrl(data.authorize_url);
+
+        const inIframe = window.self !== window.top;
+        if (inIframe) {
+          toast.info("Safari: use o botão 'Abrir BTG em nova aba' abaixo.");
           return;
         }
 
@@ -172,7 +167,6 @@ export default function AdminBtgValidacaoPage() {
         window.location.href = data.authorize_url;
       },
       onError: (err: Error) => {
-        if (authTab && !authTab.closed) authTab.close();
         toast.error(`Erro ao autorizar: ${err.message}`);
       },
     });
