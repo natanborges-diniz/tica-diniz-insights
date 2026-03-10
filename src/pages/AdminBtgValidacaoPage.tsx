@@ -177,6 +177,19 @@ export default function AdminBtgValidacaoPage() {
     });
   };
 
+  // Refresh token mutation
+  const refreshMutation = useMutation({
+    mutationFn: async (codEmpresa: number) => callBtgAuth("refresh", { cod_empresa: codEmpresa }),
+    onSuccess: () => {
+      toast.success("Token renovado com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["btg-status"] });
+    },
+    onError: (err: Error) => toast.error(`Erro ao renovar: ${err.message}`),
+  });
+
+  const getStatusForEmpresa = (codEmpresa: number) =>
+    tokenStatus?.find((t) => t.cod_empresa === codEmpresa);
+
   if (!isAdmin) {
     return (
       <div className="p-8 text-center text-muted-foreground">
