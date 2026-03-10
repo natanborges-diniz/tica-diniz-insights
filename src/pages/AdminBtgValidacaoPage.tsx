@@ -70,6 +70,21 @@ async function callBtgAuth(action: string, body?: Record<string, unknown>) {
   return res.json();
 }
 
+async function callBtgExtrato(action: string, body?: Record<string, unknown>) {
+  const headers = await getAuthHeaders();
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/btg-extrato`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ action, ...body }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `Erro ${res.status}`);
+  }
+  return res.json();
+}
+
 const isEmbeddedPreview = () => {
   try {
     return window.self !== window.top;
@@ -83,6 +98,7 @@ export default function AdminBtgValidacaoPage() {
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [manualAuthorizeUrl, setManualAuthorizeUrl] = useState<Record<number, string>>({});
+  const [saldoResult, setSaldoResult] = useState<Record<number, unknown>>({});
 
   // Handle callback redirect from BTG OAuth
   useEffect(() => {
@@ -194,6 +210,27 @@ export default function AdminBtgValidacaoPage() {
     onError: (err: Error) => toast.error(`Erro ao renovar: ${err.message}`),
   });
 
+  // Discover accounts mutation
+  const contasMutation = useMutation({
+    mutationFn: async (codEmpresa: number) => callBtgExtrato("contas", { cod_empresa: codEmpresa }),
+    onSuccess: (data) => {
+      toast.success(`Contas descobertas! ${JSON.stringify(data.contas?.length || 0)} conta(s) encontrada(s).`);
+      queryClient.invalidateQueries({ queryKey: ["btg-contas"] });
+    },
+    onError: (err: Error) => toast.error(`Erro ao descobrir contas: ${err.message}`),
+  });
+
+  // Check balance mutation
+  const saldoMutation = useMutation({
+    mutationFn: async (codEmpresa: number) => callBtgExtrato("saldo", { cod_empresa: codEmpresa }),
+    onSuccess: (data, codEmpresa) => {
+      setSaldoResult((prev) => ({ ...prev, [codEmpresa]: data }));
+      const available = data?.available?.amount ?? data?.saldo_disponivel ?? "N/A";
+      toast.success(`Saldo disponível: R$ ${Number(available).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`);
+    },
+    onError: (err: Error) => toast.error(`Erro ao consultar saldo: ${err.message}`),
+  });
+
   const getStatusForEmpresa = (codEmpresa: number) =>
     tokenStatus?.find((t) => t.cod_empresa === codEmpresa);
 
@@ -298,7 +335,7 @@ export default function AdminBtgValidacaoPage() {
                 <TableRow>
                   <TableHead>Empresa</TableHead>
                   <TableHead>CNPJ</TableHead>
-                  <TableHead>Company ID</TableHead>
+                  <TableHead>Account ID</TableHead>
                   <TableHead>Status OAuth</TableHead>
                   <TableHead>Expira em</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -309,6 +346,7 @@ export default function AdminBtgValidacaoPage() {
                   const status = getStatusForEmpresa(conta.cod_empresa);
                   const isAuth = status?.autenticado && !status?.token_expirado;
                   const isExpired = status?.autenticado && status?.token_expirado;
+                  const saldo = saldoResult[conta.cod_empresa] as Record<string, unknown> | undefined;
 
                   return (
                     <TableRow key={conta.id}>
@@ -319,7 +357,11 @@ export default function AdminBtgValidacaoPage() {
                         {conta.cnpj || "—"}
                       </TableCell>
                       <TableCell className="font-mono text-xs">
-                        {conta.company_id || <span className="text-muted-foreground">não definido</span>}
+                        {conta.account_id ? (
+                          <span className="text-emerald-700">{conta.account_id}</span>
+                        ) : (
+                          <span className="text-muted-foreground">não descoberto</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {isAuth ? (
@@ -346,6 +388,30 @@ export default function AdminBtgValidacaoPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-2 justify-end flex-wrap items-center">
+                          {/* Discover accounts */}
+                          {isAuth && !conta.account_id && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => contasMutation.mutate(conta.cod_empresa)}
+                              disabled={contasMutation.isPending}
+                            >
+                              {contasMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Landmark className="h-3 w-3 mr-1" />}
+                              Descobrir Contas
+                            </Button>
+                          )}
+                          {/* Check balance */}
+                          {isAuth && conta.account_id && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => saldoMutation.mutate(conta.cod_empresa)}
+                              disabled={saldoMutation.isPending}
+                            >
+                              {saldoMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Shield className="h-3 w-3 mr-1" />}
+                              Ver Saldo
+                            </Button>
+                          )}
                           {!isAuth && (
                             <Button
                               size="sm"
@@ -393,6 +459,17 @@ export default function AdminBtgValidacaoPage() {
                             </Button>
                           )}
                         </div>
+                        {/* Saldo result inline */}
+                        {saldo && (
+                          <div className="mt-2 text-left text-xs bg-muted/50 rounded p-2">
+                            <div className="font-medium text-foreground">
+                              Saldo: R$ {Number(
+                                (saldo.available as Record<string, unknown>)?.amount ?? saldo.saldo_disponivel ?? 0
+                              ).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </div>
+                            {saldo.sandbox && <span className="text-muted-foreground">(sandbox)</span>}
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
