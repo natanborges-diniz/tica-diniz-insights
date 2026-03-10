@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -57,6 +57,9 @@ export default function BankingDdaDashboard() {
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [filtroConciliado, setFiltroConciliado] = useState<string>("todos");
 
+  const [autoImported, setAutoImported] = useState(false);
+  useEffect(() => setAutoImported(false), [codEmpresa]);
+
   const { data: titulos = [], isLoading } = useQuery<DdaTitulo[]>({
     queryKey: ["btg-dda", codEmpresa, filtroStatus, filtroConciliado],
     queryFn: async () => {
@@ -65,6 +68,26 @@ export default function BankingDdaDashboard() {
       });
       if (error) throw error;
       let items = Array.isArray(data) ? data : [];
+
+      // Auto-import from BTG if no local data exists
+      if (items.length === 0 && !autoImported) {
+        setAutoImported(true);
+        try {
+          const { data: importResult } = await supabase.functions.invoke("btg-dda", {
+            body: { action: "importar", cod_empresa: codEmpresa },
+          });
+          if (importResult?.importados > 0) {
+            const { data: refetched } = await supabase.functions.invoke("btg-dda", {
+              body: { action: "listar", cod_empresa: codEmpresa },
+            });
+            items = Array.isArray(refetched) ? refetched : [];
+            toast.success(`${importResult.importados} títulos DDA importados do BTG`);
+          }
+        } catch (e) {
+          console.warn("Auto-import DDA failed:", e);
+        }
+      }
+
       if (filtroStatus !== "todos") items = items.filter((i: DdaTitulo) => i.status === filtroStatus);
       if (filtroConciliado !== "todos") items = items.filter((i: DdaTitulo) => String(i.conciliado) === filtroConciliado);
       return items;

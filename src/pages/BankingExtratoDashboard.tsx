@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -68,24 +68,39 @@ export default function BankingExtratoDashboard() {
   const [filtroConciliado, setFiltroConciliado] = useState<string>("todos");
 
   // ─── Queries ─────────────────────────────────────────────
+  const [autoImported, setAutoImported] = useState(false);
+  useEffect(() => setAutoImported(false), [codEmpresa]);
+
   const { data: lancamentos = [], isLoading } = useQuery<ExtratoItem[]>({
     queryKey: ["btg-extrato", codEmpresa, dataInicio, dataFim, filtroTipo, filtroConciliado],
     queryFn: async () => {
-      const params: Record<string, string> = {
-        action: "listar",
-        cod_empresa: String(codEmpresa),
-        data_inicio: dataInicio,
-        data_fim: dataFim,
-        limit: "500",
-      };
-      if (filtroTipo !== "todos") params.tipo = filtroTipo;
-      if (filtroConciliado !== "todos") params.conciliado = filtroConciliado;
-
+      // First try to list from local DB
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
         body: { action: "listar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
       });
       if (error) throw error;
       let items = Array.isArray(data) ? data : [];
+
+      // Auto-import from BTG if no local data exists
+      if (items.length === 0 && !autoImported) {
+        setAutoImported(true);
+        try {
+          const { data: importResult } = await supabase.functions.invoke("btg-extrato", {
+            body: { action: "importar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
+          });
+          if (importResult?.importados > 0) {
+            // Re-fetch after import
+            const { data: refetched } = await supabase.functions.invoke("btg-extrato", {
+              body: { action: "listar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
+            });
+            items = Array.isArray(refetched) ? refetched : [];
+            toast.success(`${importResult.importados} lançamentos importados do BTG`);
+          }
+        } catch (e) {
+          console.warn("Auto-import failed:", e);
+        }
+      }
+
       if (filtroTipo !== "todos") items = items.filter((i: ExtratoItem) => i.tipo === filtroTipo);
       if (filtroConciliado !== "todos") items = items.filter((i: ExtratoItem) => String(i.conciliado) === filtroConciliado);
       return items;
