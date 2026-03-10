@@ -211,7 +211,6 @@ export default function AdminBtgValidacaoPage() {
   });
 
   // Discover accounts mutation
-  const [saldoResult, setSaldoResult] = useState<Record<number, unknown>>({});
   const contasMutation = useMutation({
     mutationFn: async (codEmpresa: number) => callBtgExtrato("contas", { cod_empresa: codEmpresa }),
     onSuccess: (data) => {
