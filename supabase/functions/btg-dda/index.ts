@@ -171,21 +171,21 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
       if (existing) { duplicados++; continue; }
     }
 
-    // Map BTG API fields — handle nested payee object and flat patterns
+    // Map BTG API fields — handle nested payee object
     const payee = (titulo.payee || {}) as Record<string, unknown>;
-    const emissorVal = (titulo.issuerName || titulo.issuer_name || payee.fantasyName || payee.socialName || titulo.payeeName || titulo.beneficiaryName || titulo.emissor || null) as string | null;
-    const docEmissorVal = (titulo.issuerDocument || titulo.issuer_document || payee.taxId || titulo.payeeDocument || titulo.beneficiaryDocument || titulo.documento_emissor || null) as string | null;
-    const numDocVal = (titulo.documentNumber || titulo.document_number || titulo.barCodeNumber || titulo.numero_documento || null) as string | null;
-    const valorVal = Number(titulo.amount || titulo.value || titulo.valor || titulo.totalAmount || 0);
-    const vencVal = (titulo.dueDate || titulo.due_date || titulo.maturityDate || titulo.data_vencimento || new Date().toISOString().slice(0, 10)) as string;
-    const linhaVal = (titulo.digitableLine || titulo.digitable_line || titulo.barcode || titulo.linha_digitavel || null) as string | null;
+    const emissorVal = (payee.fantasyName || payee.socialName || titulo.issuerName || titulo.payeeName || null) as string | null;
+    const docEmissorVal = (payee.taxId || titulo.issuerDocument || titulo.payeeDocument || null) as string | null;
+    const bancoVal = (payee.bankName || null) as string | null;
+    const valorVal = Number(titulo.amount || titulo.value || 0);
+    const vencVal = (titulo.dueDate || titulo.due_date || new Date().toISOString().slice(0, 10)) as string;
+    const linhaVal = (titulo.digitableLine || titulo.digitable_line || null) as string | null;
 
     const { error } = await db.from("btg_dda_titulos").insert({
       cod_empresa: ce,
       btg_dda_id: btgDdaId || null,
       emissor: emissorVal,
       documento_emissor: docEmissorVal,
-      numero_documento: numDocVal,
+      banco_emissor: bancoVal,
       valor: valorVal,
       data_vencimento: vencVal,
       linha_digitavel: linhaVal,
