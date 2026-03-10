@@ -1,7 +1,9 @@
 // supabase/functions/btg-cobrancas/index.ts
 // BTG Pactual Banking — Cobranças / Boletos (endpoints oficiais v2)
 // Path: /{CNPJ}/banking/collections
-// Actions: emitir, listar, detalhe, cancelar, segunda_via
+// Actions: emitir, listar, detalhe, cancelar, segunda_via, importar
+// BTG Collection Types: BANKSLIP, BANKSLIP_QRCODE, DUE_DATE_PIX
+// BTG Status: CREATED, PROCESSING, PAID, OVERDUE, CANCELED, FAILED, EXPIRED
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -92,42 +94,87 @@ async function getCnpj(codEmpresa: number): Promise<string> {
   throw json({ error: `CNPJ não encontrado para empresa ${codEmpresa}` }, 400);
 }
 
-// ─── Param helper ────────────────────────────────────────────
+async function getAccountId(codEmpresa: number): Promise<string> {
+  const db = getServiceClient();
+  const { data } = await db.from("btg_contas_bancarias").select("account_id").eq("cod_empresa", codEmpresa).eq("ativa", true).single();
+  if (!data?.account_id) throw json({ error: `Account ID não configurado para empresa ${codEmpresa}.` }, 400);
+  return data.account_id;
+}
+
 function getParam(body: Record<string, unknown> | null, url: URL, key: string): string | null {
   if (body && body[key] !== undefined && body[key] !== null) return String(body[key]);
   return url.searchParams.get(key);
 }
 
 // ─── ACTION: emitir ──────────────────────────────────────────
+// BTG POST /collections expects:
+// { amount, type (BANKSLIP|BANKSLIP_QRCODE|DUE_DATE_PIX), dueDate, overDueDate,
+//   payer: { name, personType (J|F), document },
+//   account: { accountId },
+//   detail: { bankslip: {} } (for BANKSLIP type),
+//   description, deliveryMediums, interest, fine, discounts }
 async function handleEmitir(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
-  const { cod_empresa, valor, data_vencimento, sacado_nome, sacado_documento, parcela_id } = body;
+  const { cod_empresa, valor, data_vencimento, data_expiracao, sacado_nome, sacado_documento,
+    parcela_id, tipo_cobranca, descricao } = body;
 
   if (!cod_empresa || !valor || !data_vencimento || !sacado_documento) {
     return json({ error: "cod_empresa, valor, data_vencimento e sacado_documento são obrigatórios" }, 400);
   }
 
   const ce = Number(cod_empresa);
+  const collectionType = String(tipo_cobranca || "BANKSLIP");
   const { apiBase, isSandbox } = await getBtgConfig();
 
-  let btgReceivableId = "";
+  let btgCollectionId = "";
   let linhaDigitavel = "";
   let urlBoleto = "";
+  let btgStatus = "CREATED";
 
   if (isSandbox) {
-    btgReceivableId = `sandbox-rcv-${Date.now()}`;
+    btgCollectionId = `sandbox-col-${Date.now()}`;
     linhaDigitavel = "23793.38128 60000.000003 00000.000402 1 " + String(Math.floor(Math.random() * 9999999999)).padStart(10, "0");
-    urlBoleto = `https://sandbox.btgpactual.com/boleto/${btgReceivableId}`;
+    urlBoleto = `https://sandbox.btgpactual.com/boleto/${btgCollectionId}`;
   } else {
     const accessToken = await getBtgToken(ce);
     const cnpj = await getCnpj(ce);
+    const accountId = await getAccountId(ce);
 
-    const btgPayload = {
+    // Determine personType from document length
+    const doc = String(sacado_documento).replace(/\D/g, "");
+    const personType = doc.length > 11 ? "J" : "F";
+
+    // Calculate overDueDate: use provided or default +30 days from dueDate
+    const overDueDate = data_expiracao
+      ? String(data_expiracao)
+      : (() => {
+          const d = new Date(String(data_vencimento));
+          d.setDate(d.getDate() + 30);
+          return d.toISOString().slice(0, 10);
+        })();
+
+    const btgPayload: Record<string, unknown> = {
       amount: Number(valor),
+      type: collectionType,
       dueDate: String(data_vencimento),
-      payer: { name: sacado_nome ? String(sacado_nome) : "", taxId: String(sacado_documento) },
+      overDueDate,
+      payer: {
+        name: sacado_nome ? String(sacado_nome) : "",
+        document: doc,
+        personType,
+      },
+      account: { accountId },
     };
+
+    if (descricao) btgPayload.description = String(descricao);
+
+    // Add type-specific detail
+    if (collectionType === "BANKSLIP" || collectionType === "BANKSLIP_QRCODE") {
+      btgPayload.detail = { bankslip: {} };
+    }
+
+    console.log("[btg-cobrancas] BTG payload:", JSON.stringify(btgPayload).substring(0, 500));
 
     const btgRes = await fetch(
       `${apiBase}/${cnpj}/banking/collections`,
@@ -143,22 +190,24 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
       return json({ error: "BTG rejeitou a emissão", btg_status: btgRes.status, details: btgData }, 502);
     }
 
-    btgReceivableId = (btgData.id || btgData.collectionId || "") as string;
-    linhaDigitavel = (btgData.digitableLine || btgData.linha_digitavel || "") as string;
+    // BTG response: { collectionId, status, digitableLine, ... }
+    btgCollectionId = (btgData.collectionId || btgData.id || "") as string;
+    linhaDigitavel = (btgData.digitableLine || btgData.digitableLi || "") as string;
     urlBoleto = (btgData.url || btgData.boletoUrl || "") as string;
+    btgStatus = (btgData.status || "CREATED") as string;
   }
 
   const db = getServiceClient();
   const { data, error } = await db.from("btg_cobrancas").insert({
     cod_empresa: ce,
-    btg_receivable_id: btgReceivableId || null,
+    btg_receivable_id: btgCollectionId || null,
     valor: Number(valor),
     data_vencimento: String(data_vencimento),
     sacado_nome: sacado_nome ? String(sacado_nome) : null,
     sacado_documento: String(sacado_documento),
     linha_digitavel: linhaDigitavel || null,
     url_boleto: urlBoleto || null,
-    status: "EMITIDO",
+    status: btgStatus,
     parcela_id: parcela_id ? String(parcela_id) : null,
   }).select().single();
 
@@ -168,6 +217,88 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
   }
 
   return json({ success: true, cobranca: data, sandbox: isSandbox }, 201);
+}
+
+// ─── ACTION: importar (fetch existing collections from BTG) ──
+async function handleImportar(body: Record<string, unknown>, userId: string) {
+  await requireAdminRole(userId);
+
+  const { cod_empresa } = body;
+  if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
+
+  const ce = Number(cod_empresa);
+  const { apiBase, isSandbox } = await getBtgConfig();
+
+  let btgItems: Record<string, unknown>[] = [];
+
+  if (isSandbox) {
+    btgItems = [
+      { collectionId: `sandbox-col-1`, amount: 1500.00, dueDate: "2026-03-15", status: "CREATED", payer: { name: "CLIENTE TESTE 1", document: "12345678000100" }, digitableLine: "23793.38128 60000.000003 00000.000402 1 88880000150000" },
+      { collectionId: `sandbox-col-2`, amount: 3200.00, dueDate: "2026-03-10", status: "PAID", payer: { name: "CLIENTE TESTE 2", document: "98765432000199" }, digitableLine: "23793.38128 60000.000004 00000.000403 1 88880000320000" },
+      { collectionId: `sandbox-col-3`, amount: 890.00, dueDate: "2026-02-28", status: "OVERDUE", payer: { name: "CLIENTE TESTE 3", document: "11222333000144" }, digitableLine: "23793.38128 60000.000005 00000.000404 1 88880000089000" },
+    ];
+  } else {
+    const accessToken = await getBtgToken(ce);
+    const cnpj = await getCnpj(ce);
+    const accountId = await getAccountId(ce);
+
+    const params = new URLSearchParams();
+    params.set("accountId", accountId);
+
+    const btgRes = await fetch(
+      `${apiBase}/${cnpj}/banking/collections?${params}`,
+      { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
+    );
+
+    const btgBody = await btgRes.text();
+    if (!btgRes.ok) {
+      console.error("[btg-cobrancas] BTG import error:", btgRes.status, btgBody);
+      return json({ error: "Erro ao importar cobranças do BTG", btg_status: btgRes.status, details: btgBody }, 502);
+    }
+
+    try {
+      const parsed = JSON.parse(btgBody);
+      btgItems = Array.isArray(parsed) ? parsed : (parsed.items || parsed.content || parsed.data || []);
+    } catch {
+      return json({ error: "Resposta inválida do BTG" }, 502);
+    }
+  }
+
+  const db = getServiceClient();
+  let inseridos = 0;
+  let duplicados = 0;
+
+  for (const item of btgItems) {
+    const collectionId = (item.collectionId || item.id || "") as string;
+
+    if (collectionId) {
+      const { data: existing } = await db
+        .from("btg_cobrancas")
+        .select("id")
+        .eq("btg_receivable_id", collectionId)
+        .eq("cod_empresa", ce)
+        .maybeSingle();
+      if (existing) { duplicados++; continue; }
+    }
+
+    const payer = item.payer as Record<string, unknown> | undefined;
+    const { error } = await db.from("btg_cobrancas").insert({
+      cod_empresa: ce,
+      btg_receivable_id: collectionId || null,
+      valor: Number(item.amount || 0),
+      data_vencimento: (item.dueDate || new Date().toISOString().slice(0, 10)) as string,
+      sacado_nome: (payer?.name || null) as string | null,
+      sacado_documento: (payer?.document || payer?.taxId || null) as string | null,
+      linha_digitavel: (item.digitableLine || null) as string | null,
+      url_boleto: (item.url || item.boletoUrl || null) as string | null,
+      status: (item.status || "CREATED") as string,
+    });
+
+    if (!error) inseridos++;
+    else console.warn("[btg-cobrancas] Insert error:", error.message);
+  }
+
+  return json({ success: true, importados: inseridos, duplicados, total_btg: btgItems.length, sandbox: isSandbox });
 }
 
 // ─── ACTION: listar ──────────────────────────────────────────
@@ -215,6 +346,7 @@ async function handleDetalhe(body: Record<string, unknown> | null, url: URL) {
 }
 
 // ─── ACTION: cancelar ────────────────────────────────────────
+// BTG: DELETE /{companyId}/banking/collections/{collectionId}
 async function handleCancelar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
@@ -225,7 +357,7 @@ async function handleCancelar(body: Record<string, unknown>, userId: string) {
   const { data: cobranca } = await db.from("btg_cobrancas").select("status, cod_empresa, btg_receivable_id").eq("id", String(id)).single();
 
   if (!cobranca) return json({ error: "Cobrança não encontrada" }, 404);
-  if (cobranca.status !== "EMITIDO") {
+  if (!["CREATED", "PROCESSING", "EMITIDO"].includes(cobranca.status)) {
     return json({ error: `Não é possível cancelar cobrança com status ${cobranca.status}` }, 400);
   }
 
@@ -243,12 +375,13 @@ async function handleCancelar(body: Record<string, unknown>, userId: string) {
     }
   }
 
-  const { error } = await db.from("btg_cobrancas").update({ status: "CANCELADO" }).eq("id", String(id));
+  const { error } = await db.from("btg_cobrancas").update({ status: "CANCELED" }).eq("id", String(id));
   if (error) return json({ error: "Erro ao cancelar", details: error.message }, 500);
-  return json({ success: true, status: "CANCELADO" });
+  return json({ success: true, status: "CANCELED" });
 }
 
 // ─── ACTION: segunda_via ─────────────────────────────────────
+// BTG: GET /{companyId}/banking/collections/{collectionId}
 async function handleSegundaVia(body: Record<string, unknown> | null, url: URL) {
   const id = getParam(body, url, "id");
   if (!id) return json({ error: "id obrigatório" }, 400);
@@ -259,25 +392,37 @@ async function handleSegundaVia(body: Record<string, unknown> | null, url: URL) 
   if (!cobranca) return json({ error: "Cobrança não encontrada" }, 404);
   if (!cobranca.btg_receivable_id) return json({ error: "Cobrança sem ID BTG" }, 400);
 
+  const { isSandbox, apiBase } = await getBtgConfig();
+  if (isSandbox) {
+    return json({ url_boleto: cobranca.url_boleto, linha_digitavel: cobranca.linha_digitavel });
+  }
+
   const accessToken = await getBtgToken(cobranca.cod_empresa);
   const cnpj = await getCnpj(cobranca.cod_empresa);
-  const { apiBase } = await getBtgConfig();
 
   const btgRes = await fetch(
     `${apiBase}/${cnpj}/banking/collections/${cobranca.btg_receivable_id}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
+    { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
   );
 
   if (!btgRes.ok) return json({ error: "Erro ao consultar BTG", btg_status: btgRes.status }, 502);
 
   const btgData = await btgRes.json();
   const urlBoleto = (btgData.url || btgData.boletoUrl || cobranca.url_boleto || "") as string;
+  const btgStatus = (btgData.status || cobranca.status) as string;
 
-  if (urlBoleto && urlBoleto !== cobranca.url_boleto) {
-    await db.from("btg_cobrancas").update({ url_boleto: urlBoleto }).eq("id", id);
+  // Update local record with latest BTG data
+  const updates: Record<string, unknown> = {};
+  if (urlBoleto && urlBoleto !== cobranca.url_boleto) updates.url_boleto = urlBoleto;
+  if (btgStatus !== cobranca.status) updates.status = btgStatus;
+  if (btgData.paidAmount) updates.valor_pago = Number(btgData.paidAmount);
+  if (btgData.paymentDate) updates.data_pagamento = String(btgData.paymentDate);
+
+  if (Object.keys(updates).length > 0) {
+    await db.from("btg_cobrancas").update(updates).eq("id", id);
   }
 
-  return json({ url_boleto: urlBoleto, linha_digitavel: cobranca.linha_digitavel, btg_data: btgData });
+  return json({ url_boleto: urlBoleto, linha_digitavel: cobranca.linha_digitavel, status: btgStatus, btg_data: btgData });
 }
 
 // ─── MAIN ────────────────────────────────────────────────────
@@ -303,6 +448,8 @@ Deno.serve(async (req) => {
     switch (action) {
       case "emitir":
         return await handleEmitir(body || {}, userId);
+      case "importar":
+        return await handleImportar(body || {}, userId);
       case "listar":
         return await handleListar(body, url, userId);
       case "detalhe":
@@ -312,7 +459,7 @@ Deno.serve(async (req) => {
       case "segunda_via":
         return await handleSegundaVia(body, url);
       default:
-        return json({ error: `Ação desconhecida: '${action}'. Use: emitir, listar, detalhe, cancelar, segunda_via` }, 400);
+        return json({ error: `Ação desconhecida: '${action}'. Use: emitir, importar, listar, detalhe, cancelar, segunda_via` }, 400);
     }
   } catch (e) {
     if (e instanceof Response) return e;

@@ -94,10 +94,8 @@ async function getBtgToken(codEmpresa: number): Promise<string> {
 // ─── CNPJ helper (companyId for BTG API = CNPJ sem pontuação) ──
 async function getCnpj(codEmpresa: number): Promise<string> {
   const db = getServiceClient();
-  // Try btg_contas_bancarias first (has cnpj field)
   const { data: conta } = await db.from("btg_contas_bancarias").select("cnpj").eq("cod_empresa", codEmpresa).eq("ativa", true).single();
   if (conta?.cnpj) return conta.cnpj.replace(/\D/g, "");
-  // Fallback to empresa table
   const { data: emp } = await db.from("empresa").select("cnpj").eq("cod_empresa", codEmpresa).single();
   if (emp?.cnpj) return emp.cnpj.replace(/\D/g, "");
   throw json({ error: `CNPJ não encontrado para empresa ${codEmpresa}. Configure na tabela de empresas.` }, 400);
@@ -117,8 +115,6 @@ function getParam(body: Record<string, unknown> | null, url: URL, key: string): 
 }
 
 // ─── ACTION: contas (construir e salvar account_id) ─────────
-// BTG não possui endpoint /accounts. O accountId é construído:
-// formato: CNPJ-208-Agência-Conta
 async function handleContas(body: Record<string, unknown> | null, url: URL, userId: string) {
   await requireAdminRole(userId);
   const codEmpresa = Number(getParam(body, url, "cod_empresa"));
@@ -132,11 +128,7 @@ async function handleContas(body: Record<string, unknown> | null, url: URL, user
 
   const db = getServiceClient();
   const { error } = await db.from("btg_contas_bancarias")
-    .update({
-      account_id: accountId,
-      agencia,
-      conta,
-    })
+    .update({ account_id: accountId, agencia, conta })
     .eq("cod_empresa", codEmpresa);
 
   if (error) {
@@ -149,6 +141,7 @@ async function handleContas(body: Record<string, unknown> | null, url: URL, user
 }
 
 // ─── ACTION: saldo ───────────────────────────────────────────
+// BTG v2 Response: { accountId, available: { amount, currency }, blocked: { amount, currency, blockedDate } }
 async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
   const codEmpresa = Number(getParam(body, url, "cod_empresa"));
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
@@ -158,8 +151,9 @@ async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
   if (isSandbox) {
     return json({
       cod_empresa: codEmpresa,
-      saldo_disponivel: 125430.50,
-      saldo_bloqueado: 3200.00,
+      accountId: "sandbox-account",
+      available: { amount: 125430.50, currency: "BRL" },
+      blocked: { amount: 3200.00, currency: "BRL", blockedDate: null },
       data_consulta: new Date().toISOString(),
       sandbox: true,
     });
@@ -180,8 +174,76 @@ async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
     return json({ error: "Erro ao consultar saldo", status: res.status, details: resBody }, 502);
   }
 
+  // BTG returns: { accountId, available: { amount, currency }, blocked: { amount, currency, blockedDate } }
   const data = await res.json();
-  return json({ cod_empresa: codEmpresa, ...data });
+  return json({
+    cod_empresa: codEmpresa,
+    accountId: data.accountId,
+    available: data.available || { amount: 0, currency: "BRL" },
+    blocked: data.blocked || { amount: 0, currency: "BRL", blockedDate: null },
+    data_consulta: new Date().toISOString(),
+  });
+}
+
+// ─── Normalize BTG statement movements ──────────────────────
+function flattenStatements(data: unknown): Array<Record<string, unknown>> {
+  if (!data || typeof data !== "object") return [];
+  const d = data as Record<string, unknown>;
+
+  // Direct array
+  if (Array.isArray(d)) return d;
+
+  // BTG v2: { data: { dailyMovements: [{ date, movements: [...] }] } }
+  const inner = d.data as Record<string, unknown> | undefined;
+  if (inner?.dailyMovements && Array.isArray(inner.dailyMovements)) {
+    const items: Record<string, unknown>[] = [];
+    for (const day of inner.dailyMovements as Array<Record<string, unknown>>) {
+      const dayDate = day.date ? String(day.date).substring(0, 10) : null;
+      if (Array.isArray(day.movements)) {
+        for (const mov of day.movements as Array<Record<string, unknown>>) {
+          items.push({ ...mov, _dayDate: dayDate });
+        }
+      }
+    }
+    return items;
+  }
+
+  // Fallback keys
+  for (const key of ["entries", "transactions", "lancamentos", "items", "statement"]) {
+    if (Array.isArray(d[key])) return d[key] as Record<string, unknown>[];
+  }
+  if (Array.isArray(d.data)) return d.data as Record<string, unknown>[];
+
+  return [];
+}
+
+// ─── Normalize a single movement to our schema ─────────────
+function normalizeMovement(l: Record<string, unknown>, codEmpresa: number) {
+  // BTG v2 fields: dateHour, description, amount, type ("credit"/"debit"), _dayDate (injected)
+  const date = l._dayDate || l.dateHour || l.date || l.bookingDate || l.transactionDate || l.data || l.dataLancamento || null;
+  const desc = l.description || l.remittanceInformation || l.descricao || l.detail || "";
+  const rawAmount = l.amount || l.transactionAmount || l.valor || 0;
+  const amount = typeof rawAmount === "object" && rawAmount !== null
+    ? Number((rawAmount as Record<string, unknown>).amount || 0)
+    : Number(rawAmount);
+  const balanceAfter = l.balance_after || l.balanceAfterTransaction || l.saldo_apos || null;
+  const rawType = l.type || l.creditDebitIndicator || l.tipo || "";
+
+  const isCredit = String(rawType).toLowerCase() === "credit" ||
+    String(rawType).toUpperCase().includes("CRED") ||
+    String(rawType).toUpperCase().includes("CRDT") ||
+    String(rawType).toUpperCase() === "C" ||
+    (!rawType && amount > 0);
+
+  return {
+    cod_empresa: codEmpresa,
+    data_lancamento: date ? String(date).substring(0, 10) : new Date().toISOString().substring(0, 10),
+    descricao: String(desc),
+    valor: Math.abs(amount),
+    tipo: isCredit ? "CREDITO" : "DEBITO",
+    saldo_apos: balanceAfter != null ? Number(balanceAfter) : null,
+    conciliado: false,
+  };
 }
 
 // ─── ACTION: extrato (consulta BTG) ─────────────────────────
@@ -196,10 +258,14 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
 
   if (isSandbox) {
     const mockEntries = [
-      { date: "2026-02-24", description: "TED RECEBIDA - CLIENTE ABC LTDA", amount: 5200.00, type: "CREDITO" },
-      { date: "2026-02-24", description: "PIX ENVIADO - FORNECEDOR XYZ", amount: -3100.00, type: "DEBITO" },
-      { date: "2026-02-23", description: "BOLETO PAGO - ENERGIA ELETRICA", amount: -890.50, type: "DEBITO" },
-      { date: "2026-02-23", description: "PIX RECEBIDO - VENDA OS 92345", amount: 1450.00, type: "CREDITO" },
+      { date: "2026-03-09", description: "TED RECEBIDA - CLIENTE ABC LTDA", amount: 5200.00, type: "credit" },
+      { date: "2026-03-09", description: "PIX ENVIADO - FORNECEDOR XYZ", amount: 3100.00, type: "debit" },
+      { date: "2026-03-08", description: "BOLETO PAGO - ENERGIA ELETRICA", amount: 890.50, type: "debit" },
+      { date: "2026-03-08", description: "PIX RECEBIDO - VENDA OS 92345", amount: 1450.00, type: "credit" },
+      { date: "2026-03-07", description: "TED ENVIADA - SALARIOS", amount: 15800.00, type: "debit" },
+      { date: "2026-03-07", description: "BOLETO RECEBIDO - CLIENTE DEF", amount: 3200.00, type: "credit" },
+      { date: "2026-03-06", description: "PIX RECEBIDO - VENDA OS 92301", amount: 980.00, type: "credit" },
+      { date: "2026-03-05", description: "DEBITO AUTOMATICO - TELECOM", amount: 299.90, type: "debit" },
     ];
     return json({ cod_empresa: codEmpresa, lancamentos: mockEntries, sandbox: true });
   }
@@ -226,31 +292,9 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
 
   const data = await res.json();
   console.log("[btg-extrato] handleExtrato raw keys:", Object.keys(data || {}));
-  console.log("[btg-extrato] handleExtrato raw (500ch):", JSON.stringify(data).substring(0, 500));
 
-  // Normalize response — BTG v2 returns { data: { dailyMovements: [{ date, movements: [...] }] } }
-  let items: unknown[] = [];
-  if (Array.isArray(data)) {
-    items = data;
-  } else if (data?.data?.dailyMovements && Array.isArray(data.data.dailyMovements)) {
-    // Flatten dailyMovements → movements
-    for (const day of data.data.dailyMovements) {
-      const dayDate = day.date ? String(day.date).substring(0, 10) : null;
-      if (Array.isArray(day.movements)) {
-        for (const mov of day.movements) {
-          items.push({ ...mov, _dayDate: dayDate });
-        }
-      }
-    }
-    console.log(`[btg-extrato] Flattened ${items.length} movements from dailyMovements`);
-  } else {
-    for (const key of ["entries", "transactions", "lancamentos", "items", "statement"]) {
-      if (Array.isArray(data?.[key])) { items = data[key]; break; }
-    }
-    if (items.length === 0 && data?.data && Array.isArray(data.data)) {
-      items = data.data;
-    }
-  }
+  const items = flattenStatements(data);
+  console.log(`[btg-extrato] Parsed ${items.length} movements`);
 
   return json({ cod_empresa: codEmpresa, lancamentos: items, raw_keys: Object.keys(data || {}) });
 }
@@ -266,14 +310,18 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
 
   const { apiBase, isSandbox } = await getBtgConfig();
 
-  let lancamentos: Array<{ date: string; description: string; amount: number; type: string; balance_after?: number }> = [];
+  let rawItems: Array<Record<string, unknown>> = [];
 
   if (isSandbox) {
-    lancamentos = [
-      { date: "2026-02-24", description: "TED RECEBIDA - CLIENTE ABC LTDA", amount: 5200.00, type: "CREDITO", balance_after: 130630.50 },
-      { date: "2026-02-24", description: "PIX ENVIADO - FORNECEDOR XYZ", amount: -3100.00, type: "DEBITO", balance_after: 125430.50 },
-      { date: "2026-02-23", description: "BOLETO PAGO - ENERGIA ELETRICA", amount: -890.50, type: "DEBITO", balance_after: 128530.50 },
-      { date: "2026-02-23", description: "PIX RECEBIDO - VENDA OS 92345", amount: 1450.00, type: "CREDITO", balance_after: 129421.00 },
+    rawItems = [
+      { date: "2026-03-09", description: "TED RECEBIDA - CLIENTE ABC LTDA", amount: 5200.00, type: "credit", balance_after: 130630.50 },
+      { date: "2026-03-09", description: "PIX ENVIADO - FORNECEDOR XYZ", amount: 3100.00, type: "debit", balance_after: 125430.50 },
+      { date: "2026-03-08", description: "BOLETO PAGO - ENERGIA ELETRICA", amount: 890.50, type: "debit", balance_after: 128530.50 },
+      { date: "2026-03-08", description: "PIX RECEBIDO - VENDA OS 92345", amount: 1450.00, type: "credit", balance_after: 129421.00 },
+      { date: "2026-03-07", description: "TED ENVIADA - SALARIOS", amount: 15800.00, type: "debit", balance_after: 127971.00 },
+      { date: "2026-03-07", description: "BOLETO RECEBIDO - CLIENTE DEF", amount: 3200.00, type: "credit", balance_after: 143771.00 },
+      { date: "2026-03-06", description: "PIX RECEBIDO - VENDA OS 92301", amount: 980.00, type: "credit", balance_after: 140571.00 },
+      { date: "2026-03-05", description: "DEBITO AUTOMATICO - TELECOM", amount: 299.90, type: "debit", balance_after: 139591.00 },
     ];
   } else {
     const accessToken = await getBtgToken(cod_empresa);
@@ -295,70 +343,22 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     }
 
     const data = await res.json();
-    console.log("[btg-extrato] Raw statements response keys:", Object.keys(data || {}));
-    console.log("[btg-extrato] Raw statements response (first 500 chars):", JSON.stringify(data).substring(0, 500));
-    
-    // BTG v2: { data: { dailyMovements: [{ date, movements: [...] }] } }
-    if (Array.isArray(data)) {
-      lancamentos = data;
-    } else if (data?.data?.dailyMovements && Array.isArray(data.data.dailyMovements)) {
-      for (const day of data.data.dailyMovements) {
-        const dayDate = day.date ? String(day.date).substring(0, 10) : null;
-        if (Array.isArray(day.movements)) {
-          for (const mov of day.movements) {
-            lancamentos.push({ ...mov, _dayDate: dayDate });
-          }
-        }
-      }
-    } else {
-      for (const key of ["entries", "transactions", "lancamentos", "items", "statement"]) {
-        if (Array.isArray(data?.[key])) { lancamentos = data[key]; break; }
-      }
-      if (lancamentos.length === 0 && data?.data && Array.isArray(data.data)) {
-        lancamentos = data.data;
-      }
-    }
-    console.log(`[btg-extrato] Parsed ${lancamentos.length} lancamentos from BTG response`);
+    console.log("[btg-extrato] Raw statements keys:", Object.keys(data || {}));
+    rawItems = flattenStatements(data);
+    console.log(`[btg-extrato] Parsed ${rawItems.length} items from BTG`);
   }
+
+  if (rawItems.length > 0) {
+    console.log("[btg-extrato] First item keys:", Object.keys(rawItems[0]));
+  }
+
+  const rows = rawItems
+    .map((l) => normalizeMovement(l, cod_empresa))
+    .filter((r) => r.data_lancamento && r.valor > 0);
+
+  if (rows.length === 0) return json({ success: true, importados: 0, raw_count: rawItems.length });
 
   const db = getServiceClient();
-  
-  // Log first item to understand field structure
-  if (lancamentos.length > 0) {
-    console.log("[btg-extrato] First item keys:", Object.keys(lancamentos[0]));
-    console.log("[btg-extrato] First item:", JSON.stringify(lancamentos[0]).substring(0, 300));
-  }
-  
-  const rows = lancamentos.map((l: Record<string, unknown>) => {
-    // BTG v2 fields: dateHour, description, amount, type ("credit"/"debit"), _dayDate (injected)
-    const date = l._dayDate || l.dateHour || l.date || l.bookingDate || l.transactionDate || l.data || l.dataLancamento || null;
-    const desc = l.description || l.remittanceInformation || l.descricao || l.detail || "";
-    const rawAmount = l.amount || l.transactionAmount || l.valor || 0;
-    const amount = typeof rawAmount === 'object' && rawAmount !== null 
-      ? Number((rawAmount as Record<string, unknown>).amount || 0) 
-      : Number(rawAmount);
-    const balanceAfter = l.balance_after || l.balanceAfterTransaction || l.saldo_apos || null;
-    const rawType = l.type || l.creditDebitIndicator || l.tipo || "";
-    
-    const isCredit = String(rawType).toLowerCase() === "credit" ||
-                     String(rawType).toUpperCase().includes("CRED") || 
-                     String(rawType).toUpperCase().includes("CRDT") || 
-                     String(rawType).toUpperCase() === "C" ||
-                     (!rawType && amount > 0);
-
-    return {
-      cod_empresa,
-      data_lancamento: date ? String(date).substring(0, 10) : new Date().toISOString().substring(0, 10),
-      descricao: String(desc),
-      valor: Math.abs(amount),
-      tipo: isCredit ? "CREDITO" : "DEBITO",
-      saldo_apos: balanceAfter != null ? Number(balanceAfter) : null,
-      conciliado: false,
-    };
-  }).filter((r: { data_lancamento: string; valor: number }) => r.data_lancamento && r.valor > 0);
-
-  if (rows.length === 0) return json({ success: true, importados: 0, raw_count: lancamentos.length });
-
   const { error } = await db.from("btg_extrato").insert(rows);
   if (error) {
     console.error("[btg-extrato] Insert error:", error);

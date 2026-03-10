@@ -1,6 +1,8 @@
 // supabase/functions/btg-pagamentos/index.ts
-// BTG Pactual Banking — Pagamentos (Fase 2)
+// BTG Pactual Banking — Pagamentos e Transferências (v2)
+// Path: /{CNPJ}/banking/payments
 // Actions: criar, listar, detalhe, cancelar, aprovar_interno, enviar_btg
+// BTG Payment Types: PIX_KEY, PIX_QR_CODE, PIX_MANUAL, TED, BANKSLIP, UTILITIES, DARF, PIX_REVERSAL
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -56,54 +58,29 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 
 function requireAuth(req: Request): string {
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    throw json({ error: "Unauthorized" }, 401);
-  }
+  if (!authHeader?.startsWith("Bearer ")) throw json({ error: "Unauthorized" }, 401);
   const claims = decodeJwtPayload(authHeader.replace("Bearer ", ""));
-  if (!claims?.sub || claims.aud !== "authenticated") {
-    throw json({ error: "Unauthorized" }, 401);
-  }
+  if (!claims?.sub || claims.aud !== "authenticated") throw json({ error: "Unauthorized" }, 401);
   const exp = claims.exp as number | undefined;
-  if (exp && exp < Math.floor(Date.now() / 1000)) {
-    throw json({ error: "Token expirado" }, 401);
-  }
+  if (exp && exp < Math.floor(Date.now() / 1000)) throw json({ error: "Token expirado" }, 401);
   return claims.sub as string;
 }
 
 async function isAdmin(userId: string): Promise<boolean> {
   const db = getServiceClient();
-  const { data } = await db
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin");
+  const { data } = await db.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin");
   return !!data && data.length > 0;
 }
 
 async function requireAdminRole(userId: string) {
-  if (!(await isAdmin(userId))) {
-    throw json({ error: "Forbidden — apenas admin" }, 403);
-  }
+  if (!(await isAdmin(userId))) throw json({ error: "Forbidden — apenas admin" }, 403);
 }
 
-// ─── BTG Token helper ────────────────────────────────────────
 async function getBtgToken(codEmpresa: number): Promise<string> {
   const db = getServiceClient();
-  const { data } = await db
-    .from("btg_tokens")
-    .select("access_token, expires_at")
-    .eq("cod_empresa", codEmpresa)
-    .single();
-
-  if (!data) {
-    throw json({ error: `Empresa ${codEmpresa} não autenticada no BTG. Autorize primeiro.` }, 400);
-  }
-
-  const expiresAt = new Date(data.expires_at);
-  if (expiresAt < new Date()) {
-    throw json({ error: `Token BTG expirado para empresa ${codEmpresa}. Faça refresh.` }, 401);
-  }
-
+  const { data } = await db.from("btg_tokens").select("access_token, expires_at").eq("cod_empresa", codEmpresa).single();
+  if (!data) throw json({ error: `Empresa ${codEmpresa} não autenticada no BTG.` }, 400);
+  if (new Date(data.expires_at) < new Date()) throw json({ error: `Token BTG expirado para empresa ${codEmpresa}.` }, 401);
   return data.access_token;
 }
 
@@ -116,10 +93,88 @@ async function getCnpj(codEmpresa: number): Promise<string> {
   throw json({ error: `CNPJ não encontrado para empresa ${codEmpresa}` }, 400);
 }
 
-// ─── Param helper: reads from body (POST) or query string ────
 function getParam(body: Record<string, unknown> | null, url: URL, key: string): string | null {
   if (body && body[key] !== undefined && body[key] !== null) return String(body[key]);
   return url.searchParams.get(key);
+}
+
+// ─── Build BTG payment payload per type ──────────────────────
+// BTG API expects: { type, amount, scheduledDate?, details: {...per type} }
+function buildBtgPayload(pagamento: Record<string, unknown>): Record<string, unknown> {
+  const tipo = String(pagamento.tipo);
+  const dados = (pagamento.dados_pagamento || {}) as Record<string, unknown>;
+  const amount = Number(pagamento.valor);
+
+  const payload: Record<string, unknown> = {
+    type: tipo,
+    amount,
+  };
+
+  if (dados.scheduledDate) payload.scheduledDate = String(dados.scheduledDate);
+  if (dados.description) payload.description = String(dados.description);
+
+  switch (tipo) {
+    case "PIX_KEY":
+      payload.details = {
+        pixKey: String(dados.chave_pix || dados.pixKey || ""),
+      };
+      break;
+
+    case "PIX_QR_CODE":
+      payload.details = {
+        emv: String(dados.emv || dados.qr_code || ""),
+      };
+      break;
+
+    case "PIX_MANUAL":
+      payload.details = {
+        bankCode: String(dados.banco || dados.bankCode || ""),
+        branchCode: String(dados.agencia || dados.branchCode || ""),
+        accountNumber: String(dados.conta || dados.accountNumber || ""),
+        accountType: String(dados.tipo_conta || dados.accountType || "CHECKING"),
+        holderTaxId: String(dados.documento || dados.holderTaxId || ""),
+        holderName: String(dados.nome || dados.holderName || ""),
+      };
+      break;
+
+    case "TED":
+      payload.details = {
+        bankCode: String(dados.banco || dados.bankCode || ""),
+        branchCode: String(dados.agencia || dados.branchCode || ""),
+        accountNumber: String(dados.conta || dados.accountNumber || ""),
+        accountType: String(dados.tipo_conta || dados.accountType || "CHECKING"),
+        holderTaxId: String(dados.documento || dados.holderTaxId || ""),
+        holderName: String(dados.nome || dados.holderName || ""),
+      };
+      break;
+
+    case "BANKSLIP":
+      payload.details = {
+        barcode: String(dados.codigo_barras || dados.barcode || dados.linha_digitavel || ""),
+      };
+      break;
+
+    case "UTILITIES":
+      payload.details = {
+        barcode: String(dados.codigo_barras || dados.barcode || ""),
+      };
+      break;
+
+    case "DARF":
+      payload.details = {
+        revenueCode: String(dados.codigo_receita || dados.revenueCode || ""),
+        taxId: String(dados.cnpj || dados.taxId || ""),
+        referenceDate: String(dados.data_referencia || dados.referenceDate || ""),
+        dueDate: String(dados.data_vencimento || dados.dueDate || ""),
+        description: String(dados.descricao || dados.description || ""),
+      };
+      break;
+
+    default:
+      payload.details = dados;
+  }
+
+  return payload;
 }
 
 // ─── ACTION: criar ───────────────────────────────────────────
@@ -166,25 +221,16 @@ async function handleListar(body: Record<string, unknown> | null, url: URL, user
   let empresasPermitidas: number[] = [];
 
   if (!admin) {
-    const { data: perms } = await db
-      .from("user_empresa_permissions")
-      .select("cod_empresa")
-      .eq("user_id", userId);
+    const { data: perms } = await db.from("user_empresa_permissions").select("cod_empresa").eq("user_id", userId);
     empresasPermitidas = (perms || []).map((p: { cod_empresa: number }) => p.cod_empresa);
     if (empresasPermitidas.length === 0) return json([]);
   }
 
-  let query = db
-    .from("btg_pagamentos")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  let query = db.from("btg_pagamentos").select("*").order("created_at", { ascending: false }).limit(limit);
 
   if (codEmpresa) {
     const ce = Number(codEmpresa);
-    if (!admin && !empresasPermitidas.includes(ce)) {
-      return json({ error: "Sem permissão para essa empresa" }, 403);
-    }
+    if (!admin && !empresasPermitidas.includes(ce)) return json({ error: "Sem permissão para essa empresa" }, 403);
     query = query.eq("cod_empresa", ce);
   } else if (!admin) {
     query = query.in("cod_empresa", empresasPermitidas);
@@ -193,10 +239,7 @@ async function handleListar(body: Record<string, unknown> | null, url: URL, user
   if (status) query = query.eq("status", status);
 
   const { data, error } = await query;
-  if (error) {
-    return json({ error: "Erro ao listar pagamentos", details: error.message }, 500);
-  }
-
+  if (error) return json({ error: "Erro ao listar pagamentos", details: error.message }, 500);
   return json(data || []);
 }
 
@@ -206,12 +249,7 @@ async function handleDetalhe(body: Record<string, unknown> | null, url: URL) {
   if (!id) return json({ error: "id obrigatório" }, 400);
 
   const db = getServiceClient();
-  const { data, error } = await db
-    .from("btg_pagamentos")
-    .select("*")
-    .eq("id", id)
-    .single();
-
+  const { data, error } = await db.from("btg_pagamentos").select("*").eq("id", id).single();
   if (error || !data) return json({ error: "Pagamento não encontrado" }, 404);
   return json(data);
 }
@@ -224,31 +262,26 @@ async function handleAprovarInterno(body: Record<string, unknown>, userId: strin
   if (!id) return json({ error: "id obrigatório" }, 400);
 
   const db = getServiceClient();
-  const { data: pagamento } = await db
-    .from("btg_pagamentos")
-    .select("status")
-    .eq("id", String(id))
-    .single();
+  const { data: pagamento } = await db.from("btg_pagamentos").select("status").eq("id", String(id)).single();
 
   if (!pagamento) return json({ error: "Pagamento não encontrado" }, 404);
   if (pagamento.status !== "RASCUNHO") {
     return json({ error: `Não é possível aprovar pagamento com status ${pagamento.status}` }, 400);
   }
 
-  const { error } = await db
-    .from("btg_pagamentos")
-    .update({
-      status: "APROVADO_INTERNO",
-      aprovado_por: userId,
-      aprovado_em: new Date().toISOString(),
-    })
-    .eq("id", String(id));
+  const { error } = await db.from("btg_pagamentos").update({
+    status: "APROVADO_INTERNO",
+    aprovado_por: userId,
+    aprovado_em: new Date().toISOString(),
+  }).eq("id", String(id));
 
   if (error) return json({ error: "Erro ao aprovar", details: error.message }, 500);
   return json({ success: true, status: "APROVADO_INTERNO" });
 }
 
 // ─── ACTION: enviar_btg ──────────────────────────────────────
+// BTG: POST /{companyId}/banking/payments
+// Payment will require approval via BTG internet banking before funds move
 async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
@@ -256,11 +289,7 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
   if (!id) return json({ error: "id obrigatório" }, 400);
 
   const db = getServiceClient();
-  const { data: pagamento } = await db
-    .from("btg_pagamentos")
-    .select("*")
-    .eq("id", String(id))
-    .single();
+  const { data: pagamento } = await db.from("btg_pagamentos").select("*").eq("id", String(id)).single();
 
   if (!pagamento) return json({ error: "Pagamento não encontrado" }, 404);
   if (pagamento.status !== "APROVADO_INTERNO") {
@@ -269,7 +298,6 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
 
   const { apiBase, isSandbox } = await getBtgUrls();
 
-  // Sandbox mode: simulate BTG acceptance
   if (isSandbox) {
     const mockBtgId = `sandbox-pay-${Date.now()}`;
     await db.from("btg_pagamentos").update({
@@ -283,12 +311,9 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
   const accessToken = await getBtgToken(pagamento.cod_empresa);
   const cnpj = await getCnpj(pagamento.cod_empresa);
 
-  const btgPayload = {
-    type: pagamento.tipo,
-    amount: pagamento.valor,
-    beneficiary: pagamento.beneficiario,
-    ...((pagamento.dados_pagamento as Record<string, unknown>) || {}),
-  };
+  // Build proper BTG payload with structured details
+  const btgPayload = buildBtgPayload(pagamento);
+  console.log("[btg-pagamentos] BTG payload:", JSON.stringify(btgPayload).substring(0, 500));
 
   const btgRes = await fetch(
     `${apiBase}/${cnpj}/banking/payments`,
@@ -315,7 +340,7 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
     return json({ error: "BTG rejeitou o pagamento", btg_status: btgRes.status, details: btgData }, 502);
   }
 
-  const btgPaymentId = (btgData.id || btgData.paymentId || btgData.payment_id || "") as string;
+  const btgPaymentId = (btgData.paymentId || btgData.id || btgData.payment_id || "") as string;
   await db.from("btg_pagamentos").update({
     status: "ENVIADO_BTG",
     btg_payment_id: btgPaymentId || null,
@@ -326,6 +351,7 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
 }
 
 // ─── ACTION: cancelar ────────────────────────────────────────
+// BTG: DELETE /{companyId}/banking/payments/{paymentId}
 async function handleCancelar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
@@ -333,15 +359,28 @@ async function handleCancelar(body: Record<string, unknown>, userId: string) {
   if (!id) return json({ error: "id obrigatório" }, 400);
 
   const db = getServiceClient();
-  const { data: pagamento } = await db
-    .from("btg_pagamentos")
-    .select("status")
-    .eq("id", String(id))
-    .single();
+  const { data: pagamento } = await db.from("btg_pagamentos").select("status, btg_payment_id, cod_empresa").eq("id", String(id)).single();
 
   if (!pagamento) return json({ error: "Pagamento não encontrado" }, 404);
-  if (!["RASCUNHO", "APROVADO_INTERNO"].includes(pagamento.status)) {
+  if (!["RASCUNHO", "APROVADO_INTERNO", "ENVIADO_BTG"].includes(pagamento.status)) {
     return json({ error: `Não é possível cancelar pagamento com status ${pagamento.status}` }, 400);
+  }
+
+  // If already sent to BTG, try to cancel there too
+  if (pagamento.btg_payment_id && pagamento.status === "ENVIADO_BTG") {
+    const { apiBase, isSandbox } = await getBtgUrls();
+    if (!isSandbox) {
+      try {
+        const accessToken = await getBtgToken(pagamento.cod_empresa);
+        const cnpj = await getCnpj(pagamento.cod_empresa);
+        await fetch(`${apiBase}/${cnpj}/banking/payments/${pagamento.btg_payment_id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+      } catch (e) {
+        console.warn("[btg-pagamentos] Erro ao cancelar no BTG:", e);
+      }
+    }
   }
 
   const { error } = await db.from("btg_pagamentos").update({ status: "CANCELADO" }).eq("id", String(id));
@@ -367,7 +406,6 @@ Deno.serve(async (req) => {
       } catch { /* no-op */ }
     }
 
-    // Auth for all actions
     const userId = requireAuth(req);
 
     switch (action) {
