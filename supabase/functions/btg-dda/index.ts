@@ -144,7 +144,16 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     }
   }
 
-  const db = getServiceClient();
+  // Delete old records that have null emissor (bad imports) to allow reimport
+  const { count: deletedOld } = await db
+    .from("btg_dda_titulos")
+    .delete({ count: "exact" })
+    .eq("cod_empresa", ce)
+    .is("emissor", null)
+    .eq("status", "PENDENTE");
+
+  console.log(`[btg-dda] Deleted ${deletedOld ?? 0} old records with null emissor for reimport`);
+
   let inseridos = 0;
   let duplicados = 0;
 
@@ -185,7 +194,19 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     else console.warn("[btg-dda] Insert error:", error.message);
   }
 
-  return json({ success: true, importados: inseridos, duplicados, total_btg: btgData.length, sandbox: isSandbox });
+  // Include a sample of raw BTG data for debugging field mapping
+  const sampleItem = btgData.length > 0 ? btgData[0] : null;
+
+  return json({
+    success: true,
+    importados: inseridos,
+    duplicados,
+    registros_limpos: deletedOld ?? 0,
+    total_btg: btgData.length,
+    sandbox: isSandbox,
+    _debug_sample_keys: sampleItem ? Object.keys(sampleItem) : [],
+    _debug_sample: sampleItem,
+  });
 }
 
 // ─── ACTION: conciliar_auto ──────────────────────────────────
