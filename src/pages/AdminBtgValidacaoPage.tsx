@@ -344,7 +344,7 @@ export default function AdminBtgValidacaoPage() {
                             </Button>
                           )}
                           {manualAuthorizeUrl[conta.cod_empresa] && (
-                            <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700" asChild>
+                            <Button size="sm" variant="secondary" asChild>
                               <a href={manualAuthorizeUrl[conta.cod_empresa]} target="_blank" rel="noopener noreferrer">
                                 <ExternalLink className="h-3 w-3 mr-1" />
                                 Abrir BTG
