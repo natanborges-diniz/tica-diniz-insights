@@ -120,13 +120,10 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     const accessToken = await getBtgToken(ce);
     const cnpj = await getCnpj(ce);
 
-    const params = new URLSearchParams();
-    params.set("pageNumber", "1");
-    params.set("pageSize", "100");
-    params.set("status", "PENDING");
+    const queryStr = `pageNumber=1&pageSize=100&status=PENDING`;
 
     const btgRes = await fetch(
-      `${apiBase}/${cnpj}/banking/direct-debit/debits?${params}`,
+      `${apiBase}/${cnpj}/banking/direct-debit/debits?${queryStr}`,
       { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
     );
 
