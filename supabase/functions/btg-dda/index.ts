@@ -198,14 +198,27 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
       if (existing) { duplicados++; continue; }
     }
 
-    // Map BTG API fields — handle nested payee object
+    // Map BTG API fields — exact contract: payee.document, payee.fantasyName, payee.bankCode/bankName
     const payee = (titulo.payee || {}) as Record<string, unknown>;
-    const emissorVal = (payee.fantasyName || payee.socialName || titulo.issuerName || titulo.payeeName || null) as string | null;
-    const docEmissorVal = (payee.taxId || titulo.issuerDocument || titulo.payeeDocument || null) as string | null;
+    const emissorVal = (payee.fantasyName || payee.socialName || null) as string | null;
+    const docEmissorVal = (payee.document || null) as string | null;
     const bancoVal = (payee.bankName || null) as string | null;
-    const valorVal = Number(titulo.amount || titulo.value || 0);
-    const vencVal = (titulo.dueDate || titulo.due_date || new Date().toISOString().slice(0, 10)) as string;
-    const linhaVal = (titulo.digitableLine || titulo.digitable_line || null) as string | null;
+    const valorVal = Number(titulo.amount || 0);
+    const vencVal = (titulo.dueDate || new Date().toISOString()).toString().slice(0, 10);
+    const linhaVal = (titulo.digitableLine || null) as string | null;
+
+    // Map BTG status to internal status
+    const btgStatus = (titulo.status || "CREATED") as string;
+    const statusMap: Record<string, string> = {
+      CREATED: "PENDENTE",
+      OVERDUE: "PENDENTE",
+      PAYMENT_PENDING_APPROVAL: "PAGAMENTO_PENDENTE",
+      PAYMENT_PROCESSING: "PAGAMENTO_PROCESSANDO",
+      PAYMENT_CONFIRMED: "CONCILIADO",
+      SCHEDULED: "AGENDADO",
+    };
+    const internalStatus = statusMap[btgStatus] || "PENDENTE";
+    const isConciliado = btgStatus === "PAYMENT_CONFIRMED";
 
     const { error } = await db.from("btg_dda_titulos").insert({
       cod_empresa: ce,
@@ -216,7 +229,8 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
       valor: valorVal,
       data_vencimento: vencVal,
       linha_digitavel: linhaVal,
-      status: "PENDENTE",
+      status: internalStatus,
+      conciliado: isConciliado,
     });
 
     if (!error) inseridos++;
