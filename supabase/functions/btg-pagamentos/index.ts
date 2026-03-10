@@ -281,7 +281,7 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
   }
 
   const accessToken = await getBtgToken(pagamento.cod_empresa);
-  const companyId = await getCompanyId(pagamento.cod_empresa);
+  const cnpj = await getCnpj(pagamento.cod_empresa);
 
   const btgPayload = {
     type: pagamento.tipo,
@@ -291,7 +291,7 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
   };
 
   const btgRes = await fetch(
-    `${apiBase}/banking/v1/companies/${companyId}/payments`,
+    `${apiBase}/${cnpj}/banking/payments`,
     {
       method: "POST",
       headers: {
