@@ -390,17 +390,43 @@ export default function AdminBtgValidacaoPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex gap-2 justify-end flex-wrap items-center">
-                          {/* Discover accounts */}
+                          {/* Configure account_id */}
                           {isAuth && !conta.account_id && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => contasMutation.mutate(conta.cod_empresa)}
-                              disabled={contasMutation.isPending}
-                            >
-                              {contasMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Landmark className="h-3 w-3 mr-1" />}
-                              Descobrir Contas
-                            </Button>
+                            <div className="flex gap-1 items-center">
+                              <Input
+                                placeholder="Agência"
+                                className="w-20 h-8 text-xs"
+                                value={contaInputs[conta.cod_empresa]?.agencia || ""}
+                                onChange={(e) => setContaInputs(prev => ({
+                                  ...prev,
+                                  [conta.cod_empresa]: { ...prev[conta.cod_empresa], agencia: e.target.value, conta: prev[conta.cod_empresa]?.conta || "" }
+                                }))}
+                              />
+                              <Input
+                                placeholder="Conta"
+                                className="w-28 h-8 text-xs"
+                                value={contaInputs[conta.cod_empresa]?.conta || ""}
+                                onChange={(e) => setContaInputs(prev => ({
+                                  ...prev,
+                                  [conta.cod_empresa]: { agencia: prev[conta.cod_empresa]?.agencia || "", conta: e.target.value }
+                                }))}
+                              />
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  const inp = contaInputs[conta.cod_empresa];
+                                  if (!inp?.agencia || !inp?.conta) {
+                                    toast.error("Preencha agência e conta");
+                                    return;
+                                  }
+                                  contasMutation.mutate({ codEmpresa: conta.cod_empresa, agencia: inp.agencia, conta: inp.conta });
+                                }}
+                                disabled={contasMutation.isPending}
+                              >
+                                {contasMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                              </Button>
+                            </div>
                           )}
                           {/* Check balance */}
                           {isAuth && conta.account_id && (
