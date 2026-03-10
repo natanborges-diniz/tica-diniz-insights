@@ -98,7 +98,6 @@ export default function AdminBtgValidacaoPage() {
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [manualAuthorizeUrl, setManualAuthorizeUrl] = useState<Record<number, string>>({});
-  const [saldoResult, setSaldoResult] = useState<Record<number, unknown>>({});
   const [contaInputs, setContaInputs] = useState<Record<number, { agencia: string; conta: string }>>({});
 
   // Handle callback redirect from BTG OAuth
@@ -222,16 +221,6 @@ export default function AdminBtgValidacaoPage() {
     onError: (err: Error) => toast.error(`Erro ao configurar conta: ${err.message}`),
   });
 
-  // Check balance mutation
-  const saldoMutation = useMutation({
-    mutationFn: async (codEmpresa: number) => callBtgExtrato("saldo", { cod_empresa: codEmpresa }),
-    onSuccess: (data, codEmpresa) => {
-      setSaldoResult((prev) => ({ ...prev, [codEmpresa]: data }));
-      const available = data?.available?.amount ?? data?.saldo_disponivel ?? "N/A";
-      toast.success(`Saldo disponível: R$ ${Number(available).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`);
-    },
-    onError: (err: Error) => toast.error(`Erro ao consultar saldo: ${err.message}`),
-  });
 
   const getStatusForEmpresa = (codEmpresa: number) =>
     tokenStatus?.find((t) => t.cod_empresa === codEmpresa);
@@ -348,7 +337,7 @@ export default function AdminBtgValidacaoPage() {
                   const status = getStatusForEmpresa(conta.cod_empresa);
                   const isAuth = status?.autenticado && !status?.token_expirado;
                   const isExpired = status?.autenticado && status?.token_expirado;
-                  const saldo = saldoResult[conta.cod_empresa] as Record<string, unknown> | undefined;
+                  
 
                   return (
                     <TableRow key={conta.id}>
@@ -428,17 +417,12 @@ export default function AdminBtgValidacaoPage() {
                               </Button>
                             </div>
                           )}
-                          {/* Check balance */}
+                          {/* Account ID configurado — setup completo */}
                           {isAuth && conta.account_id && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => saldoMutation.mutate(conta.cod_empresa)}
-                              disabled={saldoMutation.isPending}
-                            >
-                              {saldoMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Shield className="h-3 w-3 mr-1" />}
-                              Ver Saldo
-                            </Button>
+                            <Badge variant="outline" className="text-emerald-700 border-emerald-300">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Setup completo
+                            </Badge>
                           )}
                           {!isAuth && (
                             <Button
@@ -487,17 +471,6 @@ export default function AdminBtgValidacaoPage() {
                             </Button>
                           )}
                         </div>
-                        {/* Saldo result inline */}
-                        {saldo && (
-                          <div className="mt-2 text-left text-xs bg-muted/50 rounded p-2">
-                            <div className="font-medium text-foreground">
-                              Saldo: R$ {Number(
-                                (saldo.available as Record<string, unknown>)?.amount ?? saldo.saldo_disponivel ?? 0
-                              ).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                            </div>
-                            {saldo.sandbox && <span className="text-muted-foreground">(sandbox)</span>}
-                          </div>
-                        )}
                       </TableCell>
                     </TableRow>
                   );
