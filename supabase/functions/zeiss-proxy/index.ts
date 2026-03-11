@@ -72,20 +72,29 @@ async function loadStoreConfig(sb: ReturnType<typeof createClient>, codEmpresa: 
 }
 
 // Fetch with timeout (15s)
-async function fetchZeiss(url: string, options: RequestInit, correlationId: string, action: string): Promise<Response> {
+async function fetchZeiss(url: string, options: RequestInit, correlationId: string, action: string, apiKey?: string | null): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   const start = Date.now();
 
+  // Inject API key header if available
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((options.headers as Record<string, string>) || {}),
+  };
+  if (apiKey) {
+    headers["x-api-key"] = apiKey;
+  }
+
   try {
-    const resp = await fetch(url, { ...options, signal: controller.signal });
+    const resp = await fetch(url, { ...options, headers, signal: controller.signal });
     clearTimeout(timer);
     console.log(`[zeiss-proxy] [${correlationId}] ${action} -> ${resp.status} (${Date.now() - start}ms)`);
 
     if (resp.status === 403) {
       throw {
         code: ZEISS_ERROR_CODES.UNAVAILABLE,
-        message: "API Zeiss retornou 403 Forbidden. Verifique se os IPs do servidor estão liberados (whitelisting) junto à Zeiss.",
+        message: "API Zeiss retornou 403 Forbidden. Verifique se a API key está correta e se os IPs estão liberados.",
         correlationId,
       };
     }
@@ -101,7 +110,7 @@ async function fetchZeiss(url: string, options: RequestInit, correlationId: stri
     return resp;
   } catch (err) {
     clearTimeout(timer);
-    if ((err as { code?: string })?.code) throw err; // re-throw structured errors
+    if ((err as { code?: string })?.code) throw err;
     const isTimeout = err instanceof DOMException && err.name === "AbortError";
     throw {
       code: isTimeout ? ZEISS_ERROR_CODES.TIMEOUT : ZEISS_ERROR_CODES.UNAVAILABLE,
