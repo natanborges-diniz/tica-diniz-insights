@@ -391,17 +391,16 @@ const PedidoZeissPage: React.FC = () => {
       };
     }
 
-    if (armacao.ponte || armacao.altura || armacao.largura) {
-      payload.armacao = {
-        modelo: armacao.modelo,
-        ponte: armacao.ponte,
-        altura: armacao.altura,
-        largura: armacao.largura,
-        diagonalmaior: armacao.diagonalMaior,
-        tipo: armacao.tipo,
-        formatoaro: armacao.formatoAro,
-      };
-    }
+    // Armação is REQUIRED by Zeiss API — always include it
+    payload.armacao = {
+      modelo: armacao.modelo || "",
+      ponte: armacao.ponte || "",
+      altura: armacao.altura || "",
+      largura: armacao.largura || "",
+      diagonalmaior: armacao.diagonalMaior || "",
+      tipo: armacao.tipo || "M",
+      formatoaro: armacao.formatoAro || "",
+    };
 
     // Add services
     if (selectedServicos.length > 0) {
