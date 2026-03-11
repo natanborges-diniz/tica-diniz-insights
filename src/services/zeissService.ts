@@ -67,6 +67,8 @@ export interface ZeissPedidoOlho {
   eixoprisma?: string;
   sugestaobase?: string;
   sugestaodiametro?: string;
+  amostracoloracao?: string;
+  corcoloracao?: string;
   compl?: Record<string, unknown>;
 }
 
