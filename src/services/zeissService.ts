@@ -93,6 +93,7 @@ export interface ZeissPedidoPayload {
   servicos?: { codigo: string }[];
   datanascimento?: string;
   aprov?: ZeissAprovacao;
+  compl?: Record<string, unknown>;
 }
 
 export interface ZeissTrackingData {

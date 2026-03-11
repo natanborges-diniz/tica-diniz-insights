@@ -95,6 +95,7 @@ const PedidoZeissPage: React.FC = () => {
   const codEmpresa = Number(searchParams.get("codEmpresa")) || 0;
   const paramPaciente = searchParams.get("paciente") || "";
   const paramCpf = searchParams.get("cpf") || "";
+  const paramDataNascimento = searchParams.get("dataNascimento") || "";
 
   // State
   const [os, setOs] = useState<OsHubRecord | null>(null);
@@ -406,6 +407,11 @@ const PedidoZeissPage: React.FC = () => {
     if (selectedServicos.length > 0) {
       payload.servicos = selectedServicos.map(cod => ({ codigo: cod }));
     }
+
+    // compl is REQUIRED by Zeiss API — always include it
+    payload.compl = {
+      datanascimento: paramDataNascimento ? paramDataNascimento.split("T")[0] : undefined,
+    };
 
     if (aprov) payload.aprov = aprov;
     return payload;
