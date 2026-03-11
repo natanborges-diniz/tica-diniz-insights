@@ -612,67 +612,73 @@ const PedidoZeissPage: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* ── Approval step ── */}
+            {/* ── Approval step (single confirmation) ── */}
             {approvalData && (
               <Card className="border-primary/30 bg-primary/5">
-                <CardHeader>
+                <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-base">
-                    <DollarSign className="h-5 w-5" /> Aprovação de Preços
+                    <DollarSign className="h-5 w-5" /> Resumo de Custos — Laboratório
                   </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Valores retornados pela Zeiss. Revise e aprove com um único clique.
+                  </p>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    A Zeiss retornou a cotação abaixo. Confirme para gravar o pedido.
-                  </p>
-                  {/* Lab cost breakdown */}
-                  <div className="rounded-lg border border-border/60 bg-background px-4 py-3 space-y-2">
-                    <p className="text-[10px] font-semibold uppercase text-muted-foreground flex items-center gap-1">
-                      <DollarSign className="h-3 w-3" /> Custo Laboratório
-                    </p>
-                    {approvalData.aprov.precood && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">OD — Lente</span>
-                        <span className="font-mono font-medium">R$ {approvalData.aprov.precood}</span>
-                      </div>
-                    )}
-                    {approvalData.aprov.precooe && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">OE — Lente</span>
-                        <span className="font-mono font-medium">R$ {approvalData.aprov.precooe}</span>
-                      </div>
-                    )}
-                    {approvalData.aprov.precoserv && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Serviços / Tratamentos</span>
-                        <span className="font-mono font-medium">R$ {approvalData.aprov.precoserv}</span>
-                      </div>
-                    )}
-                    {(() => {
-                      const parseVal = (v?: string) => {
-                        if (!v) return 0;
-                        return parseFloat(String(v).replace(",", ".").replace(/[^\d.]/g, "")) || 0;
-                      };
-                      const total = parseVal(approvalData.aprov.precood) + parseVal(approvalData.aprov.precooe) + parseVal(approvalData.aprov.precoserv);
-                      if (total <= 0) return null;
-                      return (
-                        <div className="border-t border-border/40 pt-2 flex justify-between text-sm font-semibold">
-                          <span>Total Lab</span>
-                          <span className="font-mono text-primary">R$ {total.toFixed(2)}</span>
-                        </div>
-                      );
-                    })()}
+                  {/* Cost table */}
+                  <div className="rounded-lg border border-border/60 bg-background overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border/40 bg-muted/40">
+                          <th className="text-left px-4 py-2 text-[10px] uppercase font-semibold text-muted-foreground">Item</th>
+                          <th className="text-right px-4 py-2 text-[10px] uppercase font-semibold text-muted-foreground">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {approvalData.aprov.precood && (
+                          <tr className="border-b border-border/20">
+                            <td className="px-4 py-2 text-muted-foreground">Lente OD</td>
+                            <td className="px-4 py-2 text-right font-mono font-medium">R$ {approvalData.aprov.precood}</td>
+                          </tr>
+                        )}
+                        {approvalData.aprov.precooe && (
+                          <tr className="border-b border-border/20">
+                            <td className="px-4 py-2 text-muted-foreground">Lente OE</td>
+                            <td className="px-4 py-2 text-right font-mono font-medium">R$ {approvalData.aprov.precooe}</td>
+                          </tr>
+                        )}
+                        {approvalData.aprov.precoserv && (
+                          <tr className="border-b border-border/20">
+                            <td className="px-4 py-2 text-muted-foreground">Serviços / Tratamentos</td>
+                            <td className="px-4 py-2 text-right font-mono font-medium">R$ {approvalData.aprov.precoserv}</td>
+                          </tr>
+                        )}
+                        {approvalData.precos.filter(p => !["od","oe"].includes(p.c?.toLowerCase?.())).map((p, i) => (
+                          <tr key={i} className="border-b border-border/20">
+                            <td className="px-4 py-2 text-muted-foreground">{p.n}</td>
+                            <td className="px-4 py-2 text-right font-mono font-medium">R$ {p.p}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        {(() => {
+                          const parseVal = (v?: string) => {
+                            if (!v) return 0;
+                            return parseFloat(String(v).replace(",", ".").replace(/[^\d.]/g, "")) || 0;
+                          };
+                          const total = parseVal(approvalData.aprov.precood) + parseVal(approvalData.aprov.precooe) + parseVal(approvalData.aprov.precoserv);
+                          if (total <= 0) return null;
+                          return (
+                            <tr className="bg-muted/30">
+                              <td className="px-4 py-2.5 font-semibold">Total Laboratório</td>
+                              <td className="px-4 py-2.5 text-right font-mono font-bold text-lg text-primary">R$ {total.toFixed(2)}</td>
+                            </tr>
+                          );
+                        })()}
+                      </tfoot>
+                    </table>
                   </div>
-                  {approvalData.precos.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-semibold uppercase text-muted-foreground">Detalhamento</p>
-                      {approvalData.precos.map((p, i) => (
-                        <div key={i} className="flex justify-between text-sm py-1 border-b border-border/40">
-                          <span className="text-muted-foreground">{p.n}</span>
-                          <span className="font-mono font-medium">R$ {p.p}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+
+                  {/* Alerts section */}
                   {approvalData.antecDescricao && (
                     <Alert><AlertDescription className="text-sm">
                       <strong>Análise Técnica:</strong> {approvalData.antecDescricao}
@@ -690,11 +696,13 @@ const PedidoZeissPage: React.FC = () => {
                       </AlertDescription>
                     </Alert>
                   )}
-                  <div className="flex gap-3">
-                    <Button variant="outline" onClick={() => setApprovalData(null)}>Cancelar</Button>
-                    <Button onClick={handleConfirmApproval} disabled={enviando} className="gap-2">
+
+                  {/* Single approval action */}
+                  <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/40">
+                    <Button variant="outline" onClick={() => setApprovalData(null)}>Voltar e Editar</Button>
+                    <Button size="lg" onClick={handleConfirmApproval} disabled={enviando} className="gap-2 px-6">
                       {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                      Confirmar Pedido
+                      Aprovar e Confirmar Pedido
                     </Button>
                   </div>
                 </CardContent>
