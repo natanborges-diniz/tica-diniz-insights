@@ -394,10 +394,10 @@ const PedidoZeissPage: React.FC = () => {
     // Armação is REQUIRED by Zeiss API — always include it
     payload.armacao = {
       modelo: armacao.modelo || "",
-      ponte: armacao.ponte || "",
-      altura: armacao.altura || "",
-      largura: armacao.largura || "",
-      diagonalmaior: armacao.diagonalMaior || "",
+      ponte: armacao.ponte || "0",
+      altura: armacao.altura || "0",
+      largura: armacao.largura || "0",
+      diagonalmaior: armacao.diagonalMaior || "0",
       tipo: armacao.tipo || "M",
       formatoaro: armacao.formatoAro || "",
     };
