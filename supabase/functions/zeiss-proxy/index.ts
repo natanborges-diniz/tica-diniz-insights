@@ -231,6 +231,11 @@ serve(async (req) => {
         let respData: Record<string, unknown>;
         try { respData = JSON.parse(respText); } catch { respData = { rawResponse: respText }; }
 
+        // Log response for debugging (especially errors)
+        if (resp.status >= 400) {
+          console.error(`[zeiss-proxy] [${correlationId}] criar-pedido RESPONSE (${resp.status}): ${respText.substring(0, 1000)}`);
+        }
+
         // Check for errors: API may return { erro: ... } or { message: "Falha..." } or HTTP 5xx
         const apiErrorMsg = respData.erro || (resp.status >= 400 ? (respData.message || respData.rawResponse || `HTTP ${resp.status}`) : null);
         if (apiErrorMsg) {
