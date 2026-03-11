@@ -59,6 +59,7 @@ export interface ZeissPedidoOlho {
   cilindrico?: string;
   eixocilindrico?: string;
   adicao?: string;
+  regressao?: string;
   dnp?: string;
   dnpperto?: string;
   dnplonge?: string;
@@ -67,12 +68,10 @@ export interface ZeissPedidoOlho {
   eixoprisma?: string;
   sugestaobase?: string;
   sugestaodiametro?: string;
-  amostracoloracao?: string;
-  corcoloracao?: string;
-  compl?: Record<string, unknown>;
 }
 
 export interface ZeissArmacao {
+  compralab?: string;
   modelo?: string;
   ponte?: string;
   altura?: string;
@@ -80,6 +79,8 @@ export interface ZeissArmacao {
   diagonalmaior?: string;
   tipo?: string; // M, A, F, P, C, S
   formatoaro?: string;
+  distanciahastes?: string;
+  distanciafrontal?: string;
 }
 
 export interface ZeissPedidoPayload {
@@ -89,6 +90,8 @@ export interface ZeissPedidoPayload {
   medico?: string;
   crm?: string;
   voucher?: string;
+  corcoloracao?: string;
+  amostracoloracao?: string;
   observacao?: string[];
   od?: ZeissPedidoOlho;
   oe?: ZeissPedidoOlho;
