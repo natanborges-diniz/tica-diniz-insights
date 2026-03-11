@@ -415,8 +415,8 @@ const PedidoZeissPage: React.FC = () => {
     // ── Auto-set diâmetro para Lente Pronta: positivo→65, negativo→70 ──
     const calcDiametroLP = (esf: string): string => {
       const val = parseFloat(esf);
-      if (isNaN(val)) return "70"; // default
-      return val >= 0 ? "65" : "70";
+      if (isNaN(val) || val <= 0) return "70";
+      return "65";
     };
 
     const todosLP = odIsLentePronta && (!oeProduct || oeIsLentePronta);
