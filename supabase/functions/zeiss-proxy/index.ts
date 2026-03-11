@@ -483,6 +483,7 @@ serve(async (req) => {
             estabel: params.estabelecimento,
             numpedido: params.numeroPedido,
           }),
+        }, correlationId, "cancelar-pedido", zeissConfig.apiKey);
         }, correlationId, "cancelar-pedido");
 
         const data = await resp.json();
