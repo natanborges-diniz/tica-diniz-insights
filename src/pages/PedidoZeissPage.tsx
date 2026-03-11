@@ -38,6 +38,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import ZeissServicosSection from "@/components/zeiss-pedido/ZeissServicosSection";
 import ZeissSugestaoBase from "@/components/zeiss-pedido/ZeissSugestaoBase";
 import ZeissValidationPanel from "@/components/zeiss-pedido/ZeissValidationPanel";
+import ZeissPrecoPreview from "@/components/zeiss-pedido/ZeissPrecoPreview";
 import {
   ArrowLeft, Send, Eye, Glasses, Package, Loader2, Check, AlertTriangle,
   Search, ShieldCheck, CheckCircle2, DollarSign, Zap, Sparkles, ChevronDown,
@@ -1023,6 +1024,14 @@ const PedidoZeissPage: React.FC = () => {
 
             {/* ── Validation errors ── */}
             {showValidation && <ZeissValidationPanel errors={validationErrors} />}
+
+            {/* ── Price Preview ── */}
+            <ZeissPrecoPreview
+              codEmpresa={codEmpresa}
+              produtoCodOd={produtoOd?.cod || null}
+              produtoCodOe={useSameProduct ? null : produtoOe?.cod || null}
+              servicosCods={selectedServicos}
+            />
 
             {/* ── Submit ── */}
             {!approvalData && (
