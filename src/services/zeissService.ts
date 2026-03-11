@@ -179,7 +179,11 @@ async function callZeissProxy<T>(action: string, params: Record<string, unknown>
 
   if (data?.error) {
     const code = data.code as string | undefined;
-    const friendlyMessage = (code && ZEISS_ERROR_MESSAGES[code]) || data.error;
+    // Show exact Zeiss API error when available; only fallback to generic message for non-API errors
+    const isApiError = code === "ZEISS_API_ERROR";
+    const friendlyMessage = isApiError
+      ? data.error  // Preserve exact Zeiss error (e.g. "É necessário informar o Diâmetro...")
+      : (code && ZEISS_ERROR_MESSAGES[code]) || data.error;
     const proxyError: ZeissProxyError = {
       code: code || "ZEISS_API_ERROR",
       message: friendlyMessage,
