@@ -1025,13 +1025,6 @@ const PedidoZeissPage: React.FC = () => {
             {/* ── Validation errors ── */}
             {showValidation && <ZeissValidationPanel errors={validationErrors} />}
 
-            {/* ── Price Preview ── */}
-            <ZeissPrecoPreview
-              codEmpresa={codEmpresa}
-              produtoCodOd={produtoOd?.cod || null}
-              produtoCodOe={useSameProduct ? null : produtoOe?.cod || null}
-              servicosCods={selectedServicos}
-            />
 
             {/* ── Submit ── */}
             {!approvalData && (
