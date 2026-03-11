@@ -38,6 +38,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import ZeissServicosSection from "@/components/zeiss-pedido/ZeissServicosSection";
 import ZeissSugestaoBase from "@/components/zeiss-pedido/ZeissSugestaoBase";
 import ZeissValidationPanel from "@/components/zeiss-pedido/ZeissValidationPanel";
+import ZeissPrecoPreview from "@/components/zeiss-pedido/ZeissPrecoPreview";
 import {
   ArrowLeft, Send, Eye, Glasses, Package, Loader2, Check, AlertTriangle,
   Search, ShieldCheck, CheckCircle2, DollarSign, Zap, Sparkles, ChevronDown,
