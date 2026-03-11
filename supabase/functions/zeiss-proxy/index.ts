@@ -187,24 +187,7 @@ serve(async (req) => {
         pedidoPayload.usersao = store.userSao;
         pedidoPayload.cnpj = store.cnpj;
 
-        // Normalizar campos de armação: Zeiss exige "Diâmetro OU Dados da Armação e Montagem"
-        // Para lente pronta (LP), armação vem vazia — converter "" para "0" nos campos numéricos
-        const arm = pedidoPayload.armacao || {};
-        const armFields = ["ponte", "altura", "largura", "diagonalmaior", "distanciahastes", "distanciafrontal"];
-        for (const f of armFields) {
-          if (arm[f] == null || String(arm[f]).trim() === "") {
-            arm[f] = "0";
-          }
-        }
-        pedidoPayload.armacao = arm;
-
-        // Se armação toda zerada, garantir tipo padrão e formatoaro para não dar erro
-        const armacaoSemMedidas = ["ponte", "altura", "largura", "diagonalmaior"]
-          .every((f) => String(arm[f]).trim() === "0");
-        if (armacaoSemMedidas) {
-          if (!arm.tipo || String(arm.tipo).trim() === "") arm.tipo = "M";
-          if (!arm.formatoaro || String(arm.formatoaro).trim() === "") arm.formatoaro = "1AB";
-        }
+        // Armação: respeitar valores enviados pelo frontend (LP envia tudo vazio "")
 
         const zeissBody = { sao: { pedido: pedidoPayload } };
         const url = `${BASE_URL}/pedidos/criar`;
