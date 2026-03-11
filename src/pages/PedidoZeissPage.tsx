@@ -410,7 +410,7 @@ const PedidoZeissPage: React.FC = () => {
 
     // compl is REQUIRED by Zeiss API — always include it
     payload.compl = {
-      datanascimento: dataNascimento || undefined,
+      datanascimento: paramDataNascimento ? paramDataNascimento.split("T")[0] : undefined,
     };
 
     if (aprov) payload.aprov = aprov;
