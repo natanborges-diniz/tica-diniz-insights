@@ -262,7 +262,7 @@ serve(async (req) => {
           });
         }
 
-        const pedidoResp = (respData as any)?.sao?.pedido;
+        const pedidoResp = (respData as any)?.sao?.pedido || (respData as any)?.det?.sao?.pedido;
 
         // Check if approval is needed (two-step flow)
         if (pedidoResp?.aprov && !pedidoResp?.nrpedido) {
