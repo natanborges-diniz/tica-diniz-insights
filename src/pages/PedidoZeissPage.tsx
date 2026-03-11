@@ -38,7 +38,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import ZeissServicosSection from "@/components/zeiss-pedido/ZeissServicosSection";
 import ZeissSugestaoBase from "@/components/zeiss-pedido/ZeissSugestaoBase";
 import ZeissValidationPanel from "@/components/zeiss-pedido/ZeissValidationPanel";
-import ZeissPrecoPreview from "@/components/zeiss-pedido/ZeissPrecoPreview";
+
 import {
   ArrowLeft, Send, Eye, Glasses, Package, Loader2, Check, AlertTriangle,
   Search, ShieldCheck, CheckCircle2, DollarSign, Zap, Sparkles, ChevronDown,
@@ -624,8 +624,47 @@ const PedidoZeissPage: React.FC = () => {
                   <p className="text-sm text-muted-foreground">
                     A Zeiss retornou a cotação abaixo. Confirme para gravar o pedido.
                   </p>
+                  {/* Lab cost breakdown */}
+                  <div className="rounded-lg border border-border/60 bg-background px-4 py-3 space-y-2">
+                    <p className="text-[10px] font-semibold uppercase text-muted-foreground flex items-center gap-1">
+                      <DollarSign className="h-3 w-3" /> Custo Laboratório
+                    </p>
+                    {approvalData.aprov.precood && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">OD — Lente</span>
+                        <span className="font-mono font-medium">R$ {approvalData.aprov.precood}</span>
+                      </div>
+                    )}
+                    {approvalData.aprov.precooe && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">OE — Lente</span>
+                        <span className="font-mono font-medium">R$ {approvalData.aprov.precooe}</span>
+                      </div>
+                    )}
+                    {approvalData.aprov.precoserv && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Serviços / Tratamentos</span>
+                        <span className="font-mono font-medium">R$ {approvalData.aprov.precoserv}</span>
+                      </div>
+                    )}
+                    {(() => {
+                      const parseVal = (v?: string) => {
+                        if (!v) return 0;
+                        return parseFloat(String(v).replace(",", ".").replace(/[^\d.]/g, "")) || 0;
+                      };
+                      const total = parseVal(approvalData.aprov.precood) + parseVal(approvalData.aprov.precooe) + parseVal(approvalData.aprov.precoserv);
+                      if (total <= 0) return null;
+                      return (
+                        <div className="border-t border-border/40 pt-2 flex justify-between text-sm font-semibold">
+                          <span>Total Lab</span>
+                          <span className="font-mono text-primary">R$ {total.toFixed(2)}</span>
+                        </div>
+                      );
+                    })()}
+                  </div>
                   {approvalData.precos.length > 0 && (
                     <div className="space-y-1">
+                      <p className="text-[10px] font-semibold uppercase text-muted-foreground">Detalhamento</p>
                       {approvalData.precos.map((p, i) => (
                         <div key={i} className="flex justify-between text-sm py-1 border-b border-border/40">
                           <span className="text-muted-foreground">{p.n}</span>
@@ -1025,13 +1064,6 @@ const PedidoZeissPage: React.FC = () => {
             {/* ── Validation errors ── */}
             {showValidation && <ZeissValidationPanel errors={validationErrors} />}
 
-            {/* ── Price Preview ── */}
-            <ZeissPrecoPreview
-              codEmpresa={codEmpresa}
-              produtoCodOd={produtoOd?.cod || null}
-              produtoCodOe={useSameProduct ? null : produtoOe?.cod || null}
-              servicosCods={selectedServicos}
-            />
 
             {/* ── Submit ── */}
             {!approvalData && (
