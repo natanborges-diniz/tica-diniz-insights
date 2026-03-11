@@ -495,7 +495,7 @@ serve(async (req) => {
       // ── Listar Serviços ──
       case "listar-servicos": {
         const url = `${BASE_URL}/servicos/lista/1`;
-        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-servicos");
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-servicos", zeissConfig.apiKey);
         const data = await resp.json();
         return new Response(JSON.stringify(data?.sao?.servicos || []), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
