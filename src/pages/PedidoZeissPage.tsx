@@ -372,9 +372,9 @@ const PedidoZeissPage: React.FC = () => {
         eixoprisma: prescOd.eixoPrisma,
         sugestaobase: sugestaoBase || undefined,
         sugestaodiametro: sugestaoDiametro || undefined,
-        amostracoloracao: "",
-        corcoloracao: "",
-        compl: {},
+        amostracoloracao: "0",
+        corcoloracao: "0",
+        compl: { amostracoloracao: "0", corcoloracao: "0" },
       };
     }
 
@@ -392,9 +392,9 @@ const PedidoZeissPage: React.FC = () => {
         eixoprisma: prescOe.eixoPrisma,
         sugestaobase: sugestaoBase || undefined,
         sugestaodiametro: sugestaoDiametro || undefined,
-        amostracoloracao: "",
-        corcoloracao: "",
-        compl: {},
+        amostracoloracao: "0",
+        corcoloracao: "0",
+        compl: { amostracoloracao: "0", corcoloracao: "0" },
       };
     }
 
@@ -418,8 +418,8 @@ const PedidoZeissPage: React.FC = () => {
     // amostracoloracao and corcoloracao may need to be at pedido.compl level
     payload.compl = {
       datanascimento: paramDataNascimento ? paramDataNascimento.split("T")[0] : undefined,
-      amostracoloracao: "",
-      corcoloracao: "",
+      amostracoloracao: "0",
+      corcoloracao: "0",
     };
 
     if (aprov) payload.aprov = aprov;
