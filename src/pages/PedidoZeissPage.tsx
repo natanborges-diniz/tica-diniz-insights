@@ -1,5 +1,6 @@
 // src/pages/PedidoZeissPage.tsx
 // Tela de criação de pedido Zeiss (MaisZeiss) — com matching inteligente + DE/PARA + auto-fill
+// + serviços/cores + sugestão base + validação clínica
 
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -11,6 +12,7 @@ import {
   ZeissConfirmResponse,
   listarProdutosZeiss,
   criarPedidoZeiss,
+  cancelarPedidoZeiss,
 } from "@/services/zeissService";
 import {
   matchZeissProducts,
@@ -19,6 +21,7 @@ import {
   ZeissMatchResult,
   zeissScoreLabel,
 } from "@/services/zeissMatchingService";
+import { validateZeissPayload, hasBlockingErrors, ValidationError } from "@/services/zeissValidation";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -32,10 +35,13 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import ZeissServicosSection from "@/components/zeiss-pedido/ZeissServicosSection";
+import ZeissSugestaoBase from "@/components/zeiss-pedido/ZeissSugestaoBase";
+import ZeissValidationPanel from "@/components/zeiss-pedido/ZeissValidationPanel";
 import {
   ArrowLeft, Send, Eye, Glasses, Package, Loader2, Check, AlertTriangle,
   Search, ShieldCheck, CheckCircle2, DollarSign, Zap, Sparkles, ChevronDown,
-  ChevronUp, XCircle,
+  ChevronUp, XCircle, Ban,
 } from "lucide-react";
 
 // ============================================
@@ -68,6 +74,12 @@ function autoFillLabel(source: AutoFillSource) {
     case "manual": return { text: "Seleção manual", icon: <Search className="h-3.5 w-3.5" />, color: "text-muted-foreground bg-muted border-border" };
     default: return null;
   }
+}
+
+/** Extract familia (cat) from selected product for service/color lookups */
+function extractFamilia(produto: ZeissProduto | null): string | null {
+  if (!produto?.cat) return null;
+  return produto.cat;
 }
 
 // ============================================
@@ -104,7 +116,7 @@ const PedidoZeissPage: React.FC = () => {
   // Two-step flow
   const [approvalData, setApprovalData] = useState<ZeissApprovalResponse | null>(null);
   const [pedidoConfirmado, setPedidoConfirmado] = useState<ZeissConfirmResponse | null>(null);
-  const [pedidoExistente, setPedidoExistente] = useState<{ numero_pedido: string | null; status: string } | null>(null);
+  const [pedidoExistente, setPedidoExistente] = useState<{ numero_pedido: string | null; status: string; estabelecimento?: string } | null>(null);
 
   // Prescrição editável
   const [prescOd, setPrescOd] = useState({
@@ -131,6 +143,21 @@ const PedidoZeissPage: React.FC = () => {
   const [crm, setCrm] = useState("");
   const [voucher, setVoucher] = useState("");
   const [observacao, setObservacao] = useState("");
+
+  // Services & Colors
+  const [selectedServicos, setSelectedServicos] = useState<string[]>([]);
+  const [selectedCor, setSelectedCor] = useState("none");
+
+  // Sugestão de base
+  const [sugestaoBase, setSugestaoBase] = useState("");
+  const [sugestaoDiametro, setSugestaoDiametro] = useState("");
+
+  // Validation
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+  const [showValidation, setShowValidation] = useState(false);
+
+  // Cancellation
+  const [cancelando, setCancelando] = useState(false);
 
   // ── Load OS data ──
   useEffect(() => {
@@ -213,14 +240,19 @@ const PedidoZeissPage: React.FC = () => {
     (async () => {
       const { data: rows } = await supabase
         .from("pedidos_fornecedor")
-        .select("numero_pedido, status")
+        .select("numero_pedido, status, response")
         .eq("cod_os", codOs)
         .eq("fornecedor", "ZEISS")
         .order("created_at", { ascending: false });
       if (rows && rows.length > 0) {
         const confirmado = rows.find(r => r.numero_pedido);
         if (confirmado) {
-          setPedidoExistente({ numero_pedido: confirmado.numero_pedido, status: confirmado.status || "" });
+          const resp = confirmado.response as any;
+          setPedidoExistente({
+            numero_pedido: confirmado.numero_pedido,
+            status: confirmado.status || "",
+            estabelecimento: resp?.sao?.pedido?.est || resp?.estabelecimento || "",
+          });
         }
       }
     })();
@@ -257,7 +289,7 @@ const PedidoZeissPage: React.FC = () => {
         setProdutoOd(result.bestMatch.produto);
         setProdutoOe(result.bestMatch.produto);
         setAutoFillSource(result.source === "depara" ? "depara" : "match");
-        setConfirmedProduct(result.source === "depara"); // Auto-confirm DE/PARA
+        setConfirmedProduct(result.source === "depara");
         toast({
           title: result.source === "depara" ? "Produto encontrado via DE/PARA" : "Match inteligente realizado",
           description: result.bestMatch.produto.nome,
@@ -274,6 +306,9 @@ const PedidoZeissPage: React.FC = () => {
     setConfirmedProduct(source === "manual" || source === "depara");
     setShowManualSearch(false);
     setBuscaProduto("");
+    // Reset services/colors when product changes
+    setSelectedServicos([]);
+    setSelectedCor("none");
   }, [useSameProduct]);
 
   // ── Manual search ──
@@ -284,6 +319,31 @@ const PedidoZeissPage: React.FC = () => {
       p.nome?.toLowerCase().includes(q) || p.descr?.toLowerCase().includes(q) || p.cod?.includes(q)
     ).slice(0, 30);
   }, [produtos, buscaProduto]);
+
+  // ── Familia from selected product ──
+  const familia = extractFamilia(produtoOd);
+
+  // ── Handle sugestão base ──
+  const handleSugestaoBase = useCallback((base: string, diametro: string) => {
+    setSugestaoBase(base);
+    setSugestaoDiametro(diametro);
+  }, []);
+
+  // ── Validate ──
+  const runValidation = useCallback((): ValidationError[] => {
+    const errors = validateZeissPayload(
+      produtoOd?.cod || null,
+      produtoOe?.cod || null,
+      prescOd,
+      prescOe,
+      armacao,
+      osNumero,
+      paciente,
+    );
+    setValidationErrors(errors);
+    setShowValidation(true);
+    return errors;
+  }, [produtoOd, produtoOe, prescOd, prescOe, armacao, osNumero, paciente]);
 
   // ── Build payload ──
   function buildPayload(aprov?: ZeissApprovalResponse["aprov"]): ZeissPedidoPayload {
@@ -308,6 +368,8 @@ const PedidoZeissPage: React.FC = () => {
         alturamontagem: prescOd.alturaMontagem,
         prisma: prescOd.prisma,
         eixoprisma: prescOd.eixoPrisma,
+        sugestaobase: sugestaoBase || undefined,
+        sugestaodiametro: sugestaoDiametro || undefined,
       };
     }
 
@@ -323,6 +385,8 @@ const PedidoZeissPage: React.FC = () => {
         alturamontagem: prescOe.alturaMontagem,
         prisma: prescOe.prisma,
         eixoprisma: prescOe.eixoPrisma,
+        sugestaobase: sugestaoBase || undefined,
+        sugestaodiametro: sugestaoDiametro || undefined,
       };
     }
 
@@ -338,15 +402,30 @@ const PedidoZeissPage: React.FC = () => {
       };
     }
 
+    // Add services
+    if (selectedServicos.length > 0) {
+      payload.servicos = selectedServicos.map(cod => ({ codigo: cod }));
+    }
+
     if (aprov) payload.aprov = aprov;
     return payload;
   }
 
   // ── Submit ──
   const handleSubmit = async () => {
-    if (!produtoOd) {
-      toast({ title: "Selecione o produto", variant: "destructive" });
+    const errors = runValidation();
+    if (hasBlockingErrors(errors)) {
+      toast({ title: "Corrija os erros antes de enviar", variant: "destructive" });
       return;
+    }
+
+    // Show warnings but allow continue
+    const warnings = errors.filter(e => e.severity === "warning");
+    if (warnings.length > 0) {
+      const proceed = window.confirm(
+        `Atenção: ${warnings.length} aviso(s) detectado(s):\n\n${warnings.map(w => `• ${w.message}`).join("\n")}\n\nDeseja continuar mesmo assim?`
+      );
+      if (!proceed) return;
     }
 
     setEnviando(true);
@@ -399,6 +478,28 @@ const PedidoZeissPage: React.FC = () => {
       toast({ title: "Erro ao confirmar pedido", description: e.message || "Erro desconhecido", variant: "destructive" });
     } finally {
       setEnviando(false);
+    }
+  };
+
+  // ── Cancel order ──
+  const handleCancelarPedido = async () => {
+    if (!pedidoExistente?.numero_pedido || !pedidoExistente?.estabelecimento) {
+      toast({ title: "Dados insuficientes para cancelar", variant: "destructive" });
+      return;
+    }
+    const confirmed = window.confirm(`Tem certeza que deseja cancelar o pedido ${pedidoExistente.numero_pedido}?`);
+    if (!confirmed) return;
+
+    setCancelando(true);
+    try {
+      await cancelarPedidoZeiss(pedidoExistente.numero_pedido, pedidoExistente.estabelecimento);
+      toast({ title: "Solicitação de cancelamento enviada", description: `Pedido ${pedidoExistente.numero_pedido}` });
+      setPedidoExistente(prev => prev ? { ...prev, status: "CANCELAMENTO_SOLICITADO" } : null);
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      toast({ title: "Erro ao cancelar", description: e.message || "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setCancelando(false);
     }
   };
 
@@ -483,8 +584,22 @@ const PedidoZeissPage: React.FC = () => {
         {pedidoExistente?.numero_pedido && (
           <Alert className="border-amber-300 bg-amber-500/10">
             <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              Já existe pedido Zeiss para esta OS: <strong>{pedidoExistente.numero_pedido}</strong> ({pedidoExistente.status})
+            <AlertDescription className="flex items-center justify-between gap-2">
+              <span>
+                Já existe pedido Zeiss para esta OS: <strong>{pedidoExistente.numero_pedido}</strong> ({pedidoExistente.status})
+              </span>
+              {pedidoExistente.estabelecimento && pedidoExistente.status !== "CANCELAMENTO_SOLICITADO" && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="gap-1.5 shrink-0"
+                  onClick={handleCancelarPedido}
+                  disabled={cancelando}
+                >
+                  {cancelando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
+                  Cancelar Pedido
+                </Button>
+              )}
             </AlertDescription>
           </Alert>
         )}
@@ -586,12 +701,7 @@ const PedidoZeissPage: React.FC = () => {
                       </div>
                       <div className="flex gap-1.5 shrink-0">
                         {!confirmedProduct && (
-                          <Button
-                            size="sm"
-                            variant="default"
-                            className="gap-1.5 h-8"
-                            onClick={() => setConfirmedProduct(true)}
-                          >
+                          <Button size="sm" variant="default" className="gap-1.5 h-8" onClick={() => setConfirmedProduct(true)}>
                             <Check className="h-3.5 w-3.5" /> Confirmar
                           </Button>
                         )}
@@ -601,15 +711,12 @@ const PedidoZeissPage: React.FC = () => {
                           </Badge>
                         )}
                         <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8"
+                          size="sm" variant="ghost" className="h-8"
                           onClick={() => {
-                            setProdutoOd(null);
-                            setProdutoOe(null);
-                            setConfirmedProduct(false);
-                            setAutoFillSource(null);
+                            setProdutoOd(null); setProdutoOe(null);
+                            setConfirmedProduct(false); setAutoFillSource(null);
                             setShowManualSearch(true);
+                            setSelectedServicos([]); setSelectedCor("none");
                           }}
                         >
                           <XCircle className="h-3.5 w-3.5" />
@@ -759,6 +866,16 @@ const PedidoZeissPage: React.FC = () => {
               </CardContent>
             </Card>
 
+            {/* ── Services & Colors ── */}
+            <ZeissServicosSection
+              familia={familia}
+              codEmpresa={codEmpresa}
+              selectedServicos={selectedServicos}
+              onServicosChange={setSelectedServicos}
+              selectedCor={selectedCor}
+              onCorChange={setSelectedCor}
+            />
+
             {/* ── Patient & Doctor ── */}
             <Card>
               <CardHeader className="pb-3">
@@ -834,6 +951,17 @@ const PedidoZeissPage: React.FC = () => {
                   <RxField label="Prisma" value={prescOd.prisma} onChange={v => setPrescOd(p => ({ ...p, prisma: v }))} />
                   <RxField label="Eixo Pr" value={prescOd.eixoPrisma} onChange={v => setPrescOd(p => ({ ...p, eixoPrisma: v }))} />
                 </div>
+
+                {/* Sugestão de base OD */}
+                <ZeissSugestaoBase
+                  familia={familia}
+                  codEmpresa={codEmpresa}
+                  esferico={prescOd.esferico}
+                  cilindrico={prescOd.cilindrico}
+                  adicao={prescOd.adicao}
+                  onSugestao={handleSugestaoBase}
+                />
+
                 <Separator />
                 <p className="text-xs font-semibold text-muted-foreground uppercase">Olho Esquerdo (OE)</p>
                 <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
@@ -893,12 +1021,18 @@ const PedidoZeissPage: React.FC = () => {
               </CardContent>
             </Card>
 
+            {/* ── Validation errors ── */}
+            {showValidation && <ZeissValidationPanel errors={validationErrors} />}
+
             {/* ── Submit ── */}
             {!approvalData && (
               <div className="flex items-center justify-between gap-3 pt-2">
                 <div className="text-xs text-muted-foreground">
                   {!produtoOd && "Selecione um produto para continuar"}
                   {produtoOd && !confirmedProduct && "Confirme o produto selecionado"}
+                  {produtoOd && confirmedProduct && selectedServicos.length > 0 && (
+                    <span>{selectedServicos.length} serviço(s) selecionado(s)</span>
+                  )}
                 </div>
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => navigate(-1)}>Cancelar</Button>
