@@ -81,7 +81,7 @@ export function validateZeissPayload(
     }
   };
 
-  if (presc.esferico || prescOd.cilindrico) validateEye(prescOd, "OD");
+  if (prescOd.esferico || prescOd.cilindrico) validateEye(prescOd, "OD");
   if (prescOe.esferico || prescOe.cilindrico) validateEye(prescOe, "OE");
 
   // ── Frame validation ──
