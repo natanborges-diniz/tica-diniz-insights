@@ -225,7 +225,7 @@ serve(async (req) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: payloadStr,
-        }, correlationId, "criar-pedido");
+        }, correlationId, "criar-pedido", zeissConfig.apiKey);
 
         const respText = await resp.text();
         let respData: Record<string, unknown>;
