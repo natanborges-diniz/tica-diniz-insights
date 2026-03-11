@@ -326,7 +326,7 @@ serve(async (req) => {
             idpais: 1,
             numpedido: Number(params.numeroPedido),
           }),
-        }, correlationId, "consultar-pedido");
+        }, correlationId, "consultar-pedido", zeissConfig.apiKey);
 
         const data = await resp.json();
 
