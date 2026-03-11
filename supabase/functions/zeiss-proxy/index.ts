@@ -236,8 +236,11 @@ serve(async (req) => {
           console.error(`[zeiss-proxy] [${correlationId}] criar-pedido RESPONSE (${resp.status}): ${respText.substring(0, 1000)}`);
         }
 
-        // Check for errors: API may return { erro: ... } or { message: "Falha..." } or HTTP 5xx
-        const apiErrorMsg = respData.erro || (resp.status >= 400 ? (respData.message || respData.rawResponse || `HTTP ${resp.status}`) : null);
+        // Check for errors: API may return nested { det.sao.pedido.erro }, { erro }, { message } or HTTP 5xx
+        const nestedErro = (respData as any)?.det?.sao?.pedido?.erro;
+        const topErro = respData.erro;
+        const saoErro = (respData as any)?.sao?.pedido?.erro;
+        const apiErrorMsg = nestedErro || topErro || saoErro || (resp.status >= 400 ? (respData.message || respData.rawResponse || `HTTP ${resp.status}`) : null);
         if (apiErrorMsg) {
           // Save error record
           await sbService.from("pedidos_fornecedor").insert({
