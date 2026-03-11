@@ -78,9 +78,27 @@ async function fetchZeiss(url: string, options: RequestInit, correlationId: stri
     const resp = await fetch(url, { ...options, signal: controller.signal });
     clearTimeout(timer);
     console.log(`[zeiss-proxy] [${correlationId}] ${action} -> ${resp.status} (${Date.now() - start}ms)`);
+
+    if (resp.status === 403) {
+      throw {
+        code: ZEISS_ERROR_CODES.UNAVAILABLE,
+        message: "API Zeiss retornou 403 Forbidden. Verifique se os IPs do servidor estão liberados (whitelisting) junto à Zeiss.",
+        correlationId,
+      };
+    }
+
+    if (resp.status === 401) {
+      throw {
+        code: ZEISS_ERROR_CODES.CONFIG_ERROR,
+        message: "API Zeiss retornou 401 Unauthorized. Verifique as credenciais (usersao/cnpj) da loja.",
+        correlationId,
+      };
+    }
+
     return resp;
   } catch (err) {
     clearTimeout(timer);
+    if ((err as { code?: string })?.code) throw err; // re-throw structured errors
     const isTimeout = err instanceof DOMException && err.name === "AbortError";
     throw {
       code: isTimeout ? ZEISS_ERROR_CODES.TIMEOUT : ZEISS_ERROR_CODES.UNAVAILABLE,
