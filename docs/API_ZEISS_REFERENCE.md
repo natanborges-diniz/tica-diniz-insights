@@ -17,7 +17,8 @@
 
 ### 02 - Gravação de Pedido (dois passos)
 - `POST /pedidos/criar`
-- Payload: `{ sao: { pedido: { usersao, cnpj, oscliente, paciente, ... od: {}, oe: {}, armacao: {}, servicos: [] } } }`
+- Payload: `{ sao: { pedido: { usersao, cnpj, oscliente, paciente, medico, crm, voucher, corcoloracao, amostracoloracao, od: { produto, esferico, cilindrico, eixocilindrico, adicao, regressao, prisma, eixoprisma, dnp, dnpperto, dnplonge, alturamontagem, sugestaobase, sugestaodiametro }, oe: {...}, armacao: { compralab, modelo, ponte, altura, largura, diagonalmaior, tipo, formatoaro, distanciahastes, distanciafrontal }, servicos: [{ codigo }] } } }`
+- **IMPORTANTE**: `corcoloracao` e `amostracoloracao` são filhos diretos de `pedido`, NÃO dentro de `od`/`oe`
 - Resposta 1ª chamada: `sao.pedido.aprov` (preços para aprovação)
 - Resposta 2ª chamada (com aprov): `sao.pedido.nrpedido` (confirmação)
 

@@ -356,6 +356,8 @@ const PedidoZeissPage: React.FC = () => {
       medico,
       crm,
       voucher: voucher || "",
+      corcoloracao: "",
+      amostracoloracao: "",
       observacao: observacao ? [observacao] : [],
     };
 
@@ -366,15 +368,15 @@ const PedidoZeissPage: React.FC = () => {
         cilindrico: prescOd.cilindrico,
         eixocilindrico: prescOd.eixo,
         adicao: prescOd.adicao,
+        regressao: "",
         dnp: prescOd.dnp,
+        dnpperto: "",
+        dnplonge: "",
         alturamontagem: prescOd.alturaMontagem,
         prisma: prescOd.prisma,
         eixoprisma: prescOd.eixoPrisma,
-        sugestaobase: sugestaoBase || undefined,
-        sugestaodiametro: sugestaoDiametro || undefined,
-        amostracoloracao: "0",
-        corcoloracao: "0",
-        compl: { amostracoloracao: "0", corcoloracao: "0" },
+        sugestaobase: sugestaoBase || "",
+        sugestaodiametro: sugestaoDiametro || "",
       };
     }
 
@@ -386,20 +388,21 @@ const PedidoZeissPage: React.FC = () => {
         cilindrico: prescOe.cilindrico,
         eixocilindrico: prescOe.eixo,
         adicao: prescOe.adicao,
+        regressao: "",
         dnp: prescOe.dnp,
+        dnpperto: "",
+        dnplonge: "",
         alturamontagem: prescOe.alturaMontagem,
         prisma: prescOe.prisma,
         eixoprisma: prescOe.eixoPrisma,
-        sugestaobase: sugestaoBase || undefined,
-        sugestaodiametro: sugestaoDiametro || undefined,
-        amostracoloracao: "0",
-        corcoloracao: "0",
-        compl: { amostracoloracao: "0", corcoloracao: "0" },
+        sugestaobase: sugestaoBase || "",
+        sugestaodiametro: sugestaoDiametro || "",
       };
     }
 
     // Armação is REQUIRED by Zeiss API — always include it
     payload.armacao = {
+      compralab: "",
       modelo: armacao.modelo || "",
       ponte: armacao.ponte || "0",
       altura: armacao.altura || "0",
@@ -407,20 +410,14 @@ const PedidoZeissPage: React.FC = () => {
       diagonalmaior: armacao.diagonalMaior || "0",
       tipo: armacao.tipo || "M",
       formatoaro: armacao.formatoAro || "",
+      distanciahastes: "",
+      distanciafrontal: "",
     };
 
     // Add services
     if (selectedServicos.length > 0) {
       payload.servicos = selectedServicos.map(cod => ({ codigo: cod }));
     }
-
-    // compl is REQUIRED by Zeiss API — always include it
-    // amostracoloracao and corcoloracao may need to be at pedido.compl level
-    payload.compl = {
-      datanascimento: paramDataNascimento ? paramDataNascimento.split("T")[0] : undefined,
-      amostracoloracao: "0",
-      corcoloracao: "0",
-    };
 
     if (aprov) payload.aprov = aprov;
     return payload;
