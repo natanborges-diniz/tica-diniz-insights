@@ -262,7 +262,8 @@ serve(async (req) => {
           });
         }
 
-        const pedidoResp = (respData as any)?.sao?.pedido;
+        const pedidoResp = (respData as any)?.sao?.pedido || (respData as any)?.det?.sao?.pedido;
+        console.log(`[zeiss-proxy] [${correlationId}] pedidoResp keys: ${pedidoResp ? Object.keys(pedidoResp).join(',') : 'NULL'}, raw top keys: ${Object.keys(respData).join(',')}`);
 
         // Check if approval is needed (two-step flow)
         if (pedidoResp?.aprov && !pedidoResp?.nrpedido) {
