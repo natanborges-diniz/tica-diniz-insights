@@ -407,6 +407,11 @@ const PedidoZeissPage: React.FC = () => {
       payload.servicos = selectedServicos.map(cod => ({ codigo: cod }));
     }
 
+    // compl is REQUIRED by Zeiss API — always include it
+    payload.compl = {
+      datanascimento: dataNascimento || undefined,
+    };
+
     if (aprov) payload.aprov = aprov;
     return payload;
   }
