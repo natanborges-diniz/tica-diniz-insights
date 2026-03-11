@@ -557,7 +557,7 @@ serve(async (req) => {
           });
         }
         const url = `${BASE_URL}/pedidos/base/sugestao/1/${store.cnpj}/${familia}/${esf || "0"}/${cil || "0"}/${adicao || "0"}`;
-        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "sugestao-base");
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "sugestao-base", zeissConfig.apiKey);
         const data = await resp.json();
         return new Response(JSON.stringify(data), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
