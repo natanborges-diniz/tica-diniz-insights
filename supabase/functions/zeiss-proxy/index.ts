@@ -157,7 +157,7 @@ serve(async (req) => {
         }
 
         const url = `${BASE_URL}/produtos/lista/1/${store.cnpj}`;
-        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-produtos");
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-produtos", zeissConfig.apiKey);
         const data = await resp.json();
 
         if (data?.erro) {
