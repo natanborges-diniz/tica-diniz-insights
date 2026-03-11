@@ -438,7 +438,7 @@ const PedidoZeissPage: React.FC = () => {
         altura: "",
         largura: "",
         diagonalmaior: "",
-        tipo: "",
+        tipo: armacao.tipo || "M",
         formatoaro: "",
         distanciahastes: "",
         distanciafrontal: "",
