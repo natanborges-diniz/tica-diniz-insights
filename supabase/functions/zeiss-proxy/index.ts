@@ -187,36 +187,23 @@ serve(async (req) => {
         pedidoPayload.usersao = store.userSao;
         pedidoPayload.cnpj = store.cnpj;
 
-        // Zeiss pode exigir diâmetro mesmo quando armação está zerada (caso típico de lente pronta)
-        const armacao = pedidoPayload.armacao || {};
-        const armacaoSemMedidas = [armacao.ponte, armacao.altura, armacao.largura, armacao.diagonalmaior]
-          .every((v) => v == null || String(v).trim() === "" || String(v).trim() === "0");
-
-        if (armacaoSemMedidas) {
-          if (pedidoPayload.od && (!pedidoPayload.od.sugestaodiametro || String(pedidoPayload.od.sugestaodiametro).trim() === "")) {
-            pedidoPayload.od.sugestaodiametro = "0";
-          }
-          if (pedidoPayload.oe && (!pedidoPayload.oe.sugestaodiametro || String(pedidoPayload.oe.sugestaodiametro).trim() === "")) {
-            pedidoPayload.oe.sugestaodiametro = "0";
+        // Normalizar campos de armação: Zeiss exige "Diâmetro OU Dados da Armação e Montagem"
+        // Para lente pronta (LP), armação vem vazia — converter "" para "0" nos campos numéricos
+        const arm = pedidoPayload.armacao || {};
+        const armFields = ["ponte", "altura", "largura", "diagonalmaior", "distanciahastes", "distanciafrontal"];
+        for (const f of armFields) {
+          if (arm[f] == null || String(arm[f]).trim() === "") {
+            arm[f] = "0";
           }
         }
+        pedidoPayload.armacao = arm;
 
-        const zeissBody = { sao: { pedido: pedidoPayload } };
-        pedidoPayload.usersao = store.userSao;
-        pedidoPayload.cnpj = store.cnpj;
-
-        // Zeiss pode exigir diâmetro mesmo quando armação está zerada (caso típico de lente pronta)
-        const armacao = pedidoPayload.armacao || {};
-        const armacaoSemMedidas = [armacao.ponte, armacao.altura, armacao.largura, armacao.diagonalmaior]
-          .every((v) => v == null || String(v).trim() === "" || String(v).trim() === "0");
-
+        // Se armação toda zerada, garantir tipo padrão e formatoaro para não dar erro
+        const armacaoSemMedidas = ["ponte", "altura", "largura", "diagonalmaior"]
+          .every((f) => String(arm[f]).trim() === "0");
         if (armacaoSemMedidas) {
-          if (pedidoPayload.od && (!pedidoPayload.od.sugestaodiametro || String(pedidoPayload.od.sugestaodiametro).trim() === "")) {
-            pedidoPayload.od.sugestaodiametro = "0";
-          }
-          if (pedidoPayload.oe && (!pedidoPayload.oe.sugestaodiametro || String(pedidoPayload.oe.sugestaodiametro).trim() === "")) {
-            pedidoPayload.oe.sugestaodiametro = "0";
-          }
+          if (!arm.tipo || String(arm.tipo).trim() === "") arm.tipo = "M";
+          if (!arm.formatoaro || String(arm.formatoaro).trim() === "") arm.formatoaro = "1AB";
         }
 
         const zeissBody = { sao: { pedido: pedidoPayload } };
