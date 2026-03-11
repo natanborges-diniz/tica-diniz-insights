@@ -67,6 +67,7 @@ export interface ZeissPedidoOlho {
   eixoprisma?: string;
   sugestaobase?: string;
   sugestaodiametro?: string;
+  compl?: Record<string, unknown>;
 }
 
 export interface ZeissArmacao {
