@@ -21,13 +21,14 @@ function generateCorrelationId(): string {
 interface ZeissRuntimeConfig {
   baseUrl: string;
   ambiente: string;
+  apiKey: string | null;
 }
 
 async function loadZeissConfig(sb: ReturnType<typeof createClient>): Promise<ZeissRuntimeConfig> {
   try {
     const { data } = await sb
       .from("fornecedor_configuracao")
-      .select("ambiente, base_url_staging, base_url_production")
+      .select("ambiente, base_url_staging, base_url_production, api_key_staging, api_key_production")
       .eq("fornecedor", "ZEISS")
       .eq("ativo", true)
       .maybeSingle();
@@ -37,7 +38,8 @@ async function loadZeissConfig(sb: ReturnType<typeof createClient>): Promise<Zei
       const baseUrl = isProduction
         ? (data.base_url_production || "https://a9lt368bb2.execute-api.us-east-2.amazonaws.com/prd")
         : (data.base_url_staging || "https://aupk1256rl.execute-api.us-east-2.amazonaws.com/dev");
-      return { baseUrl, ambiente: data.ambiente };
+      const apiKey = isProduction ? (data.api_key_production || null) : (data.api_key_staging || null);
+      return { baseUrl, ambiente: data.ambiente, apiKey };
     }
   } catch (e) {
     console.warn("[zeiss-proxy] Could not load DB config:", e);
@@ -45,6 +47,7 @@ async function loadZeissConfig(sb: ReturnType<typeof createClient>): Promise<Zei
   return {
     baseUrl: "https://aupk1256rl.execute-api.us-east-2.amazonaws.com/dev",
     ambiente: "staging",
+    apiKey: null,
   };
 }
 
@@ -69,20 +72,29 @@ async function loadStoreConfig(sb: ReturnType<typeof createClient>, codEmpresa: 
 }
 
 // Fetch with timeout (15s)
-async function fetchZeiss(url: string, options: RequestInit, correlationId: string, action: string): Promise<Response> {
+async function fetchZeiss(url: string, options: RequestInit, correlationId: string, action: string, apiKey?: string | null): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   const start = Date.now();
 
+  // Inject API key header if available
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((options.headers as Record<string, string>) || {}),
+  };
+  if (apiKey) {
+    headers["x-api-key"] = apiKey;
+  }
+
   try {
-    const resp = await fetch(url, { ...options, signal: controller.signal });
+    const resp = await fetch(url, { ...options, headers, signal: controller.signal });
     clearTimeout(timer);
     console.log(`[zeiss-proxy] [${correlationId}] ${action} -> ${resp.status} (${Date.now() - start}ms)`);
 
     if (resp.status === 403) {
       throw {
         code: ZEISS_ERROR_CODES.UNAVAILABLE,
-        message: "API Zeiss retornou 403 Forbidden. Verifique se os IPs do servidor estão liberados (whitelisting) junto à Zeiss.",
+        message: "API Zeiss retornou 403 Forbidden. Verifique se a API key está correta e se os IPs estão liberados.",
         correlationId,
       };
     }
@@ -98,7 +110,7 @@ async function fetchZeiss(url: string, options: RequestInit, correlationId: stri
     return resp;
   } catch (err) {
     clearTimeout(timer);
-    if ((err as { code?: string })?.code) throw err; // re-throw structured errors
+    if ((err as { code?: string })?.code) throw err;
     const isTimeout = err instanceof DOMException && err.name === "AbortError";
     throw {
       code: isTimeout ? ZEISS_ERROR_CODES.TIMEOUT : ZEISS_ERROR_CODES.UNAVAILABLE,
@@ -145,7 +157,7 @@ serve(async (req) => {
         }
 
         const url = `${BASE_URL}/produtos/lista/1/${store.cnpj}`;
-        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-produtos");
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-produtos", zeissConfig.apiKey);
         const data = await resp.json();
 
         if (data?.erro) {
@@ -213,7 +225,7 @@ serve(async (req) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: payloadStr,
-        }, correlationId, "criar-pedido");
+        }, correlationId, "criar-pedido", zeissConfig.apiKey);
 
         const respText = await resp.text();
         let respData: Record<string, unknown>;
@@ -314,7 +326,7 @@ serve(async (req) => {
             idpais: 1,
             numpedido: Number(params.numeroPedido),
           }),
-        }, correlationId, "consultar-pedido");
+        }, correlationId, "consultar-pedido", zeissConfig.apiKey);
 
         const data = await resp.json();
 
@@ -353,7 +365,7 @@ serve(async (req) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ codcli: Number(store.userSao), idpais: 1, numpedido: Number(numeroPedido) }),
-        }, correlationId, "atualizar-tracking");
+        }, correlationId, "atualizar-tracking", zeissConfig.apiKey);
 
         const data = await resp.json();
         const pedidoData = data?.sao?.pedido || data;
@@ -471,6 +483,7 @@ serve(async (req) => {
             estabel: params.estabelecimento,
             numpedido: params.numeroPedido,
           }),
+        }, correlationId, "cancelar-pedido", zeissConfig.apiKey);
         }, correlationId, "cancelar-pedido");
 
         const data = await resp.json();
@@ -482,7 +495,7 @@ serve(async (req) => {
       // ── Listar Serviços ──
       case "listar-servicos": {
         const url = `${BASE_URL}/servicos/lista/1`;
-        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-servicos");
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-servicos", zeissConfig.apiKey);
         const data = await resp.json();
         return new Response(JSON.stringify(data?.sao?.servicos || []), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -505,7 +518,7 @@ serve(async (req) => {
           });
         }
         const url = `${BASE_URL}/produtos/servicos/1/${familia}/${store.cnpj}`;
-        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "servicos-por-produto");
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "servicos-por-produto", zeissConfig.apiKey);
         const data = await resp.json();
         return new Response(JSON.stringify(data?.sao?.servicos || data), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
@@ -521,7 +534,7 @@ serve(async (req) => {
           });
         }
         const url = `${BASE_URL}/coloracao/lista/1/${familia}`;
-        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-cores");
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-cores", zeissConfig.apiKey);
         const data = await resp.json();
         return new Response(JSON.stringify(data?.sao?.cores || data), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
@@ -544,7 +557,7 @@ serve(async (req) => {
           });
         }
         const url = `${BASE_URL}/pedidos/base/sugestao/1/${store.cnpj}/${familia}/${esf || "0"}/${cil || "0"}/${adicao || "0"}`;
-        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "sugestao-base");
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "sugestao-base", zeissConfig.apiKey);
         const data = await resp.json();
         return new Response(JSON.stringify(data), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
@@ -561,7 +574,7 @@ serve(async (req) => {
           });
         }
         const url = `${BASE_URL}/cliente/tabelapreco/consumidor/1/${store.cnpj}`;
-        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "tabela-precos");
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "tabela-precos", zeissConfig.apiKey);
         const data = await resp.json();
         return new Response(JSON.stringify(data), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
