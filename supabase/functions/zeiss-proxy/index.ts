@@ -484,7 +484,6 @@ serve(async (req) => {
             numpedido: params.numeroPedido,
           }),
         }, correlationId, "cancelar-pedido", zeissConfig.apiKey);
-        }, correlationId, "cancelar-pedido");
 
         const data = await resp.json();
         return new Response(JSON.stringify(data), {
