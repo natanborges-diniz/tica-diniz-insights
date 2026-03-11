@@ -21,13 +21,14 @@ function generateCorrelationId(): string {
 interface ZeissRuntimeConfig {
   baseUrl: string;
   ambiente: string;
+  apiKey: string | null;
 }
 
 async function loadZeissConfig(sb: ReturnType<typeof createClient>): Promise<ZeissRuntimeConfig> {
   try {
     const { data } = await sb
       .from("fornecedor_configuracao")
-      .select("ambiente, base_url_staging, base_url_production")
+      .select("ambiente, base_url_staging, base_url_production, api_key_staging, api_key_production")
       .eq("fornecedor", "ZEISS")
       .eq("ativo", true)
       .maybeSingle();
@@ -37,7 +38,8 @@ async function loadZeissConfig(sb: ReturnType<typeof createClient>): Promise<Zei
       const baseUrl = isProduction
         ? (data.base_url_production || "https://a9lt368bb2.execute-api.us-east-2.amazonaws.com/prd")
         : (data.base_url_staging || "https://aupk1256rl.execute-api.us-east-2.amazonaws.com/dev");
-      return { baseUrl, ambiente: data.ambiente };
+      const apiKey = isProduction ? (data.api_key_production || null) : (data.api_key_staging || null);
+      return { baseUrl, ambiente: data.ambiente, apiKey };
     }
   } catch (e) {
     console.warn("[zeiss-proxy] Could not load DB config:", e);
@@ -45,6 +47,7 @@ async function loadZeissConfig(sb: ReturnType<typeof createClient>): Promise<Zei
   return {
     baseUrl: "https://aupk1256rl.execute-api.us-east-2.amazonaws.com/dev",
     ambiente: "staging",
+    apiKey: null,
   };
 }
 
