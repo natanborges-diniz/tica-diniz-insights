@@ -27,6 +27,16 @@ interface ArmacaoFields {
   tipo: string;
 }
 
+/**
+ * Detecta se o produto é Lente Pronta (código começa com "LP").
+ * Lentes prontas não exigem medidas de armação.
+ */
+export function isLentePronta(produtoCod: string | null | undefined, produtoNome?: string | null): boolean {
+  if (produtoCod && produtoCod.toUpperCase().startsWith("LP")) return true;
+  if (produtoNome && produtoNome.toUpperCase().startsWith("LP")) return true;
+  return false;
+}
+
 export function validateZeissPayload(
   produtoOdCod: string | null,
   produtoOeCod: string | null,
@@ -35,6 +45,8 @@ export function validateZeissPayload(
   armacao: ArmacaoFields,
   osNumero: string,
   paciente: string,
+  produtoOdNome?: string | null,
+  produtoOeNome?: string | null,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
 
@@ -57,7 +69,6 @@ export function validateZeissPayload(
     }
     if (presc.cilindrico.trim() && !isNaN(cil)) {
       if (cil < -10 || cil > 10) errors.push({ field: `presc${eye}.cilindrico`, message: `${eye}: Cilíndrico fora do range (-10 a +10)`, severity: "error" });
-      // If cil is present, eixo is mandatory
       if (cil !== 0 && (!presc.eixo.trim() || isNaN(eixo))) {
         errors.push({ field: `presc${eye}.eixo`, message: `${eye}: Eixo obrigatório quando cilíndrico ≠ 0`, severity: "error" });
       }
@@ -85,22 +96,39 @@ export function validateZeissPayload(
   if (prescOe.esferico || prescOe.cilindrico) validateEye(prescOe, "OE");
 
   // ── Frame validation ──
-  if (!armacao.tipo) errors.push({ field: "armacao.tipo", message: "Tipo de armação é obrigatório", severity: "error" });
+  // Lente Pronta (LP) não exige medidas de armação — serão enviadas como "0"
+  const todosLP = isLentePronta(produtoOdCod, produtoOdNome)
+    && (!produtoOeCod || isLentePronta(produtoOeCod, produtoOeNome));
 
-  const ponte = parseFloat(armacao.ponte);
-  if (armacao.ponte && !isNaN(ponte) && (ponte < 10 || ponte > 30)) {
-    errors.push({ field: "armacao.ponte", message: "Ponte fora do range (10 a 30mm)", severity: "warning" });
-  }
+  if (!todosLP) {
+    // Produto surfaçado: armação obrigatória
+    if (!armacao.tipo) errors.push({ field: "armacao.tipo", message: "Tipo de armação é obrigatório", severity: "error" });
 
-  const largura = parseFloat(armacao.largura);
-  if (armacao.largura && !isNaN(largura) && (largura < 30 || largura > 70)) {
-    errors.push({ field: "armacao.largura", message: "Largura fora do range (30 a 70mm)", severity: "warning" });
-  }
+    const hasMedidas = (armacao.ponte && armacao.ponte !== "0")
+      || (armacao.altura && armacao.altura !== "0")
+      || (armacao.largura && armacao.largura !== "0")
+      || (armacao.diagonalMaior && armacao.diagonalMaior !== "0");
 
-  const altura = parseFloat(armacao.altura);
-  if (armacao.altura && !isNaN(altura) && (altura < 15 || altura > 55)) {
-    errors.push({ field: "armacao.altura", message: "Altura fora do range (15 a 55mm)", severity: "warning" });
+    if (!hasMedidas) {
+      errors.push({ field: "armacao.medidas", message: "Medidas da armação obrigatórias para lente surfaçada (ponte, altura, largura ou diagonal)", severity: "error" });
+    }
+
+    const ponte = parseFloat(armacao.ponte);
+    if (armacao.ponte && !isNaN(ponte) && ponte !== 0 && (ponte < 10 || ponte > 30)) {
+      errors.push({ field: "armacao.ponte", message: "Ponte fora do range (10 a 30mm)", severity: "warning" });
+    }
+
+    const largura = parseFloat(armacao.largura);
+    if (armacao.largura && !isNaN(largura) && largura !== 0 && (largura < 30 || largura > 70)) {
+      errors.push({ field: "armacao.largura", message: "Largura fora do range (30 a 70mm)", severity: "warning" });
+    }
+
+    const alturaArm = parseFloat(armacao.altura);
+    if (armacao.altura && !isNaN(alturaArm) && alturaArm !== 0 && (alturaArm < 15 || alturaArm > 55)) {
+      errors.push({ field: "armacao.altura", message: "Altura fora do range (15 a 55mm)", severity: "warning" });
+    }
   }
+  // Para LP: aceita campos vazios silenciosamente — payload usará "0"
 
   return errors;
 }

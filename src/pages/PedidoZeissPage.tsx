@@ -341,6 +341,8 @@ const PedidoZeissPage: React.FC = () => {
       armacao,
       osNumero,
       paciente,
+      produtoOd?.nome || produtoOd?.descr || null,
+      produtoOe?.nome || produtoOe?.descr || null,
     );
     setValidationErrors(errors);
     setShowValidation(true);
