@@ -247,7 +247,7 @@ serve(async (req) => {
             idempotency_key: idempotencyKey,
           });
 
-          return new Response(JSON.stringify({ error: respData.erro, code: ZEISS_ERROR_CODES.API_ERROR, correlationId, raw: respData }), {
+          return new Response(JSON.stringify({ error: String(apiErrorMsg), code: ZEISS_ERROR_CODES.API_ERROR, correlationId, raw: respData }), {
             status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }

@@ -434,11 +434,27 @@ const PedidoZeissPage: React.FC = () => {
       const payload = buildPayload();
       const result = await criarPedidoZeiss(payload, codOs, codEmpresa, cpf, paciente);
 
+      // Handle idempotency hit
+      if ("idempotencyHit" in result && (result as any).idempotencyHit) {
+        const existing = result as any;
+        if (existing.numeroPedido) {
+          setPedidoConfirmado({ numeroPedido: existing.numeroPedido, voucherGerado: null, estabelecimento: null, status: existing.status });
+          toast({ title: "Pedido já enviado", description: `Nº ${existing.numeroPedido}` });
+        } else {
+          toast({ title: "Pedido já enviado", description: existing.message || "Este pedido já foi processado.", variant: "destructive" });
+        }
+        return;
+      }
+
       if ("needsApproval" in result && result.needsApproval) {
         setApprovalData(result);
         toast({ title: "Cotação recebida", description: "Revise os preços e confirme o pedido." });
       } else {
         const confirm = result as ZeissConfirmResponse;
+        if (!confirm.numeroPedido) {
+          toast({ title: "Erro no pedido", description: "A API Zeiss não retornou número de pedido. Verifique os dados e tente novamente.", variant: "destructive" });
+          return;
+        }
         setPedidoConfirmado(confirm);
         toast({ title: "Pedido confirmado!", description: `Nº ${confirm.numeroPedido}` });
 
