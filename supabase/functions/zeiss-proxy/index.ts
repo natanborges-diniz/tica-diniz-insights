@@ -182,10 +182,42 @@ serve(async (req) => {
           });
         }
 
-        const pedidoPayload = params.pedido || {};
-        // Inject usersao and cnpj
+        const pedidoPayload = (params.pedido || {}) as Record<string, any>;
+        // Inject usersao/cnpj
         pedidoPayload.usersao = store.userSao;
         pedidoPayload.cnpj = store.cnpj;
+
+        // Zeiss pode exigir diâmetro mesmo quando armação está zerada (caso típico de lente pronta)
+        const armacao = pedidoPayload.armacao || {};
+        const armacaoSemMedidas = [armacao.ponte, armacao.altura, armacao.largura, armacao.diagonalmaior]
+          .every((v) => v == null || String(v).trim() === "" || String(v).trim() === "0");
+
+        if (armacaoSemMedidas) {
+          if (pedidoPayload.od && (!pedidoPayload.od.sugestaodiametro || String(pedidoPayload.od.sugestaodiametro).trim() === "")) {
+            pedidoPayload.od.sugestaodiametro = "0";
+          }
+          if (pedidoPayload.oe && (!pedidoPayload.oe.sugestaodiametro || String(pedidoPayload.oe.sugestaodiametro).trim() === "")) {
+            pedidoPayload.oe.sugestaodiametro = "0";
+          }
+        }
+
+        const zeissBody = { sao: { pedido: pedidoPayload } };
+        pedidoPayload.usersao = store.userSao;
+        pedidoPayload.cnpj = store.cnpj;
+
+        // Zeiss pode exigir diâmetro mesmo quando armação está zerada (caso típico de lente pronta)
+        const armacao = pedidoPayload.armacao || {};
+        const armacaoSemMedidas = [armacao.ponte, armacao.altura, armacao.largura, armacao.diagonalmaior]
+          .every((v) => v == null || String(v).trim() === "" || String(v).trim() === "0");
+
+        if (armacaoSemMedidas) {
+          if (pedidoPayload.od && (!pedidoPayload.od.sugestaodiametro || String(pedidoPayload.od.sugestaodiametro).trim() === "")) {
+            pedidoPayload.od.sugestaodiametro = "0";
+          }
+          if (pedidoPayload.oe && (!pedidoPayload.oe.sugestaodiametro || String(pedidoPayload.oe.sugestaodiametro).trim() === "")) {
+            pedidoPayload.oe.sugestaodiametro = "0";
+          }
+        }
 
         const zeissBody = { sao: { pedido: pedidoPayload } };
         const url = `${BASE_URL}/pedidos/criar`;

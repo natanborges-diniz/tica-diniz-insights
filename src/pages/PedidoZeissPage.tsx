@@ -21,7 +21,8 @@ import {
   ZeissMatchResult,
   zeissScoreLabel,
 } from "@/services/zeissMatchingService";
-import { validateZeissPayload, hasBlockingErrors, ValidationError } from "@/services/zeissValidation";
+import { validateZeissPayload, hasBlockingErrors, ValidationError, isLentePronta } from "@/services/zeissValidation";
+import { isLentePronta } from "@/services/zeissValidation";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -38,7 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import ZeissServicosSection from "@/components/zeiss-pedido/ZeissServicosSection";
 import ZeissSugestaoBase from "@/components/zeiss-pedido/ZeissSugestaoBase";
 import ZeissValidationPanel from "@/components/zeiss-pedido/ZeissValidationPanel";
-
+import { validateZeissPayload, hasBlockingErrors, ValidationError, isLentePronta } from "@/services/zeissValidation";
 import {
   ArrowLeft, Send, Eye, Glasses, Package, Loader2, Check, AlertTriangle,
   Search, ShieldCheck, CheckCircle2, DollarSign, Zap, Sparkles, ChevronDown,
@@ -351,6 +352,16 @@ const PedidoZeissPage: React.FC = () => {
 
   // ── Build payload ──
   function buildPayload(aprov?: ZeissApprovalResponse["aprov"]): ZeissPedidoPayload {
+    const oeProduct = useSameProduct ? produtoOd : produtoOe;
+    const odIsLentePronta = isLentePronta(
+      produtoOd?.cod || null,
+      produtoOd?.nome || produtoOd?.descr || null,
+    );
+    const oeIsLentePronta = isLentePronta(
+      oeProduct?.cod || null,
+      oeProduct?.nome || oeProduct?.descr || null,
+    );
+
     const payload: ZeissPedidoPayload = {
       oscliente: osNumero,
       paciente,
@@ -378,12 +389,11 @@ const PedidoZeissPage: React.FC = () => {
         prisma: prescOd.prisma,
         eixoprisma: prescOd.eixoPrisma,
         sugestaobase: sugestaoBase || "",
-        sugestaodiametro: sugestaoDiametro || "",
+        sugestaodiametro: sugestaoDiametro || (odIsLentePronta ? "0" : ""),
         compl: {},
       };
     }
 
-    const oeProduct = useSameProduct ? produtoOd : produtoOe;
     if (oeProduct || prescOe.esferico) {
       payload.oe = {
         produto: oeProduct?.cod || produtoOd?.cod || "",
@@ -399,7 +409,7 @@ const PedidoZeissPage: React.FC = () => {
         prisma: prescOe.prisma,
         eixoprisma: prescOe.eixoPrisma,
         sugestaobase: sugestaoBase || "",
-        sugestaodiametro: sugestaoDiametro || "",
+        sugestaodiametro: sugestaoDiametro || (oeIsLentePronta ? "0" : ""),
         compl: {},
       };
     }
