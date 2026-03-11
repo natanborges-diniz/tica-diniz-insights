@@ -96,11 +96,19 @@ export function validateZeissPayload(
   if (prescOe.esferico || prescOe.cilindrico) validateEye(prescOe, "OE");
 
   // ── Frame validation ──
-  // Lente Pronta (LP) não exige medidas de armação — serão enviadas como "0"
-  const todosLP = isLentePronta(produtoOdCod, produtoOdNome)
-    && (!produtoOeCod || isLentePronta(produtoOeCod, produtoOeNome));
+  const odLP = isLentePronta(produtoOdCod, produtoOdNome);
+  const oeLP = !produtoOeCod || isLentePronta(produtoOeCod, produtoOeNome);
+  const todosLP = odLP && oeLP;
 
-  if (!todosLP) {
+  if (todosLP) {
+    // Lente Pronta: Zeiss exige altura de montagem mesmo para LP
+    if (produtoOdCod && !prescOd.alturaMontagem.trim()) {
+      errors.push({ field: "prescOD.altura", message: "OD: Altura de montagem obrigatória para Lente Pronta", severity: "error" });
+    }
+    if (produtoOeCod && !prescOe.alturaMontagem.trim()) {
+      errors.push({ field: "prescOE.altura", message: "OE: Altura de montagem obrigatória para Lente Pronta", severity: "error" });
+    }
+  } else {
     // Produto surfaçado: armação obrigatória
     if (!armacao.tipo) errors.push({ field: "armacao.tipo", message: "Tipo de armação é obrigatório", severity: "error" });
 
@@ -128,7 +136,6 @@ export function validateZeissPayload(
       errors.push({ field: "armacao.altura", message: "Altura fora do range (15 a 55mm)", severity: "warning" });
     }
   }
-  // Para LP: aceita campos vazios silenciosamente — payload usará "0"
 
   return errors;
 }

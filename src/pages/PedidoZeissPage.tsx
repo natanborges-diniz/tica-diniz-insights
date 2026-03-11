@@ -412,9 +412,25 @@ const PedidoZeissPage: React.FC = () => {
       };
     }
 
-    // Armação: para LP, enviar tudo vazio ("") para não triggerar validação de montagem
+    // ── Auto-set diâmetro para Lente Pronta: positivo→65, negativo→70 ──
+    const calcDiametroLP = (esf: string): string => {
+      const val = parseFloat(esf);
+      if (isNaN(val)) return "70"; // default
+      return val >= 0 ? "65" : "70";
+    };
+
     const todosLP = odIsLentePronta && (!oeProduct || oeIsLentePronta);
+
     if (todosLP) {
+      // Para LP: enviar altura de montagem do estado + diâmetro automático
+      if (payload.od) {
+        payload.od.sugestaodiametro = calcDiametroLP(prescOd.esferico);
+        payload.od.alturamontagem = prescOd.alturaMontagem;
+      }
+      if (payload.oe) {
+        payload.oe.sugestaodiametro = calcDiametroLP(prescOe.esferico);
+        payload.oe.alturamontagem = prescOe.alturaMontagem;
+      }
       payload.armacao = {
         compralab: "",
         modelo: "",
