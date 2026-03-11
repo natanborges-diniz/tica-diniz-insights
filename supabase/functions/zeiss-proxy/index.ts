@@ -365,7 +365,7 @@ serve(async (req) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ codcli: Number(store.userSao), idpais: 1, numpedido: Number(numeroPedido) }),
-        }, correlationId, "atualizar-tracking");
+        }, correlationId, "atualizar-tracking", zeissConfig.apiKey);
 
         const data = await resp.json();
         const pedidoData = data?.sao?.pedido || data;
