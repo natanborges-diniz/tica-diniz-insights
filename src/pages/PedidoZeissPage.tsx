@@ -474,6 +474,10 @@ const PedidoZeissPage: React.FC = () => {
     setEnviando(true);
     try {
       const payload = buildPayload();
+      console.log("[PedidoZeiss] payload enviado:", JSON.stringify(payload, null, 2));
+      console.log("[PedidoZeiss] prescOd state:", JSON.stringify(prescOd));
+      console.log("[PedidoZeiss] prescOe state:", JSON.stringify(prescOe));
+      console.log("[PedidoZeiss] armacao state:", JSON.stringify(armacao));
       const result = await criarPedidoZeiss(payload, codOs, codEmpresa, cpf, paciente);
 
       // Handle idempotency hit
