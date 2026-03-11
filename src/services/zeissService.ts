@@ -150,8 +150,18 @@ export interface ZeissProxyError {
 }
 
 async function callZeissProxy<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
+  // Inject authenticated session token for authGuard
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+
+  const headers: Record<string, string> = {};
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  }
+
   const { data, error } = await supabase.functions.invoke("zeiss-proxy", {
     body: { action, ...params },
+    headers,
   });
 
   if (error) {
