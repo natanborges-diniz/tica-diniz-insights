@@ -372,6 +372,8 @@ const PedidoZeissPage: React.FC = () => {
         eixoprisma: prescOd.eixoPrisma,
         sugestaobase: sugestaoBase || undefined,
         sugestaodiametro: sugestaoDiametro || undefined,
+        amostracoloracao: "",
+        corcoloracao: "",
         compl: {},
       };
     }
@@ -390,6 +392,8 @@ const PedidoZeissPage: React.FC = () => {
         eixoprisma: prescOe.eixoPrisma,
         sugestaobase: sugestaoBase || undefined,
         sugestaodiametro: sugestaoDiametro || undefined,
+        amostracoloracao: "",
+        corcoloracao: "",
         compl: {},
       };
     }
