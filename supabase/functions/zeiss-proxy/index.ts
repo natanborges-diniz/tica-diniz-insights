@@ -574,7 +574,7 @@ serve(async (req) => {
           });
         }
         const url = `${BASE_URL}/cliente/tabelapreco/consumidor/1/${store.cnpj}`;
-        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "tabela-precos");
+        const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "tabela-precos", zeissConfig.apiKey);
         const data = await resp.json();
         return new Response(JSON.stringify(data), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
