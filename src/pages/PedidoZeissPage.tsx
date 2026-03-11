@@ -95,6 +95,7 @@ const PedidoZeissPage: React.FC = () => {
   const codEmpresa = Number(searchParams.get("codEmpresa")) || 0;
   const paramPaciente = searchParams.get("paciente") || "";
   const paramCpf = searchParams.get("cpf") || "";
+  const paramDataNascimento = searchParams.get("dataNascimento") || "";
 
   // State
   const [os, setOs] = useState<OsHubRecord | null>(null);
