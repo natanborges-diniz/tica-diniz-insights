@@ -22,7 +22,6 @@ import {
   zeissScoreLabel,
 } from "@/services/zeissMatchingService";
 import { validateZeissPayload, hasBlockingErrors, ValidationError, isLentePronta } from "@/services/zeissValidation";
-import { isLentePronta } from "@/services/zeissValidation";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
