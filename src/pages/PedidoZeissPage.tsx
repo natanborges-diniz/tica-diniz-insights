@@ -387,7 +387,7 @@ const PedidoZeissPage: React.FC = () => {
         prisma: prescOd.prisma,
         eixoprisma: prescOd.eixoPrisma,
         sugestaobase: sugestaoBase || "",
-        sugestaodiametro: sugestaoDiametro || (odIsLentePronta ? "0" : ""),
+        sugestaodiametro: sugestaoDiametro || "",
         compl: {},
       };
     }
