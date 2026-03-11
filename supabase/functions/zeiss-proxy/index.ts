@@ -231,7 +231,9 @@ serve(async (req) => {
         let respData: Record<string, unknown>;
         try { respData = JSON.parse(respText); } catch { respData = { rawResponse: respText }; }
 
-        if (respData.erro) {
+        // Check for errors: API may return { erro: ... } or { message: "Falha..." } or HTTP 5xx
+        const apiErrorMsg = respData.erro || (resp.status >= 400 ? (respData.message || respData.rawResponse || `HTTP ${resp.status}`) : null);
+        if (apiErrorMsg) {
           // Save error record
           await sbService.from("pedidos_fornecedor").insert({
             cod_os: codOs,
@@ -245,7 +247,7 @@ serve(async (req) => {
             idempotency_key: idempotencyKey,
           });
 
-          return new Response(JSON.stringify({ error: respData.erro, code: ZEISS_ERROR_CODES.API_ERROR, correlationId, raw: respData }), {
+          return new Response(JSON.stringify({ error: String(apiErrorMsg), code: ZEISS_ERROR_CODES.API_ERROR, correlationId, raw: respData }), {
             status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }

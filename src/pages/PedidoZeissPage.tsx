@@ -391,17 +391,16 @@ const PedidoZeissPage: React.FC = () => {
       };
     }
 
-    if (armacao.ponte || armacao.altura || armacao.largura) {
-      payload.armacao = {
-        modelo: armacao.modelo,
-        ponte: armacao.ponte,
-        altura: armacao.altura,
-        largura: armacao.largura,
-        diagonalmaior: armacao.diagonalMaior,
-        tipo: armacao.tipo,
-        formatoaro: armacao.formatoAro,
-      };
-    }
+    // Armação is REQUIRED by Zeiss API — always include it
+    payload.armacao = {
+      modelo: armacao.modelo || "",
+      ponte: armacao.ponte || "",
+      altura: armacao.altura || "",
+      largura: armacao.largura || "",
+      diagonalmaior: armacao.diagonalMaior || "",
+      tipo: armacao.tipo || "M",
+      formatoaro: armacao.formatoAro || "",
+    };
 
     // Add services
     if (selectedServicos.length > 0) {
@@ -434,11 +433,27 @@ const PedidoZeissPage: React.FC = () => {
       const payload = buildPayload();
       const result = await criarPedidoZeiss(payload, codOs, codEmpresa, cpf, paciente);
 
+      // Handle idempotency hit
+      if ("idempotencyHit" in result && (result as any).idempotencyHit) {
+        const existing = result as any;
+        if (existing.numeroPedido) {
+          setPedidoConfirmado({ numeroPedido: existing.numeroPedido, voucherGerado: null, estabelecimento: null, status: existing.status });
+          toast({ title: "Pedido já enviado", description: `Nº ${existing.numeroPedido}` });
+        } else {
+          toast({ title: "Pedido já enviado", description: existing.message || "Este pedido já foi processado.", variant: "destructive" });
+        }
+        return;
+      }
+
       if ("needsApproval" in result && result.needsApproval) {
         setApprovalData(result);
         toast({ title: "Cotação recebida", description: "Revise os preços e confirme o pedido." });
       } else {
         const confirm = result as ZeissConfirmResponse;
+        if (!confirm.numeroPedido) {
+          toast({ title: "Erro no pedido", description: "A API Zeiss não retornou número de pedido. Verifique os dados e tente novamente.", variant: "destructive" });
+          return;
+        }
         setPedidoConfirmado(confirm);
         toast({ title: "Pedido confirmado!", description: `Nº ${confirm.numeroPedido}` });
 
