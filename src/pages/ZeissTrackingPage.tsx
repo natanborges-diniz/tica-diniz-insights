@@ -337,9 +337,9 @@ const ZeissTrackingPage: React.FC = () => {
                   {/* Paciente e Médico */}
                   {(r.paciente || r.medico) && (
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 bg-muted/30 rounded-lg p-3">
-                      {r.paciente && (<div><span className="text-muted-foreground block text-[10px] uppercase">Paciente</span><span className="font-medium">{r.paciente}</span></div>)}
-                      {r.medico && (<div><span className="text-muted-foreground block text-[10px] uppercase">Médico</span><span>{r.medico}{r.crm ? ` (CRM ${r.crm})` : ""}</span></div>)}
-                      {r.voucher && (<div><span className="text-muted-foreground block text-[10px] uppercase">Voucher</span><span className="font-mono">{r.voucher}{r.descrvoucher ? ` — ${r.descrvoucher}` : ""}</span></div>)}
+                      {r.paciente && (<div><span className="text-muted-foreground block text-[10px] uppercase">Paciente</span><span className="font-medium">{safeStr(r.paciente)}</span></div>)}
+                      {r.medico && (<div><span className="text-muted-foreground block text-[10px] uppercase">Médico</span><span>{safeStr(r.medico)}{r.crm ? ` (CRM ${safeStr(r.crm)})` : ""}</span></div>)}
+                      {r.voucher && (<div><span className="text-muted-foreground block text-[10px] uppercase">Voucher</span><span className="font-mono">{safeStr(r.voucher)}{r.descrvoucher ? ` — ${safeStr(r.descrvoucher)}` : ""}</span></div>)}
                     </div>
                   )}
 
