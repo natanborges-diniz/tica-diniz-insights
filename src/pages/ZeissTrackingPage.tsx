@@ -316,7 +316,7 @@ const ZeissTrackingPage: React.FC = () => {
                       <span className="text-muted-foreground text-[10px]">(externo)</span>
                     </div>
                     {totalPreco && (
-                      <span className="font-semibold text-sm">R$ {totalPreco}</span>
+                      <span className="font-semibold text-sm">R$ {safeStr(totalPreco)}</span>
                     )}
                   </div>
 
