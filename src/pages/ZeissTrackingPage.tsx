@@ -314,8 +314,8 @@ const ZeissTrackingPage: React.FC = () => {
                     {r.primprevisao && r.primprevisao !== r.previsao && (<div><span className="text-muted-foreground block text-[10px] uppercase">1ª Previsão</span><span>{r.primprevisao}</span></div>)}
                     {r.rastreamento && (<div><span className="text-muted-foreground block text-[10px] uppercase">Rastreio</span><span className="font-mono">{r.rastreamento}</span></div>)}
                     {(r.codsituacao || r.codigoSituacao) && (<div><span className="text-muted-foreground block text-[10px] uppercase">Cód. Situação</span><span className="font-mono">{r.codsituacao || r.codigoSituacao}</span></div>)}
-                    {r.nomeneg && (<div><span className="text-muted-foreground block text-[10px] uppercase">Negociação</span><span>{r.nomeneg}</span></div>)}
-                    {r.campanha && (<div><span className="text-muted-foreground block text-[10px] uppercase">Campanha</span><span>{r.campanha}</span></div>)}
+                    {typeof r.nomeneg === "string" && r.nomeneg && (<div><span className="text-muted-foreground block text-[10px] uppercase">Negociação</span><span>{r.nomeneg}</span></div>)}
+                    {r.campanha && (<div><span className="text-muted-foreground block text-[10px] uppercase">Campanha</span><span>{typeof r.campanha === "string" ? r.campanha : Array.isArray(r.campanha) ? (r.campanha as Array<{c?: string; n?: string}>).map(c => c.n || c.c).join(", ") : ""}</span></div>)}
                   </div>
 
                   {/* Paciente e Médico */}
@@ -328,11 +328,11 @@ const ZeissTrackingPage: React.FC = () => {
                   )}
 
                   {/* Cliente (ótica) */}
-                  {r.cliente?.nome && (
+                  {r.cliente && typeof r.cliente === "object" && typeof r.cliente.nome === "string" && r.cliente.nome && (
                     <div className="bg-muted/30 rounded-lg p-3">
                       <span className="text-muted-foreground block text-[10px] uppercase mb-1">Cliente (Ótica)</span>
                       <span className="font-medium">{r.cliente.nome}</span>
-                      {r.cliente.cnpj && <span className="text-muted-foreground ml-2 font-mono text-[10px]">CNPJ {r.cliente.cnpj}</span>}
+                      {typeof r.cliente.cnpj === "string" && r.cliente.cnpj && <span className="text-muted-foreground ml-2 font-mono text-[10px]">CNPJ {r.cliente.cnpj}</span>}
                     </div>
                   )}
 
