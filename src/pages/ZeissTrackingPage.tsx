@@ -136,7 +136,7 @@ const ZeissTrackingPage: React.FC = () => {
     return result;
   }, [pedidos, statusFilter, search]);
 
-  const showConsultaAvulsa = !isLoading && filtered.length === 0 && search.trim();
+  const showConsultaAvulsa = !isLoading && filtered.length === 0 && search.trim().length > 0;
 
   const handleRefreshPedido = async (pedido: PedidoFornecedorRecord) => {
     if (refreshingIds.has(pedido.id)) return;
@@ -189,7 +189,7 @@ const ZeissTrackingPage: React.FC = () => {
           </Button>
         </div>
 
-        {/* Filters */}
+        {/* Filters + unified search */}
         <div className="flex flex-wrap gap-3 items-end">
           <div className="w-48">
             <Label className="text-[10px] uppercase">Status</Label>
@@ -204,6 +204,17 @@ const ZeissTrackingPage: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
+          <div className="w-44">
+            <Label className="text-[10px] uppercase">Loja (consulta avulsa)</Label>
+            <Select value={consultaEmpresa} onValueChange={setConsultaEmpresa}>
+              <SelectTrigger className="h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+              <SelectContent>
+                {empresas.map(e => (
+                  <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>{e.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex-1 min-w-[220px]">
             <Label className="text-[10px] uppercase">Buscar — Nº pedido, OS ou pedido externo</Label>
             <div className="flex gap-2">
@@ -211,14 +222,14 @@ const ZeissTrackingPage: React.FC = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   value={search}
-                  onChange={e => {
+                  onChange={(e) => {
                     setSearch(e.target.value);
                     if (consultaAvulsaResult || consultaAvulsaError) {
                       setConsultaAvulsaResult(null);
                       setConsultaAvulsaError(null);
                     }
                   }}
-                  onKeyDown={e => {
+                  onKeyDown={(e) => {
                     if (e.key === "Enter" && filtered.length === 0 && search.trim()) {
                       handleConsultaAvulsa(search);
                     }
@@ -227,27 +238,18 @@ const ZeissTrackingPage: React.FC = () => {
                   className="pl-9 h-9 font-mono"
                 />
               </div>
-              {showConsultaAvulsa && (
-                <>
-                  <Select value={consultaEmpresa} onValueChange={setConsultaEmpresa}>
-                    <SelectTrigger className="h-9 w-44 shrink-0"><SelectValue placeholder="Loja..." /></SelectTrigger>
-                    <SelectContent>
-                      {empresas.map(e => (
-                        <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>{e.nome}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-9 gap-2 shrink-0"
-                    disabled={consultaAvulsaLoading}
-                    onClick={() => handleConsultaAvulsa(search)}
-                  >
-                    {consultaAvulsaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                    Consultar Zeiss
-                  </Button>
-                </>
+              {filtered.length === 0 && search.trim() && !isLoading && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 gap-2 shrink-0"
+                  disabled={consultaAvulsaLoading || !consultaEmpresa}
+                  onClick={() => handleConsultaAvulsa(search)}
+                  title={!consultaEmpresa ? "Selecione a loja primeiro" : "Consultar pedido na Zeiss"}
+                >
+                  {consultaAvulsaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  Consultar Zeiss
+                </Button>
               )}
             </div>
           </div>
