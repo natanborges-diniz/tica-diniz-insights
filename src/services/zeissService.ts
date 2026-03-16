@@ -104,13 +104,50 @@ export interface ZeissPedidoPayload {
 }
 
 export interface ZeissTrackingData {
+  // Identificação
   est?: string;
+  estabel?: string;
   nrpedido?: string;
+  oscliente?: string;
+  modo?: string;
+  // Cliente
+  cliente?: { cod?: string; cnpj?: string; nome?: string; garantiaantec?: string };
+  // Paciente / Médico
+  paciente?: string;
+  medico?: string;
+  crm?: string;
+  voucher?: string;
+  descrvoucher?: string;
+  // Status
   situacao?: string;
+  codsituacao?: string;
   codigoSituacao?: string;
-  previsao?: string;
   rastreamento?: string;
+  aguard?: string;
+  // Previsão e datas
+  previsao?: string;
+  primprevisao?: string;
+  precototal?: string;
   precoTotal?: string;
+  // Datas de etapas
+  entrada?: { data?: string; hora?: string };
+  producao?: { data?: string; hora?: string };
+  fatur?: { data?: string; hora?: string };
+  // Negociação / Campanha
+  codneg?: string;
+  nomeneg?: string;
+  codcamp?: string;
+  campanha?: string;
+  // Cor / Motivo
+  cor?: string;
+  codmot?: string;
+  motivo?: string;
+  // Garantia
+  tracer?: string;
+  prazogarprod?: string;
+  prazogarserv?: string;
+  // Histórico detalhado
+  detalhe_sit?: { situacao: string; data: string; hora: string }[];
   detalhes?: { situacao: string; data: string; hora: string }[];
 }
 
