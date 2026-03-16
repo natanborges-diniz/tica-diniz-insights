@@ -33,6 +33,20 @@ import { ptBR } from "date-fns/locale";
 
 // ============================================
 // HELPERS
+/** Safely convert any value to a renderable string — prevents React "Objects are not valid as a React child" errors */
+function safeStr(val: unknown): string {
+  if (val == null) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "number" || typeof val === "boolean") return String(val);
+  if (Array.isArray(val)) return val.map(safeStr).filter(Boolean).join(", ");
+  if (typeof val === "object") {
+    const obj = val as Record<string, unknown>;
+    // common patterns from Zeiss API
+    return obj.nome ? String(obj.nome) : obj.n ? String(obj.n) : obj.descricao ? String(obj.descricao) : JSON.stringify(val);
+  }
+  return String(val);
+}
+
 // ============================================
 
 function statusBadge(status: string | null) {
@@ -297,33 +311,35 @@ const ZeissTrackingPage: React.FC = () => {
                       <CheckCircle2 className="h-4 w-4 text-success" />
                       <span className="font-semibold text-sm font-mono">Pedido #{r.nrpedido || search}</span>
                       <Badge variant="outline" className={statusBadge(r.situacao || "").color + " text-xs"}>
-                        {r.situacao}
+                        {safeStr(r.situacao)}
                       </Badge>
                       <span className="text-muted-foreground text-[10px]">(externo)</span>
                     </div>
                     {totalPreco && (
-                      <span className="font-semibold text-sm">R$ {totalPreco}</span>
+                      <span className="font-semibold text-sm">R$ {safeStr(totalPreco)}</span>
                     )}
                   </div>
 
                   {/* Grid de informações principais */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 bg-muted/50 rounded-lg p-3">
-                    {r.oscliente && (<div><span className="text-muted-foreground block text-[10px] uppercase">OS Cliente</span><span className="font-mono font-medium">{r.oscliente}</span></div>)}
-                    {(r.est || r.estabel) && (<div><span className="text-muted-foreground block text-[10px] uppercase">Estabelecimento</span><span className="font-mono">{r.est || r.estabel}</span></div>)}
-                    {r.previsao && (<div><span className="text-muted-foreground block text-[10px] uppercase">Previsão Entrega</span><span>{r.previsao}</span></div>)}
-                    {r.primprevisao && r.primprevisao !== r.previsao && (<div><span className="text-muted-foreground block text-[10px] uppercase">1ª Previsão</span><span>{r.primprevisao}</span></div>)}
-                    {r.rastreamento && (<div><span className="text-muted-foreground block text-[10px] uppercase">Rastreio</span><span className="font-mono">{r.rastreamento}</span></div>)}
-                    {(r.codsituacao || r.codigoSituacao) && (<div><span className="text-muted-foreground block text-[10px] uppercase">Cód. Situação</span><span className="font-mono">{r.codsituacao || r.codigoSituacao}</span></div>)}
-                    {typeof r.nomeneg === "string" && r.nomeneg && (<div><span className="text-muted-foreground block text-[10px] uppercase">Negociação</span><span>{r.nomeneg}</span></div>)}
-                    {r.campanha && (<div><span className="text-muted-foreground block text-[10px] uppercase">Campanha</span><span>{typeof r.campanha === "string" ? r.campanha : Array.isArray(r.campanha) ? (r.campanha as Array<{c?: string; n?: string}>).map(c => c.n || c.c).join(", ") : ""}</span></div>)}
+                    {r.oscliente && (<div><span className="text-muted-foreground block text-[10px] uppercase">OS Cliente</span><span className="font-mono font-medium">{safeStr(r.oscliente)}</span></div>)}
+                    {(r.est || r.estabel) && (<div><span className="text-muted-foreground block text-[10px] uppercase">Estabelecimento</span><span className="font-mono">{safeStr(r.est || r.estabel)}</span></div>)}
+                    {r.previsao && (<div><span className="text-muted-foreground block text-[10px] uppercase">Previsão Entrega</span><span>{safeStr(r.previsao)}</span></div>)}
+                    {r.primprevisao && r.primprevisao !== r.previsao && (<div><span className="text-muted-foreground block text-[10px] uppercase">1ª Previsão</span><span>{safeStr(r.primprevisao)}</span></div>)}
+                    {r.rastreamento && (<div><span className="text-muted-foreground block text-[10px] uppercase">Rastreio</span><span className="font-mono">{safeStr(r.rastreamento)}</span></div>)}
+                    {(r.codsituacao || r.codigoSituacao) && (<div><span className="text-muted-foreground block text-[10px] uppercase">Cód. Situação</span><span className="font-mono">{safeStr(r.codsituacao || r.codigoSituacao)}</span></div>)}
+                    {r.nomeneg && (<div><span className="text-muted-foreground block text-[10px] uppercase">Negociação</span><span>{safeStr(r.nomeneg)}</span></div>)}
+                    {r.campanha && (<div><span className="text-muted-foreground block text-[10px] uppercase">Campanha</span><span>{safeStr(r.campanha)}</span></div>)}
+                    {r.cor && (<div><span className="text-muted-foreground block text-[10px] uppercase">Cor</span><span>{safeStr(r.cor)}</span></div>)}
+                    {r.motivo && (<div><span className="text-muted-foreground block text-[10px] uppercase">Motivo</span><span>{safeStr(r.motivo)}</span></div>)}
                   </div>
 
                   {/* Paciente e Médico */}
                   {(r.paciente || r.medico) && (
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 bg-muted/30 rounded-lg p-3">
-                      {r.paciente && (<div><span className="text-muted-foreground block text-[10px] uppercase">Paciente</span><span className="font-medium">{r.paciente}</span></div>)}
-                      {r.medico && (<div><span className="text-muted-foreground block text-[10px] uppercase">Médico</span><span>{r.medico}{r.crm ? ` (CRM ${r.crm})` : ""}</span></div>)}
-                      {r.voucher && (<div><span className="text-muted-foreground block text-[10px] uppercase">Voucher</span><span className="font-mono">{r.voucher}{r.descrvoucher ? ` — ${r.descrvoucher}` : ""}</span></div>)}
+                      {r.paciente && (<div><span className="text-muted-foreground block text-[10px] uppercase">Paciente</span><span className="font-medium">{safeStr(r.paciente)}</span></div>)}
+                      {r.medico && (<div><span className="text-muted-foreground block text-[10px] uppercase">Médico</span><span>{safeStr(r.medico)}{r.crm ? ` (CRM ${safeStr(r.crm)})` : ""}</span></div>)}
+                      {r.voucher && (<div><span className="text-muted-foreground block text-[10px] uppercase">Voucher</span><span className="font-mono">{safeStr(r.voucher)}{r.descrvoucher ? ` — ${safeStr(r.descrvoucher)}` : ""}</span></div>)}
                     </div>
                   )}
 
