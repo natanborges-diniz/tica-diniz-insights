@@ -322,14 +322,16 @@ const ZeissTrackingPage: React.FC = () => {
 
                   {/* Grid de informações principais */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 bg-muted/50 rounded-lg p-3">
-                    {r.oscliente && (<div><span className="text-muted-foreground block text-[10px] uppercase">OS Cliente</span><span className="font-mono font-medium">{r.oscliente}</span></div>)}
-                    {(r.est || r.estabel) && (<div><span className="text-muted-foreground block text-[10px] uppercase">Estabelecimento</span><span className="font-mono">{r.est || r.estabel}</span></div>)}
-                    {r.previsao && (<div><span className="text-muted-foreground block text-[10px] uppercase">Previsão Entrega</span><span>{r.previsao}</span></div>)}
-                    {r.primprevisao && r.primprevisao !== r.previsao && (<div><span className="text-muted-foreground block text-[10px] uppercase">1ª Previsão</span><span>{r.primprevisao}</span></div>)}
-                    {r.rastreamento && (<div><span className="text-muted-foreground block text-[10px] uppercase">Rastreio</span><span className="font-mono">{r.rastreamento}</span></div>)}
-                    {(r.codsituacao || r.codigoSituacao) && (<div><span className="text-muted-foreground block text-[10px] uppercase">Cód. Situação</span><span className="font-mono">{r.codsituacao || r.codigoSituacao}</span></div>)}
-                    {typeof r.nomeneg === "string" && r.nomeneg && (<div><span className="text-muted-foreground block text-[10px] uppercase">Negociação</span><span>{r.nomeneg}</span></div>)}
-                    {r.campanha && (<div><span className="text-muted-foreground block text-[10px] uppercase">Campanha</span><span>{typeof r.campanha === "string" ? r.campanha : Array.isArray(r.campanha) ? (r.campanha as Array<{c?: string; n?: string}>).map(c => c.n || c.c).join(", ") : ""}</span></div>)}
+                    {r.oscliente && (<div><span className="text-muted-foreground block text-[10px] uppercase">OS Cliente</span><span className="font-mono font-medium">{safeStr(r.oscliente)}</span></div>)}
+                    {(r.est || r.estabel) && (<div><span className="text-muted-foreground block text-[10px] uppercase">Estabelecimento</span><span className="font-mono">{safeStr(r.est || r.estabel)}</span></div>)}
+                    {r.previsao && (<div><span className="text-muted-foreground block text-[10px] uppercase">Previsão Entrega</span><span>{safeStr(r.previsao)}</span></div>)}
+                    {r.primprevisao && r.primprevisao !== r.previsao && (<div><span className="text-muted-foreground block text-[10px] uppercase">1ª Previsão</span><span>{safeStr(r.primprevisao)}</span></div>)}
+                    {r.rastreamento && (<div><span className="text-muted-foreground block text-[10px] uppercase">Rastreio</span><span className="font-mono">{safeStr(r.rastreamento)}</span></div>)}
+                    {(r.codsituacao || r.codigoSituacao) && (<div><span className="text-muted-foreground block text-[10px] uppercase">Cód. Situação</span><span className="font-mono">{safeStr(r.codsituacao || r.codigoSituacao)}</span></div>)}
+                    {r.nomeneg && (<div><span className="text-muted-foreground block text-[10px] uppercase">Negociação</span><span>{safeStr(r.nomeneg)}</span></div>)}
+                    {r.campanha && (<div><span className="text-muted-foreground block text-[10px] uppercase">Campanha</span><span>{safeStr(r.campanha)}</span></div>)}
+                    {r.cor && (<div><span className="text-muted-foreground block text-[10px] uppercase">Cor</span><span>{safeStr(r.cor)}</span></div>)}
+                    {r.motivo && (<div><span className="text-muted-foreground block text-[10px] uppercase">Motivo</span><span>{safeStr(r.motivo)}</span></div>)}
                   </div>
 
                   {/* Paciente e Médico */}
