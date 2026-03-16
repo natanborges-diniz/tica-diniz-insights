@@ -66,29 +66,31 @@ const ZeissTrackingPage: React.FC = () => {
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
 
   // Consulta avulsa
-  const [consultaNumero, setConsultaNumero] = useState("");
+  const [consultaAvulsaLoading, setConsultaAvulsaLoading] = useState(false);
+  const [consultaAvulsaResult, setConsultaAvulsaResult] = useState<ZeissTrackingData | null>(null);
+  const [consultaAvulsaError, setConsultaAvulsaError] = useState<string | null>(null);
   const [consultaEmpresa, setConsultaEmpresa] = useState<string>("");
-  const [consultando, setConsultando] = useState(false);
-  const [consultaResult, setConsultaResult] = useState<ZeissTrackingData | null>(null);
 
-  const handleConsultaAvulsa = async () => {
-    if (!consultaNumero.trim() || !consultaEmpresa) {
-      toast({ title: "Preencha o número do pedido e selecione a loja", variant: "destructive" });
+  const handleConsultaAvulsa = async (num: string) => {
+    if (!num.trim()) return;
+    if (!consultaEmpresa) {
+      toast({ title: "Selecione a loja para consultar na Zeiss", variant: "destructive" });
       return;
     }
-    setConsultando(true);
-    setConsultaResult(null);
+    setConsultaAvulsaLoading(true);
+    setConsultaAvulsaResult(null);
+    setConsultaAvulsaError(null);
     try {
-      const data = await consultarPedidoZeiss(consultaNumero.trim(), Number(consultaEmpresa));
-      setConsultaResult(data);
+      const data = await consultarPedidoZeiss(num.trim(), Number(consultaEmpresa));
       if (!data?.situacao) {
-        toast({ title: "Pedido não encontrado", description: "Verifique o número e a loja selecionada.", variant: "destructive" });
+        setConsultaAvulsaError("Pedido não encontrado. Verifique o número e a loja.");
+      } else {
+        setConsultaAvulsaResult(data);
       }
     } catch (err: any) {
-      const msg = err?.message || (typeof err === "object" && err?.code ? err.code : "Erro ao consultar");
-      toast({ title: "Erro na consulta", description: msg, variant: "destructive" });
+      setConsultaAvulsaError(err?.message || "Erro ao consultar pedido na Zeiss.");
     } finally {
-      setConsultando(false);
+      setConsultaAvulsaLoading(false);
     }
   };
 
@@ -133,6 +135,8 @@ const ZeissTrackingPage: React.FC = () => {
     }
     return result;
   }, [pedidos, statusFilter, search]);
+
+  const showConsultaAvulsa = !isLoading && filtered.length === 0 && search.trim();
 
   const handleRefreshPedido = async (pedido: PedidoFornecedorRecord) => {
     if (refreshingIds.has(pedido.id)) return;
@@ -201,10 +205,50 @@ const ZeissTrackingPage: React.FC = () => {
             </Select>
           </div>
           <div className="flex-1 min-w-[220px]">
-            <Label className="text-[10px] uppercase">Buscar</Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Nº pedido ou OS..." className="pl-9 h-9 font-mono" />
+            <Label className="text-[10px] uppercase">Buscar — Nº pedido, OS ou pedido externo</Label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={e => {
+                    setSearch(e.target.value);
+                    if (consultaAvulsaResult || consultaAvulsaError) {
+                      setConsultaAvulsaResult(null);
+                      setConsultaAvulsaError(null);
+                    }
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && filtered.length === 0 && search.trim()) {
+                      handleConsultaAvulsa(search);
+                    }
+                  }}
+                  placeholder="Nº pedido, OS ou externo (Enter p/ consultar Zeiss)"
+                  className="pl-9 h-9 font-mono"
+                />
+              </div>
+              {showConsultaAvulsa && (
+                <>
+                  <Select value={consultaEmpresa} onValueChange={setConsultaEmpresa}>
+                    <SelectTrigger className="h-9 w-44 shrink-0"><SelectValue placeholder="Loja..." /></SelectTrigger>
+                    <SelectContent>
+                      {empresas.map(e => (
+                        <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>{e.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 gap-2 shrink-0"
+                    disabled={consultaAvulsaLoading}
+                    onClick={() => handleConsultaAvulsa(search)}
+                  >
+                    {consultaAvulsaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    Consultar Zeiss
+                  </Button>
+                </>
+              )}
             </div>
           </div>
           <Badge variant="secondary" className="h-9 flex items-center">
@@ -212,86 +256,81 @@ const ZeissTrackingPage: React.FC = () => {
           </Badge>
         </div>
 
-        {/* Consulta Avulsa */}
-        <Card className="border-dashed">
-          <CardContent className="pt-4 pb-4">
-            <p className="text-xs font-semibold text-muted-foreground uppercase mb-3">Consultar pedido avulso</p>
-            <div className="flex flex-wrap gap-3 items-end">
-              <div className="w-48">
-                <Label className="text-[10px] uppercase">Loja</Label>
-                <Select value={consultaEmpresa} onValueChange={setConsultaEmpresa}>
-                  <SelectTrigger className="h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                  <SelectContent>
-                    {empresas.map(e => (
-                      <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>{e.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex-1 min-w-[180px]">
-                <Label className="text-[10px] uppercase">Nº Pedido Zeiss</Label>
-                <Input
-                  value={consultaNumero}
-                  onChange={e => setConsultaNumero(e.target.value)}
-                  placeholder="Ex: 1012334"
-                  className="h-9 font-mono"
-                  onKeyDown={e => e.key === "Enter" && handleConsultaAvulsa()}
-                />
-              </div>
-              <Button onClick={handleConsultaAvulsa} disabled={consultando} className="h-9 gap-2">
-                {consultando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                Consultar Zeiss
-              </Button>
-            </div>
-
-            {consultaResult?.situacao && (
-              <div className="mt-4 p-3 rounded-md bg-muted/50 space-y-2">
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className={statusBadge(consultaResult.situacao).color}>
-                    {consultaResult.situacao}
-                  </Badge>
-                  <span className="font-mono text-sm font-bold">Pedido {consultaResult.nrpedido || consultaNumero}</span>
-                </div>
-                {consultaResult.previsao && (
-                  <p className="text-xs text-muted-foreground">Previsão: {consultaResult.previsao}</p>
-                )}
-                {consultaResult.precoTotal && (
-                  <p className="text-xs text-muted-foreground">Preço total: R$ {consultaResult.precoTotal}</p>
-                )}
-                {consultaResult.rastreamento && (
-                  <p className="text-xs font-mono">Rastreio: {consultaResult.rastreamento}</p>
-                )}
-                {consultaResult.detalhes && consultaResult.detalhes.length > 0 && (
-                  <div className="mt-2 relative pl-4 border-l-2 border-border space-y-2">
-                    {consultaResult.detalhes.map((d, i) => (
-                      <div key={i} className="relative">
-                        <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-background border-2 border-primary" />
-                        <p className="text-xs">
-                          <span className="font-medium">{d.situacao}</span>
-                          <span className="text-muted-foreground ml-2">{d.data} {d.hora}</span>
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Loading */}
+        {/* Loading list */}
         {isLoading && (
           <div className="flex items-center justify-center py-12 gap-2">
             <Loader2 className="h-5 w-5 animate-spin" /> <span className="text-muted-foreground">Carregando pedidos...</span>
           </div>
         )}
 
-        {/* List */}
-        {!isLoading && filtered.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
-            <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
-            <p>Nenhum pedido Zeiss encontrado</p>
-          </div>
+        {/* Resultado de consulta avulsa (pedido externo) */}
+        {showConsultaAvulsa && (consultaAvulsaResult || consultaAvulsaError || consultaAvulsaLoading) && (
+          <Card className="border-dashed">
+            <CardContent className="p-4 space-y-3">
+              {consultaAvulsaLoading && (
+                <div className="flex items-center gap-2 justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="text-sm text-muted-foreground">Consultando Zeiss...</span>
+                </div>
+              )}
+              {consultaAvulsaError && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 text-destructive p-3 text-xs flex items-start gap-2">
+                  <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Pedido não encontrado ou erro na Zeiss</p>
+                    <p className="mt-0.5 opacity-80">{consultaAvulsaError}</p>
+                  </div>
+                </div>
+              )}
+              {consultaAvulsaResult && (
+                <div className="space-y-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-success" />
+                    <span className="font-semibold text-sm font-mono">Pedido #{consultaAvulsaResult.nrpedido || search}</span>
+                    <Badge variant="outline" className={statusBadge(consultaAvulsaResult.situacao || "").color + " text-xs"}>
+                      {consultaAvulsaResult.situacao}
+                    </Badge>
+                    <span className="text-muted-foreground text-[10px]">(externo)</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-muted/50 rounded p-3">
+                    {consultaAvulsaResult.est && (<><span className="text-muted-foreground">Estabelecimento</span><span className="font-mono">{consultaAvulsaResult.est}</span></>)}
+                    {consultaAvulsaResult.previsao && (<><span className="text-muted-foreground">Previsão</span><span>{consultaAvulsaResult.previsao}</span></>)}
+                    {consultaAvulsaResult.precoTotal && (<><span className="text-muted-foreground">Preço Total</span><span>R$ {consultaAvulsaResult.precoTotal}</span></>)}
+                    {consultaAvulsaResult.rastreamento && (<><span className="text-muted-foreground">Rastreio</span><span className="font-mono">{consultaAvulsaResult.rastreamento}</span></>)}
+                    {consultaAvulsaResult.codigoSituacao && (<><span className="text-muted-foreground">Código Situação</span><span className="font-mono">{consultaAvulsaResult.codigoSituacao}</span></>)}
+                  </div>
+                  {consultaAvulsaResult.detalhes && consultaAvulsaResult.detalhes.length > 0 && (
+                    <div>
+                      <p className="font-medium text-[10px] uppercase tracking-wide text-muted-foreground mb-2">Histórico Zeiss</p>
+                      <div className="relative pl-5 space-y-2">
+                        <div className="absolute left-[7px] top-1 bottom-1 w-0.5 bg-border" />
+                        {consultaAvulsaResult.detalhes.map((d, i) => (
+                          <div key={i} className="relative">
+                            <div className="absolute -left-5 top-0.5 h-3.5 w-3.5 rounded-full bg-muted border flex items-center justify-center">
+                              <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                            </div>
+                            <p className="font-medium">{d.situacao}</p>
+                            <p className="text-muted-foreground">{d.data} {d.hora}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Empty (sem resultado local nem avulso) */}
+        {!isLoading && filtered.length === 0 && !consultaAvulsaResult && !consultaAvulsaError && !consultaAvulsaLoading && (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground">
+              <Package className="h-10 w-10 mx-auto mb-3 opacity-50" />
+              <p>Nenhum pedido encontrado</p>
+              {search.trim() && <p className="text-xs mt-1">Selecione a loja e pressione Enter ou clique "Consultar Zeiss" para buscar no laboratório</p>}
+            </CardContent>
+          </Card>
         )}
 
         <div className="space-y-2">
