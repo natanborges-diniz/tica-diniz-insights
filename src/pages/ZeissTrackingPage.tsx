@@ -136,7 +136,7 @@ const ZeissTrackingPage: React.FC = () => {
     return result;
   }, [pedidos, statusFilter, search]);
 
-  const showConsultaAvulsa = !isLoading && filtered.length === 0 && search.trim();
+  const showConsultaAvulsa = !isLoading && filtered.length === 0 && search.trim().length > 0;
 
   const handleRefreshPedido = async (pedido: PedidoFornecedorRecord) => {
     if (refreshingIds.has(pedido.id)) return;
