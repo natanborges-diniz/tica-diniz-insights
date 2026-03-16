@@ -285,32 +285,113 @@ const ZeissTrackingPage: React.FC = () => {
                   </div>
                 </div>
               )}
-              {consultaAvulsaResult && (
-                <div className="space-y-3 text-xs">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-success" />
-                    <span className="font-semibold text-sm font-mono">Pedido #{consultaAvulsaResult.nrpedido || search}</span>
-                    <Badge variant="outline" className={statusBadge(consultaAvulsaResult.situacao || "").color + " text-xs"}>
-                      {consultaAvulsaResult.situacao}
-                    </Badge>
-                    <span className="text-muted-foreground text-[10px]">(externo)</span>
+              {consultaAvulsaResult && (() => {
+                const r = consultaAvulsaResult;
+                const totalPreco = r.precototal || r.precoTotal;
+                const timeline = r.detalhe_sit || r.detalhes || [];
+                return (
+                <div className="space-y-4 text-xs">
+                  {/* Header com status */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-success" />
+                      <span className="font-semibold text-sm font-mono">Pedido #{r.nrpedido || search}</span>
+                      <Badge variant="outline" className={statusBadge(r.situacao || "").color + " text-xs"}>
+                        {r.situacao}
+                      </Badge>
+                      <span className="text-muted-foreground text-[10px]">(externo)</span>
+                    </div>
+                    {totalPreco && (
+                      <span className="font-semibold text-sm">R$ {totalPreco}</span>
+                    )}
                   </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-muted/50 rounded p-3">
-                    {consultaAvulsaResult.est && (<><span className="text-muted-foreground">Estabelecimento</span><span className="font-mono">{consultaAvulsaResult.est}</span></>)}
-                    {consultaAvulsaResult.previsao && (<><span className="text-muted-foreground">Previsão</span><span>{consultaAvulsaResult.previsao}</span></>)}
-                    {consultaAvulsaResult.precoTotal && (<><span className="text-muted-foreground">Preço Total</span><span>R$ {consultaAvulsaResult.precoTotal}</span></>)}
-                    {consultaAvulsaResult.rastreamento && (<><span className="text-muted-foreground">Rastreio</span><span className="font-mono">{consultaAvulsaResult.rastreamento}</span></>)}
-                    {consultaAvulsaResult.codigoSituacao && (<><span className="text-muted-foreground">Código Situação</span><span className="font-mono">{consultaAvulsaResult.codigoSituacao}</span></>)}
+
+                  {/* Grid de informações principais */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 bg-muted/50 rounded-lg p-3">
+                    {r.oscliente && (<div><span className="text-muted-foreground block text-[10px] uppercase">OS Cliente</span><span className="font-mono font-medium">{r.oscliente}</span></div>)}
+                    {(r.est || r.estabel) && (<div><span className="text-muted-foreground block text-[10px] uppercase">Estabelecimento</span><span className="font-mono">{r.est || r.estabel}</span></div>)}
+                    {r.previsao && (<div><span className="text-muted-foreground block text-[10px] uppercase">Previsão Entrega</span><span>{r.previsao}</span></div>)}
+                    {r.primprevisao && r.primprevisao !== r.previsao && (<div><span className="text-muted-foreground block text-[10px] uppercase">1ª Previsão</span><span>{r.primprevisao}</span></div>)}
+                    {r.rastreamento && (<div><span className="text-muted-foreground block text-[10px] uppercase">Rastreio</span><span className="font-mono">{r.rastreamento}</span></div>)}
+                    {(r.codsituacao || r.codigoSituacao) && (<div><span className="text-muted-foreground block text-[10px] uppercase">Cód. Situação</span><span className="font-mono">{r.codsituacao || r.codigoSituacao}</span></div>)}
+                    {r.nomeneg && (<div><span className="text-muted-foreground block text-[10px] uppercase">Negociação</span><span>{r.nomeneg}</span></div>)}
+                    {r.campanha && (<div><span className="text-muted-foreground block text-[10px] uppercase">Campanha</span><span>{r.campanha}</span></div>)}
                   </div>
-                  {consultaAvulsaResult.detalhes && consultaAvulsaResult.detalhes.length > 0 && (
+
+                  {/* Paciente e Médico */}
+                  {(r.paciente || r.medico) && (
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 bg-muted/30 rounded-lg p-3">
+                      {r.paciente && (<div><span className="text-muted-foreground block text-[10px] uppercase">Paciente</span><span className="font-medium">{r.paciente}</span></div>)}
+                      {r.medico && (<div><span className="text-muted-foreground block text-[10px] uppercase">Médico</span><span>{r.medico}{r.crm ? ` (CRM ${r.crm})` : ""}</span></div>)}
+                      {r.voucher && (<div><span className="text-muted-foreground block text-[10px] uppercase">Voucher</span><span className="font-mono">{r.voucher}{r.descrvoucher ? ` — ${r.descrvoucher}` : ""}</span></div>)}
+                    </div>
+                  )}
+
+                  {/* Cliente (ótica) */}
+                  {r.cliente?.nome && (
+                    <div className="bg-muted/30 rounded-lg p-3">
+                      <span className="text-muted-foreground block text-[10px] uppercase mb-1">Cliente (Ótica)</span>
+                      <span className="font-medium">{r.cliente.nome}</span>
+                      {r.cliente.cnpj && <span className="text-muted-foreground ml-2 font-mono text-[10px]">CNPJ {r.cliente.cnpj}</span>}
+                    </div>
+                  )}
+
+                  {/* Datas de etapas */}
+                  {(r.entrada?.data || r.producao?.data || r.fatur?.data) && (
+                    <div className="flex flex-wrap gap-4">
+                      {r.entrada?.data && (
+                        <div className="flex items-center gap-2 bg-muted/30 rounded px-3 py-1.5">
+                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                          <div>
+                            <span className="text-muted-foreground text-[10px] uppercase block">Entrada</span>
+                            <span>{r.entrada.data} {r.entrada.hora}</span>
+                          </div>
+                        </div>
+                      )}
+                      {r.producao?.data && (
+                        <div className="flex items-center gap-2 bg-muted/30 rounded px-3 py-1.5">
+                          <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                          <div>
+                            <span className="text-muted-foreground text-[10px] uppercase block">Produção</span>
+                            <span>{r.producao.data} {r.producao.hora}</span>
+                          </div>
+                        </div>
+                      )}
+                      {r.fatur?.data && (
+                        <div className="flex items-center gap-2 bg-muted/30 rounded px-3 py-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-muted-foreground" />
+                          <div>
+                            <span className="text-muted-foreground text-[10px] uppercase block">Faturamento</span>
+                            <span>{r.fatur.data} {r.fatur.hora}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Garantia */}
+                  {(r.prazogarprod || r.prazogarserv) && (
+                    <div className="flex gap-4 text-[10px]">
+                      {r.prazogarprod && r.prazogarprod !== "0" && (
+                        <span className="text-muted-foreground">Garantia Produto: <span className="text-foreground font-medium">{r.prazogarprod} meses</span></span>
+                      )}
+                      {r.prazogarserv && r.prazogarserv !== "0" && (
+                        <span className="text-muted-foreground">Garantia Serviço: <span className="text-foreground font-medium">{r.prazogarserv} meses</span></span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Timeline */}
+                  {timeline.length > 0 && (
                     <div>
-                      <p className="font-medium text-[10px] uppercase tracking-wide text-muted-foreground mb-2">Histórico Zeiss</p>
+                      <Separator className="mb-3" />
+                      <p className="font-medium text-[10px] uppercase tracking-wide text-muted-foreground mb-2">Histórico de Produção</p>
                       <div className="relative pl-5 space-y-2">
                         <div className="absolute left-[7px] top-1 bottom-1 w-0.5 bg-border" />
-                        {consultaAvulsaResult.detalhes.map((d, i) => (
+                        {timeline.map((d, i) => (
                           <div key={i} className="relative">
-                            <div className="absolute -left-5 top-0.5 h-3.5 w-3.5 rounded-full bg-muted border flex items-center justify-center">
-                              <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+                            <div className={`absolute -left-5 top-0.5 h-3.5 w-3.5 rounded-full border flex items-center justify-center ${i === 0 ? "bg-primary border-primary" : "bg-muted border-border"}`}>
+                              <div className={`h-1.5 w-1.5 rounded-full ${i === 0 ? "bg-primary-foreground" : "bg-muted-foreground"}`} />
                             </div>
                             <p className="font-medium">{d.situacao}</p>
                             <p className="text-muted-foreground">{d.data} {d.hora}</p>
@@ -320,7 +401,8 @@ const ZeissTrackingPage: React.FC = () => {
                     </div>
                   )}
                 </div>
-              )}
+                );
+              })()}
             </CardContent>
           </Card>
         )}
