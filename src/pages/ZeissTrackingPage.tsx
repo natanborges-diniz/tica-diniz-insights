@@ -426,9 +426,12 @@ const ZeissTrackingPage: React.FC = () => {
 
             return (
               <Card key={pedido.id} className="overflow-hidden">
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleExpand(pedido.id)}
-                  className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-accent/30 transition-colors"
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleExpand(pedido.id); }}
+                  className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-accent/30 transition-colors cursor-pointer"
                 >
                   <IconComp className="h-5 w-5 shrink-0" />
                   <div className="flex-1 min-w-0">
