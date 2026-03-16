@@ -328,11 +328,11 @@ const ZeissTrackingPage: React.FC = () => {
                   )}
 
                   {/* Cliente (ótica) */}
-                  {r.cliente?.nome && (
+                  {r.cliente && typeof r.cliente === "object" && typeof r.cliente.nome === "string" && r.cliente.nome && (
                     <div className="bg-muted/30 rounded-lg p-3">
                       <span className="text-muted-foreground block text-[10px] uppercase mb-1">Cliente (Ótica)</span>
                       <span className="font-medium">{r.cliente.nome}</span>
-                      {r.cliente.cnpj && <span className="text-muted-foreground ml-2 font-mono text-[10px]">CNPJ {r.cliente.cnpj}</span>}
+                      {typeof r.cliente.cnpj === "string" && r.cliente.cnpj && <span className="text-muted-foreground ml-2 font-mono text-[10px]">CNPJ {r.cliente.cnpj}</span>}
                     </div>
                   )}
 
