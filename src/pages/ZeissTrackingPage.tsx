@@ -65,6 +65,33 @@ const ZeissTrackingPage: React.FC = () => {
   const [loadingTimeline, setLoadingTimeline] = useState(false);
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
 
+  // Consulta avulsa
+  const [consultaNumero, setConsultaNumero] = useState("");
+  const [consultaEmpresa, setConsultaEmpresa] = useState<string>("");
+  const [consultando, setConsultando] = useState(false);
+  const [consultaResult, setConsultaResult] = useState<ZeissTrackingData | null>(null);
+
+  const handleConsultaAvulsa = async () => {
+    if (!consultaNumero.trim() || !consultaEmpresa) {
+      toast({ title: "Preencha o número do pedido e selecione a loja", variant: "destructive" });
+      return;
+    }
+    setConsultando(true);
+    setConsultaResult(null);
+    try {
+      const data = await consultarPedidoZeiss(consultaNumero.trim(), Number(consultaEmpresa));
+      setConsultaResult(data);
+      if (!data?.situacao) {
+        toast({ title: "Pedido não encontrado", description: "Verifique o número e a loja selecionada.", variant: "destructive" });
+      }
+    } catch (err: any) {
+      const msg = err?.message || (typeof err === "object" && err?.code ? err.code : "Erro ao consultar");
+      toast({ title: "Erro na consulta", description: msg, variant: "destructive" });
+    } finally {
+      setConsultando(false);
+    }
+  };
+
   const { empresas } = useUserEmpresas();
   const empresaNameMap = useMemo(() => {
     const map = new Map<number, string>();
@@ -184,6 +211,73 @@ const ZeissTrackingPage: React.FC = () => {
             {filtered.length} pedido{filtered.length !== 1 ? "s" : ""}
           </Badge>
         </div>
+
+        {/* Consulta Avulsa */}
+        <Card className="border-dashed">
+          <CardContent className="pt-4 pb-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase mb-3">Consultar pedido avulso</p>
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="w-48">
+                <Label className="text-[10px] uppercase">Loja</Label>
+                <Select value={consultaEmpresa} onValueChange={setConsultaEmpresa}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    {empresas.map(e => (
+                      <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>{e.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex-1 min-w-[180px]">
+                <Label className="text-[10px] uppercase">Nº Pedido Zeiss</Label>
+                <Input
+                  value={consultaNumero}
+                  onChange={e => setConsultaNumero(e.target.value)}
+                  placeholder="Ex: 1012334"
+                  className="h-9 font-mono"
+                  onKeyDown={e => e.key === "Enter" && handleConsultaAvulsa()}
+                />
+              </div>
+              <Button onClick={handleConsultaAvulsa} disabled={consultando} className="h-9 gap-2">
+                {consultando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Consultar Zeiss
+              </Button>
+            </div>
+
+            {consultaResult?.situacao && (
+              <div className="mt-4 p-3 rounded-md bg-muted/50 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={statusBadge(consultaResult.situacao).color}>
+                    {consultaResult.situacao}
+                  </Badge>
+                  <span className="font-mono text-sm font-bold">Pedido {consultaResult.nrpedido || consultaNumero}</span>
+                </div>
+                {consultaResult.previsao && (
+                  <p className="text-xs text-muted-foreground">Previsão: {consultaResult.previsao}</p>
+                )}
+                {consultaResult.precoTotal && (
+                  <p className="text-xs text-muted-foreground">Preço total: R$ {consultaResult.precoTotal}</p>
+                )}
+                {consultaResult.rastreamento && (
+                  <p className="text-xs font-mono">Rastreio: {consultaResult.rastreamento}</p>
+                )}
+                {consultaResult.detalhes && consultaResult.detalhes.length > 0 && (
+                  <div className="mt-2 relative pl-4 border-l-2 border-border space-y-2">
+                    {consultaResult.detalhes.map((d, i) => (
+                      <div key={i} className="relative">
+                        <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-background border-2 border-primary" />
+                        <p className="text-xs">
+                          <span className="font-medium">{d.situacao}</span>
+                          <span className="text-muted-foreground ml-2">{d.data} {d.hora}</span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Loading */}
         {isLoading && (
