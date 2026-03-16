@@ -65,6 +65,33 @@ const ZeissTrackingPage: React.FC = () => {
   const [loadingTimeline, setLoadingTimeline] = useState(false);
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
 
+  // Consulta avulsa
+  const [consultaNumero, setConsultaNumero] = useState("");
+  const [consultaEmpresa, setConsultaEmpresa] = useState<string>("");
+  const [consultando, setConsultando] = useState(false);
+  const [consultaResult, setConsultaResult] = useState<ZeissTrackingData | null>(null);
+
+  const handleConsultaAvulsa = async () => {
+    if (!consultaNumero.trim() || !consultaEmpresa) {
+      toast({ title: "Preencha o número do pedido e selecione a loja", variant: "destructive" });
+      return;
+    }
+    setConsultando(true);
+    setConsultaResult(null);
+    try {
+      const data = await consultarPedidoZeiss(consultaNumero.trim(), Number(consultaEmpresa));
+      setConsultaResult(data);
+      if (!data?.situacao) {
+        toast({ title: "Pedido não encontrado", description: "Verifique o número e a loja selecionada.", variant: "destructive" });
+      }
+    } catch (err: any) {
+      const msg = err?.message || (typeof err === "object" && err?.code ? err.code : "Erro ao consultar");
+      toast({ title: "Erro na consulta", description: msg, variant: "destructive" });
+    } finally {
+      setConsultando(false);
+    }
+  };
+
   const { empresas } = useUserEmpresas();
   const empresaNameMap = useMemo(() => {
     const map = new Map<number, string>();
