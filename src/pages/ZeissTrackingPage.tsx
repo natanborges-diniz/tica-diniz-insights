@@ -311,7 +311,7 @@ const ZeissTrackingPage: React.FC = () => {
                       <CheckCircle2 className="h-4 w-4 text-success" />
                       <span className="font-semibold text-sm font-mono">Pedido #{r.nrpedido || search}</span>
                       <Badge variant="outline" className={statusBadge(r.situacao || "").color + " text-xs"}>
-                        {r.situacao}
+                        {safeStr(r.situacao)}
                       </Badge>
                       <span className="text-muted-foreground text-[10px]">(externo)</span>
                     </div>
