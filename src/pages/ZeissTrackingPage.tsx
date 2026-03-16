@@ -33,6 +33,20 @@ import { ptBR } from "date-fns/locale";
 
 // ============================================
 // HELPERS
+/** Safely convert any value to a renderable string — prevents React "Objects are not valid as a React child" errors */
+function safeStr(val: unknown): string {
+  if (val == null) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "number" || typeof val === "boolean") return String(val);
+  if (Array.isArray(val)) return val.map(safeStr).filter(Boolean).join(", ");
+  if (typeof val === "object") {
+    const obj = val as Record<string, unknown>;
+    // common patterns from Zeiss API
+    return obj.nome ? String(obj.nome) : obj.n ? String(obj.n) : obj.descricao ? String(obj.descricao) : JSON.stringify(val);
+  }
+  return String(val);
+}
+
 // ============================================
 
 function statusBadge(status: string | null) {
