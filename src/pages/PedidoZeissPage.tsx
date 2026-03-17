@@ -1108,8 +1108,8 @@ const PedidoZeissPage: React.FC = () => {
             {/* ── Frame ── */}
             <Card>
               <CardHeader className="pb-3"><CardTitle className="text-sm">Armação</CardTitle></CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
                   <div>
                     <Label className="text-[10px] uppercase text-muted-foreground">Modelo</Label>
                     <Input value={armacao.modelo} onChange={e => setArmacao(a => ({ ...a, modelo: e.target.value }))} className="h-8 text-sm" />
@@ -1141,11 +1141,11 @@ const PedidoZeissPage: React.FC = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label className="text-[10px] uppercase text-muted-foreground">Formato Aro</Label>
-                    <Input value={armacao.formatoAro} onChange={e => setArmacao(a => ({ ...a, formatoAro: e.target.value }))} className="h-8 text-sm font-mono" placeholder="ex: 1AB" />
-                  </div>
                 </div>
+                <ZeissFormatoAroSelector
+                  value={armacao.formatoAro}
+                  onChange={(code) => setArmacao(a => ({ ...a, formatoAro: code }))}
+                />
               </CardContent>
             </Card>
 
