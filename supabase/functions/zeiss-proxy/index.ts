@@ -529,10 +529,13 @@ serve(async (req) => {
             status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        const url = `${BASE_URL}/produtos/servicos/1/${familia}/${store.cnpj}`;
+        const url = `${BASE_URL}/produtos/servicos/1/${encodeURIComponent(familia)}/${store.cnpj}`;
         const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "servicos-por-produto", zeissConfig.apiKey);
         const data = await resp.json();
-        return new Response(JSON.stringify(data?.sao?.servicos || data), {
+        console.log(`[zeiss-proxy] [${correlationId}] servicos-por-produto response keys: ${data ? Object.keys(data).join(',') : 'NULL'}`);
+        // Extract from multiple possible response shapes
+        const servicos = data?.sao?.servicos || data?.sao?.servico || (Array.isArray(data) ? data : []);
+        return new Response(JSON.stringify(servicos), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
         });
       }
