@@ -548,10 +548,13 @@ serve(async (req) => {
             status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        const url = `${BASE_URL}/coloracao/lista/1/${familia}`;
+        const url = `${BASE_URL}/coloracao/lista/1/${encodeURIComponent(familia)}`;
         const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-cores", zeissConfig.apiKey);
         const data = await resp.json();
-        return new Response(JSON.stringify(data?.sao?.cores || data), {
+        console.log(`[zeiss-proxy] [${correlationId}] listar-cores response keys: ${data ? Object.keys(data).join(',') : 'NULL'}`);
+        // Extract from multiple possible response shapes
+        const cores = data?.sao?.cores || data?.sao?.cor || data?.sao?.coloracao || (Array.isArray(data) ? data : []);
+        return new Response(JSON.stringify(cores), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
         });
       }
