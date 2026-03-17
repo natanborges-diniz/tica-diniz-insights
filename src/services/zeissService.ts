@@ -199,14 +199,13 @@ async function callZeissProxy<T>(action: string, params: Record<string, unknown>
   const { data: sessionData } = await supabase.auth.getSession();
   const accessToken = sessionData?.session?.access_token;
 
-  const headers: Record<string, string> = {};
-  if (accessToken) {
-    headers["Authorization"] = `Bearer ${accessToken}`;
+  if (!accessToken) {
+    throw new Error("Sessão expirada. Faça login novamente.");
   }
 
   const { data, error } = await supabase.functions.invoke("zeiss-proxy", {
     body: { action, ...params },
-    headers,
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 
   if (error) {
