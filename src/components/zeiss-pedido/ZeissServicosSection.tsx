@@ -8,7 +8,7 @@ import { Loader2, Paintbrush, Wrench } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { listarServicosPorProdutoZeiss, listarCoresZeiss } from "@/services/zeissService";
+import { listarServicosPorProdutoZeiss, listarCoresZeiss, listarServicosZeiss } from "@/services/zeissService";
 
 export interface ZeissServico {
   cod: string;
