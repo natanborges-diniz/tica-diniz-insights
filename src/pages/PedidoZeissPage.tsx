@@ -76,10 +76,11 @@ function autoFillLabel(source: AutoFillSource) {
   }
 }
 
-/** Extract familia (cat) from selected product for service/color lookups */
+/** Extract familia (cat or cod) from selected product for service/color lookups */
 function extractFamilia(produto: ZeissProduto | null): string | null {
-  if (!produto?.cat) return null;
-  return produto.cat;
+  if (!produto) return null;
+  // Prefer cat (category/family), fallback to cod (product code)
+  return produto.cat || produto.cod || null;
 }
 
 // ============================================
