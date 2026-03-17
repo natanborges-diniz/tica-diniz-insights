@@ -46,21 +46,29 @@ const ZeissServicosSection: React.FC<Props> = ({
       return;
     }
 
-    // Fetch services and colors in parallel
+    // Fetch services by product (returns codes) + full catalog (returns names) + colors
     setLoadingServicos(true);
     setLoadingCores(true);
 
-    listarServicosPorProdutoZeiss(familia, codEmpresa)
-      .then((data) => {
-        const arr = Array.isArray(data) ? data : [];
-        // API returns array of strings (codes) like ["69","76","77"]
-        setServicos(arr.map((s: any) => {
-          if (typeof s === "string") return { cod: s, nome: `Serviço ${s}`, descr: "" };
-          return {
-            cod: s.cod || s.codigo || s.c || s.codigo_servico || "",
-            nome: s.nome || s.n || s.descricao || s.desc || "",
-            descr: s.descr || s.d || "",
-          };
+    // Fetch product services and full catalog in parallel to cross-reference names
+    Promise.all([
+      listarServicosPorProdutoZeiss(familia, codEmpresa),
+      listarServicosZeiss().catch(() => []),  // fallback if catalog fails
+    ])
+      .then(([productServicos, allServicos]) => {
+        const codes = Array.isArray(productServicos) ? productServicos : [];
+        // Build name map from full catalog
+        const nameMap: Record<string, string> = {};
+        if (Array.isArray(allServicos)) {
+          allServicos.forEach((s: any) => {
+            const cod = s.cod || s.codigo || s.c || "";
+            const nome = s.nome || s.n || s.descricao || "";
+            if (cod) nameMap[String(cod)] = nome;
+          });
+        }
+        setServicos(codes.map((s: any) => {
+          const cod = typeof s === "string" ? s : (s.cod || s.codigo || s.c || s.codigo_servico || "");
+          return { cod, nome: nameMap[String(cod)] || `Serviço ${cod}`, descr: "" };
         }).filter((s: ZeissServico) => s.cod));
       })
       .catch((err) => console.warn("[ZeissServicos] Error loading services:", err))
