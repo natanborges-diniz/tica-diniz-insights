@@ -53,11 +53,15 @@ const ZeissServicosSection: React.FC<Props> = ({
     listarServicosPorProdutoZeiss(familia, codEmpresa)
       .then((data) => {
         const arr = Array.isArray(data) ? data : [];
-        setServicos(arr.map((s: any) => ({
-          cod: s.cod || s.codigo || s.c || "",
-          nome: s.nome || s.n || s.descricao || "",
-          descr: s.descr || s.d || "",
-        })).filter((s: ZeissServico) => s.cod));
+        // API returns array of strings (codes) like ["69","76","77"]
+        setServicos(arr.map((s: any) => {
+          if (typeof s === "string") return { cod: s, nome: `Serviço ${s}`, descr: "" };
+          return {
+            cod: s.cod || s.codigo || s.c || s.codigo_servico || "",
+            nome: s.nome || s.n || s.descricao || s.desc || "",
+            descr: s.descr || s.d || "",
+          };
+        }).filter((s: ZeissServico) => s.cod));
       })
       .catch((err) => console.warn("[ZeissServicos] Error loading services:", err))
       .finally(() => setLoadingServicos(false));
@@ -65,9 +69,10 @@ const ZeissServicosSection: React.FC<Props> = ({
     listarCoresZeiss(familia)
       .then((data) => {
         const arr = Array.isArray(data) ? data : [];
+        // API returns {codigo_cor_sao, farb} objects
         setCores(arr.map((c: any) => ({
-          cod: c.cod || c.codigo || c.c || "",
-          nome: c.nome || c.n || c.descricao || "",
+          cod: c.codigo_cor_sao || c.cod || c.codigo || c.c || "",
+          nome: c.farb || c.nome || c.n || c.descricao || "",
         })).filter((c: ZeissCor) => c.cod));
       })
       .catch((err) => console.warn("[ZeissServicos] Error loading colors:", err))
