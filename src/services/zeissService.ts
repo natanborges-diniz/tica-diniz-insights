@@ -290,8 +290,8 @@ export async function listarTimelinePedidoZeiss(pedidoFornecedorId: string): Pro
 
 // ── Services ──
 
-export async function listarServicosZeiss(): Promise<unknown[]> {
-  return callZeissProxy<unknown[]>("listar-servicos");
+export async function listarServicosZeiss(codEmpresa?: number): Promise<unknown[]> {
+  return callZeissProxy<unknown[]>("listar-servicos", codEmpresa ? { codEmpresa } : {});
 }
 
 export async function listarServicosPorProdutoZeiss(familia: string, codEmpresa: number): Promise<unknown[]> {

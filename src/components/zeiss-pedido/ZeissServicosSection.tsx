@@ -8,7 +8,7 @@ import { Loader2, Paintbrush, Wrench } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { listarServicosPorProdutoZeiss, listarCoresZeiss } from "@/services/zeissService";
+import { listarServicosPorProdutoZeiss, listarCoresZeiss, listarServicosZeiss } from "@/services/zeissService";
 
 export interface ZeissServico {
   cod: string;
@@ -46,18 +46,30 @@ const ZeissServicosSection: React.FC<Props> = ({
       return;
     }
 
-    // Fetch services and colors in parallel
+    // Fetch services by product (returns codes) + full catalog (returns names) + colors
     setLoadingServicos(true);
     setLoadingCores(true);
 
-    listarServicosPorProdutoZeiss(familia, codEmpresa)
-      .then((data) => {
-        const arr = Array.isArray(data) ? data : [];
-        setServicos(arr.map((s: any) => ({
-          cod: s.cod || s.codigo || s.c || "",
-          nome: s.nome || s.n || s.descricao || "",
-          descr: s.descr || s.d || "",
-        })).filter((s: ZeissServico) => s.cod));
+    // Fetch product services and full catalog in parallel to cross-reference names
+    Promise.all([
+      listarServicosPorProdutoZeiss(familia, codEmpresa),
+      listarServicosZeiss().catch(() => []),  // fallback if catalog fails
+    ])
+      .then(([productServicos, allServicos]) => {
+        const codes = Array.isArray(productServicos) ? productServicos : [];
+        // Build name map from full catalog
+        const nameMap: Record<string, string> = {};
+        if (Array.isArray(allServicos)) {
+          allServicos.forEach((s: any) => {
+            const cod = s.cod || s.codigo || s.c || "";
+            const nome = s.nome || s.n || s.descricao || "";
+            if (cod) nameMap[String(cod)] = nome;
+          });
+        }
+        setServicos(codes.map((s: any) => {
+          const cod = typeof s === "string" ? s : (s.cod || s.codigo || s.c || s.codigo_servico || "");
+          return { cod, nome: nameMap[String(cod)] || `Serviço ${cod}`, descr: "" };
+        }).filter((s: ZeissServico) => s.cod));
       })
       .catch((err) => console.warn("[ZeissServicos] Error loading services:", err))
       .finally(() => setLoadingServicos(false));
@@ -65,9 +77,10 @@ const ZeissServicosSection: React.FC<Props> = ({
     listarCoresZeiss(familia)
       .then((data) => {
         const arr = Array.isArray(data) ? data : [];
+        // API returns {codigo_cor_sao, farb} objects
         setCores(arr.map((c: any) => ({
-          cod: c.cod || c.codigo || c.c || "",
-          nome: c.nome || c.n || c.descricao || "",
+          cod: c.codigo_cor_sao || c.cod || c.codigo || c.c || "",
+          nome: c.farb || c.nome || c.n || c.descricao || "",
         })).filter((c: ZeissCor) => c.cod));
       })
       .catch((err) => console.warn("[ZeissServicos] Error loading colors:", err))
