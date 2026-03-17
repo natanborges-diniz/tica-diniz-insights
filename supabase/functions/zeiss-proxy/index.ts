@@ -554,8 +554,9 @@ serve(async (req) => {
         const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-cores", zeissConfig.apiKey);
         const data = await resp.json();
         console.log(`[zeiss-proxy] [${correlationId}] listar-cores response keys: ${data ? Object.keys(data).join(',') : 'NULL'}`);
+        console.log(`[zeiss-proxy] [${correlationId}] listar-cores full: ${JSON.stringify(data).substring(0, 500)}`);
         // Extract from multiple possible response shapes
-        const cores = data?.sao?.cores || data?.sao?.cor || data?.sao?.coloracao || (Array.isArray(data) ? data : []);
+        const cores = data?.cores || data?.sao?.cores || data?.sao?.cor || data?.sao?.coloracao || (Array.isArray(data) ? data : []);
         return new Response(JSON.stringify(cores), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
         });
