@@ -39,6 +39,7 @@ const ZeissServicosSection: React.FC<Props> = ({
   const [loadingCores, setLoadingCores] = useState(false);
 
   useEffect(() => {
+    console.log("[ZeissServicos] familia:", familia, "codEmpresa:", codEmpresa);
     if (!familia || !codEmpresa) {
       setServicos([]);
       setCores([]);
