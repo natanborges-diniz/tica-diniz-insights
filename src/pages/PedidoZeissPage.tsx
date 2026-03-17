@@ -36,6 +36,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ZeissServicosSection from "@/components/zeiss-pedido/ZeissServicosSection";
+import ZeissFormatoAroSelector from "@/components/zeiss-pedido/ZeissFormatoAroSelector";
 import ZeissSugestaoBase from "@/components/zeiss-pedido/ZeissSugestaoBase";
 import ZeissValidationPanel from "@/components/zeiss-pedido/ZeissValidationPanel";
 import {
