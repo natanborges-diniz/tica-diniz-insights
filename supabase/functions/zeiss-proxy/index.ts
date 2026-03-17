@@ -506,10 +506,17 @@ serve(async (req) => {
 
       // ── Listar Serviços ──
       case "listar-servicos": {
-        const url = `${BASE_URL}/servicos/lista/1`;
+        const codEmpresa = Number(params.codEmpresa);
+        let url = `${BASE_URL}/servicos/lista/1`;
+        // If codEmpresa provided, resolve CNPJ and append to URL
+        if (codEmpresa) {
+          const store = await loadStoreConfig(sbService, codEmpresa);
+          if (store?.cnpj) url = `${BASE_URL}/servicos/lista/1/${store.cnpj}`;
+        }
         const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "listar-servicos", zeissConfig.apiKey);
         const data = await resp.json();
-        return new Response(JSON.stringify(data?.sao?.servicos || []), {
+        const servicos = data?.sao?.servicos || data?.sao?.servico || (Array.isArray(data) ? data : []);
+        return new Response(JSON.stringify(servicos), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
