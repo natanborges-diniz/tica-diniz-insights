@@ -532,9 +532,11 @@ serve(async (req) => {
         const url = `${BASE_URL}/produtos/servicos/1/${encodeURIComponent(familia)}/${store.cnpj}`;
         const resp = await fetchZeiss(url, { method: "GET", headers: { "Content-Type": "application/json" } }, correlationId, "servicos-por-produto", zeissConfig.apiKey);
         const data = await resp.json();
-        console.log(`[zeiss-proxy] [${correlationId}] servicos-por-produto response keys: ${data ? Object.keys(data).join(',') : 'NULL'}`);
+        const saoKeys = data?.sao ? Object.keys(data.sao).join(',') : 'NO_SAO';
+        console.log(`[zeiss-proxy] [${correlationId}] servicos-por-produto response keys: ${data ? Object.keys(data).join(',') : 'NULL'}, sao keys: ${saoKeys}`);
+        console.log(`[zeiss-proxy] [${correlationId}] servicos-por-produto sao sample: ${JSON.stringify(data?.sao).substring(0, 500)}`);
         // Extract from multiple possible response shapes
-        const servicos = data?.sao?.servicos || data?.sao?.servico || (Array.isArray(data) ? data : []);
+        const servicos = data?.sao?.servicos || data?.sao?.servico || data?.sao?.produtos?.servicos || (Array.isArray(data?.sao) ? data.sao : (Array.isArray(data) ? data : []));
         return new Response(JSON.stringify(servicos), {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
         });
