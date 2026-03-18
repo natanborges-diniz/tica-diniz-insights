@@ -285,29 +285,6 @@ const PedidoZeissPage: React.FC = () => {
     })();
   }, [codEmpresa]);
 
-  // ── Run matching when OS + catalog are ready ──
-  useEffect(() => {
-    if (!os || produtos.length === 0) return;
-    const descricao = os.lenteOdDescricao || os.lenteOeDescricao;
-    if (!descricao) return;
-
-    (async () => {
-      const result = await matchZeissProducts(produtos, descricao);
-      setMatchResult(result);
-
-      if (result.bestMatch) {
-        setProdutoOd(result.bestMatch.produto);
-        setProdutoOe(result.bestMatch.produto);
-        setAutoFillSource(result.source === "depara" ? "depara" : "match");
-        setConfirmedProduct(result.source === "depara");
-        toast({
-          title: result.source === "depara" ? "Produto encontrado via DE/PARA" : "Match inteligente realizado",
-          description: result.bestMatch.produto.nome,
-        });
-      }
-    })();
-  }, [os, produtos]);
-
   // ── Select product handler ──
   const handleSelectProduct = useCallback((produto: ZeissProduto, source: AutoFillSource) => {
     setProdutoOd(produto);
@@ -331,6 +308,27 @@ const PedidoZeissPage: React.FC = () => {
       setSelectedCorridor("");
     }
   }, [useSameProduct, produtos]);
+
+  // ── Run matching when OS + catalog are ready ──
+  useEffect(() => {
+    if (!os || produtos.length === 0) return;
+    const descricao = os.lenteOdDescricao || os.lenteOeDescricao;
+    if (!descricao) return;
+
+    (async () => {
+      const result = await matchZeissProducts(produtos, descricao);
+      setMatchResult(result);
+
+      if (result.bestMatch) {
+        const source: AutoFillSource = result.source === "depara" ? "depara" : "match";
+        handleSelectProduct(result.bestMatch.produto, source);
+        toast({
+          title: source === "depara" ? "Produto encontrado via DE/PARA" : "Match inteligente realizado",
+          description: result.bestMatch.produto.nome,
+        });
+      }
+    })();
+  }, [os, produtos, handleSelectProduct]);
 
   // ── Handle corridor change ──
   const handleCorridorChange = useCallback((corridorHeight: string) => {
