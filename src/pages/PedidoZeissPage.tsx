@@ -322,6 +322,7 @@ const PedidoZeissPage: React.FC = () => {
 
     // Compute corridor options for this product
     const options = getCorridorOptionsForProduct(produto, produtos);
+    console.log("[PedidoZeiss] Corridor options for", produto.nome, ":", options.length, options.map(o => `${o.altura}mm (${o.cod})`));
     setCorridorOptions(options);
     if (options.length > 0) {
       const currentCorridor = extractCorridorHeight(produto.nome || "");
