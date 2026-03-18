@@ -596,8 +596,8 @@ const ZeissTrackingPage: React.FC = () => {
                               {/* Prescrição OD/OE */}
                               {(od || oe) && (
                                 <div className="grid grid-cols-2 gap-2 bg-background/60 rounded p-2">
-                                  {fmtOlhoZeiss(od, "OD (Direito)")}
-                                  {fmtOlhoZeiss(oe, "OE (Esquerdo)")}
+                                  {fmtOlhoZeiss(od, "OD (Direito)", meta?.produtoOdNome)}
+                                  {fmtOlhoZeiss(oe, "OE (Esquerdo)", meta?.produtoOeNome)}
                                 </div>
                               )}
 
