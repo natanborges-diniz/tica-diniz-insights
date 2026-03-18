@@ -319,7 +319,30 @@ const PedidoZeissPage: React.FC = () => {
     // Reset services/colors when product changes
     setSelectedServicos([]);
     setSelectedCor("none");
-  }, [useSameProduct]);
+
+    // Compute corridor options for this product
+    const options = getCorridorOptionsForProduct(produto, produtos);
+    setCorridorOptions(options);
+    if (options.length > 0) {
+      const currentCorridor = extractCorridorHeight(produto.nome || "");
+      setSelectedCorridor(currentCorridor ? String(currentCorridor.height) : String(options[0].altura));
+    } else {
+      setSelectedCorridor("");
+    }
+  }, [useSameProduct, produtos]);
+
+  // ── Handle corridor change ──
+  const handleCorridorChange = useCallback((corridorHeight: string) => {
+    setSelectedCorridor(corridorHeight);
+    const option = corridorOptions.find(c => String(c.altura) === corridorHeight);
+    if (option) {
+      setProdutoOd(option.produto);
+      if (useSameProduct) setProdutoOe(option.produto);
+      // Keep confirmed state
+      setSelectedServicos([]);
+      setSelectedCor("none");
+    }
+  }, [corridorOptions, useSameProduct]);
 
   // ── Manual search ──
   const filteredProdutos = useMemo(() => {
