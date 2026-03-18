@@ -498,12 +498,12 @@ const PedidoZeissPage: React.FC = () => {
     payload.compl = {};
 
     // Store product metadata for tracking display (ignored by Zeiss API)
-    const oeProduct = useSameProduct ? produtoOd : produtoOe;
+    const oeProductMeta = useSameProduct ? produtoOd : produtoOe;
     (payload as any)._meta = {
       produtoOdNome: produtoOd?.nome || produtoOd?.descr || null,
       produtoOdCod: produtoOd?.cod || null,
-      produtoOeNome: oeProduct?.nome || oeProduct?.descr || null,
-      produtoOeCod: oeProduct?.cod || null,
+      produtoOeNome: oeProductMeta?.nome || oeProductMeta?.descr || null,
+      produtoOeCod: oeProductMeta?.cod || null,
     };
 
     if (aprov) payload.aprov = aprov;
