@@ -53,7 +53,7 @@ const ZeissServicosSection: React.FC<Props> = ({
     // Fetch product services and full catalog in parallel to cross-reference names
     Promise.all([
       listarServicosPorProdutoZeiss(familia, codEmpresa),
-      listarServicosZeiss().catch(() => []),  // fallback if catalog fails
+      listarServicosZeiss(codEmpresa).catch(() => []),  // fallback if catalog fails
     ])
       .then(([productServicos, allServicos]) => {
         const codes = Array.isArray(productServicos) ? productServicos : [];
