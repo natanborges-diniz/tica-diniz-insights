@@ -488,24 +488,31 @@ const ZeissTrackingPage: React.FC = () => {
                       const oe = pedidoData?.oe as Record<string, unknown> | undefined;
                       const armacao = pedidoData?.armacao as Record<string, unknown> | undefined;
                       const servicos = pedidoData?.servicos as { codigo: string }[] | undefined;
+                      const meta = pedidoData?._meta as { produtoOdNome?: string; produtoOdCod?: string; produtoOeNome?: string; produtoOeCod?: string } | undefined;
 
-                      const fmtOlhoZeiss = (olho: Record<string, unknown> | undefined, label: string) => {
+                      const fmtOlhoZeiss = (olho: Record<string, unknown> | undefined, label: string, prodNome?: string | null) => {
                         if (!olho) return null;
                         const parts: string[] = [];
                         if (olho.esferico) parts.push(`ESF ${olho.esferico}`);
                         if (olho.cilindrico) parts.push(`CIL ${olho.cilindrico}`);
                         if (olho.eixocilindrico) parts.push(`EIX ${olho.eixocilindrico}°`);
                         if (olho.adicao) parts.push(`AD ${olho.adicao}`);
+                        if (olho.dnp) parts.push(`DNP ${olho.dnp}`);
                         if (olho.dnplonge) parts.push(`DNP-L ${olho.dnplonge}`);
                         if (olho.dnpperto) parts.push(`DNP-P ${olho.dnpperto}`);
                         if (olho.alturamontagem) parts.push(`ALT ${olho.alturamontagem}`);
                         if (olho.prisma) parts.push(`PRISMA ${olho.prisma}`);
-                        if (parts.length === 0) return null;
+                        if (parts.length === 0 && !prodNome) return null;
                         return (
                           <div>
                             <span className="text-muted-foreground uppercase tracking-wide text-[10px]">{label}</span>
-                            <p className="font-mono mt-0.5 text-xs">{parts.join(" | ")}</p>
-                            {olho.produto && <p className="text-[10px] text-muted-foreground mt-0.5">Produto: {String(olho.produto)}</p>}
+                            {prodNome && (
+                              <p className="text-xs font-medium mt-0.5">{prodNome}</p>
+                            )}
+                            {!prodNome && olho.produto && (
+                              <p className="text-[10px] text-muted-foreground mt-0.5">Cód. Produto: {String(olho.produto)}</p>
+                            )}
+                            {parts.length > 0 && <p className="font-mono mt-0.5 text-xs">{parts.join(" | ")}</p>}
                           </div>
                         );
                       };
@@ -589,8 +596,8 @@ const ZeissTrackingPage: React.FC = () => {
                               {/* Prescrição OD/OE */}
                               {(od || oe) && (
                                 <div className="grid grid-cols-2 gap-2 bg-background/60 rounded p-2">
-                                  {fmtOlhoZeiss(od, "OD (Direito)")}
-                                  {fmtOlhoZeiss(oe, "OE (Esquerdo)")}
+                                  {fmtOlhoZeiss(od, "OD (Direito)", meta?.produtoOdNome)}
+                                  {fmtOlhoZeiss(oe, "OE (Esquerdo)", meta?.produtoOeNome)}
                                 </div>
                               )}
 
