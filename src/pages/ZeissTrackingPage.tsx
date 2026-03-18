@@ -472,7 +472,176 @@ const ZeissTrackingPage: React.FC = () => {
                 </div>
 
                 {isExpanded && (
-                  <CardContent className="border-t pt-4">
+                  <CardContent className="border-t pt-4 space-y-4">
+                    {/* ===== DADOS DO PEDIDO LOCAL (payload/response) ===== */}
+                    {(() => {
+                      const response = pedido.response as Record<string, unknown> | null;
+                      const payload = pedido.payload as Record<string, unknown> | null;
+                      if (!response && !payload) return null;
+
+                      const confirmado = !!pedido.numero_pedido;
+                      const isErro = (pedido.status || "").toUpperCase() === "ERRO";
+
+                      // Extract Zeiss payload fields
+                      const pedidoData = (payload as any)?.pedido || payload;
+                      const od = pedidoData?.od as Record<string, unknown> | undefined;
+                      const oe = pedidoData?.oe as Record<string, unknown> | undefined;
+                      const armacao = pedidoData?.armacao as Record<string, unknown> | undefined;
+                      const servicos = pedidoData?.servicos as { codigo: string }[] | undefined;
+
+                      const fmtOlhoZeiss = (olho: Record<string, unknown> | undefined, label: string) => {
+                        if (!olho) return null;
+                        const parts: string[] = [];
+                        if (olho.esferico) parts.push(`ESF ${olho.esferico}`);
+                        if (olho.cilindrico) parts.push(`CIL ${olho.cilindrico}`);
+                        if (olho.eixocilindrico) parts.push(`EIX ${olho.eixocilindrico}°`);
+                        if (olho.adicao) parts.push(`AD ${olho.adicao}`);
+                        if (olho.dnplonge) parts.push(`DNP-L ${olho.dnplonge}`);
+                        if (olho.dnpperto) parts.push(`DNP-P ${olho.dnpperto}`);
+                        if (olho.alturamontagem) parts.push(`ALT ${olho.alturamontagem}`);
+                        if (olho.prisma) parts.push(`PRISMA ${olho.prisma}`);
+                        if (parts.length === 0) return null;
+                        return (
+                          <div>
+                            <span className="text-muted-foreground uppercase tracking-wide text-[10px]">{label}</span>
+                            <p className="font-mono mt-0.5 text-xs">{parts.join(" | ")}</p>
+                            {olho.produto && <p className="text-[10px] text-muted-foreground mt-0.5">Produto: {String(olho.produto)}</p>}
+                          </div>
+                        );
+                      };
+
+                      return (
+                        <div className={`rounded-md border p-3 space-y-3 text-xs ${confirmado ? "bg-success-soft border-success-muted" : isErro ? "bg-danger-soft border-danger-muted" : "bg-muted/40"}`}>
+                          <div className="flex items-center gap-2">
+                            {confirmado ? (
+                              <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+                            ) : isErro ? (
+                              <XCircle className="h-4 w-4 text-danger shrink-0" />
+                            ) : (
+                              <Clock className="h-4 w-4 text-warning shrink-0" />
+                            )}
+                            <p className="font-semibold text-sm">
+                              {confirmado ? "Pedido confirmado pela Zeiss" : isErro ? "Falha no envio à Zeiss" : "Resposta da Zeiss"}
+                            </p>
+                          </div>
+
+                          {/* Response data */}
+                          {response && (
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-background/60 rounded p-2">
+                              {response.numeroPedido != null && (
+                                <>
+                                  <span className="text-muted-foreground">Nº Pedido Zeiss</span>
+                                  <span className="font-mono font-bold text-success">{String(response.numeroPedido)}</span>
+                                </>
+                              )}
+                              {response.status != null && (
+                                <>
+                                  <span className="text-muted-foreground">Status</span>
+                                  <span className="font-medium">{String(response.status)}</span>
+                                </>
+                              )}
+                              {response.voucherGerado != null && (
+                                <>
+                                  <span className="text-muted-foreground">Voucher Gerado</span>
+                                  <span className="font-mono">{String(response.voucherGerado)}</span>
+                                </>
+                              )}
+                              {response.estabelecimento != null && (
+                                <>
+                                  <span className="text-muted-foreground">Estabelecimento</span>
+                                  <span className="font-mono">{String(response.estabelecimento)}</span>
+                                </>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Payload details */}
+                          {pedidoData && (
+                            <div className="space-y-2">
+                              <span className="text-muted-foreground font-medium text-[10px] uppercase tracking-wide">Dados enviados</span>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 bg-background/60 rounded p-2">
+                                {pedidoData.oscliente && (
+                                  <div>
+                                    <span className="text-muted-foreground text-[10px] uppercase block">OS</span>
+                                    <span className="font-mono font-medium">{String(pedidoData.oscliente)}</span>
+                                  </div>
+                                )}
+                                {pedidoData.paciente && (
+                                  <div>
+                                    <span className="text-muted-foreground text-[10px] uppercase block">Paciente</span>
+                                    <span className="font-medium">{String(pedidoData.paciente)}</span>
+                                  </div>
+                                )}
+                                {pedidoData.medico && (
+                                  <div>
+                                    <span className="text-muted-foreground text-[10px] uppercase block">Médico</span>
+                                    <span>{String(pedidoData.medico)}{pedidoData.crm ? ` (CRM ${pedidoData.crm})` : ""}</span>
+                                  </div>
+                                )}
+                                {pedidoData.voucher && (
+                                  <div>
+                                    <span className="text-muted-foreground text-[10px] uppercase block">Voucher</span>
+                                    <span className="font-mono">{String(pedidoData.voucher)}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Prescrição OD/OE */}
+                              {(od || oe) && (
+                                <div className="grid grid-cols-2 gap-2 bg-background/60 rounded p-2">
+                                  {fmtOlhoZeiss(od, "OD (Direito)")}
+                                  {fmtOlhoZeiss(oe, "OE (Esquerdo)")}
+                                </div>
+                              )}
+
+                              {/* Armação */}
+                              {armacao && Object.values(armacao).some(v => v && v !== "0" && v !== "") && (
+                                <div className="bg-background/60 rounded p-2">
+                                  <span className="text-muted-foreground text-[10px] uppercase block mb-1">Armação</span>
+                                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-xs">
+                                    {armacao.tipo && <span>Tipo: {String(armacao.tipo)}</span>}
+                                    {armacao.modelo && <span>Modelo: {String(armacao.modelo)}</span>}
+                                    {armacao.largura && armacao.largura !== "0" && <span>Largura: {String(armacao.largura)}</span>}
+                                    {armacao.ponte && armacao.ponte !== "0" && <span>Ponte: {String(armacao.ponte)}</span>}
+                                    {armacao.altura && armacao.altura !== "0" && <span>Altura: {String(armacao.altura)}</span>}
+                                    {armacao.diagonalmaior && armacao.diagonalmaior !== "0" && <span>Diagonal: {String(armacao.diagonalmaior)}</span>}
+                                    {armacao.formatoaro && <span>Formato: {String(armacao.formatoaro)}</span>}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Serviços */}
+                              {servicos && servicos.length > 0 && (
+                                <div className="bg-background/60 rounded p-2">
+                                  <span className="text-muted-foreground text-[10px] uppercase block mb-1">Serviços</span>
+                                  <div className="flex flex-wrap gap-1">
+                                    {servicos.map((s, i) => (
+                                      <Badge key={i} variant="secondary" className="text-[10px]">{s.codigo}</Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Observações */}
+                              {pedidoData.observacao && (
+                                <div className="bg-background/60 rounded p-2">
+                                  <span className="text-muted-foreground text-[10px] uppercase block mb-1">Observações</span>
+                                  <p className="text-xs">{Array.isArray(pedidoData.observacao) ? pedidoData.observacao.join(" | ") : String(pedidoData.observacao)}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <p className="text-[10px] text-muted-foreground">
+                            Enviado em {formatDate(pedido.requested_at || pedido.created_at)}
+                          </p>
+                        </div>
+                      );
+                    })()}
+
+                    <Separator />
+
+                    {/* Timeline */}
                     {loadingTimeline ? (
                       <div className="flex items-center gap-2 py-4"><Loader2 className="h-4 w-4 animate-spin" /> Carregando timeline...</div>
                     ) : timeline.length === 0 ? (
