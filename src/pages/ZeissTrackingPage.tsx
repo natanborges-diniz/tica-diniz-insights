@@ -483,7 +483,7 @@ const ZeissTrackingPage: React.FC = () => {
                       const isErro = (pedido.status || "").toUpperCase() === "ERRO";
 
                       // Extract Zeiss payload fields
-                      const pedidoData = (payload as any)?.pedido || payload;
+                      const pedidoData = (payload as any)?.sao?.pedido || (payload as any)?.pedido || payload;
                       const od = pedidoData?.od as Record<string, unknown> | undefined;
                       const oe = pedidoData?.oe as Record<string, unknown> | undefined;
                       const armacao = pedidoData?.armacao as Record<string, unknown> | undefined;
