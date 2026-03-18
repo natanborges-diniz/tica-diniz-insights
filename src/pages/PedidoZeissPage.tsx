@@ -296,12 +296,10 @@ const PedidoZeissPage: React.FC = () => {
       setMatchResult(result);
 
       if (result.bestMatch) {
-        setProdutoOd(result.bestMatch.produto);
-        setProdutoOe(result.bestMatch.produto);
-        setAutoFillSource(result.source === "depara" ? "depara" : "match");
-        setConfirmedProduct(result.source === "depara");
+        const source: AutoFillSource = result.source === "depara" ? "depara" : "match";
+        handleSelectProduct(result.bestMatch.produto, source);
         toast({
-          title: result.source === "depara" ? "Produto encontrado via DE/PARA" : "Match inteligente realizado",
+          title: source === "depara" ? "Produto encontrado via DE/PARA" : "Match inteligente realizado",
           description: result.bestMatch.produto.nome,
         });
       }
