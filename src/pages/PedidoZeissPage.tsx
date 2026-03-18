@@ -21,6 +21,11 @@ import {
   ZeissMatchResult,
   zeissScoreLabel,
 } from "@/services/zeissMatchingService";
+import {
+  getCorridorOptionsForProduct,
+  extractCorridorHeight,
+  ZeissCorridorOption,
+} from "@/services/zeissProductGrouping";
 import { validateZeissPayload, hasBlockingErrors, ValidationError, isLentePronta } from "@/services/zeissValidation";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { supabase } from "@/integrations/supabase/client";
