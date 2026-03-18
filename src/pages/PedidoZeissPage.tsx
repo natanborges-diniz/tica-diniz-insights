@@ -120,6 +120,8 @@ const PedidoZeissPage: React.FC = () => {
   const [showManualSearch, setShowManualSearch] = useState(false);
   const [showMatchCandidates, setShowMatchCandidates] = useState(false);
   const [buscaProduto, setBuscaProduto] = useState("");
+  const [corridorOptions, setCorridorOptions] = useState<ZeissCorridorOption[]>([]);
+  const [selectedCorridor, setSelectedCorridor] = useState<string>("");
 
   // Two-step flow
   const [approvalData, setApprovalData] = useState<ZeissApprovalResponse | null>(null);
