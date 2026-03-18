@@ -304,7 +304,7 @@ const PedidoZeissPage: React.FC = () => {
         });
       }
     })();
-  }, [os, produtos]);
+  }, [os, produtos, handleSelectProduct]);
 
   // ── Select product handler ──
   const handleSelectProduct = useCallback((produto: ZeissProduto, source: AutoFillSource) => {
