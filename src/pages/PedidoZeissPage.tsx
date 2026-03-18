@@ -21,6 +21,11 @@ import {
   ZeissMatchResult,
   zeissScoreLabel,
 } from "@/services/zeissMatchingService";
+import {
+  getCorridorOptionsForProduct,
+  extractCorridorHeight,
+  ZeissCorridorOption,
+} from "@/services/zeissProductGrouping";
 import { validateZeissPayload, hasBlockingErrors, ValidationError, isLentePronta } from "@/services/zeissValidation";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { supabase } from "@/integrations/supabase/client";
@@ -115,6 +120,8 @@ const PedidoZeissPage: React.FC = () => {
   const [showManualSearch, setShowManualSearch] = useState(false);
   const [showMatchCandidates, setShowMatchCandidates] = useState(false);
   const [buscaProduto, setBuscaProduto] = useState("");
+  const [corridorOptions, setCorridorOptions] = useState<ZeissCorridorOption[]>([]);
+  const [selectedCorridor, setSelectedCorridor] = useState<string>("");
 
   // Two-step flow
   const [approvalData, setApprovalData] = useState<ZeissApprovalResponse | null>(null);
@@ -312,7 +319,30 @@ const PedidoZeissPage: React.FC = () => {
     // Reset services/colors when product changes
     setSelectedServicos([]);
     setSelectedCor("none");
-  }, [useSameProduct]);
+
+    // Compute corridor options for this product
+    const options = getCorridorOptionsForProduct(produto, produtos);
+    setCorridorOptions(options);
+    if (options.length > 0) {
+      const currentCorridor = extractCorridorHeight(produto.nome || "");
+      setSelectedCorridor(currentCorridor ? String(currentCorridor.height) : String(options[0].altura));
+    } else {
+      setSelectedCorridor("");
+    }
+  }, [useSameProduct, produtos]);
+
+  // ── Handle corridor change ──
+  const handleCorridorChange = useCallback((corridorHeight: string) => {
+    setSelectedCorridor(corridorHeight);
+    const option = corridorOptions.find(c => String(c.altura) === corridorHeight);
+    if (option) {
+      setProdutoOd(option.produto);
+      if (useSameProduct) setProdutoOe(option.produto);
+      // Keep confirmed state
+      setSelectedServicos([]);
+      setSelectedCor("none");
+    }
+  }, [corridorOptions, useSameProduct]);
 
   // ── Manual search ──
   const filteredProdutos = useMemo(() => {
@@ -886,7 +916,35 @@ const PedidoZeissPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* No match / manual search */}
+                {/* Corridor height selector */}
+                {produtoOd && corridorOptions.length > 1 && (
+                  <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
+                    <Label className="text-[10px] uppercase font-semibold text-muted-foreground flex items-center gap-1.5">
+                      <Glasses className="h-3.5 w-3.5" />
+                      Altura do Corredor
+                    </Label>
+                    <div className="flex flex-wrap gap-2">
+                      {corridorOptions.map(opt => (
+                        <button
+                          key={opt.cod}
+                          onClick={() => handleCorridorChange(String(opt.altura))}
+                          className={cn(
+                            "px-4 py-2 rounded-lg border-2 text-sm font-semibold transition-all",
+                            selectedCorridor === String(opt.altura)
+                              ? "border-primary bg-primary/10 text-primary shadow-sm"
+                              : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-primary/5"
+                          )}
+                        >
+                          {opt.altura}mm
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Produto selecionado: <span className="font-mono">{produtoOd.cod}</span> — {produtoOd.nome}
+                    </p>
+                  </div>
+                )}
+
                 {(!produtoOd || showManualSearch) && (
                   <>
                     {!produtoOd && matchResult && matchResult.candidates.length === 0 && !loadingProdutos && (
