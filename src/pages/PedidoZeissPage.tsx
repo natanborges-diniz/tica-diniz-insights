@@ -916,7 +916,35 @@ const PedidoZeissPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* No match / manual search */}
+                {/* Corridor height selector */}
+                {produtoOd && corridorOptions.length > 1 && (
+                  <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
+                    <Label className="text-[10px] uppercase font-semibold text-muted-foreground flex items-center gap-1.5">
+                      <Glasses className="h-3.5 w-3.5" />
+                      Altura do Corredor
+                    </Label>
+                    <div className="flex flex-wrap gap-2">
+                      {corridorOptions.map(opt => (
+                        <button
+                          key={opt.cod}
+                          onClick={() => handleCorridorChange(String(opt.altura))}
+                          className={cn(
+                            "px-4 py-2 rounded-lg border-2 text-sm font-semibold transition-all",
+                            selectedCorridor === String(opt.altura)
+                              ? "border-primary bg-primary/10 text-primary shadow-sm"
+                              : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-primary/5"
+                          )}
+                        >
+                          {opt.altura}mm
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Produto selecionado: <span className="font-mono">{produtoOd.cod}</span> — {produtoOd.nome}
+                    </p>
+                  </div>
+                )}
+
                 {(!produtoOd || showManualSearch) && (
                   <>
                     {!produtoOd && matchResult && matchResult.candidates.length === 0 && !loadingProdutos && (
