@@ -77,6 +77,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       label: "Hub Financeiro",
       items: [
         { title: "Lançamentos", url: "/financeiro/hub", icon: Landmark },
+        { title: "Conciliação Cartões", url: "/financeiro/cartoes", icon: CreditCard },
       ],
     },
     {
