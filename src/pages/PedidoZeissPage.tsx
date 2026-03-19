@@ -561,6 +561,19 @@ const PedidoZeissPage: React.FC = () => {
         setPedidoConfirmado(confirm);
         toast({ title: "Pedido confirmado!", description: `Nº ${confirm.numeroPedido}` });
 
+        // Register in cache for OS monitor badge
+        registrarPedidoNoCache(codOs, String(confirm.numeroPedido), "ZEISS", "CONFIRMADO", new Date().toISOString(), confirm.voucherGerado || null);
+
+        // Save voucher linked to CPF
+        const voucherGerado = confirm.voucherGerado;
+        const cpfCliente = cpf || paramCpf;
+        if (voucherGerado && cpfCliente) {
+          await supabase.from("voucher_cliente").upsert(
+            { cpf: cpfCliente.replace(/[.\-]/g, ""), voucher: voucherGerado, numero_pedido: String(confirm.numeroPedido), cod_empresa: codEmpresa, cliente_nome: paciente || "" },
+            { onConflict: "cpf" }
+          );
+        }
+
         // Save DE/PARA for future use
         const descricao = os?.lenteOdDescricao || os?.lenteOeDescricao;
         if (descricao && produtoOd) {
