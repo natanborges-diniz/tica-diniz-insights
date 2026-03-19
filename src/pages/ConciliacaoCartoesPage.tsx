@@ -192,8 +192,8 @@ export default function ConciliacaoCartoesPage() {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {empresas.map(e => (
-                  <SelectItem key={e.cod_empresa} value={String(e.cod_empresa)}>
-                    {e.nome_fantasia || `Empresa ${e.cod_empresa}`}
+                  <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
+                    {e.nome || `Empresa ${e.codEmpresa}`}
                   </SelectItem>
                 ))}
               </SelectContent>

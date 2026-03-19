@@ -87,6 +87,7 @@ const App = () => (
                 {/* Financeiro */}
                 <Route element={<ModuleGuard module="financeiro" />}>
                   <Route path="/financeiro/hub" element={<FinanceiroHubPage />} />
+                  <Route path="/financeiro/cartoes" element={<ConciliacaoCartoesPage />} />
                   <Route path="/financeiro" element={<FinanceiroDashboard />} />
                   <Route path="/financeiro/dre" element={<FinanceiroDreDashboard />} />
                   <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaDashboard />} />
