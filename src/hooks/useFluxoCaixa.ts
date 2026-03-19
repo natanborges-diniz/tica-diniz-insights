@@ -1,7 +1,7 @@
 // src/hooks/useFluxoCaixa.ts
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { getFinanceiroParcelas, FinanceiroParcela } from "../services/financeiroService";
+import { getFluxoCaixa, FluxoCaixaLancamento } from "../services/fluxoCaixaService";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
 
@@ -43,7 +43,7 @@ function getDefaultFilters(defaultEmpresa: EmpresaParam): FluxoCaixaFilters {
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
   return {
-    empresa: defaultEmpresa || '', // Default: empresa do profile
+    empresa: defaultEmpresa || '',
     dataIni: formatLocalDate(primeiroDiaMes),
     dataFim: formatLocalDate(ultimoDiaMes),
     granularidade: "DIARIO",
@@ -53,10 +53,8 @@ function getDefaultFilters(defaultEmpresa: EmpresaParam): FluxoCaixaFilters {
 function formatarPeriodo(dateStr: string | null, granularidade: Granularidade): string {
   if (!dateStr) return "SEM DATA";
 
-  const date = new Date(dateStr + "T00:00:00");
-
   if (granularidade === "MENSAL") {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    return dateStr.substring(0, 7); // YYYY-MM
   }
   return dateStr;
 }
@@ -68,14 +66,13 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
     ...initialFilters,
   });
   
-  // Atualizar empresa quando o profile carregar
   useEffect(() => {
     if (defaultEmpresa && filters.empresa === '') {
       setFilters(prev => ({ ...prev, empresa: defaultEmpresa }));
     }
   }, [defaultEmpresa]);
 
-  const [data, setData] = useState<FinanceiroParcela[]>([]);
+  const [data, setData] = useState<FluxoCaixaLancamento[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,15 +81,13 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
     setError(null);
 
     try {
-      const parcelas = await getFinanceiroParcelas({
+      const lancamentos = await getFluxoCaixa({
         empresa: filters.empresa,
         dataInicio: filters.dataIni,
         dataFim: filters.dataFim,
-        campoData: "VENCIMENTO",
-        tipo: "TODOS",
-        situacao: "TODOS",
+        apenasBaixado: false, // includes projections
       });
-      setData(parcelas);
+      setData(lancamentos);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao buscar fluxo de caixa");
       setData([]);
@@ -102,7 +97,6 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
   }, [filters.dataIni, filters.dataFim, filters.empresa]);
 
   useEffect(() => {
-    // Busca automaticamente se empresa estiver definida (incluindo 'ALL')
     if (filters.empresa !== null) {
       fetchData();
     }
@@ -111,14 +105,14 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
   const fluxoAgrupado = useMemo<FluxoCaixaItem[]>(() => {
     const periodoMap = new Map<string, { receber: number; pagar: number }>();
 
-    for (const parcela of data) {
-      const periodo = formatarPeriodo(parcela.dataVencimento, filters.granularidade);
+    for (const lanc of data) {
+      const periodo = formatarPeriodo(lanc.dataReferencia, filters.granularidade);
       const existing = periodoMap.get(periodo) || { receber: 0, pagar: 0 };
 
-      if (parcela.tipoLancamento === "RECEBER") {
-        existing.receber += parcela.valor;
+      if (lanc.tipo === "RECEBER") {
+        existing.receber += lanc.valor;
       } else {
-        existing.pagar += parcela.valor;
+        existing.pagar += lanc.valor;
       }
 
       periodoMap.set(periodo, existing);
@@ -131,11 +125,10 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
         totalReceber: valores.receber,
         totalPagar: valores.pagar,
         saldo: valores.receber - valores.pagar,
-        saldoAcumulado: 0, // será calculado após ordenação
+        saldoAcumulado: 0,
       });
     }
 
-    // Ordenar e calcular saldo acumulado
     result.sort((a, b) => a.periodo.localeCompare(b.periodo));
     let acumulado = 0;
     for (const item of result) {
@@ -152,12 +145,12 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
     let qtdReceber = 0;
     let qtdPagar = 0;
 
-    for (const parcela of data) {
-      if (parcela.tipoLancamento === "RECEBER") {
-        totalReceber += parcela.valor;
+    for (const lanc of data) {
+      if (lanc.tipo === "RECEBER") {
+        totalReceber += lanc.valor;
         qtdReceber++;
       } else {
-        totalPagar += parcela.valor;
+        totalPagar += lanc.valor;
         qtdPagar++;
       }
     }
