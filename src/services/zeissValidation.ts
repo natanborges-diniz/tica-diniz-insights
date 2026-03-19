@@ -25,6 +25,7 @@ interface ArmacaoFields {
   largura: string;
   diagonalMaior: string;
   tipo: string;
+  formatoAro?: string;
 }
 
 /**
