@@ -46,7 +46,9 @@ Deno.serve(async (req) => {
 
     console.log(`[sync-parcelas] Mode: ${mode}, Period: ${dataInicio} to ${dataFimExtended}, Empresa: ${codEmpresa}`);
 
-    const fbUrl = `${FIREBIRD_BASE_URL}/api/v1/financeiro/parcelas?dataInicio=${dataInicio}&dataFim=${dataFimExtended}&empresa=${codEmpresa}&campoData=VENCIMENTO`;
+    const empresaParam = codEmpresa === "ALL" ? "TODAS" : codEmpresa;
+    const fbUrl = `${FIREBIRD_BASE_URL}/api/v1/financeiro/parcelas?dataInicio=${dataInicio}&dataFim=${dataFimExtended}&empresa=${empresaParam}&campoData=VENCIMENTO`;
+    console.log(`[sync-parcelas] Firebird URL: ${fbUrl}`);
     const fbResponse = await fetch(fbUrl, {
       method: "GET",
       headers: { "Content-Type": "application/json" },
