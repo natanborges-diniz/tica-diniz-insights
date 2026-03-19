@@ -28,6 +28,7 @@ import {
 } from "@/services/zeissProductGrouping";
 import { validateZeissPayload, hasBlockingErrors, ValidationError, isLentePronta } from "@/services/zeissValidation";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
+import { registrarPedidoNoCache } from "@/utils/pedidosMapCache";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
