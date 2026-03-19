@@ -30,11 +30,17 @@
 - [x] Cobrança → vincular lançamento RECEBER ao emitir boleto (auto-gera lancamentos_financeiros com origem=COBRANCA)
 - [x] Conciliação automática extrato x lançamentos (action conciliar_auto_lancamentos: match por valor+tipo+data±7dias, cria lançamentos BAIXADOS+requer_validacao para entradas sem match)
 
-### 🔲 Sprint 5 — DRE/Fluxo derivados + Refinamentos
-- [ ] DRE baseado em lançamentos BAIXADOS
-- [ ] Fluxo de Caixa real vs projetado via lançamentos
-- [ ] Import automático do ERP
-- [ ] Lançamentos recorrentes (pg_cron)
+### ✅ Sprint 5 (Concluído)
+- [x] Edge function `financeiro-relatorios` (DRE + Fluxo de Caixa)
+- [x] DRE baseado em lançamentos BAIXADOS via ledger central
+- [x] Fluxo de Caixa real vs projetado via ledger central
+
+### ✅ Sprint 6 (Concluído)
+- [x] Action `importar_erp` (sync ERP → ledger com dedup por origem_id)
+- [x] Actions `classificar` + `listar_pendentes_validacao` + `resumo_financeiro`
+- [x] Página `FinanceiroClassificacaoPage` (`/financeiro/classificacao`)
+- [x] Página `FinanceiroOverviewPage` (`/financeiro/overview`) — Dashboard unificado
+- [x] Sidebar com seção "Visão Geral" + "Classificação"
 
 
 # Plano Revisado: Sistema Financeiro Centralizado com Bordero e Conciliacao de Cartoes
