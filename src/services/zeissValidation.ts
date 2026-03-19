@@ -25,6 +25,7 @@ interface ArmacaoFields {
   largura: string;
   diagonalMaior: string;
   tipo: string;
+  formatoAro?: string;
 }
 
 /**
@@ -117,8 +118,10 @@ export function validateZeissPayload(
       || (armacao.largura && armacao.largura !== "0")
       || (armacao.diagonalMaior && armacao.diagonalMaior !== "0");
 
-    if (!hasMedidas) {
-      errors.push({ field: "armacao.medidas", message: "Medidas da armação obrigatórias para lente surfaçada (ponte, altura, largura ou diagonal)", severity: "error" });
+    const hasFormatoAro = !!armacao.formatoAro?.trim();
+
+    if (!hasMedidas && !hasFormatoAro) {
+      errors.push({ field: "armacao.medidas", message: "Medidas da armação ou formato do aro obrigatórios para lente surfaçada", severity: "error" });
     }
 
     const ponte = parseFloat(armacao.ponte);
