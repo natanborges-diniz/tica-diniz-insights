@@ -233,17 +233,59 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
       conciliado: isConciliado,
     });
 
-    if (!error) inseridos++;
-    else console.warn("[btg-dda] Insert error:", error.message);
+    if (!error) {
+      inseridos++;
+
+      // Auto-create lancamento_financeiro for this DDA title
+      const { data: ddaRow } = await db
+        .from("btg_dda_titulos")
+        .select("id")
+        .eq("btg_dda_id", btgDdaId)
+        .eq("cod_empresa", ce)
+        .maybeSingle();
+
+      if (ddaRow) {
+        // Check if lancamento already exists for this DDA
+        const { data: existingLanc } = await db
+          .from("lancamentos_financeiros")
+          .select("id")
+          .eq("btg_dda_id", ddaRow.id)
+          .eq("cod_empresa", ce)
+          .maybeSingle();
+
+        if (!existingLanc) {
+          await db.from("lancamentos_financeiros").insert({
+            cod_empresa: ce,
+            tipo: "PAGAR",
+            descricao: `DDA - ${emissorVal || "Título"}`,
+            valor: valorVal,
+            data_vencimento: vencVal,
+            pessoa_nome: emissorVal,
+            pessoa_documento: docEmissorVal,
+            natureza: null,
+            categoria: null,
+            forma_pagamento: "BOLETO",
+            origem: "DDA",
+            origem_id: btgDdaId || null,
+            btg_dda_id: ddaRow.id,
+            status: "PREVISTO",
+            observacao: linhaVal ? `Linha digitável: ${linhaVal}` : null,
+          });
+          lancamentosGerados++;
+        }
+      }
+    } else {
+      console.warn("[btg-dda] Insert error:", error.message);
+    }
   }
 
-  // Include a sample of raw BTG data for debugging field mapping
   const sampleItem = btgData.length > 0 ? btgData[0] : null;
 
   return json({
     success: true,
     importados: inseridos,
     duplicados,
+    lancamentos_gerados: lancamentosGerados,
     registros_limpos: deletedOld ?? 0,
     total_btg: btgData.length,
     sandbox: isSandbox,
