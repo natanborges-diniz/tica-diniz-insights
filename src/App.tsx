@@ -26,6 +26,7 @@ import BankingExtratoDashboard from "./pages/BankingExtratoDashboard";
 import BankingPagamentosDashboard from "./pages/BankingPagamentosDashboard";
 import BankingCobrancasDashboard from "./pages/BankingCobrancasDashboard";
 import BankingDdaDashboard from "./pages/BankingDdaDashboard";
+import FinanceiroHubPage from "./pages/FinanceiroHubPage";
 import InteligenciaVendasDashboard from "./pages/InteligenciaVendasDashboard";
 import MetasConfigDashboard from "./pages/MetasConfigDashboard";
 import CentralIADashboard from "./pages/CentralIADashboard";
