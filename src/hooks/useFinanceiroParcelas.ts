@@ -1,7 +1,7 @@
 // src/hooks/useFinanceiroParcelas.ts
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { getFinanceiroParcelas, FinanceiroParcela } from "../services/financeiroService";
+import { getFinanceiroParcelasFromCache, getFinanceiroParcelas, FinanceiroParcela } from "../services/financeiroService";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
 
@@ -46,7 +46,7 @@ function getDefaultFilters(defaultEmpresa: EmpresaParam): FinanceiroFilters {
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
   return {
-    empresa: defaultEmpresa || '', // Default: empresa do profile
+    empresa: defaultEmpresa || '',
     dataIni: formatLocalDate(primeiroDiaMes),
     dataFim: formatLocalDate(ultimoDiaMes),
     tipo: "TODOS",
@@ -129,8 +129,6 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
     ...initialFilters,
   });
   
-  // Atualizar empresa quando o profile carregar
-  const empresaInitRef = useCallback(() => {}, []);
   useEffect(() => {
     if (defaultEmpresa && filters.empresa === '') {
       setFilters(prev => ({ ...prev, empresa: defaultEmpresa }));
@@ -140,13 +138,15 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
   const [data, setData] = useState<FinanceiroParcela[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<'cache' | 'live' | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const parcelas = await getFinanceiroParcelas({
+      // Try cache first (instant)
+      const cached = await getFinanceiroParcelasFromCache({
         empresa: filters.empresa,
         dataInicio: filters.dataIni,
         dataFim: filters.dataFim,
@@ -154,7 +154,26 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
         situacao: filters.situacao,
         campoData: filters.campoData,
       });
-      setData(parcelas);
+
+      if (cached.length > 0) {
+        setData(cached);
+        setSource('cache');
+        setLoading(false);
+        return;
+      }
+
+      // Fallback to live Firebird query if cache is empty
+      console.log('[useFinanceiroParcelas] Cache vazio, buscando do ERP...');
+      const live = await getFinanceiroParcelas({
+        empresa: filters.empresa,
+        dataInicio: filters.dataIni,
+        dataFim: filters.dataFim,
+        tipo: filters.tipo,
+        situacao: filters.situacao,
+        campoData: filters.campoData,
+      });
+      setData(live);
+      setSource('live');
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao buscar parcelas");
       setData([]);
@@ -164,7 +183,6 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
   }, [filters.dataIni, filters.dataFim, filters.empresa, filters.tipo, filters.situacao, filters.campoData]);
 
   useEffect(() => {
-    // Busca automaticamente se empresa estiver definida (incluindo 'ALL')
     if (filters.empresa !== null) {
       fetchData();
     }
@@ -186,6 +204,7 @@ export function useFinanceiroParcelas(initialFilters?: Partial<FinanceiroFilters
     loading,
     error,
     reload,
+    source,
   };
 }
 

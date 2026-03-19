@@ -1,6 +1,7 @@
 // src/services/financeiroService.ts
-// Service para endpoints financeiros
+// Service para endpoints financeiros — agora lê do cache (parcelas_cache)
 
+import { supabase } from "@/integrations/supabase/client";
 import { apiGet, EmpresaParam, formatEmpresaParam } from './firebirdBridge';
 
 // ============================================
@@ -77,6 +78,60 @@ function mapParcelaRaw(r: FinanceiroParcelaRaw): FinanceiroParcela {
   };
 }
 
+// ── Cache-based query (primary) ──
+export async function getFinanceiroParcelasFromCache(
+  params: GetFinanceiroParcelasParams
+): Promise<FinanceiroParcela[]> {
+  const campoData = params.campoData || 'VENCIMENTO';
+  const dateColumn = campoData === 'EMISSAO' ? 'data_emissao'
+    : campoData === 'PAGAMENTO' ? 'data_pagamento'
+    : 'data_vencimento';
+
+  let query = supabase
+    .from('parcelas_cache')
+    .select('*')
+    .gte(dateColumn, params.dataInicio)
+    .lte(dateColumn, params.dataFim)
+    .order(dateColumn, { ascending: true });
+
+  // Filter by empresa
+  const emp = params.empresa;
+  if (emp && emp !== 'ALL' && emp !== '') {
+    query = query.eq('cod_empresa', Number(emp));
+  }
+
+  // Filter by tipo
+  if (params.tipo && params.tipo !== 'TODOS') {
+    query = query.eq('tipo_lancamento', params.tipo);
+  }
+
+  // Filter by situacao
+  if (params.situacao && params.situacao !== 'TODOS') {
+    query = query.eq('situacao', params.situacao);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((r) => ({
+    codEmpresa: r.cod_empresa ?? 0,
+    empresaNome: r.empresa_nome ?? '',
+    tipoLancamento: r.tipo_lancamento ?? 'RECEBER',
+    documento: r.documento ?? '',
+    pessoaNome: r.pessoa_nome ?? '',
+    dataVencimento: r.data_vencimento ?? null,
+    dataEmissao: r.data_emissao ?? null,
+    dataPagamento: r.data_pagamento ?? null,
+    valor: Number(r.valor) || 0,
+    valorPago: Number(r.valor_pago) || 0,
+    situacao: r.situacao ?? 'EM ABERTO',
+    contaNumero: r.conta_numero ?? null,
+    contaDescricao: r.conta_descricao ?? null,
+    formaPagamentoTipo: r.forma_pagamento_tipo ?? null,
+  }));
+}
+
+// ── Firebird live query (fallback) ──
 export async function getFinanceiroParcelas(
   params: GetFinanceiroParcelasParams
 ): Promise<FinanceiroParcela[]> {
