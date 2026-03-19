@@ -1,7 +1,7 @@
 // src/services/financeiroDreService.ts
-// Service para endpoint de DRE
+// Service para DRE derivado do ledger central (lancamentos_financeiros)
 
-import { apiGet, EmpresaParam, formatEmpresaParam } from './firebirdBridge';
+import { supabase } from "@/integrations/supabase/client";
 
 // ============================================
 // INTERFACES - DRE
@@ -10,14 +10,11 @@ import { apiGet, EmpresaParam, formatEmpresaParam } from './firebirdBridge';
 interface DreLinhaRaw {
   COMPETENCIA?: string;
   COD_EMPRESA?: number;
-  EMPRESA_NOME?: string;
   CONTACLA_CODIGO?: string;
-  CONTACLA_NUMERO?: string;
   CONTACLA_DESCRICAO?: string;
   VALOR_TOTAL?: number;
   GRUPO?: string;
   SUBGRUPO?: string;
-  VALOR?: number;
 }
 
 export interface DreLinha {
@@ -33,7 +30,7 @@ export interface DreLinha {
 }
 
 export interface GetDreParams {
-  empresa: EmpresaParam;
+  empresa: number | string | null;
   dataInicio: string;
   dataFim: string;
 }
@@ -50,28 +47,26 @@ const GRUPOS_SINAL_NEGATIVO = new Set<string>([
  * Normaliza o sinal do valor conforme convenção contábil:
  * - Receitas: sempre positivo
  * - Deduções/Custos/Despesas: sempre negativo
- * Isso protege contra inconsistência silenciosa se o backend mudar a convenção.
  */
 function normalizarSinalDre(valor: number, grupo: string): number {
   if (GRUPOS_SINAL_NEGATIVO.has(grupo)) {
-    return valor > 0 ? -valor : valor; // garante negativo
+    return valor > 0 ? -valor : valor;
   }
-  // Receitas devem ser positivas
   if (grupo === 'RECEITA_BRUTA' || grupo === 'OUTRAS_RECEITAS') {
-    return valor < 0 ? -valor : valor; // garante positivo
+    return valor < 0 ? -valor : valor;
   }
-  return valor; // grupos desconhecidos: sem alteração
+  return valor;
 }
 
 function mapDreLinhaRaw(r: DreLinhaRaw): DreLinha {
   const grupo = r.GRUPO ?? '';
-  const valorBruto = r.VALOR_TOTAL ?? r.VALOR ?? 0;
+  const valorBruto = r.VALOR_TOTAL ?? 0;
   return {
     competencia: r.COMPETENCIA ?? '',
     codEmpresa: r.COD_EMPRESA ?? 0,
-    empresaNome: r.EMPRESA_NOME ?? '',
+    empresaNome: '',
     contaclaCodigo: r.CONTACLA_CODIGO ?? null,
-    contaclaNumero: r.CONTACLA_NUMERO ?? null,
+    contaclaNumero: null,
     contaclaDescricao: r.CONTACLA_DESCRICAO ?? null,
     valorTotal: normalizarSinalDre(valorBruto, grupo),
     grupo,
@@ -80,14 +75,20 @@ function mapDreLinhaRaw(r: DreLinhaRaw): DreLinha {
 }
 
 export async function getFinanceiroDre(params: GetDreParams): Promise<DreLinha[]> {
-  const queryParams: Record<string, string | number | undefined> = {
-    empresa: formatEmpresaParam(params.empresa),
-    dataInicio: params.dataInicio,
-    dataFim: params.dataFim,
-  };
+  const codEmpresa = params.empresa === 'ALL' || params.empresa === '' ? null : params.empresa ? Number(params.empresa) : null;
 
-  const raw = await apiGet<DreLinhaRaw>('/financeiro/dre', queryParams);
+  const { data, error } = await supabase.functions.invoke('financeiro-relatorios', {
+    body: {
+      action: 'dre',
+      cod_empresa: codEmpresa,
+      data_inicio: params.dataInicio,
+      data_fim: params.dataFim,
+    },
+  });
 
+  if (error) throw new Error(error.message || 'Erro ao buscar DRE');
+
+  const raw = Array.isArray(data) ? data : [];
   return raw.map(mapDreLinhaRaw);
 }
 

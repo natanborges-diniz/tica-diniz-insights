@@ -24,7 +24,7 @@ function getDefaultFilters(defaultEmpresa: EmpresaParam): DreFilters {
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
   return {
-    empresa: defaultEmpresa || '', // Default: empresa do profile
+    empresa: defaultEmpresa || '',
     dataIni: formatLocalDate(primeiroDiaMes),
     dataFim: formatLocalDate(ultimoDiaMes),
   };
@@ -44,7 +44,6 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
     ...initialFilters,
   });
   
-  // Atualizar empresa quando o profile carregar
   useEffect(() => {
     if (defaultEmpresa && filters.empresa === '') {
       setFilters(prev => ({ ...prev, empresa: defaultEmpresa }));
@@ -75,7 +74,6 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
   }, [filters.dataIni, filters.dataFim, filters.empresa]);
 
   useEffect(() => {
-    // Busca automaticamente se empresa estiver definida (incluindo 'ALL')
     if (filters.empresa !== null) {
       fetchData();
     }
