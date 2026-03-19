@@ -28,6 +28,7 @@ import {
 } from "@/services/zeissProductGrouping";
 import { validateZeissPayload, hasBlockingErrors, ValidationError, isLentePronta } from "@/services/zeissValidation";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
+import { registrarPedidoNoCache } from "@/utils/pedidosMapCache";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -47,7 +48,7 @@ import ZeissValidationPanel from "@/components/zeiss-pedido/ZeissValidationPanel
 import {
   ArrowLeft, Send, Eye, Glasses, Package, Loader2, Check, AlertTriangle,
   Search, ShieldCheck, CheckCircle2, DollarSign, Zap, Sparkles, ChevronDown,
-  ChevronUp, XCircle, Ban,
+  ChevronUp, XCircle, Ban, Copy, Ticket,
 } from "lucide-react";
 
 // ============================================
@@ -560,6 +561,19 @@ const PedidoZeissPage: React.FC = () => {
         setPedidoConfirmado(confirm);
         toast({ title: "Pedido confirmado!", description: `Nº ${confirm.numeroPedido}` });
 
+        // Register in cache for OS monitor badge
+        registrarPedidoNoCache(codOs, String(confirm.numeroPedido), "ZEISS", "CONFIRMADO", new Date().toISOString(), confirm.voucherGerado || null);
+
+        // Save voucher linked to CPF
+        const voucherGerado = confirm.voucherGerado;
+        const cpfCliente = cpf || paramCpf;
+        if (voucherGerado && cpfCliente) {
+          await supabase.from("voucher_cliente").upsert(
+            { cpf: cpfCliente.replace(/[.\-]/g, ""), voucher: voucherGerado, numero_pedido: String(confirm.numeroPedido), cod_empresa: codEmpresa, cliente_nome: paciente || "" },
+            { onConflict: "cpf" }
+          );
+        }
+
         // Save DE/PARA for future use
         const descricao = os?.lenteOdDescricao || os?.lenteOeDescricao;
         if (descricao && produtoOd) {
@@ -583,9 +597,23 @@ const PedidoZeissPage: React.FC = () => {
       const result = await criarPedidoZeiss(payload, codOs, codEmpresa, cpf, paciente);
 
       if ("numeroPedido" in result) {
-        setPedidoConfirmado(result as ZeissConfirmResponse);
+        const confirmRes = result as ZeissConfirmResponse;
+        setPedidoConfirmado(confirmRes);
         setApprovalData(null);
-        toast({ title: "Pedido confirmado!", description: `Nº ${(result as ZeissConfirmResponse).numeroPedido}` });
+        toast({ title: "Pedido confirmado!", description: `Nº ${confirmRes.numeroPedido}` });
+
+        // Register in cache for OS monitor badge
+        registrarPedidoNoCache(codOs, String(confirmRes.numeroPedido), "ZEISS", "CONFIRMADO", new Date().toISOString(), confirmRes.voucherGerado || null);
+
+        // Save voucher linked to CPF
+        const voucherGerado = confirmRes.voucherGerado;
+        const cpfCliente = cpf || paramCpf;
+        if (voucherGerado && cpfCliente) {
+          await supabase.from("voucher_cliente").upsert(
+            { cpf: cpfCliente.replace(/[.\-]/g, ""), voucher: voucherGerado, numero_pedido: String(confirmRes.numeroPedido), cod_empresa: codEmpresa, cliente_nome: paciente || "" },
+            { onConflict: "cpf" }
+          );
+        }
 
         const descricao = os?.lenteOdDescricao || os?.lenteOeDescricao;
         if (descricao && produtoOd) {
@@ -649,6 +677,14 @@ const PedidoZeissPage: React.FC = () => {
   // ============================================
 
   if (pedidoConfirmado) {
+    const handleCopyVoucher = (v: string) => {
+      navigator.clipboard.writeText(v);
+      toast({ title: "Voucher copiado!", description: v });
+    };
+    const handleCopyPedido = (v: string) => {
+      navigator.clipboard.writeText(v);
+      toast({ title: "Nº do pedido copiado!", description: v });
+    };
     return (
       <ScrollArea className="h-full">
         <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-6">
@@ -656,9 +692,23 @@ const PedidoZeissPage: React.FC = () => {
             <CardContent className="pt-6 text-center space-y-4">
               <CheckCircle2 className="h-16 w-16 text-emerald-600 mx-auto" />
               <h2 className="text-xl font-bold">Pedido Zeiss Confirmado!</h2>
-              <p className="text-2xl font-mono font-bold text-primary">{pedidoConfirmado.numeroPedido}</p>
+              <div className="flex items-center justify-center gap-2">
+                <p className="text-2xl font-mono font-bold text-primary">{pedidoConfirmado.numeroPedido}</p>
+                {pedidoConfirmado.numeroPedido && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleCopyPedido(pedidoConfirmado.numeroPedido!)}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
               {pedidoConfirmado.voucherGerado && (
-                <Badge variant="secondary" className="text-sm">Voucher: {pedidoConfirmado.voucherGerado}</Badge>
+                <div className="flex items-center justify-center gap-2 p-3 rounded-lg border border-primary/30 bg-primary/5">
+                  <Ticket className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Voucher:</span>
+                  <span className="font-mono font-bold text-primary">{pedidoConfirmado.voucherGerado}</span>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleCopyVoucher(pedidoConfirmado.voucherGerado!)}>
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               )}
               <div className="flex gap-3 justify-center pt-4">
                 <Button variant="outline" onClick={() => navigate("/os")}>Voltar ao Monitor</Button>
@@ -1079,7 +1129,8 @@ const PedidoZeissPage: React.FC = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
                     <Label className="text-[10px] uppercase text-muted-foreground">OS</Label>
-                    <Input value={osNumero} onChange={e => setOsNumero(e.target.value)} className="h-8 text-sm font-mono bg-muted" readOnly />
+                    <Input value={osNumero} onChange={e => setOsNumero(e.target.value)} className="h-8 text-sm font-mono" />
+                    <span className="text-[9px] text-muted-foreground">Pré-preenchido da OS. Editável se necessário.</span>
                   </div>
                   <div>
                     <Label className="text-[10px] uppercase text-muted-foreground">Paciente</Label>
@@ -1177,8 +1228,9 @@ const PedidoZeissPage: React.FC = () => {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
                   <div>
-                    <Label className="text-[10px] uppercase text-muted-foreground">Modelo</Label>
+                    <Label className="text-[10px] uppercase text-muted-foreground">Referência</Label>
                     <Input value={armacao.modelo} onChange={e => setArmacao(a => ({ ...a, modelo: e.target.value }))} className="h-8 text-sm" />
+                    <span className="text-[9px] text-muted-foreground">Referência da armação no ERP</span>
                   </div>
                   <div>
                     <Label className="text-[10px] uppercase text-muted-foreground">Ponte</Label>
