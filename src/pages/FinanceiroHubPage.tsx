@@ -332,7 +332,7 @@ export default function FinanceiroHubPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-              <ArrowDownCircle className="h-4 w-4 text-emerald-600" /> A Receber
+              <ArrowDownCircle className="h-4 w-4 text-primary" /> A Receber
             </CardTitle>
           </CardHeader>
           <CardContent><p className="text-2xl font-bold">{fmtCurrency(totalReceber)}</p></CardContent>
