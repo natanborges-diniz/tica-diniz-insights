@@ -88,6 +88,7 @@ const App = () => (
 
                 {/* Financeiro */}
                 <Route element={<ModuleGuard module="financeiro" />}>
+                  <Route path="/financeiro" element={<Navigate to="/financeiro/overview" replace />} />
                   <Route path="/financeiro/overview" element={<FinanceiroOverviewPage />} />
                   <Route path="/financeiro/hub" element={<FinanceiroHubPage />} />
                   <Route path="/financeiro/cartoes" element={<ConciliacaoCartoesPage />} />
