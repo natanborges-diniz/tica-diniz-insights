@@ -384,8 +384,7 @@ export default function FinanceiroHubPage() {
       <BaseDialog
         open={borderoDialogOpen}
         onOpenChange={setBorderoDialogOpen}
-        title="Criar Borderô de Pagamento"
-        subtitle={`${selectedIds.size} lançamento(s) selecionado(s) — ${fmtCurrency(
+        title={`Criar Borderô — ${selectedIds.size} lançamento(s) — ${fmtCurrency(
           previstosPagar.filter(l => selectedIds.has(l.id)).reduce((s, l) => s + l.valor, 0)
         )}`}
         footer={
