@@ -17,6 +17,7 @@ Deno.serve(async (req) => {
     const action = body.action;
 
     switch (action) {
+      // ── Lançamentos ──
       case "listar":
         return await listar(body);
       case "criar":
@@ -31,6 +32,25 @@ Deno.serve(async (req) => {
         return await baixar(body, auth.userId);
       case "cancelar":
         return await cancelar(body);
+
+      // ── Borderôs ──
+      case "listar_borderos":
+        return await listarBorderos(body);
+      case "criar_bordero":
+        return await criarBordero(body, auth.userId);
+      case "adicionar_ao_bordero":
+        return await adicionarAoBordero(body);
+      case "remover_do_bordero":
+        return await removerDoBordero(body);
+      case "aprovar_bordero":
+        return await aprovarBordero(body, auth.userId);
+      case "enviar_bordero_btg":
+        return await enviarBorderoBtg(body, auth.userId);
+      case "cancelar_bordero":
+        return await cancelarBordero(body);
+      case "detalhe_bordero":
+        return await detalheBordero(body);
+
       default:
         return json({ error: `Action desconhecida: ${action}` }, 400);
     }
@@ -48,7 +68,21 @@ function json(data: unknown, status = 200) {
   });
 }
 
-// ── LISTAR ──────────────────────────────────────────────
+async function requireAdmin(userId: string) {
+  const { data: roles } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin");
+  if (!roles || roles.length === 0) {
+    throw new Error("Apenas administradores podem executar esta ação");
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// LANÇAMENTOS
+// ═══════════════════════════════════════════════════════════
+
 async function listar(body: Record<string, unknown>) {
   const { cod_empresa, tipo, status, natureza, origem, data_inicio, data_fim, requer_validacao, limit: lim } = body;
 
@@ -72,7 +106,6 @@ async function listar(body: Record<string, unknown>) {
   return json(data);
 }
 
-// ── CRIAR ───────────────────────────────────────────────
 async function criar(body: Record<string, unknown>, userId: string) {
   const record = {
     cod_empresa: body.cod_empresa,
@@ -110,12 +143,10 @@ async function criar(body: Record<string, unknown>, userId: string) {
   return json(data, 201);
 }
 
-// ── EDITAR ──────────────────────────────────────────────
 async function editar(body: Record<string, unknown>, _userId: string) {
   const { id, ...fields } = body;
   if (!id) throw new Error("id obrigatório");
 
-  // Only allow editing PREVISTO entries
   const { data: existing } = await supabase
     .from("lancamentos_financeiros")
     .select("status")
@@ -139,7 +170,6 @@ async function editar(body: Record<string, unknown>, _userId: string) {
   return json(data);
 }
 
-// ── EXCLUIR ─────────────────────────────────────────────
 async function excluir(body: Record<string, unknown>) {
   const { id } = body;
   if (!id) throw new Error("id obrigatório");
@@ -154,21 +184,10 @@ async function excluir(body: Record<string, unknown>) {
   return json({ ok: true });
 }
 
-// ── AUTORIZAR ───────────────────────────────────────────
 async function autorizar(body: Record<string, unknown>, userId: string) {
   const { id } = body;
   if (!id) throw new Error("id obrigatório");
-
-  // Verify admin role
-  const { data: roles } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("role", "admin");
-
-  if (!roles || roles.length === 0) {
-    throw new Error("Apenas administradores podem autorizar lançamentos");
-  }
+  await requireAdmin(userId);
 
   const { data, error } = await supabase
     .from("lancamentos_financeiros")
@@ -187,7 +206,6 @@ async function autorizar(body: Record<string, unknown>, userId: string) {
   return json(data);
 }
 
-// ── BAIXAR ──────────────────────────────────────────────
 async function baixar(body: Record<string, unknown>, userId: string) {
   const { id, valor_pago, data_pagamento } = body;
   if (!id) throw new Error("id obrigatório");
@@ -210,7 +228,6 @@ async function baixar(body: Record<string, unknown>, userId: string) {
   return json(data);
 }
 
-// ── CANCELAR ────────────────────────────────────────────
 async function cancelar(body: Record<string, unknown>) {
   const { id } = body;
   if (!id) throw new Error("id obrigatório");
@@ -226,4 +243,327 @@ async function cancelar(body: Record<string, unknown>) {
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Lançamento não encontrado ou já baixado");
   return json(data);
+}
+
+// ═══════════════════════════════════════════════════════════
+// BORDERÔS
+// ═══════════════════════════════════════════════════════════
+
+async function listarBorderos(body: Record<string, unknown>) {
+  const { cod_empresa, status: st, limit: lim } = body;
+
+  let query = supabase
+    .from("borderos")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (cod_empresa) query = query.eq("cod_empresa", cod_empresa);
+  if (st) query = query.eq("status", st);
+  if (lim) query = query.limit(Number(lim));
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return json(data);
+}
+
+async function criarBordero(body: Record<string, unknown>, userId: string) {
+  const { cod_empresa, descricao, lancamento_ids } = body;
+  if (!cod_empresa) throw new Error("cod_empresa obrigatório");
+
+  const ids = (lancamento_ids as string[]) || [];
+
+  // Create borderô
+  const { data: bordero, error: bErr } = await supabase
+    .from("borderos")
+    .insert({
+      cod_empresa: Number(cod_empresa),
+      descricao: descricao ? String(descricao) : null,
+      criado_por: userId,
+      status: "MONTAGEM",
+      qtd_lancamentos: ids.length,
+      total_valor: 0,
+    })
+    .select()
+    .single();
+
+  if (bErr) throw new Error(bErr.message);
+
+  // Link lancamentos if provided
+  if (ids.length > 0) {
+    const { error: uErr } = await supabase
+      .from("lancamentos_financeiros")
+      .update({ bordero_id: bordero.id, status: "BORDERO" })
+      .in("id", ids)
+      .eq("status", "PREVISTO")
+      .eq("tipo", "PAGAR");
+
+    if (uErr) throw new Error(uErr.message);
+
+    // Recalculate totals
+    await recalcBordero(bordero.id);
+  }
+
+  const { data: updated } = await supabase.from("borderos").select("*").eq("id", bordero.id).single();
+  return json(updated, 201);
+}
+
+async function adicionarAoBordero(body: Record<string, unknown>) {
+  const { bordero_id, lancamento_ids } = body;
+  if (!bordero_id) throw new Error("bordero_id obrigatório");
+  const ids = (lancamento_ids as string[]) || [];
+  if (ids.length === 0) throw new Error("lancamento_ids obrigatório");
+
+  // Verify borderô is in MONTAGEM
+  const { data: bordero } = await supabase.from("borderos").select("status").eq("id", bordero_id).single();
+  if (!bordero) throw new Error("Borderô não encontrado");
+  if (bordero.status !== "MONTAGEM") throw new Error("Borderô não está em montagem");
+
+  const { error } = await supabase
+    .from("lancamentos_financeiros")
+    .update({ bordero_id: String(bordero_id), status: "BORDERO" })
+    .in("id", ids)
+    .eq("status", "PREVISTO")
+    .eq("tipo", "PAGAR");
+
+  if (error) throw new Error(error.message);
+  await recalcBordero(String(bordero_id));
+  return json({ ok: true });
+}
+
+async function removerDoBordero(body: Record<string, unknown>) {
+  const { bordero_id, lancamento_ids } = body;
+  if (!bordero_id) throw new Error("bordero_id obrigatório");
+  const ids = (lancamento_ids as string[]) || [];
+  if (ids.length === 0) throw new Error("lancamento_ids obrigatório");
+
+  const { data: bordero } = await supabase.from("borderos").select("status").eq("id", bordero_id).single();
+  if (!bordero) throw new Error("Borderô não encontrado");
+  if (bordero.status !== "MONTAGEM") throw new Error("Borderô não está em montagem");
+
+  const { error } = await supabase
+    .from("lancamentos_financeiros")
+    .update({ bordero_id: null, status: "PREVISTO" })
+    .in("id", ids)
+    .eq("bordero_id", bordero_id);
+
+  if (error) throw new Error(error.message);
+  await recalcBordero(String(bordero_id));
+  return json({ ok: true });
+}
+
+async function aprovarBordero(body: Record<string, unknown>, userId: string) {
+  const { bordero_id } = body;
+  if (!bordero_id) throw new Error("bordero_id obrigatório");
+  await requireAdmin(userId);
+
+  const { data: bordero } = await supabase.from("borderos").select("*").eq("id", bordero_id).single();
+  if (!bordero) throw new Error("Borderô não encontrado");
+  if (bordero.status !== "MONTAGEM") throw new Error(`Borderô com status ${bordero.status} não pode ser aprovado`);
+  if (bordero.qtd_lancamentos === 0) throw new Error("Borderô vazio — adicione lançamentos antes de aprovar");
+
+  // Update borderô
+  const { error: bErr } = await supabase
+    .from("borderos")
+    .update({
+      status: "APROVADO",
+      aprovado_por: userId,
+      aprovado_em: new Date().toISOString(),
+    })
+    .eq("id", bordero_id);
+
+  if (bErr) throw new Error(bErr.message);
+
+  // Update linked lancamentos
+  const { error: lErr } = await supabase
+    .from("lancamentos_financeiros")
+    .update({
+      status: "AUTORIZADO",
+      autorizado_por: userId,
+      autorizado_em: new Date().toISOString(),
+    })
+    .eq("bordero_id", bordero_id)
+    .eq("status", "BORDERO");
+
+  if (lErr) throw new Error(lErr.message);
+
+  return json({ ok: true, status: "APROVADO" });
+}
+
+async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
+  const { bordero_id } = body;
+  if (!bordero_id) throw new Error("bordero_id obrigatório");
+  await requireAdmin(userId);
+
+  const { data: bordero } = await supabase.from("borderos").select("*").eq("id", bordero_id).single();
+  if (!bordero) throw new Error("Borderô não encontrado");
+  if (bordero.status !== "APROVADO") throw new Error("Borderô precisa estar APROVADO para envio ao banco");
+
+  // Get BTG environment config
+  const { data: config } = await supabase
+    .from("fornecedor_configuracao")
+    .select("ambiente")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+
+  const isSandbox = !config || config.ambiente !== "production";
+
+  if (isSandbox) {
+    // Sandbox mock
+    const mockBatchId = `sandbox-batch-${Date.now()}`;
+    await supabase.from("borderos").update({
+      status: "ENVIADO",
+      btg_batch_id: mockBatchId,
+    }).eq("id", bordero_id);
+
+    await supabase.from("lancamentos_financeiros").update({
+      status: "PROCESSANDO",
+    }).eq("bordero_id", bordero_id).eq("status", "AUTORIZADO");
+
+    return json({ ok: true, status: "ENVIADO", btg_batch_id: mockBatchId, sandbox: true });
+  }
+
+  // Production: BTG Batch Payments API
+  const { data: tokenData } = await supabase
+    .from("btg_tokens")
+    .select("access_token, expires_at")
+    .eq("cod_empresa", bordero.cod_empresa)
+    .single();
+
+  if (!tokenData) throw new Error("Token BTG não encontrado para esta empresa");
+  if (new Date(tokenData.expires_at) < new Date()) throw new Error("Token BTG expirado");
+
+  // Get CNPJ
+  const { data: conta } = await supabase
+    .from("btg_contas_bancarias")
+    .select("cnpj")
+    .eq("cod_empresa", bordero.cod_empresa)
+    .eq("ativa", true)
+    .single();
+
+  const cnpj = conta?.cnpj?.replace(/\D/g, "");
+  if (!cnpj) throw new Error("CNPJ não encontrado");
+
+  const apiBase = "https://api.empresas.btgpactual.com";
+
+  // 1. Open batch
+  const batchRes = await fetch(`${apiBase}/${cnpj}/banking/batch-payments`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${tokenData.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ description: bordero.descricao || `Borderô ${bordero.id.slice(0, 8)}` }),
+  });
+
+  if (!batchRes.ok) {
+    const errBody = await batchRes.text();
+    throw new Error(`BTG batch-payments open failed: ${batchRes.status} ${errBody}`);
+  }
+
+  const batchData = await batchRes.json();
+  const batchId = batchData.batchId || batchData.id;
+
+  // 2. Fetch lancamentos for this borderô
+  const { data: lancamentos } = await supabase
+    .from("lancamentos_financeiros")
+    .select("*")
+    .eq("bordero_id", bordero_id)
+    .eq("status", "AUTORIZADO");
+
+  // 3. Add each payment to the batch
+  for (const lanc of (lancamentos || [])) {
+    const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
+    const paymentPayload: Record<string, unknown> = {
+      type: dados.btg_payment_type || "PIX_KEY",
+      amount: Number(lanc.valor),
+      details: dados.btg_details || {},
+    };
+    if (dados.scheduledDate) paymentPayload.scheduledDate = dados.scheduledDate;
+
+    await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}/payments`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(paymentPayload),
+    });
+  }
+
+  // 4. Process the batch
+  await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${tokenData.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action: "PROCESS" }),
+  });
+
+  // 5. Update local records
+  await supabase.from("borderos").update({
+    status: "ENVIADO",
+    btg_batch_id: batchId,
+  }).eq("id", bordero_id);
+
+  await supabase.from("lancamentos_financeiros").update({
+    status: "PROCESSANDO",
+  }).eq("bordero_id", bordero_id).eq("status", "AUTORIZADO");
+
+  return json({ ok: true, status: "ENVIADO", btg_batch_id: batchId });
+}
+
+async function cancelarBordero(body: Record<string, unknown>) {
+  const { bordero_id } = body;
+  if (!bordero_id) throw new Error("bordero_id obrigatório");
+
+  const { data: bordero } = await supabase.from("borderos").select("status").eq("id", bordero_id).single();
+  if (!bordero) throw new Error("Borderô não encontrado");
+  if (!["MONTAGEM", "APROVADO"].includes(bordero.status)) {
+    throw new Error("Borderô já enviado ou processado não pode ser cancelado");
+  }
+
+  // Unlink lancamentos back to PREVISTO
+  await supabase
+    .from("lancamentos_financeiros")
+    .update({ bordero_id: null, status: "PREVISTO", autorizado_por: null, autorizado_em: null })
+    .eq("bordero_id", bordero_id)
+    .in("status", ["BORDERO", "AUTORIZADO"]);
+
+  await supabase.from("borderos").update({ status: "CANCELADO" }).eq("id", bordero_id);
+
+  return json({ ok: true, status: "CANCELADO" });
+}
+
+async function detalheBordero(body: Record<string, unknown>) {
+  const { bordero_id } = body;
+  if (!bordero_id) throw new Error("bordero_id obrigatório");
+
+  const { data: bordero } = await supabase.from("borderos").select("*").eq("id", bordero_id).single();
+  if (!bordero) throw new Error("Borderô não encontrado");
+
+  const { data: lancamentos } = await supabase
+    .from("lancamentos_financeiros")
+    .select("*")
+    .eq("bordero_id", bordero_id)
+    .order("data_vencimento", { ascending: true });
+
+  return json({ bordero, lancamentos: lancamentos || [] });
+}
+
+// ── Helper ──────────────────────────────────────────────
+async function recalcBordero(borderoId: string) {
+  const { data: lancs } = await supabase
+    .from("lancamentos_financeiros")
+    .select("valor")
+    .eq("bordero_id", borderoId);
+
+  const total = (lancs || []).reduce((s: number, l: { valor: number }) => s + Number(l.valor), 0);
+  const qtd = (lancs || []).length;
+
+  await supabase.from("borderos").update({
+    total_valor: total,
+    qtd_lancamentos: qtd,
+  }).eq("id", borderoId);
 }
