@@ -74,9 +74,15 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
   ],
   financeiro: [
     {
+      label: "Hub Financeiro",
+      items: [
+        { title: "Lançamentos", url: "/financeiro/hub", icon: Landmark },
+      ],
+    },
+    {
       label: "Análises",
       items: [
-        { title: "Parcelas a Receber", url: "/financeiro", icon: Wallet },
+        { title: "Parcelas ERP", url: "/financeiro", icon: Wallet },
         { title: "DRE", url: "/financeiro/dre", icon: FileText },
         { title: "Fluxo de Caixa", url: "/financeiro/fluxo-caixa", icon: ArrowLeftRight },
       ],
