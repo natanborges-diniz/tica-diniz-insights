@@ -181,7 +181,6 @@ export default function FinanceiroClassificacaoPage() {
         open={!!selectedId}
         onOpenChange={(open) => { if (!open) { setSelectedId(null); resetForm(); } }}
         title="Classificar Lançamento"
-        side="right"
       >
         <div className="space-y-4 py-4">
           <div className="space-y-1">
