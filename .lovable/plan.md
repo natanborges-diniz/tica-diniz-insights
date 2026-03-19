@@ -25,11 +25,10 @@
 - [x] RLS policies para recebiveis_cartao e recebiveis_cartao_parcelas
 - [x] Rota e sidebar adicionados
 
-### 🔲 Sprint 4 — DDA + Cobrança + Conciliação Extrato
-- [ ] DDA → criar/vincular lançamento ao importar
-- [ ] Cobrança → vincular lançamento ao emitir boleto
-- [ ] Conciliação automática extrato x lançamentos
-- [ ] Sugestão de classificação por similaridade
+### ✅ Sprint 4 (Concluído)
+- [x] DDA → criar/vincular lançamento PAGAR ao importar (auto-gera lancamentos_financeiros com origem=DDA)
+- [x] Cobrança → vincular lançamento RECEBER ao emitir boleto (auto-gera lancamentos_financeiros com origem=COBRANCA)
+- [x] Conciliação automática extrato x lançamentos (action conciliar_auto_lancamentos: match por valor+tipo+data±7dias, cria lançamentos BAIXADOS+requer_validacao para entradas sem match)
 
 ### 🔲 Sprint 5 — DRE/Fluxo derivados + Refinamentos
 - [ ] DRE baseado em lançamentos BAIXADOS
