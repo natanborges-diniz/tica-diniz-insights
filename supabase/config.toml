@@ -71,3 +71,6 @@ verify_jwt = false
 
 [functions.zeiss-proxy]
 verify_jwt = false
+
+[functions.btg-recebiveis-cartao]
+verify_jwt = false
