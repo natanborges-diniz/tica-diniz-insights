@@ -1200,8 +1200,9 @@ const PedidoZeissPage: React.FC = () => {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
                   <div>
-                    <Label className="text-[10px] uppercase text-muted-foreground">Modelo</Label>
+                    <Label className="text-[10px] uppercase text-muted-foreground">Referência</Label>
                     <Input value={armacao.modelo} onChange={e => setArmacao(a => ({ ...a, modelo: e.target.value }))} className="h-8 text-sm" />
+                    <span className="text-[9px] text-muted-foreground">Referência da armação no ERP</span>
                   </div>
                   <div>
                     <Label className="text-[10px] uppercase text-muted-foreground">Ponte</Label>
