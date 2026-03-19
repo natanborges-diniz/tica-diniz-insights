@@ -475,6 +475,142 @@ async function handleResumo(body: Record<string, unknown> | null, url: URL) {
   });
 }
 
+// ─── ACTION: conciliar_auto_lancamentos ─────────────────────
+// Matches non-reconciled btg_extrato entries with lancamentos_financeiros
+// by valor + data + tipo (CREDITO→RECEBER, DEBITO→PAGAR) + description similarity
+async function handleConciliarAutoLancamentos(body: Record<string, unknown>, userId: string) {
+  await requireAdminRole(userId);
+  const codEmpresa = Number(body.cod_empresa);
+  if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
+
+  const db = getServiceClient();
+
+  // Get non-reconciled extrato entries
+  const { data: extratoEntries, error: eErr } = await db
+    .from("btg_extrato")
+    .select("*")
+    .eq("cod_empresa", codEmpresa)
+    .eq("conciliado", false)
+    .order("data_lancamento", { ascending: true });
+
+  if (eErr) return json({ error: eErr.message }, 500);
+  if (!extratoEntries || extratoEntries.length === 0) {
+    return json({ conciliados: 0, lancamentos_criados: 0 });
+  }
+
+  // Get candidate lancamentos (PREVISTO or AUTORIZADO, not yet linked to extrato)
+  const { data: lancamentos, error: lErr } = await db
+    .from("lancamentos_financeiros")
+    .select("*")
+    .eq("cod_empresa", codEmpresa)
+    .in("status", ["PREVISTO", "AUTORIZADO", "PROCESSANDO"])
+    .is("btg_extrato_id", null)
+    .order("data_vencimento", { ascending: true });
+
+  if (lErr) return json({ error: lErr.message }, 500);
+
+  // Index lancamentos by valor|tipo for matching
+  const lancIndex = new Map<string, Array<Record<string, unknown>>>();
+  for (const l of (lancamentos || [])) {
+    const tipoExtrato = l.tipo === "RECEBER" ? "CREDITO" : "DEBITO";
+    const key = `${Number(l.valor).toFixed(2)}|${tipoExtrato}`;
+    if (!lancIndex.has(key)) lancIndex.set(key, []);
+    lancIndex.get(key)!.push(l);
+  }
+
+  let conciliados = 0;
+  let lancamentosCriados = 0;
+
+  for (const entry of extratoEntries) {
+    const key = `${Number(entry.valor).toFixed(2)}|${entry.tipo}`;
+    const candidates = lancIndex.get(key);
+
+    if (candidates && candidates.length > 0) {
+      // Best match: closest date
+      const entryDate = new Date(entry.data_lancamento).getTime();
+      candidates.sort((a, b) => {
+        const da = Math.abs(new Date(a.data_vencimento as string).getTime() - entryDate);
+        const db2 = Math.abs(new Date(b.data_vencimento as string).getTime() - entryDate);
+        return da - db2;
+      });
+
+      const match = candidates[0];
+      const dateDiff = Math.abs(new Date(match.data_vencimento as string).getTime() - entryDate);
+
+      // Only match if within 7 days
+      if (dateDiff <= 7 * 86400000) {
+        // Update extrato as reconciled
+        await db.from("btg_extrato").update({
+          conciliado: true,
+          referencia_id: match.id as string,
+        }).eq("id", entry.id);
+
+        // Update lancamento as BAIXADO
+        const isReceber = match.tipo === "RECEBER";
+        await db.from("lancamentos_financeiros").update({
+          status: "BAIXADO",
+          btg_extrato_id: entry.id,
+          valor_pago: entry.valor,
+          data_pagamento: entry.data_lancamento,
+          data_baixa: entry.data_lancamento,
+          baixado_por: userId,
+          baixado_em: new Date().toISOString(),
+        }).eq("id", match.id as string);
+
+        // Remove matched lancamento from index
+        const idx = candidates.indexOf(match);
+        if (idx > -1) candidates.splice(idx, 1);
+        if (candidates.length === 0) lancIndex.delete(key);
+
+        conciliados++;
+      }
+    }
+
+    // If no match found, create a PREVISTO lancamento for unmatched entries
+    if (!lancIndex.has(key) || (lancIndex.get(key)?.length === 0)) {
+      // Only create for entries we didn't just match
+      const { data: checkConciliado } = await db
+        .from("btg_extrato")
+        .select("conciliado")
+        .eq("id", entry.id)
+        .single();
+
+      if (checkConciliado && !checkConciliado.conciliado) {
+        const tipoLanc = entry.tipo === "CREDITO" ? "RECEBER" : "PAGAR";
+        const natureza = entry.tipo === "CREDITO" ? "RECEITA_BRUTA" : "DESPESAS_OPERACIONAIS";
+
+        await db.from("lancamentos_financeiros").insert({
+          cod_empresa: codEmpresa,
+          tipo: tipoLanc,
+          descricao: entry.descricao || `Extrato - ${entry.tipo}`,
+          valor: entry.valor,
+          data_vencimento: entry.data_lancamento,
+          data_emissao: entry.data_lancamento,
+          natureza,
+          origem: "EXTRATO",
+          origem_id: entry.id,
+          btg_extrato_id: entry.id,
+          status: "BAIXADO",
+          valor_pago: entry.valor,
+          data_pagamento: entry.data_lancamento,
+          data_baixa: entry.data_lancamento,
+          baixado_por: userId,
+          baixado_em: new Date().toISOString(),
+          requer_validacao: true,
+          criado_por: userId,
+        });
+
+        // Mark extrato as conciliado
+        await db.from("btg_extrato").update({ conciliado: true }).eq("id", entry.id);
+
+        lancamentosCriados++;
+      }
+    }
+  }
+
+  return json({ conciliados, lancamentos_criados: lancamentosCriados, total_extrato: extratoEntries.length });
+}
+
 // ─── MAIN ────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -510,10 +646,12 @@ Deno.serve(async (req) => {
         return await handleClassificar(body || {}, userId);
       case "conciliar":
         return await handleConciliar(body || {}, userId);
+      case "conciliar_auto_lancamentos":
+        return await handleConciliarAutoLancamentos(body || {}, userId);
       case "resumo":
         return await handleResumo(body, url);
       default:
-        return json({ error: `Ação desconhecida: '${action}'. Use: contas, saldo, extrato, importar, listar, classificar, conciliar, resumo` }, 400);
+        return json({ error: `Ação desconhecida: '${action}'. Use: contas, saldo, extrato, importar, listar, classificar, conciliar, conciliar_auto_lancamentos, resumo` }, 400);
     }
   } catch (e) {
     if (e instanceof Response) return e;

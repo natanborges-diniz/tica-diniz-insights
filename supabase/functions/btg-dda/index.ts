@@ -184,6 +184,7 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
 
   let inseridos = 0;
   let duplicados = 0;
+  let lancamentosGerados = 0;
 
   for (const titulo of btgData) {
     const btgDdaId = (titulo.id || titulo.ddaId || "") as string;

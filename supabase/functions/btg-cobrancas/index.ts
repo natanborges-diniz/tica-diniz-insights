@@ -216,7 +216,39 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
     return json({ error: "Erro ao gravar cobrança", details: error.message }, 500);
   }
 
-  return json({ success: true, cobranca: data, sandbox: isSandbox }, 201);
+  // Auto-create lancamento_financeiro RECEBER linked to this cobranca
+  let lancamentoId: string | null = null;
+  if (data?.id) {
+    const { data: existingLanc } = await db
+      .from("lancamentos_financeiros")
+      .select("id")
+      .eq("btg_cobranca_id", data.id)
+      .eq("cod_empresa", ce)
+      .maybeSingle();
+
+    if (!existingLanc) {
+      const { data: newLanc } = await db.from("lancamentos_financeiros").insert({
+        cod_empresa: ce,
+        tipo: "RECEBER",
+        descricao: `Cobrança - ${sacado_nome || sacado_documento || "Boleto"}`,
+        valor: Number(valor),
+        data_vencimento: String(data_vencimento),
+        pessoa_nome: sacado_nome ? String(sacado_nome) : null,
+        pessoa_documento: String(sacado_documento),
+        natureza: "RECEITA_BRUTA",
+        forma_pagamento: "BOLETO",
+        origem: "COBRANCA",
+        origem_id: btgCollectionId || null,
+        btg_cobranca_id: data.id,
+        status: "PREVISTO",
+        observacao: descricao ? String(descricao) : null,
+        criado_por: userId,
+      }).select("id").single();
+      lancamentoId = newLanc?.id || null;
+    }
+  }
+
+  return json({ success: true, cobranca: data, lancamento_id: lancamentoId, sandbox: isSandbox }, 201);
 }
 
 // ─── ACTION: importar (fetch existing collections from BTG) ──
