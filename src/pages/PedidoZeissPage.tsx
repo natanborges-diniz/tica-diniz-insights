@@ -1101,7 +1101,8 @@ const PedidoZeissPage: React.FC = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
                     <Label className="text-[10px] uppercase text-muted-foreground">OS</Label>
-                    <Input value={osNumero} onChange={e => setOsNumero(e.target.value)} className="h-8 text-sm font-mono bg-muted" readOnly />
+                    <Input value={osNumero} onChange={e => setOsNumero(e.target.value)} className="h-8 text-sm font-mono" />
+                    <span className="text-[9px] text-muted-foreground">Pré-preenchido da OS. Editável se necessário.</span>
                   </div>
                   <div>
                     <Label className="text-[10px] uppercase text-muted-foreground">Paciente</Label>
