@@ -28,6 +28,8 @@ import BankingCobrancasDashboard from "./pages/BankingCobrancasDashboard";
 import BankingDdaDashboard from "./pages/BankingDdaDashboard";
 import FinanceiroHubPage from "./pages/FinanceiroHubPage";
 import ConciliacaoCartoesPage from "./pages/ConciliacaoCartoesPage";
+import FinanceiroClassificacaoPage from "./pages/FinanceiroClassificacaoPage";
+import FinanceiroOverviewPage from "./pages/FinanceiroOverviewPage";
 import InteligenciaVendasDashboard from "./pages/InteligenciaVendasDashboard";
 import MetasConfigDashboard from "./pages/MetasConfigDashboard";
 import CentralIADashboard from "./pages/CentralIADashboard";
