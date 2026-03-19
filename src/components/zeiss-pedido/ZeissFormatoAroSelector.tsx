@@ -1,9 +1,11 @@
 // src/components/zeiss-pedido/ZeissFormatoAroSelector.tsx
 // Visual selector for Zeiss frame shapes (formatoAro) using official reference images
+// Includes editable text input so user can correct the code if API rejects it
 
 import React from "react";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 const ZEISS_FORMATOS: { code: string; label: string; file: string }[] = [
   { code: "VIS01", label: "VIS01", file: "VIS01.png" },
@@ -56,6 +58,19 @@ const ZeissFormatoAroSelector: React.FC<Props> = ({ value, onChange }) => {
             />
           </button>
         ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Código do formato (ex: VIS01, 60P)"
+          className="h-7 text-xs max-w-[200px]"
+        />
+        {value && (
+          <span className="text-[10px] text-muted-foreground">
+            Código enviado: <strong>{value}</strong>
+          </span>
+        )}
       </div>
     </div>
   );
