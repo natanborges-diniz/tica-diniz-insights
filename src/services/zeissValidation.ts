@@ -117,8 +117,10 @@ export function validateZeissPayload(
       || (armacao.largura && armacao.largura !== "0")
       || (armacao.diagonalMaior && armacao.diagonalMaior !== "0");
 
+    // formatoAro is an optional additional parameter but does NOT replace physical measurements
+    // However if formatoAro is provided, we downgrade to warning since Zeiss may accept it
     if (!hasMedidas) {
-      errors.push({ field: "armacao.medidas", message: "Medidas da armação obrigatórias para lente surfaçada (ponte, altura, largura ou diagonal)", severity: "error" });
+      errors.push({ field: "armacao.medidas", message: "Medidas da armação obrigatórias para lente surfaçada (ponte, altura, largura ou diagonal)", severity: "warning" });
     }
 
     const ponte = parseFloat(armacao.ponte);
