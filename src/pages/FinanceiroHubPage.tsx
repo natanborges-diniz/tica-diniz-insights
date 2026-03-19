@@ -411,8 +411,7 @@ export default function FinanceiroHubPage() {
       <BaseDialog
         open={!!borderoDetalheId}
         onOpenChange={(open) => { if (!open) setBorderoDetalheId(null); }}
-        title={`Borderô ${borderoDetalhe?.bordero?.descricao || borderoDetalheId?.slice(0, 8) || ""}`}
-        subtitle={borderoDetalhe?.bordero ? `${fmtCurrency(borderoDetalhe.bordero.total_valor)} — ${borderoDetalhe.bordero.qtd_lancamentos} lançamentos` : undefined}
+        title={`Borderô ${borderoDetalhe?.bordero?.descricao || borderoDetalheId?.slice(0, 8) || ""} — ${borderoDetalhe?.bordero ? `${fmtCurrency(borderoDetalhe.bordero.total_valor)} — ${borderoDetalhe.bordero.qtd_lancamentos} lançamentos` : ""}`}
       >
         <div className="space-y-3 py-2">
           {borderoDetalhe?.bordero && (
