@@ -1150,6 +1150,63 @@ export type Database = {
         }
         Relationships: []
       }
+      parcelas_cache: {
+        Row: {
+          cache_loaded_at: string
+          cod_empresa: number
+          conta_descricao: string | null
+          conta_numero: string | null
+          data_emissao: string | null
+          data_pagamento: string | null
+          data_vencimento: string | null
+          documento: string | null
+          empresa_nome: string | null
+          forma_pagamento_tipo: string | null
+          id: string
+          pessoa_nome: string | null
+          situacao: string
+          tipo_lancamento: string
+          valor: number
+          valor_pago: number | null
+        }
+        Insert: {
+          cache_loaded_at?: string
+          cod_empresa: number
+          conta_descricao?: string | null
+          conta_numero?: string | null
+          data_emissao?: string | null
+          data_pagamento?: string | null
+          data_vencimento?: string | null
+          documento?: string | null
+          empresa_nome?: string | null
+          forma_pagamento_tipo?: string | null
+          id?: string
+          pessoa_nome?: string | null
+          situacao?: string
+          tipo_lancamento?: string
+          valor?: number
+          valor_pago?: number | null
+        }
+        Update: {
+          cache_loaded_at?: string
+          cod_empresa?: number
+          conta_descricao?: string | null
+          conta_numero?: string | null
+          data_emissao?: string | null
+          data_pagamento?: string | null
+          data_vencimento?: string | null
+          documento?: string | null
+          empresa_nome?: string | null
+          forma_pagamento_tipo?: string | null
+          id?: string
+          pessoa_nome?: string | null
+          situacao?: string
+          tipo_lancamento?: string
+          valor?: number
+          valor_pago?: number | null
+        }
+        Relationships: []
+      }
       pedido_alertas: {
         Row: {
           acknowledged: boolean
