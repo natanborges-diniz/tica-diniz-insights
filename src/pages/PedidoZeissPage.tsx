@@ -404,6 +404,10 @@ const PedidoZeissPage: React.FC = () => {
       observacao: observacao ? [observacao] : [],
     };
 
+    // For progressive lenses (PR), Zeiss expects dnplonge/dnpperto instead of dnp
+    const isProgressiveOd = produtoOd?.nome?.toUpperCase().startsWith("PR ") || false;
+    const isProgressiveOe = (oeProduct || produtoOd)?.nome?.toUpperCase().startsWith("PR ") || false;
+
     if (produtoOd || prescOd.esferico) {
       payload.od = {
         produto: produtoOd?.cod || "",
@@ -412,9 +416,9 @@ const PedidoZeissPage: React.FC = () => {
         eixocilindrico: prescOd.eixo,
         adicao: prescOd.adicao,
         regressao: "",
-        dnp: prescOd.dnp,
-        dnpperto: "",
-        dnplonge: "",
+        dnp: isProgressiveOd ? "" : prescOd.dnp,
+        dnpperto: isProgressiveOd ? prescOd.dnp : "",
+        dnplonge: isProgressiveOd ? prescOd.dnp : "",
         alturamontagem: prescOd.alturaMontagem,
         prisma: prescOd.prisma,
         eixoprisma: prescOd.eixoPrisma,
