@@ -32,6 +32,14 @@ Deno.serve(async (req) => {
         return await baixar(body, auth.userId);
       case "cancelar":
         return await cancelar(body);
+      case "importar_erp":
+        return await importarErp(body, auth.userId);
+      case "classificar":
+        return await classificar(body, auth.userId);
+      case "listar_pendentes_validacao":
+        return await listarPendentesValidacao(body);
+      case "resumo_financeiro":
+        return await resumoFinanceiro(body);
 
       // ── Borderôs ──
       case "listar_borderos":
