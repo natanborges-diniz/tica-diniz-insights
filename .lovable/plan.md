@@ -12,16 +12,18 @@
 - [x] Rota `/financeiro/hub` adicionada ao App.tsx
 - [x] Sidebar reorganizado com "Hub Financeiro" como seção principal
 
-### 🔲 Sprint 2 — Borderô + Aprovação Master + BTG Batch API
-- [ ] Actions de borderô na edge function btg-pagamentos (criar, aprovar, enviar, cancelar)
-- [ ] UI de borderô no Hub (selecionar lançamentos, criar lote, aprovar)
-- [ ] Integração BTG Batch Payments API
+### ✅ Sprint 2 (Concluído)
+- [x] Actions de borderô na edge function financeiro-lancamentos (criar, aprovar, enviar, cancelar, detalhe)
+- [x] UI de borderô no Hub (selecionar lançamentos, criar lote, aprovar)
+- [x] Integração BTG Batch Payments API (sandbox + production)
 
-### 🔲 Sprint 3 — Conciliação de Cartões
-- [ ] Edge function `btg-recebiveis-cartao` (importar agenda BTG, conciliar)
-- [ ] Página `ConciliacaoCartoesPage` (`/financeiro/cartoes`)
-- [ ] Cálculo automático de taxas de adquirente
-- [ ] Geração de lançamentos TAXA_ADQUIRENTE
+### ✅ Sprint 3 (Concluído)
+- [x] Edge function `btg-recebiveis-cartao` (listar, importar_agenda, conciliar_auto, conciliar_manual, marcar_divergente, detalhe)
+- [x] Página `ConciliacaoCartoesPage` (`/financeiro/cartoes`) com KPIs, tabela expandível, drill-down
+- [x] Conciliação automática: match por adquirente + bandeira + data + valor (tolerância 1%)
+- [x] Geração automática de lançamentos TAXA_ADQUIRENTE
+- [x] RLS policies para recebiveis_cartao e recebiveis_cartao_parcelas
+- [x] Rota e sidebar adicionados
 
 ### 🔲 Sprint 4 — DDA + Cobrança + Conciliação Extrato
 - [ ] DDA → criar/vincular lançamento ao importar
