@@ -575,3 +575,199 @@ async function recalcBordero(borderoId: string) {
     qtd_lancamentos: qtd,
   }).eq("id", borderoId);
 }
+
+// ═══════════════════════════════════════════════════════════
+// IMPORT ERP → LEDGER
+// ═══════════════════════════════════════════════════════════
+
+async function importarErp(body: Record<string, unknown>, userId: string) {
+  const { cod_empresa, parcelas } = body;
+  if (!cod_empresa) throw new Error("cod_empresa obrigatório");
+  if (!Array.isArray(parcelas) || parcelas.length === 0) {
+    throw new Error("parcelas deve ser um array não vazio");
+  }
+
+  const records = parcelas.map((p: Record<string, unknown>) => ({
+    cod_empresa: Number(cod_empresa),
+    tipo: p.tipo === "PAGAR" ? "PAGAR" : "RECEBER",
+    descricao: String(p.descricao || p.documento || "Parcela ERP"),
+    valor: Number(p.valor || 0),
+    data_vencimento: String(p.data_vencimento),
+    data_emissao: p.data_emissao ? String(p.data_emissao) : null,
+    pessoa_nome: p.pessoa_nome ? String(p.pessoa_nome) : null,
+    pessoa_documento: p.pessoa_documento ? String(p.pessoa_documento) : null,
+    forma_pagamento: p.forma_pagamento ? String(p.forma_pagamento) : null,
+    adquirente: p.adquirente ? String(p.adquirente) : null,
+    bandeira: p.bandeira ? String(p.bandeira) : null,
+    numero_parcela: p.numero_parcela ? Number(p.numero_parcela) : null,
+    total_parcelas: p.total_parcelas ? Number(p.total_parcelas) : null,
+    natureza: p.natureza ? String(p.natureza) : null,
+    categoria: p.categoria ? String(p.categoria) : null,
+    origem: "ERP",
+    origem_id: p.origem_id ? String(p.origem_id) : null,
+    criado_por: userId,
+    status: "PREVISTO",
+  }));
+
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const rec of records) {
+    if (rec.origem_id) {
+      const { data: existing } = await supabase
+        .from("lancamentos_financeiros")
+        .select("id")
+        .eq("origem", "ERP")
+        .eq("origem_id", rec.origem_id)
+        .eq("cod_empresa", rec.cod_empresa)
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        skipped++;
+        continue;
+      }
+    }
+
+    const { error: insErr } = await supabase
+      .from("lancamentos_financeiros")
+      .insert(rec);
+
+    if (insErr) {
+      console.error("[importar_erp] erro ao inserir:", insErr.message);
+      skipped++;
+    } else {
+      inserted++;
+    }
+  }
+
+  return json({ ok: true, inserted, skipped, total: records.length });
+}
+
+// ═══════════════════════════════════════════════════════════
+// CLASSIFICAR LANÇAMENTOS (requer_validacao)
+// ═══════════════════════════════════════════════════════════
+
+async function classificar(body: Record<string, unknown>, _userId: string) {
+  const { id, categoria, natureza, subcategoria, descricao } = body;
+  if (!id) throw new Error("id obrigatório");
+
+  const updates: Record<string, unknown> = { requer_validacao: false };
+  if (categoria !== undefined) updates.categoria = categoria;
+  if (natureza !== undefined) updates.natureza = natureza;
+  if (subcategoria !== undefined) updates.subcategoria = subcategoria;
+  if (descricao !== undefined) updates.descricao = descricao;
+
+  const { data, error: updErr } = await supabase
+    .from("lancamentos_financeiros")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (updErr) throw new Error(updErr.message);
+  return json(data);
+}
+
+async function listarPendentesValidacao(body: Record<string, unknown>) {
+  const { cod_empresa, limit: lim } = body;
+
+  let query = supabase
+    .from("lancamentos_financeiros")
+    .select("*")
+    .eq("requer_validacao", true)
+    .order("created_at", { ascending: false });
+
+  if (cod_empresa) query = query.eq("cod_empresa", cod_empresa);
+  if (lim) query = query.limit(Number(lim));
+
+  const { data, error: qErr } = await query;
+  if (qErr) throw new Error(qErr.message);
+  return json(data);
+}
+
+// ═══════════════════════════════════════════════════════════
+// RESUMO FINANCEIRO UNIFICADO
+// ═══════════════════════════════════════════════════════════
+
+async function resumoFinanceiro(body: Record<string, unknown>) {
+  const { cod_empresa, data_inicio, data_fim } = body;
+
+  let query = supabase
+    .from("lancamentos_financeiros")
+    .select("tipo, status, valor, valor_pago, requer_validacao, data_vencimento")
+    .not("status", "eq", "CANCELADO");
+
+  if (cod_empresa) query = query.eq("cod_empresa", cod_empresa);
+  if (data_inicio) query = query.gte("data_vencimento", data_inicio);
+  if (data_fim) query = query.lte("data_vencimento", data_fim);
+
+  const { data: lancs, error: lErr } = await query;
+  if (lErr) throw new Error(lErr.message);
+
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  let totalReceberAberto = 0;
+  let totalPagarAberto = 0;
+  let totalBaixadoReceber = 0;
+  let totalBaixadoPagar = 0;
+  let qtdVencidos = 0;
+  let qtdPendentesValidacao = 0;
+  let totalLancamentos = 0;
+
+  for (const l of (lancs || [])) {
+    totalLancamentos++;
+    const val = Number(l.valor || 0);
+    const valPago = Number(l.valor_pago || 0);
+
+    if (l.requer_validacao) qtdPendentesValidacao++;
+
+    if (l.status === "BAIXADO") {
+      if (l.tipo === "RECEBER") totalBaixadoReceber += valPago || val;
+      else totalBaixadoPagar += valPago || val;
+    } else {
+      if (l.tipo === "RECEBER") totalReceberAberto += val;
+      else totalPagarAberto += val;
+
+      if (l.data_vencimento < hoje && l.status === "PREVISTO") {
+        qtdVencidos++;
+      }
+    }
+  }
+
+  let bQuery = supabase
+    .from("borderos")
+    .select("status, total_valor")
+    .in("status", ["MONTAGEM", "APROVADO", "ENVIADO"]);
+
+  if (cod_empresa) bQuery = bQuery.eq("cod_empresa", cod_empresa);
+
+  const { data: borderosData } = await bQuery;
+  const borderosAbertos = (borderosData || []).length;
+  const borderosTotalValor = (borderosData || []).reduce((s: number, b: { total_valor: number }) => s + Number(b.total_valor || 0), 0);
+
+  let rcQuery = supabase
+    .from("recebiveis_cartao")
+    .select("status, valor_bruto, valor_liquido, taxa_valor");
+
+  if (cod_empresa) rcQuery = rcQuery.eq("cod_empresa", cod_empresa);
+
+  const { data: recebiveis } = await rcQuery;
+  const recebiveisPendentes = (recebiveis || []).filter((r: { status: string }) => r.status === "PREVISTO").length;
+  const totalTaxasCartao = (recebiveis || []).reduce((s: number, r: { taxa_valor: number | null }) => s + Number(r.taxa_valor || 0), 0);
+
+  return json({
+    totalReceberAberto,
+    totalPagarAberto,
+    saldoAberto: totalReceberAberto - totalPagarAberto,
+    totalBaixadoReceber,
+    totalBaixadoPagar,
+    saldoBaixado: totalBaixadoReceber - totalBaixadoPagar,
+    qtdVencidos,
+    qtdPendentesValidacao,
+    totalLancamentos,
+    borderosAbertos,
+    borderosTotalValor,
+    recebiveisPendentes,
+    totalTaxasCartao,
+  });
+}
