@@ -649,6 +649,14 @@ const PedidoZeissPage: React.FC = () => {
   // ============================================
 
   if (pedidoConfirmado) {
+    const handleCopyVoucher = (v: string) => {
+      navigator.clipboard.writeText(v);
+      toast({ title: "Voucher copiado!", description: v });
+    };
+    const handleCopyPedido = (v: string) => {
+      navigator.clipboard.writeText(v);
+      toast({ title: "Nº do pedido copiado!", description: v });
+    };
     return (
       <ScrollArea className="h-full">
         <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-6">
@@ -656,9 +664,23 @@ const PedidoZeissPage: React.FC = () => {
             <CardContent className="pt-6 text-center space-y-4">
               <CheckCircle2 className="h-16 w-16 text-emerald-600 mx-auto" />
               <h2 className="text-xl font-bold">Pedido Zeiss Confirmado!</h2>
-              <p className="text-2xl font-mono font-bold text-primary">{pedidoConfirmado.numeroPedido}</p>
+              <div className="flex items-center justify-center gap-2">
+                <p className="text-2xl font-mono font-bold text-primary">{pedidoConfirmado.numeroPedido}</p>
+                {pedidoConfirmado.numeroPedido && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleCopyPedido(pedidoConfirmado.numeroPedido!)}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
               {pedidoConfirmado.voucherGerado && (
-                <Badge variant="secondary" className="text-sm">Voucher: {pedidoConfirmado.voucherGerado}</Badge>
+                <div className="flex items-center justify-center gap-2 p-3 rounded-lg border border-primary/30 bg-primary/5">
+                  <Ticket className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Voucher:</span>
+                  <span className="font-mono font-bold text-primary">{pedidoConfirmado.voucherGerado}</span>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleCopyVoucher(pedidoConfirmado.voucherGerado!)}>
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               )}
               <div className="flex gap-3 justify-center pt-4">
                 <Button variant="outline" onClick={() => navigate("/os")}>Voltar ao Monitor</Button>
