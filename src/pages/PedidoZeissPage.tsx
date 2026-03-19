@@ -597,9 +597,23 @@ const PedidoZeissPage: React.FC = () => {
       const result = await criarPedidoZeiss(payload, codOs, codEmpresa, cpf, paciente);
 
       if ("numeroPedido" in result) {
-        setPedidoConfirmado(result as ZeissConfirmResponse);
+        const confirmRes = result as ZeissConfirmResponse;
+        setPedidoConfirmado(confirmRes);
         setApprovalData(null);
-        toast({ title: "Pedido confirmado!", description: `Nº ${(result as ZeissConfirmResponse).numeroPedido}` });
+        toast({ title: "Pedido confirmado!", description: `Nº ${confirmRes.numeroPedido}` });
+
+        // Register in cache for OS monitor badge
+        registrarPedidoNoCache(codOs, String(confirmRes.numeroPedido), "ZEISS", "CONFIRMADO", new Date().toISOString(), confirmRes.voucherGerado || null);
+
+        // Save voucher linked to CPF
+        const voucherGerado = confirmRes.voucherGerado;
+        const cpfCliente = cpf || paramCpf;
+        if (voucherGerado && cpfCliente) {
+          await supabase.from("voucher_cliente").upsert(
+            { cpf: cpfCliente.replace(/[.\-]/g, ""), voucher: voucherGerado, numero_pedido: String(confirmRes.numeroPedido), cod_empresa: codEmpresa, cliente_nome: paciente || "" },
+            { onConflict: "cpf" }
+          );
+        }
 
         const descricao = os?.lenteOdDescricao || os?.lenteOeDescricao;
         if (descricao && produtoOd) {
