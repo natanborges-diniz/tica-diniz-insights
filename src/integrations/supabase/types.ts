@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      borderos: {
+        Row: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          btg_batch_id: string | null
+          cod_empresa: number
+          created_at: string
+          criado_por: string | null
+          descricao: string | null
+          id: string
+          qtd_lancamentos: number
+          status: string
+          total_valor: number
+          updated_at: string
+        }
+        Insert: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          btg_batch_id?: string | null
+          cod_empresa: number
+          created_at?: string
+          criado_por?: string | null
+          descricao?: string | null
+          id?: string
+          qtd_lancamentos?: number
+          status?: string
+          total_valor?: number
+          updated_at?: string
+        }
+        Update: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          btg_batch_id?: string | null
+          cod_empresa?: number
+          created_at?: string
+          criado_por?: string | null
+          descricao?: string | null
+          id?: string
+          qtd_lancamentos?: number
+          status?: string
+          total_valor?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bridge_health_logs: {
         Row: {
           bridge_version: string | null
@@ -640,6 +685,153 @@ export type Database = {
         }
         Relationships: []
       }
+      lancamentos_financeiros: {
+        Row: {
+          adquirente: string | null
+          autorizado_em: string | null
+          autorizado_por: string | null
+          baixado_em: string | null
+          baixado_por: string | null
+          bandeira: string | null
+          bordero_id: string | null
+          btg_cobranca_id: string | null
+          btg_dda_id: string | null
+          btg_extrato_id: string | null
+          btg_pagamento_id: string | null
+          categoria: string | null
+          cod_empresa: number
+          created_at: string
+          criado_por: string | null
+          dados_extras: Json | null
+          data_baixa: string | null
+          data_emissao: string | null
+          data_pagamento: string | null
+          data_vencimento: string
+          descricao: string
+          forma_pagamento: string | null
+          id: string
+          natureza: string | null
+          numero_parcela: number | null
+          observacao: string | null
+          origem: string
+          origem_id: string | null
+          pessoa_documento: string | null
+          pessoa_nome: string | null
+          recebivel_cartao_id: string | null
+          recorrencia_tipo: string | null
+          recorrente: boolean | null
+          requer_validacao: boolean | null
+          status: string
+          subcategoria: string | null
+          tipo: string
+          total_parcelas: number | null
+          updated_at: string
+          valor: number
+          valor_pago: number | null
+        }
+        Insert: {
+          adquirente?: string | null
+          autorizado_em?: string | null
+          autorizado_por?: string | null
+          baixado_em?: string | null
+          baixado_por?: string | null
+          bandeira?: string | null
+          bordero_id?: string | null
+          btg_cobranca_id?: string | null
+          btg_dda_id?: string | null
+          btg_extrato_id?: string | null
+          btg_pagamento_id?: string | null
+          categoria?: string | null
+          cod_empresa: number
+          created_at?: string
+          criado_por?: string | null
+          dados_extras?: Json | null
+          data_baixa?: string | null
+          data_emissao?: string | null
+          data_pagamento?: string | null
+          data_vencimento: string
+          descricao: string
+          forma_pagamento?: string | null
+          id?: string
+          natureza?: string | null
+          numero_parcela?: number | null
+          observacao?: string | null
+          origem?: string
+          origem_id?: string | null
+          pessoa_documento?: string | null
+          pessoa_nome?: string | null
+          recebivel_cartao_id?: string | null
+          recorrencia_tipo?: string | null
+          recorrente?: boolean | null
+          requer_validacao?: boolean | null
+          status?: string
+          subcategoria?: string | null
+          tipo: string
+          total_parcelas?: number | null
+          updated_at?: string
+          valor: number
+          valor_pago?: number | null
+        }
+        Update: {
+          adquirente?: string | null
+          autorizado_em?: string | null
+          autorizado_por?: string | null
+          baixado_em?: string | null
+          baixado_por?: string | null
+          bandeira?: string | null
+          bordero_id?: string | null
+          btg_cobranca_id?: string | null
+          btg_dda_id?: string | null
+          btg_extrato_id?: string | null
+          btg_pagamento_id?: string | null
+          categoria?: string | null
+          cod_empresa?: number
+          created_at?: string
+          criado_por?: string | null
+          dados_extras?: Json | null
+          data_baixa?: string | null
+          data_emissao?: string | null
+          data_pagamento?: string | null
+          data_vencimento?: string
+          descricao?: string
+          forma_pagamento?: string | null
+          id?: string
+          natureza?: string | null
+          numero_parcela?: number | null
+          observacao?: string | null
+          origem?: string
+          origem_id?: string | null
+          pessoa_documento?: string | null
+          pessoa_nome?: string | null
+          recebivel_cartao_id?: string | null
+          recorrencia_tipo?: string | null
+          recorrente?: boolean | null
+          requer_validacao?: boolean | null
+          status?: string
+          subcategoria?: string | null
+          tipo?: string
+          total_parcelas?: number | null
+          updated_at?: string
+          valor?: number
+          valor_pago?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_lancamentos_bordero"
+            columns: ["bordero_id"]
+            isOneToOne: false
+            referencedRelation: "borderos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_lancamentos_recebivel"
+            columns: ["recebivel_cartao_id"]
+            isOneToOne: false
+            referencedRelation: "recebiveis_cartao"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lojas_configuracao: {
         Row: {
           abre_domingo: boolean | null
@@ -1222,6 +1414,96 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      recebiveis_cartao: {
+        Row: {
+          adquirente: string | null
+          bandeira: string | null
+          btg_extrato_id: string | null
+          btg_receivable_id: string | null
+          cod_empresa: number
+          created_at: string
+          data_vencimento: string
+          id: string
+          status: string
+          taxa_percentual: number | null
+          taxa_valor: number | null
+          updated_at: string
+          valor_bruto: number
+          valor_liquido: number
+        }
+        Insert: {
+          adquirente?: string | null
+          bandeira?: string | null
+          btg_extrato_id?: string | null
+          btg_receivable_id?: string | null
+          cod_empresa: number
+          created_at?: string
+          data_vencimento: string
+          id?: string
+          status?: string
+          taxa_percentual?: number | null
+          taxa_valor?: number | null
+          updated_at?: string
+          valor_bruto?: number
+          valor_liquido?: number
+        }
+        Update: {
+          adquirente?: string | null
+          bandeira?: string | null
+          btg_extrato_id?: string | null
+          btg_receivable_id?: string | null
+          cod_empresa?: number
+          created_at?: string
+          data_vencimento?: string
+          id?: string
+          status?: string
+          taxa_percentual?: number | null
+          taxa_valor?: number | null
+          updated_at?: string
+          valor_bruto?: number
+          valor_liquido?: number
+        }
+        Relationships: []
+      }
+      recebiveis_cartao_parcelas: {
+        Row: {
+          id: string
+          lancamento_id: string
+          numero_parcela: number | null
+          recebivel_id: string
+          valor_parcela: number | null
+        }
+        Insert: {
+          id?: string
+          lancamento_id: string
+          numero_parcela?: number | null
+          recebivel_id: string
+          valor_parcela?: number | null
+        }
+        Update: {
+          id?: string
+          lancamento_id?: string
+          numero_parcela?: number | null
+          recebivel_id?: string
+          valor_parcela?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recebiveis_cartao_parcelas_lancamento_id_fkey"
+            columns: ["lancamento_id"]
+            isOneToOne: false
+            referencedRelation: "lancamentos_financeiros"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recebiveis_cartao_parcelas_recebivel_id_fkey"
+            columns: ["recebivel_id"]
+            isOneToOne: false
+            referencedRelation: "recebiveis_cartao"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sync_jobs: {
         Row: {

@@ -1,3 +1,39 @@
+# Plano Revisado: Sistema Financeiro Centralizado com Bordero e Conciliacao de Cartoes
+
+## Status de Implementacao
+
+### ✅ Sprint 1 (Concluído)
+- [x] Tabela `lancamentos_financeiros` criada com RLS (admin + tenant + service_role)
+- [x] Tabela `borderos` criada com RLS
+- [x] Tabela `recebiveis_cartao` criada com RLS
+- [x] Tabela `recebiveis_cartao_parcelas` criada com RLS
+- [x] Edge function `financeiro-lancamentos` (listar, criar, editar, excluir, autorizar, baixar, cancelar)
+- [x] Página `FinanceiroHubPage` com KPIs, filtros, tabela e CRUD
+- [x] Rota `/financeiro/hub` adicionada ao App.tsx
+- [x] Sidebar reorganizado com "Hub Financeiro" como seção principal
+
+### 🔲 Sprint 2 — Borderô + Aprovação Master + BTG Batch API
+- [ ] Actions de borderô na edge function btg-pagamentos (criar, aprovar, enviar, cancelar)
+- [ ] UI de borderô no Hub (selecionar lançamentos, criar lote, aprovar)
+- [ ] Integração BTG Batch Payments API
+
+### 🔲 Sprint 3 — Conciliação de Cartões
+- [ ] Edge function `btg-recebiveis-cartao` (importar agenda BTG, conciliar)
+- [ ] Página `ConciliacaoCartoesPage` (`/financeiro/cartoes`)
+- [ ] Cálculo automático de taxas de adquirente
+- [ ] Geração de lançamentos TAXA_ADQUIRENTE
+
+### 🔲 Sprint 4 — DDA + Cobrança + Conciliação Extrato
+- [ ] DDA → criar/vincular lançamento ao importar
+- [ ] Cobrança → vincular lançamento ao emitir boleto
+- [ ] Conciliação automática extrato x lançamentos
+- [ ] Sugestão de classificação por similaridade
+
+### 🔲 Sprint 5 — DRE/Fluxo derivados + Refinamentos
+- [ ] DRE baseado em lançamentos BAIXADOS
+- [ ] Fluxo de Caixa real vs projetado via lançamentos
+- [ ] Import automático do ERP
+- [ ] Lançamentos recorrentes (pg_cron)
 
 
 # Plano Revisado: Sistema Financeiro Centralizado com Bordero e Conciliacao de Cartoes
