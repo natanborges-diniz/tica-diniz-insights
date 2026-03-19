@@ -340,7 +340,7 @@ export default function FinanceiroHubPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-500" /> Vencidos
+              <AlertTriangle className="h-4 w-4 text-accent-foreground" /> Vencidos
             </CardTitle>
           </CardHeader>
           <CardContent><p className="text-2xl font-bold">{vencidos}</p></CardContent>
