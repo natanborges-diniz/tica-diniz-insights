@@ -74,9 +74,16 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
   ],
   financeiro: [
     {
+      label: "Visão Geral",
+      items: [
+        { title: "Overview Financeiro", url: "/financeiro/overview", icon: Landmark },
+      ],
+    },
+    {
       label: "Hub Financeiro",
       items: [
         { title: "Lançamentos", url: "/financeiro/hub", icon: Landmark },
+        { title: "Classificação", url: "/financeiro/classificacao", icon: ClipboardList },
         { title: "Conciliação Cartões", url: "/financeiro/cartoes", icon: CreditCard },
       ],
     },
