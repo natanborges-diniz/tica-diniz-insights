@@ -46,8 +46,7 @@ export default function FinanceiroOverviewPage() {
 
   const { data: resumo, isLoading } = useQuery<ResumoFinanceiro>({
     queryKey: ["resumo-financeiro", codEmpresa],
-    queryFn: () => invokeAction("resumo_financeiro", { cod_empresa: codEmpresa }),
-    enabled: codEmpresa !== undefined && codEmpresa !== null,
+    queryFn: () => invokeAction("resumo_financeiro", { cod_empresa: codEmpresa ?? 0 }),
     refetchInterval: 60000,
   });
 

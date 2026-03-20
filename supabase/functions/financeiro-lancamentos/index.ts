@@ -691,13 +691,15 @@ async function listarPendentesValidacao(body: Record<string, unknown>) {
 
 async function resumoFinanceiro(body: Record<string, unknown>) {
   const { cod_empresa, data_inicio, data_fim } = body;
+  const codEmp = cod_empresa && Number(cod_empresa) > 0 ? Number(cod_empresa) : null;
 
+  // ── 1. Try lancamentos_financeiros (ledger) ──
   let query = supabase
     .from("lancamentos_financeiros")
     .select("tipo, status, valor, valor_pago, requer_validacao, data_vencimento")
     .not("status", "eq", "CANCELADO");
 
-  if (cod_empresa) query = query.eq("cod_empresa", cod_empresa);
+  if (codEmp) query = query.eq("cod_empresa", codEmp);
   if (data_inicio) query = query.gte("data_vencimento", data_inicio);
   if (data_fim) query = query.lte("data_vencimento", data_fim);
 
@@ -714,42 +716,82 @@ async function resumoFinanceiro(body: Record<string, unknown>) {
   let qtdPendentesValidacao = 0;
   let totalLancamentos = 0;
 
-  for (const l of (lancs || [])) {
-    totalLancamentos++;
-    const val = Number(l.valor || 0);
-    const valPago = Number(l.valor_pago || 0);
+  const useLedger = (lancs || []).length > 0;
 
-    if (l.requer_validacao) qtdPendentesValidacao++;
+  if (useLedger) {
+    for (const l of (lancs || [])) {
+      totalLancamentos++;
+      const val = Number(l.valor || 0);
+      const valPago = Number(l.valor_pago || 0);
 
-    if (l.status === "BAIXADO") {
-      if (l.tipo === "RECEBER") totalBaixadoReceber += valPago || val;
-      else totalBaixadoPagar += valPago || val;
-    } else {
-      if (l.tipo === "RECEBER") totalReceberAberto += val;
-      else totalPagarAberto += val;
+      if (l.requer_validacao) qtdPendentesValidacao++;
 
-      if (l.data_vencimento < hoje && l.status === "PREVISTO") {
-        qtdVencidos++;
+      if (l.status === "BAIXADO") {
+        if (l.tipo === "RECEBER") totalBaixadoReceber += valPago || val;
+        else totalBaixadoPagar += valPago || val;
+      } else {
+        if (l.tipo === "RECEBER") totalReceberAberto += val;
+        else totalPagarAberto += val;
+
+        if (l.data_vencimento < hoje && l.status === "PREVISTO") {
+          qtdVencidos++;
+        }
+      }
+    }
+  } else {
+    // ── Fallback: parcelas_cache (ERP data) ──
+    console.log("[resumo] Ledger vazio, usando parcelas_cache como fallback");
+    let cacheQuery = supabase
+      .from("parcelas_cache")
+      .select("tipo_lancamento, situacao, valor, valor_pago, data_vencimento");
+
+    if (codEmp) cacheQuery = cacheQuery.eq("cod_empresa", codEmp);
+    if (data_inicio) cacheQuery = cacheQuery.gte("data_vencimento", data_inicio);
+    if (data_fim) cacheQuery = cacheQuery.lte("data_vencimento", data_fim);
+
+    const { data: parcelas, error: pErr } = await cacheQuery;
+    if (pErr) throw new Error(pErr.message);
+
+    for (const p of (parcelas || [])) {
+      totalLancamentos++;
+      const val = Number(p.valor || 0);
+      const valPago = Number(p.valor_pago || 0);
+
+      if (p.situacao === "PAGA") {
+        if (p.tipo_lancamento === "RECEBER") totalBaixadoReceber += valPago || val;
+        else totalBaixadoPagar += valPago || val;
+      } else {
+        if (p.tipo_lancamento === "RECEBER") totalReceberAberto += val;
+        else totalPagarAberto += val;
+
+        if (p.data_vencimento && p.data_vencimento < hoje && p.situacao === "EM ABERTO") {
+          qtdVencidos++;
+        }
+        if (p.situacao === "EM ATRASO") {
+          qtdVencidos++;
+        }
       }
     }
   }
 
+  // ── Borderôs ──
   let bQuery = supabase
     .from("borderos")
     .select("status, total_valor")
     .in("status", ["MONTAGEM", "APROVADO", "ENVIADO"]);
 
-  if (cod_empresa) bQuery = bQuery.eq("cod_empresa", cod_empresa);
+  if (codEmp) bQuery = bQuery.eq("cod_empresa", codEmp);
 
   const { data: borderosData } = await bQuery;
   const borderosAbertos = (borderosData || []).length;
   const borderosTotalValor = (borderosData || []).reduce((s: number, b: { total_valor: number }) => s + Number(b.total_valor || 0), 0);
 
+  // ── Recebíveis cartão ──
   let rcQuery = supabase
     .from("recebiveis_cartao")
     .select("status, valor_bruto, valor_liquido, taxa_valor");
 
-  if (cod_empresa) rcQuery = rcQuery.eq("cod_empresa", cod_empresa);
+  if (codEmp) rcQuery = rcQuery.eq("cod_empresa", codEmp);
 
   const { data: recebiveis } = await rcQuery;
   const recebiveisPendentes = (recebiveis || []).filter((r: { status: string }) => r.status === "PREVISTO").length;
