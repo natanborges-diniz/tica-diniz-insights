@@ -57,9 +57,11 @@ export default function FinanceiroClassificacaoPage() {
 
   const invokeAction = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error("Sessão expirada — faça login novamente");
     const { data, error } = await supabase.functions.invoke("financeiro-lancamentos", {
       body: { action, ...extra },
-      headers: { Authorization: `Bearer ${session?.access_token}` },
+      headers: { Authorization: `Bearer ${token}` },
     });
     if (error) throw error;
     return data;
