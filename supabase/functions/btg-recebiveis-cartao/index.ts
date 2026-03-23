@@ -78,8 +78,7 @@ async function importarAgenda(body: Record<string, unknown>, _userId: string) {
   if (!cod_empresa) throw new Error("cod_empresa obrigatório");
 
   // Resolve ambiente from fornecedor_configuracao (source of truth)
-  const db = getServiceClient();
-  const { data: configRow } = await db
+  const { data: configRow } = await supabase
     .from("fornecedor_configuracao")
     .select("ambiente")
     .eq("fornecedor", "btg")
