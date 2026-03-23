@@ -51,8 +51,9 @@ async function fetchBtgReceivables(url: string, accessToken: string, cnpj: strin
 
   const res = await fetch(url, {
     headers: {
-      Authorization: accessToken,
+      "Authorization": accessToken,
       "x-identification": cnpj,
+      "x-client-channel": "THIRD_PARTY",
     },
   });
 
