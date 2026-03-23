@@ -185,7 +185,11 @@ async function importarAgenda(body: Record<string, unknown>, _userId: string) {
       url += `?$filter=${encodeURIComponent(filters.join(" and "))}`;
     }
 
-    const allItems = await fetchBtgReceivables(url, tokenData.access_token, cnpj);
+    // Ensure Bearer prefix for OData API
+    const bearerToken = tokenData.access_token.startsWith("Bearer ")
+      ? tokenData.access_token
+      : `Bearer ${tokenData.access_token}`;
+    const allItems = await fetchBtgReceivables(url, bearerToken, cnpj);
 
     console.log("[btg-recebiveis] Total items fetched:", allItems.length);
 
