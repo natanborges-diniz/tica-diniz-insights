@@ -46,11 +46,14 @@ function json(data: unknown, status = 200) {
   });
 }
 
-async function fetchBtgReceivables(url: string, accessToken: string) {
+async function fetchBtgReceivables(url: string, accessToken: string, cnpj: string) {
   console.log("[btg-recebiveis] Calling:", url);
 
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: {
+      Authorization: accessToken,
+      "x-identification": cnpj,
+    },
   });
 
   console.log("[btg-recebiveis] Status:", res.status);
@@ -62,9 +65,10 @@ async function fetchBtgReceivables(url: string, accessToken: string) {
   }
 
   const apiData = JSON.parse(rawBody);
+  // OData response: { value: [...] } or direct array
   const items = Array.isArray(apiData)
     ? apiData
-    : apiData.receivables || apiData.items || apiData.data || apiData.content || [];
+    : apiData.value || apiData.items || apiData.data || [];
 
   console.log("[btg-recebiveis] Top-level keys:", Object.keys(apiData));
   console.log("[btg-recebiveis] Items count:", Array.isArray(items) ? items.length : "NOT_ARRAY");
