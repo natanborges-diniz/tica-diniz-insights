@@ -46,11 +46,14 @@ function json(data: unknown, status = 200) {
   });
 }
 
-async function fetchBtgReceivables(url: string, accessToken: string) {
+async function fetchBtgReceivables(url: string, accessToken: string, cnpj: string) {
   console.log("[btg-recebiveis] Calling:", url);
 
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: {
+      Authorization: accessToken,
+      "x-identification": cnpj,
+    },
   });
 
   console.log("[btg-recebiveis] Status:", res.status);
@@ -62,9 +65,10 @@ async function fetchBtgReceivables(url: string, accessToken: string) {
   }
 
   const apiData = JSON.parse(rawBody);
+  // OData response: { value: [...] } or direct array
   const items = Array.isArray(apiData)
     ? apiData
-    : apiData.receivables || apiData.items || apiData.data || apiData.content || [];
+    : apiData.value || apiData.items || apiData.data || [];
 
   console.log("[btg-recebiveis] Top-level keys:", Object.keys(apiData));
   console.log("[btg-recebiveis] Items count:", Array.isArray(items) ? items.length : "NOT_ARRAY");
@@ -167,42 +171,37 @@ async function importarAgenda(body: Record<string, unknown>, _userId: string) {
     const cnpj = conta?.cnpj?.replace(/\D/g, "");
     if (!cnpj) throw new Error("CNPJ não encontrado");
 
-    // BTG API: GET /{CNPJ}/credit/credit-card-receivables
-    // Only accepts pageSize and pageNumber — NO date filters
-    const apiBase = "https://api.empresas.btgpactual.com";
-    let allItems: Array<Record<string, unknown>> = [];
-    let pageNumber = 1;
-    const pageSize = 500;
-
-    // Paginate through all results
-    while (true) {
-      const params = new URLSearchParams();
-      params.set("pageSize", String(pageSize));
-      params.set("pageNumber", String(pageNumber));
-      const url = `${apiBase}/${cnpj}/credit/credit-card-receivables?${params}`;
-      const items = await fetchBtgReceivables(url, tokenData.access_token);
-      allItems = allItems.concat(items);
-      if (items.length < pageSize) break; // last page
-      pageNumber++;
-      if (pageNumber > 20) break; // safety limit
+    // BTG Receivables OData API
+    const apiBase = "https://api-recebiveis.btgpactualbusiness.com/odata/V1CreditCardReceivablesCedenteOData";
+    
+    // Build OData filter for date range
+    const filters: string[] = [];
+    if (data_inicio) filters.push(`dataVencimento ge ${data_inicio}`);
+    if (data_fim) filters.push(`dataVencimento le ${data_fim}`);
+    
+    let url = apiBase;
+    if (filters.length > 0) {
+      url += `?$filter=${encodeURIComponent(filters.join(" and "))}`;
     }
 
-    console.log("[btg-recebiveis] Total items fetched across pages:", allItems.length);
+    const allItems = await fetchBtgReceivables(url, tokenData.access_token, cnpj);
 
-    // Map using official BTG field names:
-    // id (number), payerId (CNPJ adquirente), payeeId, maturityDate, scheme (bandeira),
-    // maturityAmount (valor bruto string), maximumDisbursementAmount (valor líquido string), status
+    console.log("[btg-recebiveis] Total items fetched:", allItems.length);
+
+    // Map OData fields to our schema
+    // Common OData fields: dataVencimento, valorBruto/maturityAmount, valorLiquido,
+    // sacadoCnpj (adquirente CNPJ), bandeira/scheme, diasCorridos, diasUteis
     recebiveis = allItems.map((item: Record<string, unknown>) => {
-      const bruto = Number(item.maturityAmount || 0);
-      const liquido = Number(item.maximumDisbursementAmount || 0);
+      const bruto = Number(item.valorBruto || item.maturityAmount || item.valor || 0);
+      const liquido = Number(item.valorLiquido || item.maximumDisbursementAmount || bruto);
       const taxaValor = Math.round((bruto - liquido) * 100) / 100;
       const taxaPct = bruto > 0 ? Math.round((taxaValor / bruto) * 10000) / 100 : 0;
 
       return {
         cod_empresa: Number(cod_empresa),
-        adquirente: String(item.payerId || "DESCONHECIDO"),
-        bandeira: String(item.scheme || "DESCONHECIDA"),
-        data_vencimento: item.maturityDate,
+        adquirente: String(item.sacadoCnpj || item.sacadoNome || item.adquirente || item.payerId || "DESCONHECIDO"),
+        bandeira: String(item.bandeira || item.scheme || "DESCONHECIDA"),
+        data_vencimento: String(item.dataVencimento || item.maturityDate || ""),
         valor_bruto: bruto,
         valor_liquido: liquido,
         taxa_percentual: taxaPct,
@@ -211,16 +210,6 @@ async function importarAgenda(body: Record<string, unknown>, _userId: string) {
         btg_receivable_id: item.id != null ? String(item.id) : null,
       };
     });
-
-    // Client-side date filter (since API doesn't support it)
-    if (data_inicio || data_fim) {
-      recebiveis = recebiveis.filter((r) => {
-        const dv = String(r.data_vencimento);
-        if (data_inicio && dv < String(data_inicio)) return false;
-        if (data_fim && dv > String(data_fim)) return false;
-        return true;
-      });
-    }
   }
 
   // Upsert: skip duplicates by btg_receivable_id
