@@ -118,10 +118,15 @@ async function fetchBtgReceivablesLegacy(cnpj: string, accessToken: string) {
   };
 
   // 1) Tenta sem paginação explícita (algumas contas/versões já retornam a primeira página direto)
-  const withoutPaging = await requestLegacy(baseUrl);
-  if (withoutPaging.length > 0) {
-    console.log("[btg-recebiveis][legacy] Dados retornados sem pageNumber:", withoutPaging.length);
-    return withoutPaging;
+  let withoutPaging: Array<Record<string, unknown>> = [];
+  try {
+    withoutPaging = await requestLegacy(baseUrl);
+    if (withoutPaging.length > 0) {
+      console.log("[btg-recebiveis][legacy] Dados retornados sem pageNumber:", withoutPaging.length);
+      return withoutPaging;
+    }
+  } catch (e) {
+    console.warn("[btg-recebiveis][legacy] Falha sem pageNumber, seguindo para paginação:", e instanceof Error ? e.message : String(e));
   }
 
   // 2) Fallback resiliente: testa paginação iniciando em 0 e em 1
@@ -130,7 +135,18 @@ async function fetchBtgReceivablesLegacy(cnpj: string, accessToken: string) {
 
     for (let page = startPage; page < startPage + maxPages; page++) {
       const url = `${baseUrl}?pageSize=${pageSize}&pageNumber=${page}`;
-      const pageItems = await requestLegacy(url);
+      let pageItems: Array<Record<string, unknown>> = [];
+
+      try {
+        pageItems = await requestLegacy(url);
+      } catch (e) {
+        console.warn(
+          `[btg-recebiveis][legacy] Falha na estratégia pageStart=${startPage}, page=${page}:`,
+          e instanceof Error ? e.message : String(e)
+        );
+        break;
+      }
+
       allItems.push(...pageItems);
 
       if (pageItems.length < pageSize) {
