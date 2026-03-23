@@ -77,7 +77,14 @@ async function importarAgenda(body: Record<string, unknown>, _userId: string) {
   const { cod_empresa, data_inicio, data_fim } = body;
   if (!cod_empresa) throw new Error("cod_empresa obrigatório");
 
-  const isSandbox = Deno.env.get("BTG_ENVIRONMENT") !== "production";
+  // Resolve ambiente from fornecedor_configuracao (source of truth)
+  const { data: configRow } = await supabase
+    .from("fornecedor_configuracao")
+    .select("ambiente")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+  const isSandbox = (configRow?.ambiente || "sandbox") !== "production";
 
   let recebiveis: Array<Record<string, unknown>> = [];
 
