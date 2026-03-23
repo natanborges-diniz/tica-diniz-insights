@@ -142,7 +142,7 @@ async function importarAgenda(body: Record<string, unknown>, _userId: string) {
     if (data_inicio) params.set("startDate", String(data_inicio));
     if (data_fim) params.set("endDate", String(data_fim));
 
-    const res = await fetch(`${apiBase}/${cnpj}/banking/credit-card-receivables?${params}`, {
+    const res = await fetch(`${apiBase}/${cnpj}/credit/credit-card-receivables?${params}`, {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
 
