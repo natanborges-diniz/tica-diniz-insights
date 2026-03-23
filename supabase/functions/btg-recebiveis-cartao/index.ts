@@ -117,8 +117,8 @@ async function fetchBtgReceivablesLegacy(cnpj: string, accessToken: string) {
     }
   };
 
-  // Fallback resiliente: testa paginação iniciando em 1 e em 0
-  for (const startPage of [1, 0]) {
+  // Fallback legado com paginação iniciando em 1 (conforme comportamento observado da API)
+  for (const startPage of [1]) {
     const allItems: Array<Record<string, unknown>> = [];
 
     for (let page = startPage; page < startPage + maxPages; page++) {
