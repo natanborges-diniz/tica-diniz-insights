@@ -103,8 +103,22 @@ export default function ConciliacaoCartoesPage() {
 
   const importarMutation = useMutation({
     mutationFn: () => invokeAction("importar_agenda", { cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim }),
-    onSuccess: (data: { inserted?: number; sandbox?: boolean }) => {
-      toast.success(`Agenda importada — ${data?.inserted || 0} novos recebíveis${data?.sandbox ? " (sandbox)" : ""}`);
+    onSuccess: (data: { total?: number; inserted?: number; skipped_duplicates?: number; total_no_periodo?: number; sandbox_no_periodo?: number; sandbox?: boolean }) => {
+      const totalApi = data?.total || 0;
+      const inserted = data?.inserted || 0;
+      const skipped = data?.skipped_duplicates || 0;
+      const totalNoPeriodo = data?.total_no_periodo || 0;
+      const sandboxNoPeriodo = data?.sandbox_no_periodo || 0;
+
+      if (!data?.sandbox && totalApi === 0) {
+        toast.warning(
+          `BTG retornou 0 no período. Já existem ${totalNoPeriodo} recebíveis no painel${sandboxNoPeriodo > 0 ? ` (${sandboxNoPeriodo} de sandbox)` : ""}.`
+        );
+      } else {
+        toast.success(
+          `Importação concluída — BTG: ${totalApi} | novos: ${inserted} | já existentes: ${skipped}${data?.sandbox ? " (sandbox)" : ""}`
+        );
+      }
       invalidateAll();
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao importar agenda"),
