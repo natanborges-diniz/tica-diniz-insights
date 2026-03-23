@@ -46,6 +46,36 @@ function json(data: unknown, status = 200) {
   });
 }
 
+async function fetchBtgReceivables(url: string, accessToken: string) {
+  console.log("[btg-recebiveis] Calling:", url);
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  console.log("[btg-recebiveis] Status:", res.status);
+  const rawBody = await res.text();
+  console.log("[btg-recebiveis] Response body (first 2000 chars):", rawBody.slice(0, 2000));
+
+  if (!res.ok) {
+    throw new Error(`BTG receivables API failed: ${res.status} ${rawBody}`);
+  }
+
+  const apiData = JSON.parse(rawBody);
+  const items = Array.isArray(apiData)
+    ? apiData
+    : apiData.receivables || apiData.items || apiData.data || apiData.content || [];
+
+  console.log("[btg-recebiveis] Top-level keys:", Object.keys(apiData));
+  console.log("[btg-recebiveis] Items count:", Array.isArray(items) ? items.length : "NOT_ARRAY");
+  if (Array.isArray(items) && items.length > 0) {
+    console.log("[btg-recebiveis] First item keys:", Object.keys(items[0]));
+    console.log("[btg-recebiveis] First item:", JSON.stringify(items[0]).slice(0, 1000));
+  }
+
+  return Array.isArray(items) ? items : [];
+}
+
 // ═══════════════════════════════════════════════════════════
 // LISTAR recebíveis com parcelas vinculadas
 // ═══════════════════════════════════════════════════════════
@@ -141,42 +171,29 @@ async function importarAgenda(body: Record<string, unknown>, _userId: string) {
     const params = new URLSearchParams();
     if (data_inicio) params.set("startDate", String(data_inicio));
     if (data_fim) params.set("endDate", String(data_fim));
+    params.set("pageSize", "500");
+    params.set("pageNumber", "1");
 
     // Docs: https://developers.empresas.btgpactual.com/reference/get_credit-card-receivables
     const url = `${apiBase}/${cnpj}/credit/credit-card-receivables?${params}`;
-    console.log("[btg-recebiveis] Calling:", url);
+    let items = await fetchBtgReceivables(url, tokenData.access_token);
 
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
-    });
-
-    console.log("[btg-recebiveis] Status:", res.status);
-    const rawBody = await res.text();
-    console.log("[btg-recebiveis] Response body (first 2000 chars):", rawBody.slice(0, 2000));
-
-    if (!res.ok) {
-      throw new Error(`BTG receivables API failed: ${res.status} ${rawBody}`);
-    }
-
-    const apiData = JSON.parse(rawBody);
-    console.log("[btg-recebiveis] Top-level keys:", Object.keys(apiData));
-
-    // Try multiple possible response shapes
-    const items = Array.isArray(apiData) ? apiData
-      : apiData.receivables || apiData.items || apiData.data || apiData.content || [];
-    console.log("[btg-recebiveis] Items count:", Array.isArray(items) ? items.length : "NOT_ARRAY");
-    if (Array.isArray(items) && items.length > 0) {
-      console.log("[btg-recebiveis] First item keys:", Object.keys(items[0]));
-      console.log("[btg-recebiveis] First item:", JSON.stringify(items[0]).slice(0, 1000));
+    if (items.length === 0) {
+      const fallbackParams = new URLSearchParams();
+      fallbackParams.set("pageSize", "500");
+      fallbackParams.set("pageNumber", "1");
+      const fallbackUrl = `${apiBase}/${cnpj}/credit/credit-card-receivables?${fallbackParams}`;
+      console.log("[btg-recebiveis] Empty with date filters. Retrying without date filters...");
+      items = await fetchBtgReceivables(fallbackUrl, tokenData.access_token);
     }
 
     recebiveis = items.map((item: Record<string, unknown>) => ({
       cod_empresa: Number(cod_empresa),
-      adquirente: item.acquirer || item.acquirerName || item.adquirente || "DESCONHECIDO",
-      bandeira: item.brand || item.brandName || item.bandeira || "DESCONHECIDA",
-      data_vencimento: item.settlementDate || item.dueDate || item.expectedDate || item.data_vencimento,
-      valor_bruto: Number(item.grossAmount || item.totalGrossAmount || item.valor_bruto || 0),
-      valor_liquido: Number(item.netAmount || item.totalNetAmount || item.valor_liquido || 0),
+      adquirente: item.acquirer || item.acquirerName || item.payerId || item.adquirente || "DESCONHECIDO",
+      bandeira: item.brand || item.brandName || item.scheme || item.bandeira || "DESCONHECIDA",
+      data_vencimento: item.settlementDate || item.dueDate || item.expectedDate || item.maturityDate || item.data_vencimento,
+      valor_bruto: Number(item.grossAmount || item.totalGrossAmount || item.maturityAmount || item.valor_bruto || 0),
+      valor_liquido: Number(item.netAmount || item.totalNetAmount || item.maximumDisbursementAmount || item.valor_liquido || 0),
       taxa_percentual: Number(item.feePercentage || item.discountRate || 0),
       taxa_valor: Number(item.feeAmount || item.totalFeeAmount || 0),
       status: "PREVISTO",
