@@ -167,38 +167,60 @@ async function importarAgenda(body: Record<string, unknown>, _userId: string) {
     const cnpj = conta?.cnpj?.replace(/\D/g, "");
     if (!cnpj) throw new Error("CNPJ não encontrado");
 
+    // BTG API: GET /{CNPJ}/credit/credit-card-receivables
+    // Only accepts pageSize and pageNumber — NO date filters
     const apiBase = "https://api.empresas.btgpactual.com";
-    const params = new URLSearchParams();
-    if (data_inicio) params.set("startDate", String(data_inicio));
-    if (data_fim) params.set("endDate", String(data_fim));
-    params.set("pageSize", "500");
-    params.set("pageNumber", "1");
+    let allItems: Array<Record<string, unknown>> = [];
+    let pageNumber = 1;
+    const pageSize = 500;
 
-    // Docs: https://developers.empresas.btgpactual.com/reference/get_credit-card-receivables
-    const url = `${apiBase}/${cnpj}/credit/credit-card-receivables?${params}`;
-    let items = await fetchBtgReceivables(url, tokenData.access_token);
-
-    if (items.length === 0) {
-      const fallbackParams = new URLSearchParams();
-      fallbackParams.set("pageSize", "500");
-      fallbackParams.set("pageNumber", "1");
-      const fallbackUrl = `${apiBase}/${cnpj}/credit/credit-card-receivables?${fallbackParams}`;
-      console.log("[btg-recebiveis] Empty with date filters. Retrying without date filters...");
-      items = await fetchBtgReceivables(fallbackUrl, tokenData.access_token);
+    // Paginate through all results
+    while (true) {
+      const params = new URLSearchParams();
+      params.set("pageSize", String(pageSize));
+      params.set("pageNumber", String(pageNumber));
+      const url = `${apiBase}/${cnpj}/credit/credit-card-receivables?${params}`;
+      const items = await fetchBtgReceivables(url, tokenData.access_token);
+      allItems = allItems.concat(items);
+      if (items.length < pageSize) break; // last page
+      pageNumber++;
+      if (pageNumber > 20) break; // safety limit
     }
 
-    recebiveis = items.map((item: Record<string, unknown>) => ({
-      cod_empresa: Number(cod_empresa),
-      adquirente: item.acquirer || item.acquirerName || item.payerId || item.adquirente || "DESCONHECIDO",
-      bandeira: item.brand || item.brandName || item.scheme || item.bandeira || "DESCONHECIDA",
-      data_vencimento: item.settlementDate || item.dueDate || item.expectedDate || item.maturityDate || item.data_vencimento,
-      valor_bruto: Number(item.grossAmount || item.totalGrossAmount || item.maturityAmount || item.valor_bruto || 0),
-      valor_liquido: Number(item.netAmount || item.totalNetAmount || item.maximumDisbursementAmount || item.valor_liquido || 0),
-      taxa_percentual: Number(item.feePercentage || item.discountRate || 0),
-      taxa_valor: Number(item.feeAmount || item.totalFeeAmount || 0),
-      status: "PREVISTO",
-      btg_receivable_id: item.id || item.receivableId || item.unitId || null,
-    }));
+    console.log("[btg-recebiveis] Total items fetched across pages:", allItems.length);
+
+    // Map using official BTG field names:
+    // id (number), payerId (CNPJ adquirente), payeeId, maturityDate, scheme (bandeira),
+    // maturityAmount (valor bruto string), maximumDisbursementAmount (valor líquido string), status
+    recebiveis = allItems.map((item: Record<string, unknown>) => {
+      const bruto = Number(item.maturityAmount || 0);
+      const liquido = Number(item.maximumDisbursementAmount || 0);
+      const taxaValor = Math.round((bruto - liquido) * 100) / 100;
+      const taxaPct = bruto > 0 ? Math.round((taxaValor / bruto) * 10000) / 100 : 0;
+
+      return {
+        cod_empresa: Number(cod_empresa),
+        adquirente: String(item.payerId || "DESCONHECIDO"),
+        bandeira: String(item.scheme || "DESCONHECIDA"),
+        data_vencimento: item.maturityDate,
+        valor_bruto: bruto,
+        valor_liquido: liquido,
+        taxa_percentual: taxaPct,
+        taxa_valor: taxaValor,
+        status: "PREVISTO",
+        btg_receivable_id: item.id != null ? String(item.id) : null,
+      };
+    });
+
+    // Client-side date filter (since API doesn't support it)
+    if (data_inicio || data_fim) {
+      recebiveis = recebiveis.filter((r) => {
+        const dv = String(r.data_vencimento);
+        if (data_inicio && dv < String(data_inicio)) return false;
+        if (data_fim && dv > String(data_fim)) return false;
+        return true;
+      });
+    }
   }
 
   // Upsert: skip duplicates by btg_receivable_id
