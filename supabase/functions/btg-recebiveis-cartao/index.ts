@@ -84,16 +84,17 @@ async function fetchBtgReceivables(url: string, accessToken: string, cnpj: strin
 async function fetchBtgReceivablesLegacy(cnpj: string, accessToken: string) {
   const pageSize = 500;
   const maxPages = 20;
-  const allItems: Array<Record<string, unknown>> = [];
+  const baseUrl = `https://api.empresas.btgpactual.com/${cnpj}/credit/credit-card-receivables`;
 
-  for (let page = 1; page <= maxPages; page++) {
-    const url = `https://api.empresas.btgpactual.com/${cnpj}/credit/credit-card-receivables?pageSize=${pageSize}&pageNumber=${page}`;
+  const requestLegacy = async (url: string) => {
     console.log("[btg-recebiveis][legacy] Calling:", url);
 
     const res = await fetch(url, {
       headers: {
         Authorization: accessToken,
         Accept: "application/json",
+        "x-identification": cnpj,
+        "x-client-channel": "THIRD_PARTY",
       },
     });
 
@@ -105,28 +106,49 @@ async function fetchBtgReceivablesLegacy(cnpj: string, accessToken: string) {
       throw new Error(`BTG legacy receivables API failed: ${res.status} ${rawBody}`);
     }
 
-    let pageItems: Array<Record<string, unknown>> = [];
     try {
       const parsed = JSON.parse(rawBody);
-      if (Array.isArray(parsed)) {
-        pageItems = parsed;
-      } else if (Array.isArray(parsed?.items)) {
-        pageItems = parsed.items;
-      } else if (Array.isArray(parsed?.data)) {
-        pageItems = parsed.data;
-      }
+      if (Array.isArray(parsed)) return parsed as Array<Record<string, unknown>>;
+      if (Array.isArray(parsed?.items)) return parsed.items as Array<Record<string, unknown>>;
+      if (Array.isArray(parsed?.data)) return parsed.data as Array<Record<string, unknown>>;
+      return [];
     } catch {
-      pageItems = [];
+      return [];
+    }
+  };
+
+  // Fallback legado com paginação iniciando em 1 (conforme comportamento observado da API)
+  for (const startPage of [1]) {
+    const allItems: Array<Record<string, unknown>> = [];
+
+    for (let page = startPage; page < startPage + maxPages; page++) {
+      const url = `${baseUrl}?pageSize=${pageSize}&pageNumber=${page}`;
+      let pageItems: Array<Record<string, unknown>> = [];
+
+      try {
+        pageItems = await requestLegacy(url);
+      } catch (e) {
+        console.warn(
+          `[btg-recebiveis][legacy] Falha na estratégia pageStart=${startPage}, page=${page}:`,
+          e instanceof Error ? e.message : String(e)
+        );
+        break;
+      }
+
+      allItems.push(...pageItems);
+
+      if (pageItems.length < pageSize) {
+        break;
+      }
     }
 
-    allItems.push(...pageItems);
-
-    if (pageItems.length < pageSize) {
-      break;
+    if (allItems.length > 0) {
+      console.log("[btg-recebiveis][legacy] Dados encontrados com paginação iniciando em", startPage, "→", allItems.length);
+      return allItems;
     }
   }
 
-  return allItems;
+  return [];
 }
 
 // ═══════════════════════════════════════════════════════════
