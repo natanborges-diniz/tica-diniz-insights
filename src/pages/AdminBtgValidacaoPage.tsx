@@ -418,12 +418,29 @@ export default function AdminBtgValidacaoPage() {
                             </div>
                           )}
                           {/* Account ID configurado — setup completo */}
-                          {isAuth && conta.account_id && (
-                            <Badge variant="outline" className="text-emerald-700 border-emerald-300">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Setup completo
-                            </Badge>
-                          )}
+                          {isAuth && conta.account_id && (() => {
+                            const requiredScopes = [
+                              "brn:btg:empresas:receivables:credit-card.readonly",
+                              "brn:btg:empresas:receivables:credit-card",
+                            ];
+                            const currentScopes: string[] = (status?.scopes as string[]) || [];
+                            const missingScopes = requiredScopes.some(s => !currentScopes.includes(s));
+                            return (
+                              <>
+                                {missingScopes ? (
+                                  <Badge variant="outline" className="text-amber-700 border-amber-300">
+                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                    Escopos incompletos
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-emerald-700 border-emerald-300">
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                    Setup completo
+                                  </Badge>
+                                )}
+                              </>
+                            );
+                          })()}
                           {!isAuth && (
                             <Button
                               size="sm"
@@ -432,6 +449,17 @@ export default function AdminBtgValidacaoPage() {
                             >
                               <ExternalLink className="h-3 w-3 mr-1" />
                               Autorizar
+                            </Button>
+                          )}
+                          {isAuth && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAuthorize(conta.cod_empresa)}
+                              disabled={authorizeMutation.isPending}
+                            >
+                              <KeyRound className="h-3 w-3 mr-1" />
+                              Re-autorizar
                             </Button>
                           )}
                           {manualAuthorizeUrl[conta.cod_empresa] && (
