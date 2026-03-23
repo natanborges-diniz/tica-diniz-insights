@@ -81,6 +81,54 @@ async function fetchBtgReceivables(url: string, accessToken: string, cnpj: strin
   return Array.isArray(items) ? items : [];
 }
 
+async function fetchBtgReceivablesLegacy(cnpj: string, accessToken: string) {
+  const pageSize = 500;
+  const maxPages = 20;
+  const allItems: Array<Record<string, unknown>> = [];
+
+  for (let page = 1; page <= maxPages; page++) {
+    const url = `https://api.empresas.btgpactual.com/${cnpj}/credit/credit-card-receivables?pageSize=${pageSize}&pageNumber=${page}`;
+    console.log("[btg-recebiveis][legacy] Calling:", url);
+
+    const res = await fetch(url, {
+      headers: {
+        Authorization: accessToken,
+        Accept: "application/json",
+      },
+    });
+
+    const rawBody = await res.text();
+    console.log("[btg-recebiveis][legacy] Status:", res.status);
+    console.log("[btg-recebiveis][legacy] Response body (first 2000 chars):", rawBody.slice(0, 2000));
+
+    if (!res.ok) {
+      throw new Error(`BTG legacy receivables API failed: ${res.status} ${rawBody}`);
+    }
+
+    let pageItems: Array<Record<string, unknown>> = [];
+    try {
+      const parsed = JSON.parse(rawBody);
+      if (Array.isArray(parsed)) {
+        pageItems = parsed;
+      } else if (Array.isArray(parsed?.items)) {
+        pageItems = parsed.items;
+      } else if (Array.isArray(parsed?.data)) {
+        pageItems = parsed.data;
+      }
+    } catch {
+      pageItems = [];
+    }
+
+    allItems.push(...pageItems);
+
+    if (pageItems.length < pageSize) {
+      break;
+    }
+  }
+
+  return allItems;
+}
+
 // ═══════════════════════════════════════════════════════════
 // LISTAR recebíveis com parcelas vinculadas
 // ═══════════════════════════════════════════════════════════
@@ -172,24 +220,33 @@ async function importarAgenda(body: Record<string, unknown>, _userId: string) {
     const cnpj = conta?.cnpj?.replace(/\D/g, "");
     if (!cnpj) throw new Error("CNPJ não encontrado");
 
-    // BTG Receivables OData API
-    const apiBase = "https://api-recebiveis.btgpactualbusiness.com/odata/V1CreditCardReceivablesCedenteOData";
-    
-    // Build OData filter for date range
-    const filters: string[] = [];
-    if (data_inicio) filters.push(`dataVencimento ge ${data_inicio}`);
-    if (data_fim) filters.push(`dataVencimento le ${data_fim}`);
-    
-    let url = apiBase;
-    if (filters.length > 0) {
-      url += `?$filter=${encodeURIComponent(filters.join(" and "))}`;
-    }
-
-    // Ensure Bearer prefix for OData API
+    // Ensure Bearer prefix for BTG APIs
     const bearerToken = tokenData.access_token.startsWith("Bearer ")
       ? tokenData.access_token
       : `Bearer ${tokenData.access_token}`;
-    const allItems = await fetchBtgReceivables(url, bearerToken, cnpj);
+
+    // 1) Try OData endpoint first
+    const apiBase = "https://api-recebiveis.btgpactualbusiness.com/odata/V1CreditCardReceivablesCedenteOData";
+    const filters: string[] = [];
+    if (data_inicio) filters.push(`dataVencimento ge '${String(data_inicio)}'`);
+    if (data_fim) filters.push(`dataVencimento le '${String(data_fim)}'`);
+
+    let odataUrl = apiBase;
+    if (filters.length > 0) {
+      odataUrl += `?$filter=${encodeURIComponent(filters.join(" and "))}`;
+    }
+
+    let allItems: Array<Record<string, unknown>> = [];
+    try {
+      allItems = await fetchBtgReceivables(odataUrl, bearerToken, cnpj);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const shouldFallback = msg.includes(" 401 ") || msg.includes(" 418 ");
+      if (!shouldFallback) throw e;
+
+      console.warn("[btg-recebiveis] OData falhou com autenticação, usando endpoint legado.", msg);
+      allItems = await fetchBtgReceivablesLegacy(cnpj, bearerToken);
+    }
 
     console.log("[btg-recebiveis] Total items fetched:", allItems.length);
 
@@ -214,6 +271,10 @@ async function importarAgenda(body: Record<string, unknown>, _userId: string) {
         status: "PREVISTO",
         btg_receivable_id: item.id != null ? String(item.id) : null,
       };
+    }).filter((r) => {
+      if (data_inicio && r.data_vencimento < String(data_inicio)) return false;
+      if (data_fim && r.data_vencimento > String(data_fim)) return false;
+      return true;
     });
   }
 
