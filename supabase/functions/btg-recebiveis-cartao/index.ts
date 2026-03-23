@@ -142,8 +142,8 @@ async function importarAgenda(body: Record<string, unknown>, _userId: string) {
     if (data_inicio) params.set("startDate", String(data_inicio));
     if (data_fim) params.set("endDate", String(data_fim));
 
-    // Try the receivables endpoint
-    const url = `${apiBase}/${cnpj}/receivables/credit-card?${params}`;
+    // Docs: https://developers.empresas.btgpactual.com/reference/get_credit-card-receivables
+    const url = `${apiBase}/${cnpj}/credit/credit-card-receivables?${params}`;
     console.log("[btg-recebiveis] Calling:", url);
 
     const res = await fetch(url, {
