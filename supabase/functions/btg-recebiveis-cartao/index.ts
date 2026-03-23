@@ -185,23 +185,62 @@ async function importarAgenda(body: Record<string, unknown>, _userId: string) {
   }
 
   // Upsert: skip duplicates by btg_receivable_id
-  let inserted = 0;
-  for (const r of recebiveis) {
-    if (r.btg_receivable_id) {
-      const { data: existing } = await supabase
-        .from("recebiveis_cartao")
-        .select("id")
-        .eq("btg_receivable_id", r.btg_receivable_id)
-        .maybeSingle();
+  const incomingIds = recebiveis
+    .map((r) => r.btg_receivable_id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
 
-      if (existing) continue;
+  const existingIds = new Set<string>();
+  if (incomingIds.length > 0) {
+    const { data: existingRows } = await supabase
+      .from("recebiveis_cartao")
+      .select("btg_receivable_id")
+      .in("btg_receivable_id", incomingIds);
+
+    for (const row of existingRows || []) {
+      if (row.btg_receivable_id) existingIds.add(row.btg_receivable_id);
     }
+  }
 
+  const novosRecebiveis = recebiveis.filter((r) => {
+    if (!r.btg_receivable_id) return true;
+    return !existingIds.has(String(r.btg_receivable_id));
+  });
+
+  let inserted = 0;
+  for (const r of novosRecebiveis) {
     const { error } = await supabase.from("recebiveis_cartao").insert(r);
     if (!error) inserted++;
   }
 
-  return json({ ok: true, total: recebiveis.length, inserted, sandbox: isSandbox });
+  let totalNoPeriodoQuery = supabase
+    .from("recebiveis_cartao")
+    .select("id", { count: "exact", head: true })
+    .eq("cod_empresa", Number(cod_empresa));
+  if (data_inicio) totalNoPeriodoQuery = totalNoPeriodoQuery.gte("data_vencimento", String(data_inicio));
+  if (data_fim) totalNoPeriodoQuery = totalNoPeriodoQuery.lte("data_vencimento", String(data_fim));
+
+  let sandboxNoPeriodoQuery = supabase
+    .from("recebiveis_cartao")
+    .select("id", { count: "exact", head: true })
+    .eq("cod_empresa", Number(cod_empresa))
+    .like("btg_receivable_id", "sandbox-%");
+  if (data_inicio) sandboxNoPeriodoQuery = sandboxNoPeriodoQuery.gte("data_vencimento", String(data_inicio));
+  if (data_fim) sandboxNoPeriodoQuery = sandboxNoPeriodoQuery.lte("data_vencimento", String(data_fim));
+
+  const [{ count: totalNoPeriodo }, { count: sandboxNoPeriodo }] = await Promise.all([
+    totalNoPeriodoQuery,
+    sandboxNoPeriodoQuery,
+  ]);
+
+  return json({
+    ok: true,
+    total: recebiveis.length,
+    inserted,
+    skipped_duplicates: Math.max(recebiveis.length - novosRecebiveis.length, 0),
+    total_no_periodo: totalNoPeriodo || 0,
+    sandbox_no_periodo: sandboxNoPeriodo || 0,
+    sandbox: isSandbox,
+  });
 }
 
 // ═══════════════════════════════════════════════════════════
