@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Link2, Plus, XCircle, RefreshCw, Copy, ExternalLink,
-  CreditCard, Clock, CheckCircle2, AlertTriangle,
+  CreditCard, Clock, CheckCircle2, AlertTriangle, MessageCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -95,6 +95,16 @@ export default function PaymentLinksPage() {
   const copyUrl = (url: string) => {
     navigator.clipboard.writeText(url);
     toast.success("URL copiada!");
+  };
+
+  const shareWhatsApp = (link: { url_pagamento: string | null; descricao: string; valor: number; cliente_telefone: string | null }) => {
+    if (!link.url_pagamento) return;
+    const msg = encodeURIComponent(
+      `💳 Link de Pagamento\n\n${link.descricao}\nValor: ${fmtCurrency(Number(link.valor))}\n\n${link.url_pagamento}`
+    );
+    const phone = link.cliente_telefone?.replace(/\D/g, "") || "";
+    const waUrl = phone ? `https://wa.me/55${phone}?text=${msg}` : `https://wa.me/?text=${msg}`;
+    window.open(waUrl, "_blank");
   };
 
   // KPIs
@@ -300,6 +310,14 @@ export default function PaymentLinksPage() {
                                 <a href={link.url_pagamento} target="_blank" rel="noreferrer">
                                   <ExternalLink className="h-3 w-3" />
                                 </a>
+                              </Button>
+                              <Button size="icon" variant="ghost" title="Enviar via WhatsApp" onClick={() => {
+                                const msg = encodeURIComponent(`💳 Link de Pagamento\n\n${link.descricao}\nValor: ${fmtCurrency(Number(link.valor))}\n\n${link.url_pagamento}`);
+                                const phone = link.cliente_telefone?.replace(/\D/g, "") || "";
+                                const waUrl = phone ? `https://wa.me/55${phone}?text=${msg}` : `https://wa.me/?text=${msg}`;
+                                window.open(waUrl, "_blank");
+                              }}>
+                                <MessageCircle className="h-3 w-3" />
                               </Button>
                             </>
                           )}

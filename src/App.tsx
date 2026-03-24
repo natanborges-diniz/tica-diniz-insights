@@ -44,6 +44,7 @@ import AdminFornecedoresPage from "./pages/AdminFornecedoresPage";
 import AdminBtgValidacaoPage from "./pages/AdminBtgValidacaoPage";
 import AdminAdquirentesPage from "./pages/AdminAdquirentesPage";
 import SystemPlayground from "./pages/_SystemPlayground";
+import CheckoutPage from "./pages/CheckoutPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,6 +59,7 @@ const App = () => (
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/pay/:linkId" element={<CheckoutPage />} />
 
             {/* Protected */}
             <Route element={<ProtectedRoute />}>

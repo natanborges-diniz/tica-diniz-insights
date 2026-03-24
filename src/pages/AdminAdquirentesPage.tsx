@@ -14,7 +14,7 @@ import { LoadingState, EmptyState } from "@/components/system/states";
 import { toast } from "sonner";
 import {
   Loader2, Save, Plus, Eye, EyeOff, CreditCard,
-  Settings2, KeyRound, CheckCircle2, AlertCircle, Trash2,
+  Settings2, KeyRound, CheckCircle2, AlertCircle, Trash2, Wifi, WifiOff,
 } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -40,6 +40,7 @@ export default function AdminAdquirentesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [testing, setTesting] = useState<string | null>(null);
 
   // Form state for editing
   const [editForms, setEditForms] = useState<Record<string, {
@@ -151,6 +152,30 @@ export default function AdminAdquirentesPage() {
     } else {
       toast.success("Configuração removida");
       fetchConfigs();
+    }
+  };
+
+  const handleTestConnection = async (config: AdquirenteConfig) => {
+    setTesting(config.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Sessão expirada");
+
+      const { data, error } = await supabase.functions.invoke("rede-proxy", {
+        body: { action: "health", cod_empresa: config.cod_empresa },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      if (data?.ok) {
+        toast.success(`Conexão OK — ${data.ambiente}`);
+      } else {
+        toast.error(`Falha na conexão: ${data?.error || "Erro desconhecido"}`);
+      }
+    } catch (e) {
+      toast.error(`Erro ao testar: ${(e as Error).message}`);
+    } finally {
+      setTesting(null);
     }
   };
 
@@ -360,6 +385,14 @@ export default function AdminAdquirentesPage() {
                             onClick={() => handleSave(config)}
                           >
                             {saving === config.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                          </Button>
+                          <Button
+                            size="sm" variant="outline"
+                            disabled={testing === config.id}
+                            onClick={() => handleTestConnection(config)}
+                            title="Testar conexão"
+                          >
+                            {testing === config.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wifi className="h-3 w-3" />}
                           </Button>
                           <Button
                             size="sm" variant="ghost"
