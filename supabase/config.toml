@@ -74,3 +74,9 @@ verify_jwt = false
 
 [functions.btg-recebiveis-cartao]
 verify_jwt = false
+
+[functions.rede-proxy]
+verify_jwt = false
+
+[functions.payment-links]
+verify_jwt = false
