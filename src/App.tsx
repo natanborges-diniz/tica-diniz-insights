@@ -44,6 +44,7 @@ import AdminFornecedoresPage from "./pages/AdminFornecedoresPage";
 import AdminBtgValidacaoPage from "./pages/AdminBtgValidacaoPage";
 import AdminAdquirentesPage from "./pages/AdminAdquirentesPage";
 import SystemPlayground from "./pages/_SystemPlayground";
+import CheckoutPage from "./pages/CheckoutPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
