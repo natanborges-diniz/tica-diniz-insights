@@ -94,7 +94,7 @@ serve(async (req) => {
             action: "consultar_vendas",
             ambiente: env,
             parentCompanyNumber: pvMatriz,
-            subsidiaries: Object.keys(pvToEmpresa).join(","),
+            subsidiaries: pvMatriz,
             startDate: start,
             endDate: end,
             size: "20",
