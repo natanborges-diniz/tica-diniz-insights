@@ -155,6 +155,30 @@ export default function AdminAdquirentesPage() {
     }
   };
 
+  const handleTestConnection = async (config: AdquirenteConfig) => {
+    setTesting(config.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Sessão expirada");
+
+      const { data, error } = await supabase.functions.invoke("rede-proxy", {
+        body: { action: "health", cod_empresa: config.cod_empresa },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      if (data?.ok) {
+        toast.success(`Conexão OK — ${data.ambiente}`);
+      } else {
+        toast.error(`Falha na conexão: ${data?.error || "Erro desconhecido"}`);
+      }
+    } catch (e) {
+      toast.error(`Erro ao testar: ${(e as Error).message}`);
+    } finally {
+      setTesting(null);
+    }
+  };
+
   const updateForm = (id: string, field: string, value: string | boolean) => {
     setEditForms(prev => ({
       ...prev,
