@@ -1,7 +1,7 @@
 import { useLocation } from "react-router-dom";
 import { 
-  TrendingUp, BarChart3, Layers, 
-  Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
+  TrendingUp, BarChart3, Layers, Wallet,
+  Package, ClipboardList, FileText, ArrowLeftRight,
   Target, Users, Brain, Eye, RefreshCw, Activity, Truck, FlaskConical,
   AlertTriangle, Landmark, CreditCard, Receipt, FileSearch, Shield, Link2
 } from "lucide-react";
@@ -85,6 +85,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
         { title: "Lançamentos", url: "/financeiro/hub", icon: Landmark },
         { title: "Classificação", url: "/financeiro/classificacao", icon: ClipboardList },
         { title: "Conciliação Cartões", url: "/financeiro/cartoes", icon: CreditCard },
+        { title: "Carteira Recebíveis", url: "/financeiro/recebiveis", icon: Wallet },
         { title: "Links de Pagamento", url: "/financeiro/links-pagamento", icon: Link2 },
       ],
     },
