@@ -48,6 +48,7 @@ export default function AdminAdquirentesPage() {
     ambiente: string;
     merchant_id: string;
     integration_key_encrypted: string;
+    pv_matriz: string;
     ativo: boolean;
   }>>({});
 
@@ -79,6 +80,7 @@ export default function AdminAdquirentesPage() {
           ambiente: r.ambiente,
           merchant_id: r.merchant_id || "",
           integration_key_encrypted: r.integration_key_encrypted || "",
+          pv_matriz: r.pv_matriz || "",
           ativo: r.ativo,
         };
       });
@@ -102,6 +104,7 @@ export default function AdminAdquirentesPage() {
         ambiente: form.ambiente,
         merchant_id: form.merchant_id || null,
         integration_key_encrypted: form.integration_key_encrypted || null,
+        pv_matriz: form.pv_matriz || null,
         ativo: form.ativo,
       })
       .eq("id", config.id);
@@ -193,6 +196,7 @@ export default function AdminAdquirentesPage() {
     return form.ambiente !== config.ambiente
       || form.merchant_id !== (config.merchant_id || "")
       || form.integration_key_encrypted !== (config.integration_key_encrypted || "")
+      || form.pv_matriz !== (config.pv_matriz || "")
       || form.ativo !== config.ativo;
   };
 
