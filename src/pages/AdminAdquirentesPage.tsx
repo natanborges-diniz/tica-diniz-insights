@@ -447,8 +447,8 @@ export default function AdminAdquirentesPage() {
                             >
                               {testing === config.id + "-gv" ? <Loader2 className="h-3 w-3 animate-spin" /> : "GV"}
                             </Button>
-                          )
-                          </Button>
+                          )}
+
                           <Button
                             size="sm" variant="ghost"
                             className="text-destructive hover:text-destructive"
