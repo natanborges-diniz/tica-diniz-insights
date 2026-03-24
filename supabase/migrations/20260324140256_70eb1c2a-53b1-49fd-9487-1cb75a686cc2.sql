@@ -1,0 +1,1 @@
+UPDATE public.adquirentes_config SET pv_matriz = '13381369', ambiente = 'sandbox' WHERE id = 'e507935e-2d3a-4a55-9a93-b173993fd78a';
