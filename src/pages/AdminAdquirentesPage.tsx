@@ -14,7 +14,7 @@ import { LoadingState, EmptyState } from "@/components/system/states";
 import { toast } from "sonner";
 import {
   Loader2, Save, Plus, Eye, EyeOff, CreditCard,
-  Settings2, KeyRound, CheckCircle2, AlertCircle, Trash2,
+  Settings2, KeyRound, CheckCircle2, AlertCircle, Trash2, Wifi, WifiOff,
 } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
