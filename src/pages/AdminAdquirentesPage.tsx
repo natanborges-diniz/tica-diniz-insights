@@ -62,14 +62,14 @@ export default function AdminAdquirentesPage() {
   const fetchConfigs = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from("adquirentes_config" as never)
+      .from("adquirentes_config")
       .select("*")
       .order("cod_empresa");
 
     if (error) {
       toast.error("Erro ao carregar configurações: " + error.message);
     } else if (data) {
-      const rows = data as unknown as AdquirenteConfig[];
+      const rows = data as AdquirenteConfig[];
       setConfigs(rows);
       const forms: typeof editForms = {};
       rows.forEach(r => {
@@ -95,13 +95,13 @@ export default function AdminAdquirentesPage() {
     setSaving(config.id);
 
     const { error } = await supabase
-      .from("adquirentes_config" as never)
+      .from("adquirentes_config")
       .update({
         ambiente: form.ambiente,
         merchant_id: form.merchant_id || null,
         integration_key_encrypted: form.integration_key_encrypted || null,
         ativo: form.ativo,
-      } as never)
+      })
       .eq("id", config.id);
 
     if (error) {
@@ -120,14 +120,14 @@ export default function AdminAdquirentesPage() {
     }
     setSaving("new");
     const { error } = await supabase
-      .from("adquirentes_config" as never)
+      .from("adquirentes_config")
       .insert({
         cod_empresa: newForm.cod_empresa,
         adquirente: newForm.adquirente,
         ambiente: newForm.ambiente,
         merchant_id: newForm.merchant_id || null,
         integration_key_encrypted: newForm.integration_key_encrypted || null,
-      } as never);
+      });
 
     if (error) {
       toast.error("Erro ao adicionar: " + error.message);
@@ -142,7 +142,7 @@ export default function AdminAdquirentesPage() {
 
   const handleDelete = async (id: string) => {
     const { error } = await supabase
-      .from("adquirentes_config" as never)
+      .from("adquirentes_config")
       .delete()
       .eq("id", id);
 
