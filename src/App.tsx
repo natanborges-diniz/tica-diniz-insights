@@ -115,6 +115,7 @@ const App = () => (
                 <Route path="/admin/hoya-config" element={<AdminHoyaConfigPage />} />
                 <Route path="/admin/fornecedores" element={<AdminFornecedoresPage />} />
                 <Route path="/admin/btg-validacao" element={<AdminBtgValidacaoPage />} />
+                <Route path="/admin/adquirentes" element={<AdminAdquirentesPage />} />
 
                 {/* Dev playground — system design */}
                 <Route path="/dev/playground" element={<SystemPlayground />} />
