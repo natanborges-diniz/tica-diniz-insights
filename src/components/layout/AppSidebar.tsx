@@ -1,6 +1,6 @@
 import { useLocation } from "react-router-dom";
 import { 
-  TrendingUp, BarChart3, Layers, 
+  TrendingUp, BarChart3, Layers, Wallet, 
   Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
   Target, Users, Brain, Eye, RefreshCw, Activity, Truck, FlaskConical,
   AlertTriangle, Landmark, CreditCard, Receipt, FileSearch, Shield, Link2
