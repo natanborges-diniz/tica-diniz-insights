@@ -142,7 +142,7 @@ export default function AdminAdquirentesPage() {
 
   const handleDelete = async (id: string) => {
     const { error } = await supabase
-      .from("adquirentes_config" as never)
+      .from("adquirentes_config")
       .delete()
       .eq("id", id);
 
