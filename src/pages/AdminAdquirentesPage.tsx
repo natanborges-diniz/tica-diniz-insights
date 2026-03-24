@@ -387,6 +387,14 @@ export default function AdminAdquirentesPage() {
                             {saving === config.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                           </Button>
                           <Button
+                            size="sm" variant="outline"
+                            disabled={testing === config.id}
+                            onClick={() => handleTestConnection(config)}
+                            title="Testar conexão"
+                          >
+                            {testing === config.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wifi className="h-3 w-3" />}
+                          </Button>
+                          <Button
                             size="sm" variant="ghost"
                             className="text-destructive hover:text-destructive"
                             onClick={() => handleDelete(config.id)}
