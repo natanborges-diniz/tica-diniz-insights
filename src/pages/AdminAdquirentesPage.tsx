@@ -40,6 +40,7 @@ export default function AdminAdquirentesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [testing, setTesting] = useState<string | null>(null);
 
   // Form state for editing
   const [editForms, setEditForms] = useState<Record<string, {
