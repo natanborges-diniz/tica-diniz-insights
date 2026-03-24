@@ -85,6 +85,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
         { title: "Lançamentos", url: "/financeiro/hub", icon: Landmark },
         { title: "Classificação", url: "/financeiro/classificacao", icon: ClipboardList },
         { title: "Conciliação Cartões", url: "/financeiro/cartoes", icon: CreditCard },
+        { title: "Carteira Recebíveis", url: "/financeiro/recebiveis", icon: Wallet },
         { title: "Links de Pagamento", url: "/financeiro/links-pagamento", icon: Link2 },
       ],
     },
