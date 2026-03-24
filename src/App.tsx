@@ -59,6 +59,7 @@ const App = () => (
           <Routes>
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/pay/:linkId" element={<CheckoutPage />} />
 
             {/* Protected */}
             <Route element={<ProtectedRoute />}>
