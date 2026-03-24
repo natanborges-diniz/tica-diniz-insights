@@ -372,6 +372,7 @@ export default function AdminAdquirentesPage() {
                           className="font-mono text-sm h-8 w-36"
                           placeholder="PV Matriz"
                         />
+                      </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
                           <Input
