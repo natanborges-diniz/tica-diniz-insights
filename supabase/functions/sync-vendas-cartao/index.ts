@@ -8,7 +8,8 @@ const corsHeaders = {
 
 const BRAND_MAP: Record<number, string> = {
   1: "MASTERCARD", 2: "VISA", 3: "AMEX", 4: "ELO",
-  5: "HIPERCARD", 6: "HIPER", 33: "JCB", 35: "DINERS",
+  5: "HIPERCARD", 6: "HIPER", 14: "BANRICOMPRAS", 33: "JCB", 35: "DINERS",
+  36: "CABAL", 37: "BANESCARD", 38: "SOROCRED", 39: "CREDZ",
 };
 
 serve(async (req) => {
@@ -63,9 +64,12 @@ serve(async (req) => {
 
     const pvToEmpresa: Record<string, number> = {};
     for (const c of allConfigs || []) {
-      // Map both sandbox and production PVs
-      if (c.merchant_id) pvToEmpresa[c.merchant_id] = c.cod_empresa;
-      if (c.merchant_id_production) pvToEmpresa[c.merchant_id_production] = c.cod_empresa;
+      // Map PVs based on the active environment
+      if (env === "production") {
+        if (c.merchant_id_production) pvToEmpresa[c.merchant_id_production] = c.cod_empresa;
+      } else {
+        if (c.merchant_id) pvToEmpresa[c.merchant_id] = c.cod_empresa;
+      }
     }
     if (!pvToEmpresa[pvMatriz]) {
       pvToEmpresa[pvMatriz] = matrizConfig.cod_empresa;
@@ -91,7 +95,6 @@ serve(async (req) => {
             action: "consultar_vendas",
             ambiente: env,
             parentCompanyNumber: pvMatriz,
-            subsidiaries: Object.keys(pvToEmpresa).join(","),
             startDate: start,
             endDate: end,
             size: "20",
