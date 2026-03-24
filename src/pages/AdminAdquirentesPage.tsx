@@ -26,6 +26,7 @@ interface AdquirenteConfig {
   ambiente: string;
   merchant_id: string | null;
   integration_key_encrypted: string | null;
+  pv_matriz: string | null;
   ativo: boolean;
   created_at: string;
   updated_at: string;
