@@ -1,57 +1,68 @@
 
 
-# Plano: Migrar sync-vendas-cartao para API Gestao de Vendas
+# Plano: Chaveamento Sandbox/Producao por Adquirente
 
-## Passo 1 — Atualizar `sync-vendas-cartao` para usar `rede-gestao-vendas`
+## Contexto
+Hoje cada registro em `adquirentes_config` tem um unico campo `ambiente` (sandbox ou production) e um unico par de credenciais. O usuario quer que cada adquirente tenha credenciais para **ambos** os ambientes, com um toggle para ativar qual esta em uso.
 
-Hoje o sync chama `rede-proxy` (API e.Rede, Basic Auth por loja). Vamos trocar para chamar `rede-gestao-vendas` (OAuth 2.0), que retorna vendas de **todas as filiais** de uma vez usando o PV da matriz.
+## O que muda
 
-### Mudancas na edge function `sync-vendas-cartao/index.ts`:
-- Trocar a chamada de `rede-proxy` para `rede-gestao-vendas` action `consultar_vendas`
-- Buscar o PV da matriz na tabela `adquirentes_config` (ou receber como parametro)
-- Adaptar o mapeamento de campos — a API Gestao de Vendas retorna campos diferentes (ex: `grossAmount`, `netAmount`, `nsu`, `brand`, `modality`)
-- Suportar paginacao automatica (a API retorna paginas de ate 20 registros)
-- Mapear `cod_empresa` correto para cada transacao usando o campo `subsidiaryNumber` retornado pela API
+### 1. Migration — novos campos na tabela `adquirentes_config`
+Adicionar colunas para credenciais de producao separadas:
 
-### Fluxo novo:
+- `merchant_id_production` (text, nullable) — PV de producao
+- `integration_key_production` (text, nullable) — chave de producao
+- `pv_matriz_production` (text, nullable) — PV Matriz de producao
+
+Os campos existentes (`merchant_id`, `integration_key_encrypted`, `pv_matriz`) passam a representar as credenciais de **sandbox**. O campo `ambiente` continua existindo e indica qual ambiente esta **ativo** no momento.
+
+### 2. Atualizar UI — AdminAdquirentesPage
+Reorganizar a tabela para mostrar dois blocos de credenciais por linha:
+
 ```text
-sync-vendas-cartao recebe { data_inicio, data_fim }
-  → busca PV matriz em adquirentes_config
-  → chama rede-gestao-vendas action "consultar_vendas" 
-    com parentCompanyNumber = PV matriz
-  → percorre todas as paginas
-  → para cada transacao, mapeia subsidiaryNumber → cod_empresa
-  → insere em vendas_cartao (dedup por nsu+cod_empresa)
-  → cria recebiveis_cartao para credito
+Empresa | Adquirente | Ambiente Ativo [toggle]
+        | Sandbox: PV / Chave / PV Matriz
+        | Producao: PV / Chave / PV Matriz
+        | [Testar SB] [Testar Prod] [Testar GV SB] [Testar GV Prod]
 ```
 
-## Passo 2 — Configurar para producao
+- Toggle Sandbox/Producao altera qual conjunto de credenciais as Edge Functions usam
+- Botoes de teste para cada ambiente separadamente
+- Indicador visual de quais credenciais estao preenchidas
 
-Ja esta preparado no codigo. Basta:
-1. Obter as credenciais OAuth de **producao** no Portal Rede Developer
-2. Atualizar os secrets `REDE_GV_CLIENT_ID` e `REDE_GV_CLIENT_SECRET` com os valores de producao
-3. Passar `ambiente: "production"` nas chamadas (ou tornar producao o padrao)
-4. Cadastrar na tabela `adquirentes_config` o PV da **matriz** que sera usado como `parentCompanyNumber`
+### 3. Atualizar Edge Functions
 
-### Adicional: tela de config
-- Adicionar campo "PV Matriz (Gestao de Vendas)" na pagina Admin Adquirentes
-- Botao "Testar conexao GV" que chama `rede-gestao-vendas` action `health`
+**`rede-proxy`**: Ler `ambiente` do registro e usar `merchant_id` ou `merchant_id_production` conforme o ambiente ativo.
+
+**`rede-gestao-vendas`**: Ja recebe `ambiente` como parametro — nenhuma mudanca necessaria na funcao em si.
+
+**`sync-vendas-cartao`**: Ler `ambiente` do config para decidir qual `pv_matriz` usar (`pv_matriz` vs `pv_matriz_production`).
+
+**`payment-links`**: Usar `merchant_id` ou `merchant_id_production` conforme o ambiente ativo do registro.
+
+### 4. Corrigir mapeamento do sync-vendas-cartao (pendente)
+Ajustar campos conforme a estrutura real da API Gestao de Vendas (conforme descoberto nos testes anteriores):
+- `content.transactions` em vez de `content`
+- `tx.merchant.companyNumber` em vez de `tx.subsidiaryNumber`
+- `tx.amount` em vez de `tx.grossAmount`
+- `tx.modality.type` em vez de `tx.modality`
+- `tx.brandCode` mapeado para nome da bandeira
 
 ## Detalhes tecnicos
 
 | Item | Detalhe |
 |------|---------|
-| Edge function alterada | `sync-vendas-cartao/index.ts` |
-| Novo campo necessario | `adquirentes_config.pv_matriz` (ou usar campo existente `merchant_id` de um registro especial) |
-| Mapeamento filial | `subsidiaryNumber` da API → `cod_empresa` via lookup em `adquirentes_config` |
-| Paginacao | Loop ate `page >= totalPages` |
-| Ambiente | Controlado por parametro `ambiente` (default: consultar `adquirentes_config`) |
+| Migration | Adicionar 3 colunas `*_production` em `adquirentes_config` |
+| UI | Refatorar `AdminAdquirentesPage.tsx` para layout dual-ambiente |
+| Edge Functions | `rede-proxy`, `sync-vendas-cartao`, `payment-links` — resolver credencial pelo campo `ambiente` |
+| `rede-gestao-vendas` | Sem mudanca (ja recebe ambiente como parametro) |
 
 ## Ordem de implementacao
+
 | Etapa | Entrega |
 |-------|---------|
-| 1 | Adicionar coluna `pv_matriz` em `adquirentes_config` (migration) |
-| 2 | Reescrever `sync-vendas-cartao` para usar `rede-gestao-vendas` |
-| 3 | Atualizar UI Admin Adquirentes com campo PV Matriz e botao testar GV |
-| 4 | Trocar secrets para producao quando tiver credenciais |
+| 1 | Migration: adicionar colunas `*_production` |
+| 2 | Refatorar UI com campos separados por ambiente e testes independentes |
+| 3 | Atualizar `rede-proxy` e `payment-links` para resolver credenciais pelo ambiente |
+| 4 | Atualizar `sync-vendas-cartao` com credencial correta + fix de mapeamento API |
 
