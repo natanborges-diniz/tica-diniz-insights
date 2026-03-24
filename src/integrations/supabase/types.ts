@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      adquirentes_config: {
+        Row: {
+          adquirente: string
+          ambiente: string
+          ativo: boolean
+          cod_empresa: number
+          created_at: string
+          id: string
+          integration_key_encrypted: string | null
+          merchant_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          adquirente?: string
+          ambiente?: string
+          ativo?: boolean
+          cod_empresa: number
+          created_at?: string
+          id?: string
+          integration_key_encrypted?: string | null
+          merchant_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          adquirente?: string
+          ambiente?: string
+          ativo?: boolean
+          cod_empresa?: number
+          created_at?: string
+          id?: string
+          integration_key_encrypted?: string | null
+          merchant_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       borderos: {
         Row: {
           aprovado_em: string | null
@@ -426,6 +462,53 @@ export type Database = {
           uf?: string | null
         }
         Relationships: []
+      }
+      conciliacao_vendas: {
+        Row: {
+          cod_empresa: number
+          conciliado_em: string | null
+          conciliado_por: string | null
+          created_at: string
+          diferenca_valor: number | null
+          id: string
+          observacao: string | null
+          status: string
+          venda_cartao_id: string | null
+          venda_erp_id: string | null
+        }
+        Insert: {
+          cod_empresa: number
+          conciliado_em?: string | null
+          conciliado_por?: string | null
+          created_at?: string
+          diferenca_valor?: number | null
+          id?: string
+          observacao?: string | null
+          status?: string
+          venda_cartao_id?: string | null
+          venda_erp_id?: string | null
+        }
+        Update: {
+          cod_empresa?: number
+          conciliado_em?: string | null
+          conciliado_por?: string | null
+          created_at?: string
+          diferenca_valor?: number | null
+          id?: string
+          observacao?: string | null
+          status?: string
+          venda_cartao_id?: string | null
+          venda_erp_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conciliacao_vendas_venda_cartao_id_fkey"
+            columns: ["venda_cartao_id"]
+            isOneToOne: false
+            referencedRelation: "vendas_cartao"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       empresa: {
         Row: {
@@ -1207,6 +1290,81 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_links: {
+        Row: {
+          adquirente: string
+          cliente_documento: string | null
+          cliente_nome: string | null
+          cliente_telefone: string | null
+          cod_empresa: number
+          created_at: string
+          dados_extras: Json | null
+          descricao: string
+          expira_em: string | null
+          id: string
+          lancamento_id: string | null
+          origem: string
+          origem_ref: string | null
+          pago_em: string | null
+          parcelas_max: number | null
+          qr_code_pix: string | null
+          status: string
+          tid: string | null
+          updated_at: string
+          url_pagamento: string | null
+          valor: number
+          webhook_payload: Json | null
+        }
+        Insert: {
+          adquirente?: string
+          cliente_documento?: string | null
+          cliente_nome?: string | null
+          cliente_telefone?: string | null
+          cod_empresa: number
+          created_at?: string
+          dados_extras?: Json | null
+          descricao: string
+          expira_em?: string | null
+          id?: string
+          lancamento_id?: string | null
+          origem?: string
+          origem_ref?: string | null
+          pago_em?: string | null
+          parcelas_max?: number | null
+          qr_code_pix?: string | null
+          status?: string
+          tid?: string | null
+          updated_at?: string
+          url_pagamento?: string | null
+          valor: number
+          webhook_payload?: Json | null
+        }
+        Update: {
+          adquirente?: string
+          cliente_documento?: string | null
+          cliente_nome?: string | null
+          cliente_telefone?: string | null
+          cod_empresa?: number
+          created_at?: string
+          dados_extras?: Json | null
+          descricao?: string
+          expira_em?: string | null
+          id?: string
+          lancamento_id?: string | null
+          origem?: string
+          origem_ref?: string | null
+          pago_em?: string | null
+          parcelas_max?: number | null
+          qr_code_pix?: string | null
+          status?: string
+          tid?: string | null
+          updated_at?: string
+          url_pagamento?: string | null
+          valor?: number
+          webhook_payload?: Json | null
+        }
+        Relationships: []
+      }
       pedido_alertas: {
         Row: {
           acknowledged: boolean
@@ -1475,6 +1633,7 @@ export type Database = {
       recebiveis_cartao: {
         Row: {
           adquirente: string | null
+          adquirente_source: string | null
           bandeira: string | null
           btg_extrato_id: string | null
           btg_receivable_id: string | null
@@ -1491,6 +1650,7 @@ export type Database = {
         }
         Insert: {
           adquirente?: string | null
+          adquirente_source?: string | null
           bandeira?: string | null
           btg_extrato_id?: string | null
           btg_receivable_id?: string | null
@@ -1507,6 +1667,7 @@ export type Database = {
         }
         Update: {
           adquirente?: string | null
+          adquirente_source?: string | null
           bandeira?: string | null
           btg_extrato_id?: string | null
           btg_receivable_id?: string | null
@@ -1932,6 +2093,78 @@ export type Database = {
           total_desconto?: number | null
           total_vendido?: number | null
           vendedor?: string
+        }
+        Relationships: []
+      }
+      vendas_cartao: {
+        Row: {
+          adquirente: string
+          autorizacao: string | null
+          bandeira: string | null
+          cod_empresa: number
+          created_at: string
+          dados_extras: Json | null
+          data_prevista_credito: string | null
+          data_venda: string
+          id: string
+          lancamento_id: string | null
+          nsu: string | null
+          origem_venda_id: string | null
+          parcelas: number
+          status: string
+          taxa_percentual: number | null
+          taxa_valor: number | null
+          tid: string | null
+          tipo: string
+          updated_at: string
+          valor_bruto: number
+          valor_liquido: number
+        }
+        Insert: {
+          adquirente?: string
+          autorizacao?: string | null
+          bandeira?: string | null
+          cod_empresa: number
+          created_at?: string
+          dados_extras?: Json | null
+          data_prevista_credito?: string | null
+          data_venda: string
+          id?: string
+          lancamento_id?: string | null
+          nsu?: string | null
+          origem_venda_id?: string | null
+          parcelas?: number
+          status?: string
+          taxa_percentual?: number | null
+          taxa_valor?: number | null
+          tid?: string | null
+          tipo?: string
+          updated_at?: string
+          valor_bruto?: number
+          valor_liquido?: number
+        }
+        Update: {
+          adquirente?: string
+          autorizacao?: string | null
+          bandeira?: string | null
+          cod_empresa?: number
+          created_at?: string
+          dados_extras?: Json | null
+          data_prevista_credito?: string | null
+          data_venda?: string
+          id?: string
+          lancamento_id?: string | null
+          nsu?: string | null
+          origem_venda_id?: string | null
+          parcelas?: number
+          status?: string
+          taxa_percentual?: number | null
+          taxa_valor?: number | null
+          tid?: string | null
+          tipo?: string
+          updated_at?: string
+          valor_bruto?: number
+          valor_liquido?: number
         }
         Relationships: []
       }
