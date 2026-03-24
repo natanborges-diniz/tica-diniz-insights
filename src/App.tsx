@@ -29,6 +29,7 @@ import BankingDdaDashboard from "./pages/BankingDdaDashboard";
 import FinanceiroHubPage from "./pages/FinanceiroHubPage";
 import ConciliacaoCartoesPage from "./pages/ConciliacaoCartoesPage";
 import PaymentLinksPage from "./pages/PaymentLinksPage";
+import CarteiraRecebiveisPage from "./pages/CarteiraRecebiveisPage";
 import FinanceiroClassificacaoPage from "./pages/FinanceiroClassificacaoPage";
 import FinanceiroOverviewPage from "./pages/FinanceiroOverviewPage";
 import InteligenciaVendasDashboard from "./pages/InteligenciaVendasDashboard";
