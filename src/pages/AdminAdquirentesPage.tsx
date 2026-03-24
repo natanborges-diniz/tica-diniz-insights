@@ -26,6 +26,7 @@ interface AdquirenteConfig {
   ambiente: string;
   merchant_id: string | null;
   integration_key_encrypted: string | null;
+  pv_matriz: string | null;
   ativo: boolean;
   created_at: string;
   updated_at: string;
@@ -47,6 +48,7 @@ export default function AdminAdquirentesPage() {
     ambiente: string;
     merchant_id: string;
     integration_key_encrypted: string;
+    pv_matriz: string;
     ativo: boolean;
   }>>({});
 
@@ -78,6 +80,7 @@ export default function AdminAdquirentesPage() {
           ambiente: r.ambiente,
           merchant_id: r.merchant_id || "",
           integration_key_encrypted: r.integration_key_encrypted || "",
+          pv_matriz: r.pv_matriz || "",
           ativo: r.ativo,
         };
       });
@@ -101,6 +104,7 @@ export default function AdminAdquirentesPage() {
         ambiente: form.ambiente,
         merchant_id: form.merchant_id || null,
         integration_key_encrypted: form.integration_key_encrypted || null,
+        pv_matriz: form.pv_matriz || null,
         ativo: form.ativo,
       })
       .eq("id", config.id);
@@ -168,12 +172,42 @@ export default function AdminAdquirentesPage() {
       });
       if (error) throw error;
       if (data?.ok) {
-        toast.success(`Conexão OK — ${data.ambiente}`);
+        toast.success(`Conexão e.Rede OK — ${data.ambiente}`);
       } else {
         toast.error(`Falha na conexão: ${data?.error || "Erro desconhecido"}`);
       }
     } catch (e) {
       toast.error(`Erro ao testar: ${(e as Error).message}`);
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const handleTestGV = async (config: AdquirenteConfig) => {
+    const form = editForms[config.id];
+    const pvMatriz = form?.pv_matriz || config.pv_matriz;
+    if (!pvMatriz) {
+      toast.error("Configure o PV Matriz primeiro");
+      return;
+    }
+    setTesting(config.id + "-gv");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Sessão expirada");
+
+      const { data, error } = await supabase.functions.invoke("rede-gestao-vendas", {
+        body: { action: "health", ambiente: form?.ambiente || config.ambiente, parentCompanyNumber: pvMatriz },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      if (data?.ok) {
+        toast.success(`Gestão de Vendas OK — ${data.ambiente}`);
+      } else {
+        toast.error(`Falha GV: ${data?.error || "Erro desconhecido"}`);
+      }
+    } catch (e) {
+      toast.error(`Erro ao testar GV: ${(e as Error).message}`);
     } finally {
       setTesting(null);
     }
@@ -192,6 +226,7 @@ export default function AdminAdquirentesPage() {
     return form.ambiente !== config.ambiente
       || form.merchant_id !== (config.merchant_id || "")
       || form.integration_key_encrypted !== (config.integration_key_encrypted || "")
+      || form.pv_matriz !== (config.pv_matriz || "")
       || form.ativo !== config.ativo;
   };
 
@@ -299,10 +334,11 @@ export default function AdminAdquirentesPage() {
                   <TableHead>Empresa</TableHead>
                   <TableHead>Adquirente</TableHead>
                   <TableHead>PV / Merchant ID</TableHead>
+                  <TableHead>PV Matriz (GV)</TableHead>
                   <TableHead>Chave de Integração</TableHead>
                   <TableHead>Ambiente</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-32">Ações</TableHead>
+                  <TableHead className="w-40">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -327,6 +363,14 @@ export default function AdminAdquirentesPage() {
                           onChange={e => updateForm(config.id, "merchant_id", e.target.value)}
                           className="font-mono text-sm h-8 w-40"
                           placeholder="PV"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={form.pv_matriz}
+                          onChange={e => updateForm(config.id, "pv_matriz", e.target.value)}
+                          className="font-mono text-sm h-8 w-36"
+                          placeholder="PV Matriz"
                         />
                       </TableCell>
                       <TableCell>
@@ -390,10 +434,22 @@ export default function AdminAdquirentesPage() {
                             size="sm" variant="outline"
                             disabled={testing === config.id}
                             onClick={() => handleTestConnection(config)}
-                            title="Testar conexão"
+                            title="Testar e.Rede"
                           >
                             {testing === config.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wifi className="h-3 w-3" />}
                           </Button>
+                          {config.adquirente === "REDE" && (
+                            <Button
+                              size="sm" variant="outline"
+                              disabled={testing === config.id + "-gv"}
+                              onClick={() => handleTestGV(config)}
+                              title="Testar Gestão de Vendas"
+                              className="text-xs px-2"
+                            >
+                              {testing === config.id + "-gv" ? <Loader2 className="h-3 w-3 animate-spin" /> : "GV"}
+                            </Button>
+                          )}
+
                           <Button
                             size="sm" variant="ghost"
                             className="text-destructive hover:text-destructive"

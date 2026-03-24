@@ -1,0 +1,1 @@
+ALTER TABLE public.adquirentes_config ADD COLUMN pv_matriz text DEFAULT NULL;
