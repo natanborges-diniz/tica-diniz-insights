@@ -6,6 +6,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const BRAND_MAP: Record<number, string> = {
+  1: "MASTERCARD", 2: "VISA", 3: "AMEX", 4: "ELO",
+  5: "HIPERCARD", 6: "HIPER", 33: "JCB", 35: "DINERS",
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -13,52 +18,55 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { data_inicio, data_fim, ambiente } = body;
+    const { data_inicio, data_fim, ambiente: ambienteOverride } = body;
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Default: last 7 days
     const end = data_fim || new Date().toISOString().slice(0, 10);
     const start = data_inicio || new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 
-    // 1. Find the config with pv_matriz set
+    // 1. Find config with pv_matriz
     const { data: configs, error: cfgErr } = await supabaseAdmin
       .from("adquirentes_config")
       .select("*")
       .eq("adquirente", "REDE")
-      .eq("ativo", true)
-      .not("pv_matriz", "is", null);
+      .eq("ativo", true);
 
     if (cfgErr) throw new Error(`Erro ao buscar config: ${cfgErr.message}`);
 
-    // Get the first config with pv_matriz (should be unique per CNPJ)
-    const matrizConfig = configs?.find((c: any) => c.pv_matriz);
+    const matrizConfig = configs?.find((c: any) => c.pv_matriz || c.pv_matriz_production);
     if (!matrizConfig) {
-      throw new Error("Nenhuma configuração com PV Matriz encontrada em adquirentes_config. Configure o PV Matriz na tela de Adquirentes.");
+      throw new Error("Nenhuma configuração com PV Matriz encontrada. Configure na tela de Adquirentes.");
     }
 
-    const pvMatriz = matrizConfig.pv_matriz;
-    const env = ambiente || matrizConfig.ambiente || "sandbox";
+    // Resolve environment and credentials
+    const env = ambienteOverride || matrizConfig.ambiente || "sandbox";
+    const pvMatriz = env === "production"
+      ? (matrizConfig.pv_matriz_production || matrizConfig.pv_matriz)
+      : matrizConfig.pv_matriz;
 
-    console.log(`[sync-vendas-cartao] Using PV Matriz ${pvMatriz}, ambiente ${env}, period ${start} to ${end}`);
+    if (!pvMatriz) {
+      throw new Error(`PV Matriz não configurado para ambiente ${env}`);
+    }
 
-    // 2. Build merchant_id → cod_empresa lookup from all REDE configs
+    console.log(`[sync-vendas-cartao] PV Matriz ${pvMatriz}, ambiente ${env}, period ${start}→${end}`);
+
+    // 2. Build merchant_id → cod_empresa lookup
     const { data: allConfigs } = await supabaseAdmin
       .from("adquirentes_config")
-      .select("cod_empresa, merchant_id")
+      .select("cod_empresa, merchant_id, merchant_id_production, ambiente")
       .eq("adquirente", "REDE")
       .eq("ativo", true);
 
     const pvToEmpresa: Record<string, number> = {};
     for (const c of allConfigs || []) {
-      if (c.merchant_id) {
-        pvToEmpresa[c.merchant_id] = c.cod_empresa;
-      }
+      // Map both sandbox and production PVs
+      if (c.merchant_id) pvToEmpresa[c.merchant_id] = c.cod_empresa;
+      if (c.merchant_id_production) pvToEmpresa[c.merchant_id_production] = c.cod_empresa;
     }
-    // Also map pv_matriz itself
     if (!pvToEmpresa[pvMatriz]) {
       pvToEmpresa[pvMatriz] = matrizConfig.cod_empresa;
     }
@@ -99,33 +107,36 @@ serve(async (req) => {
 
       const gvData = await gvRes.json();
 
-      // API returns { content: [...], page: { number, totalPages, size, totalElements } }
-      const content = gvData?.content || [];
-      allTransactions = allTransactions.concat(content);
+      // Real API: { content: { transactions: [...], page: { number, totalPages, ... } } }
+      const transactions = gvData?.content?.transactions || gvData?.content || [];
+      allTransactions = allTransactions.concat(Array.isArray(transactions) ? transactions : []);
 
-      if (gvData?.page) {
-        totalPages = gvData.page.totalPages || 1;
+      const pageInfo = gvData?.content?.page || gvData?.page;
+      if (pageInfo) {
+        totalPages = pageInfo.totalPages || 1;
       }
 
-      console.log(`[sync-vendas-cartao] Page ${page + 1}/${totalPages}, got ${content.length} records`);
+      console.log(`[sync-vendas-cartao] Page ${page + 1}/${totalPages}, got ${Array.isArray(transactions) ? transactions.length : 0} records`);
       page++;
     }
 
-    console.log(`[sync-vendas-cartao] Total transactions from API: ${allTransactions.length}`);
+    console.log(`[sync-vendas-cartao] Total transactions: ${allTransactions.length}`);
 
     // 4. Process and insert
     let inserted = 0;
     let skipped = 0;
     let recebiveisCreated = 0;
-    let unmappedPvs = new Set<string>();
+    const unmappedPvs = new Set<string>();
 
     for (const tx of allTransactions) {
       const nsu = tx.nsu ? String(tx.nsu) : null;
-      const subsidiaryPv = tx.subsidiaryNumber ? String(tx.subsidiaryNumber) : null;
+      // Real API uses tx.merchant.companyNumber for subsidiary
+      const subsidiaryPv = tx.merchant?.companyNumber
+        ? String(tx.merchant.companyNumber)
+        : (tx.subsidiaryNumber ? String(tx.subsidiaryNumber) : null);
 
       if (!nsu) { skipped++; continue; }
 
-      // Map subsidiary PV to cod_empresa
       const codEmpresa = subsidiaryPv ? pvToEmpresa[subsidiaryPv] : null;
       if (!codEmpresa) {
         if (subsidiaryPv) unmappedPvs.add(subsidiaryPv);
@@ -133,7 +144,7 @@ serve(async (req) => {
         continue;
       }
 
-      // Dedup by nsu + cod_empresa
+      // Dedup
       const { data: existing } = await supabaseAdmin
         .from("vendas_cartao")
         .select("id")
@@ -143,33 +154,28 @@ serve(async (req) => {
 
       if (existing) { skipped++; continue; }
 
-      // Map GV API fields to vendas_cartao
-      const modalityMap: Record<string, string> = {
-        CREDIT: "CREDITO",
-        DEBIT: "DEBITO",
-      };
-
+      // Map fields (real API structure)
+      const modality = tx.modality?.type || tx.modality || "CREDIT";
+      const modalityMap: Record<string, string> = { CREDIT: "CREDITO", DEBIT: "DEBITO" };
       const statusMap: Record<string, string> = {
-        APPROVED: "APROVADA",
-        CANCELED: "CANCELADA",
-        DENIED: "CANCELADA",
-        REFUNDED: "ESTORNADA",
+        APPROVED: "APROVADA", CANCELED: "CANCELADA", DENIED: "CANCELADA", REFUNDED: "ESTORNADA",
       };
 
-      const valorBruto = tx.grossAmount || 0;
+      const valorBruto = tx.amount || tx.grossAmount || 0;
       const valorLiquido = tx.netAmount || valorBruto;
-      const taxaValor = tx.mdrFeeAmount || (valorBruto - valorLiquido) || null;
+      const taxaValor = tx.mdrAmount || tx.mdrFeeAmount || (valorBruto - valorLiquido) || null;
       const taxaPercentual = tx.mdrFee || null;
+      const brandName = tx.brandCode ? (BRAND_MAP[tx.brandCode] || `BRAND_${tx.brandCode}`) : (tx.brand || null);
 
       const record = {
         cod_empresa: codEmpresa,
         adquirente: "REDE",
         nsu,
-        autorizacao: tx.authorizationCode || null,
+        autorizacao: tx.strAuthorizationCode || tx.authorizationCode || null,
         tid: tx.tid ? String(tx.tid) : nsu,
-        bandeira: tx.brand || null,
-        tipo: modalityMap[tx.modality] || "CREDITO",
-        parcelas: tx.installments || 1,
+        bandeira: brandName,
+        tipo: modalityMap[modality] || "CREDITO",
+        parcelas: tx.installmentQuantity || tx.installments || 1,
         valor_bruto: valorBruto,
         valor_liquido: valorLiquido,
         taxa_percentual: taxaPercentual,
@@ -185,13 +191,13 @@ serve(async (req) => {
         .insert(record);
 
       if (insertErr) {
-        console.error(`[sync-vendas-cartao] Insert error for nsu ${nsu}:`, insertErr.message);
+        console.error(`[sync-vendas-cartao] Insert error nsu ${nsu}:`, insertErr.message);
         skipped++;
         continue;
       }
       inserted++;
 
-      // Create recebivel for credit transactions
+      // Create recebivel for credit
       if (record.tipo === "CREDITO" && record.status === "APROVADA" && record.data_prevista_credito) {
         const { error: recErr } = await supabaseAdmin
           .from("recebiveis_cartao")
@@ -207,7 +213,6 @@ serve(async (req) => {
             taxa_valor: record.taxa_valor,
             status: "PREVISTO",
           });
-
         if (!recErr) recebiveisCreated++;
       }
     }

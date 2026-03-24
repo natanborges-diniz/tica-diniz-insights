@@ -15,7 +15,9 @@ interface AdquirenteConfig {
   adquirente: string;
   ambiente: string;
   merchant_id: string | null;
+  merchant_id_production: string | null;
   integration_key_encrypted: string | null;
+  integration_key_production: string | null;
   ativo: boolean;
 }
 
@@ -31,11 +33,22 @@ async function getRedeCredentials(supabaseAdmin: ReturnType<typeof createClient>
   if (error || !data) throw new Error(`Nenhuma configuração Rede ativa para empresa ${codEmpresa}`);
 
   const config = data as AdquirenteConfig;
-  if (!config.merchant_id) throw new Error("PV (Merchant ID) não configurado para Rede");
-  if (!config.integration_key_encrypted) throw new Error("Chave de integração não configurada para Rede");
+  const isProduction = config.ambiente === "production";
 
-  const baseUrl = config.ambiente === "production" ? REDE_PRODUCTION_URL : REDE_SANDBOX_URL;
-  return { pv: config.merchant_id, key: config.integration_key_encrypted, baseUrl };
+  // Resolve credentials based on active environment
+  const pv = isProduction
+    ? (config.merchant_id_production || config.merchant_id)
+    : config.merchant_id;
+
+  const key = isProduction
+    ? (config.integration_key_production || config.integration_key_encrypted)
+    : config.integration_key_encrypted;
+
+  if (!pv) throw new Error(`PV (Merchant ID) não configurado para ambiente ${config.ambiente}`);
+  if (!key) throw new Error(`Chave de integração não configurada para ambiente ${config.ambiente}`);
+
+  const baseUrl = isProduction ? REDE_PRODUCTION_URL : REDE_SANDBOX_URL;
+  return { pv, key, baseUrl };
 }
 
 function basicAuth(pv: string, key: string): string {
@@ -94,7 +107,6 @@ serve(async (req) => {
 
     switch (action) {
       case "consultar_transacoes": {
-        // GET /v1/transactions?status=...&startDate=...&endDate=...
         const qs = new URLSearchParams();
         if (params.status) qs.set("status", params.status);
         if (params.start_date) qs.set("startDate", params.start_date);
@@ -107,36 +119,28 @@ serve(async (req) => {
       }
 
       case "consultar_transacao": {
-        // GET /v1/transactions/{tid}
         if (!params.tid) throw new Error("tid é obrigatório");
         result = await redeRequest(baseUrl, `/v1/transactions/${params.tid}`, pv, key);
         break;
       }
 
       case "criar_transacao": {
-        // POST /v1/transactions
         if (!params.amount) throw new Error("amount é obrigatório");
         if (!params.reference) throw new Error("reference é obrigatório");
 
         const txBody: Record<string, unknown> = {
           kind: params.kind || "credit",
           reference: params.reference,
-          amount: Math.round(params.amount * 100), // e.Rede usa centavos
+          amount: Math.round(params.amount * 100),
           installments: params.installments || 1,
-          capture: params.capture !== false, // default true
+          capture: params.capture !== false,
         };
 
-        // For payment links / e-commerce
         if (params.softDescriptor) txBody.softDescriptor = params.softDescriptor;
         if (params.subscription !== undefined) txBody.subscription = params.subscription;
-
-        // URLs for 3DS / redirect
         if (params.urls) txBody.urls = params.urls;
-
-        // Antifraud
         if (params.antifraud) txBody.antifraud = params.antifraud;
 
-        // Card data (for direct transactions, not links)
         if (params.cardNumber) {
           txBody.cardholderName = params.cardholderName;
           txBody.cardNumber = params.cardNumber;
@@ -150,7 +154,6 @@ serve(async (req) => {
       }
 
       case "cancelar_transacao": {
-        // PUT /v1/transactions/{tid}/refunds/amount
         if (!params.tid) throw new Error("tid é obrigatório");
         if (!params.amount) throw new Error("amount é obrigatório");
         const cancelBody = { amount: Math.round(params.amount * 100) };
@@ -159,7 +162,6 @@ serve(async (req) => {
       }
 
       case "health": {
-        // Simple health check — try to query transactions
         try {
           await redeRequest(baseUrl, "/v1/transactions?rows=1", pv, key);
           result = { ok: true, ambiente: baseUrl.includes("sandbox") ? "sandbox" : "production" };

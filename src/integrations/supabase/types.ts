@@ -23,8 +23,11 @@ export type Database = {
           created_at: string
           id: string
           integration_key_encrypted: string | null
+          integration_key_production: string | null
           merchant_id: string | null
+          merchant_id_production: string | null
           pv_matriz: string | null
+          pv_matriz_production: string | null
           updated_at: string
         }
         Insert: {
@@ -35,8 +38,11 @@ export type Database = {
           created_at?: string
           id?: string
           integration_key_encrypted?: string | null
+          integration_key_production?: string | null
           merchant_id?: string | null
+          merchant_id_production?: string | null
           pv_matriz?: string | null
+          pv_matriz_production?: string | null
           updated_at?: string
         }
         Update: {
@@ -47,8 +53,11 @@ export type Database = {
           created_at?: string
           id?: string
           integration_key_encrypted?: string | null
+          integration_key_production?: string | null
           merchant_id?: string | null
+          merchant_id_production?: string | null
           pv_matriz?: string | null
+          pv_matriz_production?: string | null
           updated_at?: string
         }
         Relationships: []
