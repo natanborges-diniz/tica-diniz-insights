@@ -63,9 +63,12 @@ serve(async (req) => {
 
     const pvToEmpresa: Record<string, number> = {};
     for (const c of allConfigs || []) {
-      // Map both sandbox and production PVs
-      if (c.merchant_id) pvToEmpresa[c.merchant_id] = c.cod_empresa;
-      if (c.merchant_id_production) pvToEmpresa[c.merchant_id_production] = c.cod_empresa;
+      // Map PVs based on the active environment
+      if (env === "production") {
+        if (c.merchant_id_production) pvToEmpresa[c.merchant_id_production] = c.cod_empresa;
+      } else {
+        if (c.merchant_id) pvToEmpresa[c.merchant_id] = c.cod_empresa;
+      }
     }
     if (!pvToEmpresa[pvMatriz]) {
       pvToEmpresa[pvMatriz] = matrizConfig.cod_empresa;
