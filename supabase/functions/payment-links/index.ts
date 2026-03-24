@@ -10,15 +10,16 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const INTERNAL_SERVICE_SECRET = Deno.env.get("INTERNAL_SERVICE_SECRET") || "";
 
+// Published app domain for generating payment URLs
+const APP_DOMAIN = "https://lens-data-vision.lovable.app";
+
 /** Authenticate via JWT or X-Service-Key */
 async function authenticate(req: Request): Promise<{ userId: string | null; isService: boolean }> {
-  // Check service key first (for Connect & Flow)
   const serviceKey = req.headers.get("x-service-key");
   if (serviceKey && INTERNAL_SERVICE_SECRET && serviceKey === INTERNAL_SERVICE_SECRET) {
     return { userId: null, isService: true };
   }
 
-  // Fall back to JWT
   const authHeader = req.headers.get("authorization") || "";
   const token = authHeader.replace("Bearer ", "");
   if (!token) throw new Error("Autenticação necessária (JWT ou X-Service-Key)");
@@ -38,11 +39,18 @@ serve(async (req) => {
   }
 
   try {
-    const auth = await authenticate(req);
     const body = await req.json();
     const { action, ...params } = body;
 
     if (!action) throw new Error("action é obrigatório");
+
+    // Public actions that don't require auth
+    const publicActions = ["detalhe_publico", "processar_pagamento"];
+    let auth = { userId: null as string | null, isService: false };
+
+    if (!publicActions.includes(action)) {
+      auth = await authenticate(req);
+    }
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     let result: unknown;
@@ -53,40 +61,9 @@ serve(async (req) => {
         if (!cod_empresa || !valor || !descricao) throw new Error("cod_empresa, valor e descricao são obrigatórios");
 
         const linkOrigem = origem || (auth.isService ? "CHATBOT" : "MANUAL");
-        const reference = `PL-${cod_empresa}-${Date.now()}`;
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-        // Call rede-proxy to create transaction
-        let redeResult: Record<string, unknown> | null = null;
-        try {
-          const redeRes = await fetch(`${SUPABASE_URL}/functions/v1/rede-proxy`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-            },
-            body: JSON.stringify({
-              action: "criar_transacao",
-              cod_empresa,
-              amount: valor,
-              reference,
-              installments: parcelas_max || 1,
-              kind: "credit",
-              capture: true,
-            }),
-          });
-          const redeData = await redeRes.json();
-          if (redeData.error) {
-            console.warn("[payment-links] Rede error (will save link without TID):", redeData.error);
-          } else {
-            redeResult = redeData as Record<string, unknown>;
-          }
-        } catch (e) {
-          console.warn("[payment-links] Rede proxy call failed:", (e as Error).message);
-        }
-
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h
-
-        // Save payment link
+        // Save payment link with system-generated URL (no Rede call needed at creation)
         const linkRecord = {
           cod_empresa,
           adquirente: "REDE",
@@ -94,15 +71,13 @@ serve(async (req) => {
           descricao,
           parcelas_max: parcelas_max || 1,
           expira_em: expiresAt,
-          url_pagamento: redeResult?.returnUrl || redeResult?.authorization?.returnUrl || null,
-          tid: redeResult?.tid || null,
-          status: redeResult?.tid ? "ATIVO" : "PENDENTE",
+          status: "ATIVO",
           cliente_nome: cliente_nome || null,
           cliente_documento: cliente_documento || null,
           cliente_telefone: cliente_telefone || null,
           origem: linkOrigem,
           origem_ref: origem_ref || null,
-          dados_extras: redeResult ? { rede_response: redeResult } : {},
+          dados_extras: {},
         };
 
         const { data: inserted, error: insertError } = await admin
@@ -113,7 +88,11 @@ serve(async (req) => {
 
         if (insertError) throw new Error("Erro ao salvar link: " + insertError.message);
 
-        // Create ledger entry (lancamento RECEBER)
+        // Set the URL to our own checkout page
+        const payUrl = `${APP_DOMAIN}/pay/${inserted.id}`;
+        await admin.from("payment_links").update({ url_pagamento: payUrl }).eq("id", inserted.id);
+
+        // Create ledger entry
         try {
           await admin.from("lancamentos_financeiros").insert({
             cod_empresa,
@@ -135,9 +114,8 @@ serve(async (req) => {
 
         result = {
           id: inserted.id,
-          url_pagamento: inserted.url_pagamento,
-          tid: inserted.tid,
-          status: inserted.status,
+          url_pagamento: payUrl,
+          status: "ATIVO",
           expira_em: expiresAt,
           valor,
           descricao,
@@ -181,6 +159,119 @@ serve(async (req) => {
         break;
       }
 
+      case "detalhe_publico": {
+        // Public: returns only safe fields, no auth required
+        const { link_id } = params;
+        if (!link_id) throw new Error("link_id é obrigatório");
+
+        const { data, error } = await admin
+          .from("payment_links")
+          .select("id, valor, descricao, parcelas_max, status, expira_em, cliente_nome, adquirente")
+          .eq("id", link_id)
+          .single();
+
+        if (error) throw new Error("Link não encontrado");
+
+        // Check expiration
+        if (data.status === "ATIVO" && data.expira_em && new Date(data.expira_em) < new Date()) {
+          await admin.from("payment_links").update({ status: "EXPIRADO" }).eq("id", link_id);
+          data.status = "EXPIRADO";
+        }
+
+        result = data;
+        break;
+      }
+
+      case "processar_pagamento": {
+        // Public: process card payment for a link
+        const { link_id, cardNumber, cardholderName, expirationMonth, expirationYear, securityCode, installments } = params;
+        if (!link_id) throw new Error("link_id é obrigatório");
+        if (!cardNumber || !cardholderName || !expirationMonth || !expirationYear || !securityCode) {
+          throw new Error("Dados do cartão são obrigatórios");
+        }
+
+        // Fetch link
+        const { data: link, error: fetchErr } = await admin
+          .from("payment_links")
+          .select("*")
+          .eq("id", link_id)
+          .single();
+
+        if (fetchErr || !link) throw new Error("Link não encontrado");
+        if (link.status !== "ATIVO") throw new Error(`Link com status ${link.status} não pode ser processado`);
+
+        // Check expiration
+        if (link.expira_em && new Date(link.expira_em) < new Date()) {
+          await admin.from("payment_links").update({ status: "EXPIRADO" }).eq("id", link_id);
+          throw new Error("Link expirado");
+        }
+
+        // Call rede-proxy to process payment
+        const reference = `PL-${link.cod_empresa}-${link_id.slice(0, 8)}`;
+        const redeRes = await fetch(`${SUPABASE_URL}/functions/v1/rede-proxy`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            action: "criar_transacao",
+            cod_empresa: link.cod_empresa,
+            amount: link.valor,
+            reference,
+            installments: installments || link.parcelas_max || 1,
+            kind: "credit",
+            capture: true,
+            cardNumber,
+            cardholderName,
+            expirationMonth,
+            expirationYear,
+            securityCode,
+          }),
+        });
+
+        const redeData = await redeRes.json();
+
+        if (redeData.error) {
+          console.error("[payment-links] Rede payment error:", redeData.error);
+          throw new Error("Erro ao processar pagamento: " + redeData.error);
+        }
+
+        // Check if transaction was approved
+        const returnCode = redeData.returnCode;
+        const isApproved = returnCode === "00" || returnCode === 0;
+
+        if (!isApproved) {
+          const returnMsg = redeData.returnMessage || "Transação não aprovada";
+          throw new Error(`Pagamento recusado: ${returnMsg} (código ${returnCode})`);
+        }
+
+        // Update link status
+        await admin.from("payment_links").update({
+          status: "PAGO",
+          tid: redeData.tid || null,
+          pago_em: new Date().toISOString(),
+          dados_extras: { rede_response: redeData },
+        }).eq("id", link_id);
+
+        // Update ledger
+        await admin.from("lancamentos_financeiros").update({
+          status: "BAIXADO",
+          data_pagamento: new Date().toISOString().slice(0, 10),
+          valor_pago: link.valor,
+        })
+          .eq("origem", "LINK_PAGAMENTO")
+          .eq("origem_id", link_id);
+
+        result = {
+          success: true,
+          status: "PAGO",
+          tid: redeData.tid,
+          authorization: redeData.authorizationCode,
+        };
+        break;
+      }
+
       case "cancelar": {
         const { link_id } = params;
         if (!link_id) throw new Error("link_id é obrigatório");
@@ -196,27 +287,19 @@ serve(async (req) => {
           throw new Error(`Não é possível cancelar link com status ${link.status}`);
         }
 
-        const { error: updateErr } = await admin
-          .from("payment_links")
+        await admin.from("payment_links").update({ status: "CANCELADO" }).eq("id", link_id);
+
+        // Cancel ledger entry
+        await admin.from("lancamentos_financeiros")
           .update({ status: "CANCELADO" })
-          .eq("id", link_id);
-
-        if (updateErr) throw new Error(updateErr.message);
-
-        // Also cancel ledger entry
-        if (link.lancamento_id) {
-          await admin
-            .from("lancamentos_financeiros")
-            .update({ status: "CANCELADO" })
-            .eq("id", link.lancamento_id);
-        }
+          .eq("origem", "LINK_PAGAMENTO")
+          .eq("origem_id", link_id);
 
         result = { success: true, status: "CANCELADO" };
         break;
       }
 
       case "webhook_callback": {
-        // Public endpoint for Rede webhook notifications
         const { tid, status: txStatus, amount } = params;
         console.log("[payment-links] webhook:", { tid, txStatus, amount });
 
@@ -236,26 +319,18 @@ serve(async (req) => {
 
         const newStatus = (txStatus === "Approved" || txStatus === "approved") ? "PAGO" : link.status;
 
-        const { error: upErr } = await admin
-          .from("payment_links")
-          .update({
-            status: newStatus,
-            pago_em: newStatus === "PAGO" ? new Date().toISOString() : null,
-            webhook_payload: params,
-          })
-          .eq("id", link.id);
+        await admin.from("payment_links").update({
+          status: newStatus,
+          pago_em: newStatus === "PAGO" ? new Date().toISOString() : null,
+          webhook_payload: params,
+        }).eq("id", link.id);
 
-        if (upErr) console.error("[payment-links] webhook update error:", upErr);
-
-        // Update ledger if paid
         if (newStatus === "PAGO") {
-          await admin
-            .from("lancamentos_financeiros")
-            .update({
-              status: "BAIXADO",
-              data_pagamento: new Date().toISOString().slice(0, 10),
-              valor_pago: (amount || 0) / 100, // Rede sends in cents
-            })
+          await admin.from("lancamentos_financeiros").update({
+            status: "BAIXADO",
+            data_pagamento: new Date().toISOString().slice(0, 10),
+            valor_pago: (amount || 0) / 100,
+          })
             .eq("origem", "LINK_PAGAMENTO")
             .eq("origem_id", link.id);
         }
@@ -265,7 +340,7 @@ serve(async (req) => {
       }
 
       default:
-        throw new Error(`Action '${action}' não suportada. Use: criar, listar, detalhe, cancelar, webhook_callback`);
+        throw new Error(`Action '${action}' não suportada`);
     }
 
     return new Response(JSON.stringify(result), {
