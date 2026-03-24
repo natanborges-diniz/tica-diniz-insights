@@ -86,3 +86,6 @@ verify_jwt = false
 
 [functions.conciliar-vendas]
 verify_jwt = false
+
+[functions.rede-gestao-vendas]
+verify_jwt = false

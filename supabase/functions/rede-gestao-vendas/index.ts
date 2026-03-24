@@ -1,0 +1,271 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const SANDBOX_BASE_URL = "https://rl7-sandbox-api.useredecloud.com.br";
+const PRODUCTION_BASE_URL = "https://api.userede.com.br";
+
+// Token cache (in-memory, per function instance)
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+async function getOAuthToken(baseUrl: string): Promise<string> {
+  // Check cache
+  if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
+    return cachedToken.token;
+  }
+
+  const clientId = Deno.env.get("REDE_GV_CLIENT_ID");
+  const clientSecret = Deno.env.get("REDE_GV_CLIENT_SECRET");
+
+  if (!clientId || !clientSecret) {
+    throw new Error("REDE_GV_CLIENT_ID ou REDE_GV_CLIENT_SECRET não configurados");
+  }
+
+  const tokenUrl = `${baseUrl}/oauth2/token`;
+  console.log(`[rede-gv] Requesting OAuth token from ${tokenUrl}`);
+
+  const res = await fetch(tokenUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: "Basic " + btoa(`${clientId}:${clientSecret}`),
+    },
+    body: "grant_type=client_credentials",
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    console.error(`[rede-gv] Token error ${res.status}:`, text.slice(0, 500));
+    throw new Error(`Falha ao obter token OAuth: ${res.status} ${text.slice(0, 200)}`);
+  }
+
+  const data = JSON.parse(text);
+  const token = data.access_token;
+  const expiresIn = data.expires_in || 3600;
+
+  cachedToken = {
+    token,
+    expiresAt: Date.now() + expiresIn * 1000,
+  };
+
+  console.log(`[rede-gv] Token obtained, expires in ${expiresIn}s`);
+  return token;
+}
+
+async function apiRequest(
+  baseUrl: string,
+  path: string,
+  token: string,
+  params?: Record<string, string>
+): Promise<unknown> {
+  const qs = new URLSearchParams(params || {});
+  const qsStr = qs.toString();
+  const url = `${baseUrl}${path}${qsStr ? "?" + qsStr : ""}`;
+
+  console.log(`[rede-gv] GET ${url}`);
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+  });
+
+  const text = await res.text();
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); } catch { parsed = { raw: text }; }
+
+  if (!res.ok) {
+    console.error(`[rede-gv] API ${res.status}:`, text.slice(0, 500));
+    throw new Error(`Rede Gestão Vendas API ${res.status}: ${text.slice(0, 300)}`);
+  }
+
+  return parsed;
+}
+
+function resolveBaseUrl(ambiente?: string): string {
+  return ambiente === "production" ? PRODUCTION_BASE_URL : SANDBOX_BASE_URL;
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const body = await req.json();
+    const { action, ambiente, ...params } = body;
+
+    if (!action) throw new Error("action é obrigatório");
+
+    const baseUrl = resolveBaseUrl(ambiente);
+    const token = await getOAuthToken(baseUrl);
+
+    let result: unknown;
+
+    switch (action) {
+      case "consultar_vendas": {
+        // GET /merchant-statement/v1/sales
+        if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
+        if (!params.startDate) throw new Error("startDate é obrigatório (YYYY-MM-DD)");
+        if (!params.endDate) throw new Error("endDate é obrigatório (YYYY-MM-DD)");
+
+        const qp: Record<string, string> = {
+          parentCompanyNumber: params.parentCompanyNumber,
+          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
+          startDate: params.startDate,
+          endDate: params.endDate,
+        };
+        if (params.brands) qp.brands = params.brands;
+        if (params.modalities) qp.modalities = params.modalities;
+        if (params.status) qp.status = params.status;
+        if (params.size) qp.size = String(params.size);
+        if (params.page) qp.page = String(params.page);
+
+        result = await apiRequest(baseUrl, "/merchant-statement/v1/sales", token, qp);
+        break;
+      }
+
+      case "consultar_vendas_diarias": {
+        // GET /merchant-statement/v1/sales/{nsu}/daily
+        if (!params.nsu) throw new Error("nsu é obrigatório");
+        if (!params.startDate) throw new Error("startDate é obrigatório");
+        if (!params.endDate) throw new Error("endDate é obrigatório");
+
+        result = await apiRequest(
+          baseUrl,
+          `/merchant-statement/v1/sales/${params.nsu}/daily`,
+          token,
+          { startDate: params.startDate, endDate: params.endDate }
+        );
+        break;
+      }
+
+      case "consultar_parcelas": {
+        // GET /merchant-statement/v1/sales/installments
+        if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
+        if (!params.startDate) throw new Error("startDate é obrigatório");
+        if (!params.endDate) throw new Error("endDate é obrigatório");
+
+        const qp: Record<string, string> = {
+          parentCompanyNumber: params.parentCompanyNumber,
+          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
+          startDate: params.startDate,
+          endDate: params.endDate,
+        };
+        if (params.size) qp.size = String(params.size);
+        if (params.page) qp.page = String(params.page);
+
+        result = await apiRequest(baseUrl, "/merchant-statement/v1/sales/installments", token, qp);
+        break;
+      }
+
+      case "consultar_pagamentos": {
+        // GET /merchant-statement/v1/payments
+        if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
+        if (!params.startDate) throw new Error("startDate é obrigatório");
+        if (!params.endDate) throw new Error("endDate é obrigatório");
+
+        const qp: Record<string, string> = {
+          parentCompanyNumber: params.parentCompanyNumber,
+          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
+          startDate: params.startDate,
+          endDate: params.endDate,
+        };
+        if (params.brands) qp.brands = params.brands;
+        if (params.status) qp.status = params.status;
+        if (params.types) qp.types = params.types;
+        if (params.size) qp.size = String(params.size);
+        if (params.page) qp.page = String(params.page);
+
+        result = await apiRequest(baseUrl, "/merchant-statement/v1/payments", token, qp);
+        break;
+      }
+
+      case "consultar_pagamentos_oc": {
+        // GET /merchant-statement/v1/payments/credit-orders
+        if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
+        if (!params.startDate) throw new Error("startDate é obrigatório");
+        if (!params.endDate) throw new Error("endDate é obrigatório");
+
+        const qp: Record<string, string> = {
+          parentCompanyNumber: params.parentCompanyNumber,
+          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
+          startDate: params.startDate,
+          endDate: params.endDate,
+        };
+        if (params.size) qp.size = String(params.size);
+        if (params.page) qp.page = String(params.page);
+
+        result = await apiRequest(baseUrl, "/merchant-statement/v1/payments/credit-orders", token, qp);
+        break;
+      }
+
+      case "consultar_debitos": {
+        // GET /merchant-statement/v1/charges
+        if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
+        if (!params.startDate) throw new Error("startDate é obrigatório");
+        if (!params.endDate) throw new Error("endDate é obrigatório");
+
+        const qp: Record<string, string> = {
+          parentCompanyNumber: params.parentCompanyNumber,
+          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
+          startDate: params.startDate,
+          endDate: params.endDate,
+        };
+        if (params.size) qp.size = String(params.size);
+
+        result = await apiRequest(baseUrl, "/merchant-statement/v1/charges", token, qp);
+        break;
+      }
+
+      case "consultar_tipos_ajuste": {
+        // GET /merchant-statement/v1/charges/adjustment-types
+        result = await apiRequest(baseUrl, "/merchant-statement/v1/charges/adjustment-types", token);
+        break;
+      }
+
+      case "health": {
+        try {
+          // Test with sandbox PV numbers
+          const testPv = params.parentCompanyNumber || "13381369";
+          const today = new Date().toISOString().slice(0, 10);
+          const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+
+          await apiRequest(baseUrl, "/merchant-statement/v1/sales", token, {
+            parentCompanyNumber: testPv,
+            subsidiaries: testPv,
+            startDate: weekAgo,
+            endDate: today,
+            size: "1",
+          });
+          result = { ok: true, ambiente: baseUrl.includes("sandbox") ? "sandbox" : "production" };
+        } catch (e) {
+          result = { ok: false, error: (e as Error).message };
+        }
+        break;
+      }
+
+      default:
+        throw new Error(
+          `Action '${action}' não suportada. Use: consultar_vendas, consultar_vendas_diarias, consultar_parcelas, consultar_pagamentos, consultar_pagamentos_oc, consultar_debitos, consultar_tipos_ajuste, health`
+        );
+    }
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    console.error("[rede-gv] Error:", err);
+    return new Response(
+      JSON.stringify({ error: (err as Error).message }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
