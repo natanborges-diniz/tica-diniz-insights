@@ -311,6 +311,14 @@ export default function PaymentLinksPage() {
                                   <ExternalLink className="h-3 w-3" />
                                 </a>
                               </Button>
+                              <Button size="icon" variant="ghost" title="Enviar via WhatsApp" onClick={() => {
+                                const msg = encodeURIComponent(`💳 Link de Pagamento\n\n${link.descricao}\nValor: ${fmtCurrency(Number(link.valor))}\n\n${link.url_pagamento}`);
+                                const phone = link.cliente_telefone?.replace(/\D/g, "") || "";
+                                const waUrl = phone ? `https://wa.me/55${phone}?text=${msg}` : `https://wa.me/?text=${msg}`;
+                                window.open(waUrl, "_blank");
+                              }}>
+                                <MessageCircle className="h-3 w-3" />
+                              </Button>
                             </>
                           )}
                           {(link.status === "ATIVO" || link.status === "PENDENTE") && (
