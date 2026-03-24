@@ -1,68 +1,88 @@
 
 
-# Plano: Chaveamento Sandbox/Producao por Adquirente
+# Plano: Gerar e-mail de solicitação de acesso produção API Rede
 
-## Contexto
-Hoje cada registro em `adquirentes_config` tem um unico campo `ambiente` (sandbox ou production) e um unico par de credenciais. O usuario quer que cada adquirente tenha credenciais para **ambos** os ambientes, com um toggle para ativar qual esta em uso.
+Vou gerar um e-mail formatado para enviar a `produtosapi@userede.com.br` com todos os dados necessários, incluindo os 10 CNPJs visíveis no print.
 
-## O que muda
+## Dados coletados
 
-### 1. Migration — novos campos na tabela `adquirentes_config`
-Adicionar colunas para credenciais de producao separadas:
+| Campo | Valor |
+|-------|-------|
+| Empresa | Óticas Diniz |
+| Segmento | Varejo Óptico |
+| E-mail empresa | natan.borges@oticasdiniz.com.br |
+| Telefone | 11 3681-5272 |
+| Login Portal | natanoticasdiniz@hotmail.com |
+| APIs | Gestão de Vendas (Merchant Statement) e Chargeback |
 
-- `merchant_id_production` (text, nullable) — PV de producao
-- `integration_key_production` (text, nullable) — chave de producao
-- `pv_matriz_production` (text, nullable) — PV Matriz de producao
+### CNPJs (do print):
+1. 12.107.885/0001-01
+2. 13.844.111/0001-26
+3. 19.938.491/0001-44
+4. 19.280.952/0002-15
+5. 35.385.887/0001-68
+6. 50.390.704/0001-96
+7. 51.322.401/0001-07
+8. 57.465.988/0001-81
+9. 35.385.887/0002-49
+10. 59.068.194/0001-00
 
-Os campos existentes (`merchant_id`, `integration_key_encrypted`, `pv_matriz`) passam a representar as credenciais de **sandbox**. O campo `ambiente` continua existindo e indica qual ambiente esta **ativo** no momento.
+## Entrega
 
-### 2. Atualizar UI — AdminAdquirentesPage
-Reorganizar a tabela para mostrar dois blocos de credenciais por linha:
+E-mail pronto para copiar e enviar, no formato solicitado pela Rede, com todos os CNPJs listados e as APIs desejadas (Gestão de Vendas + Chargeback).
 
-```text
-Empresa | Adquirente | Ambiente Ativo [toggle]
-        | Sandbox: PV / Chave / PV Matriz
-        | Producao: PV / Chave / PV Matriz
-        | [Testar SB] [Testar Prod] [Testar GV SB] [Testar GV Prod]
-```
+---
 
-- Toggle Sandbox/Producao altera qual conjunto de credenciais as Edge Functions usam
-- Botoes de teste para cada ambiente separadamente
-- Indicador visual de quais credenciais estao preenchidas
+## E-mail
 
-### 3. Atualizar Edge Functions
+**Para:** produtosapi@userede.com.br
+**Assunto:** Solicitação de Acesso Produção — APIs Gestão de Vendas e Chargeback — Óticas Diniz
 
-**`rede-proxy`**: Ler `ambiente` do registro e usar `merchant_id` ou `merchant_id_production` conforme o ambiente ativo.
+---
 
-**`rede-gestao-vendas`**: Ja recebe `ambiente` como parametro — nenhuma mudanca necessaria na funcao em si.
+Prezada equipe de Integrações,
 
-**`sync-vendas-cartao`**: Ler `ambiente` do config para decidir qual `pv_matriz` usar (`pv_matriz` vs `pv_matriz_production`).
+Solicito o cadastro da organização, usuário e aplicação para acesso às APIs da Rede em ambiente de produção, conforme informações abaixo:
 
-**`payment-links`**: Usar `merchant_id` ou `merchant_id_production` conforme o ambiente ativo do registro.
+**1. Nome da Empresa/Organização:** Óticas Diniz
 
-### 4. Corrigir mapeamento do sync-vendas-cartao (pendente)
-Ajustar campos conforme a estrutura real da API Gestao de Vendas (conforme descoberto nos testes anteriores):
-- `content.transactions` em vez de `content`
-- `tx.merchant.companyNumber` em vez de `tx.subsidiaryNumber`
-- `tx.amount` em vez de `tx.grossAmount`
-- `tx.modality.type` em vez de `tx.modality`
-- `tx.brandCode` mapeado para nome da bandeira
+**2. CNPJs da Empresa/Organização:**
+- 12.107.885/0001-01
+- 13.844.111/0001-26
+- 19.938.491/0001-44
+- 19.280.952/0002-15
+- 35.385.887/0001-68
+- 50.390.704/0001-96
+- 51.322.401/0001-07
+- 57.465.988/0001-81
+- 35.385.887/0002-49
+- 59.068.194/0001-00
 
-## Detalhes tecnicos
+**3. E-mail da Empresa/Organização:** natan.borges@oticasdiniz.com.br
 
-| Item | Detalhe |
-|------|---------|
-| Migration | Adicionar 3 colunas `*_production` em `adquirentes_config` |
-| UI | Refatorar `AdminAdquirentesPage.tsx` para layout dual-ambiente |
-| Edge Functions | `rede-proxy`, `sync-vendas-cartao`, `payment-links` — resolver credencial pelo campo `ambiente` |
-| `rede-gestao-vendas` | Sem mudanca (ja recebe ambiente como parametro) |
+**4. Telefone da Empresa/Organização:** (11) 3681-5272
 
-## Ordem de implementacao
+**5. Segmento da Empresa/Organização:** Varejo Óptico
 
-| Etapa | Entrega |
-|-------|---------|
-| 1 | Migration: adicionar colunas `*_production` |
-| 2 | Refatorar UI com campos separados por ambiente e testes independentes |
-| 3 | Atualizar `rede-proxy` e `payment-links` para resolver credenciais pelo ambiente |
-| 4 | Atualizar `sync-vendas-cartao` com credencial correta + fix de mapeamento API |
+**6. Nome do Cliente:** Natan Borges
+
+**7. E-mail do Cliente:** natan.borges@oticasdiniz.com.br
+
+**8. APIs que deseja acessar:**
+- Gestão de Vendas (Merchant Statement API) — Consulta de vendas consolidadas
+- Chargeback — Gestão de contestações
+
+**9. E-mail utilizado no Login do Portal do Desenvolvedor:** natanoticasdiniz@hotmail.com
+
+Todos os CNPJs acima pertencem ao mesmo grupo e devem estar vinculados à mesma organização/aplicação, permitindo consulta consolidada via parentCompanyNumber.
+
+Já realizamos testes com sucesso no ambiente Sandbox e estamos prontos para migrar para produção.
+
+Aguardamos o envio das credenciais (Client ID e Client Secret) de produção.
+
+Atenciosamente,
+Natan Borges
+Óticas Diniz
+natan.borges@oticasdiniz.com.br
+(11) 3681-5272
 
