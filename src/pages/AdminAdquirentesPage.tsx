@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
@@ -14,7 +13,7 @@ import { LoadingState, EmptyState } from "@/components/system/states";
 import { toast } from "sonner";
 import {
   Loader2, Save, Plus, Eye, EyeOff, CreditCard,
-  Settings2, KeyRound, CheckCircle2, AlertCircle, Trash2, Wifi, WifiOff,
+  CheckCircle2, AlertCircle, Trash2, Wifi,
 } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -25,11 +24,25 @@ interface AdquirenteConfig {
   adquirente: string;
   ambiente: string;
   merchant_id: string | null;
+  merchant_id_production: string | null;
   integration_key_encrypted: string | null;
+  integration_key_production: string | null;
   pv_matriz: string | null;
+  pv_matriz_production: string | null;
   ativo: boolean;
   created_at: string;
   updated_at: string;
+}
+
+interface EditForm {
+  ambiente: string;
+  merchant_id: string;
+  merchant_id_production: string;
+  integration_key_encrypted: string;
+  integration_key_production: string;
+  pv_matriz: string;
+  pv_matriz_production: string;
+  ativo: boolean;
 }
 
 const ADQUIRENTES = ["REDE", "CIELO", "STONE", "PAGSEGURO", "GETNET"];
@@ -42,22 +55,11 @@ export default function AdminAdquirentesPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [testing, setTesting] = useState<string | null>(null);
-
-  // Form state for editing
-  const [editForms, setEditForms] = useState<Record<string, {
-    ambiente: string;
-    merchant_id: string;
-    integration_key_encrypted: string;
-    pv_matriz: string;
-    ativo: boolean;
-  }>>({});
-
-  // New config form
+  const [editForms, setEditForms] = useState<Record<string, EditForm>>({});
   const [showAddForm, setShowAddForm] = useState(false);
   const [newForm, setNewForm] = useState({
     cod_empresa: 0,
     adquirente: "REDE",
-    ambiente: "sandbox",
     merchant_id: "",
     integration_key_encrypted: "",
   });
@@ -74,13 +76,16 @@ export default function AdminAdquirentesPage() {
     } else if (data) {
       const rows = data as AdquirenteConfig[];
       setConfigs(rows);
-      const forms: typeof editForms = {};
+      const forms: Record<string, EditForm> = {};
       rows.forEach(r => {
         forms[r.id] = {
           ambiente: r.ambiente,
           merchant_id: r.merchant_id || "",
+          merchant_id_production: r.merchant_id_production || "",
           integration_key_encrypted: r.integration_key_encrypted || "",
+          integration_key_production: r.integration_key_production || "",
           pv_matriz: r.pv_matriz || "",
+          pv_matriz_production: r.pv_matriz_production || "",
           ativo: r.ativo,
         };
       });
@@ -103,10 +108,13 @@ export default function AdminAdquirentesPage() {
       .update({
         ambiente: form.ambiente,
         merchant_id: form.merchant_id || null,
+        merchant_id_production: form.merchant_id_production || null,
         integration_key_encrypted: form.integration_key_encrypted || null,
+        integration_key_production: form.integration_key_production || null,
         pv_matriz: form.pv_matriz || null,
+        pv_matriz_production: form.pv_matriz_production || null,
         ativo: form.ativo,
-      })
+      } as any)
       .eq("id", config.id);
 
     if (error) {
@@ -129,7 +137,7 @@ export default function AdminAdquirentesPage() {
       .insert({
         cod_empresa: newForm.cod_empresa,
         adquirente: newForm.adquirente,
-        ambiente: newForm.ambiente,
+        ambiente: "sandbox",
         merchant_id: newForm.merchant_id || null,
         integration_key_encrypted: newForm.integration_key_encrypted || null,
       });
@@ -139,18 +147,14 @@ export default function AdminAdquirentesPage() {
     } else {
       toast.success("Adquirente configurada com sucesso");
       setShowAddForm(false);
-      setNewForm({ cod_empresa: 0, adquirente: "REDE", ambiente: "sandbox", merchant_id: "", integration_key_encrypted: "" });
+      setNewForm({ cod_empresa: 0, adquirente: "REDE", merchant_id: "", integration_key_encrypted: "" });
       fetchConfigs();
     }
     setSaving(null);
   };
 
   const handleDelete = async (id: string) => {
-    const { error } = await supabase
-      .from("adquirentes_config")
-      .delete()
-      .eq("id", id);
-
+    const { error } = await supabase.from("adquirentes_config").delete().eq("id", id);
     if (error) {
       toast.error("Erro ao excluir: " + error.message);
     } else {
@@ -159,46 +163,52 @@ export default function AdminAdquirentesPage() {
     }
   };
 
-  const handleTestConnection = async (config: AdquirenteConfig) => {
-    setTesting(config.id);
+  const handleTestErede = async (config: AdquirenteConfig, targetAmbiente: "sandbox" | "production") => {
+    const testId = `${config.id}-erede-${targetAmbiente}`;
+    setTesting(testId);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error("Sessão expirada");
+      if (!session?.access_token) throw new Error("Sessão expirada");
 
+      // Temporarily save the config with target ambiente before testing
+      const form = editForms[config.id];
       const { data, error } = await supabase.functions.invoke("rede-proxy", {
         body: { action: "health", cod_empresa: config.cod_empresa },
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error) throw error;
       if (data?.ok) {
-        toast.success(`Conexão e.Rede OK — ${data.ambiente}`);
+        toast.success(`e.Rede OK — ${data.ambiente}`);
       } else {
-        toast.error(`Falha na conexão: ${data?.error || "Erro desconhecido"}`);
+        toast.error(`Falha e.Rede: ${data?.error || "Erro desconhecido"}`);
       }
     } catch (e) {
-      toast.error(`Erro ao testar: ${(e as Error).message}`);
+      toast.error(`Erro: ${(e as Error).message}`);
     } finally {
       setTesting(null);
     }
   };
 
-  const handleTestGV = async (config: AdquirenteConfig) => {
+  const handleTestGV = async (config: AdquirenteConfig, targetAmbiente: "sandbox" | "production") => {
     const form = editForms[config.id];
-    const pvMatriz = form?.pv_matriz || config.pv_matriz;
+    const pvMatriz = targetAmbiente === "production"
+      ? (form?.pv_matriz_production || form?.pv_matriz)
+      : form?.pv_matriz;
+
     if (!pvMatriz) {
-      toast.error("Configure o PV Matriz primeiro");
+      toast.error(`Configure o PV Matriz (${targetAmbiente}) primeiro`);
       return;
     }
-    setTesting(config.id + "-gv");
+
+    const testId = `${config.id}-gv-${targetAmbiente}`;
+    setTesting(testId);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error("Sessão expirada");
+      if (!session?.access_token) throw new Error("Sessão expirada");
 
       const { data, error } = await supabase.functions.invoke("rede-gestao-vendas", {
-        body: { action: "health", ambiente: form?.ambiente || config.ambiente, parentCompanyNumber: pvMatriz },
-        headers: { Authorization: `Bearer ${token}` },
+        body: { action: "health", ambiente: targetAmbiente, parentCompanyNumber: pvMatriz },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error) throw error;
       if (data?.ok) {
@@ -207,7 +217,7 @@ export default function AdminAdquirentesPage() {
         toast.error(`Falha GV: ${data?.error || "Erro desconhecido"}`);
       }
     } catch (e) {
-      toast.error(`Erro ao testar GV: ${(e as Error).message}`);
+      toast.error(`Erro GV: ${(e as Error).message}`);
     } finally {
       setTesting(null);
     }
@@ -225,14 +235,90 @@ export default function AdminAdquirentesPage() {
     if (!form) return false;
     return form.ambiente !== config.ambiente
       || form.merchant_id !== (config.merchant_id || "")
+      || form.merchant_id_production !== (config.merchant_id_production || "")
       || form.integration_key_encrypted !== (config.integration_key_encrypted || "")
+      || form.integration_key_production !== (config.integration_key_production || "")
       || form.pv_matriz !== (config.pv_matriz || "")
+      || form.pv_matriz_production !== (config.pv_matriz_production || "")
       || form.ativo !== config.ativo;
   };
 
   const getEmpresaNome = (cod: number) => {
     const emp = empresas.find(e => e.codEmpresa === cod);
     return emp?.nome || `Empresa ${cod}`;
+  };
+
+  const CredentialBlock = ({ configId, label, ambiente, form }: {
+    configId: string; label: string; ambiente: "sandbox" | "production"; form: EditForm;
+  }) => {
+    const prefix = ambiente === "production" ? "_production" : "";
+    const pvField = ambiente === "production" ? "merchant_id_production" : "merchant_id";
+    const keyField = ambiente === "production" ? "integration_key_production" : "integration_key_encrypted";
+    const pvMatrizField = ambiente === "production" ? "pv_matriz_production" : "pv_matriz";
+
+    const pvValue = (form as any)[pvField] || "";
+    const keyValue = (form as any)[keyField] || "";
+    const pvMatrizValue = (form as any)[pvMatrizField] || "";
+    const keyVisibleId = `${configId}-${ambiente}`;
+    const isKeyVisible = showKeys[keyVisibleId];
+    const isActive = form.ambiente === ambiente;
+
+    return (
+      <div className={`p-3 rounded-lg border space-y-2 ${isActive ? "border-primary/40 bg-primary/5" : "border-border/50 bg-muted/20 opacity-75"}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge variant={isActive ? "default" : "secondary"} className="text-[10px]">
+              {label}
+            </Badge>
+            {isActive && (
+              <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
+                ATIVO
+              </Badge>
+            )}
+          </div>
+          {pvValue && <CheckCircle2 className="h-3 w-3 text-primary" />}
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div className="space-y-0.5">
+            <Label className="text-[10px] text-muted-foreground">PV</Label>
+            <Input
+              value={pvValue}
+              onChange={e => updateForm(configId, pvField, e.target.value)}
+              className="font-mono text-xs h-7"
+              placeholder="Nº filiação"
+            />
+          </div>
+          <div className="space-y-0.5">
+            <Label className="text-[10px] text-muted-foreground">Chave</Label>
+            <div className="flex gap-0.5">
+              <Input
+                type={isKeyVisible ? "text" : "password"}
+                value={keyValue}
+                onChange={e => updateForm(configId, keyField, e.target.value)}
+                className="font-mono text-xs h-7"
+                placeholder="••••"
+              />
+              <Button
+                variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                onClick={() => setShowKeys(prev => ({ ...prev, [keyVisibleId]: !prev[keyVisibleId] }))}
+              >
+                {isKeyVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-0.5">
+            <Label className="text-[10px] text-muted-foreground">PV Matriz (GV)</Label>
+            <Input
+              value={pvMatrizValue}
+              onChange={e => updateForm(configId, pvMatrizField, e.target.value)}
+              className="font-mono text-xs h-7"
+              placeholder="PV Matriz"
+            />
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -248,7 +334,6 @@ export default function AdminAdquirentesPage() {
         }
       />
 
-      {/* Add Form */}
       {showAddForm && (
         <Card className="border-primary/30">
           <CardHeader className="pb-3">
@@ -279,7 +364,7 @@ export default function AdminAdquirentesPage() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">PV / Merchant ID</Label>
+                <Label className="text-xs">PV Sandbox</Label>
                 <Input
                   value={newForm.merchant_id}
                   onChange={e => setNewForm(f => ({ ...f, merchant_id: e.target.value }))}
@@ -288,7 +373,7 @@ export default function AdminAdquirentesPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Chave de Integração</Label>
+                <Label className="text-xs">Chave Sandbox</Label>
                 <Input
                   type="password"
                   value={newForm.integration_key_encrypted}
@@ -297,14 +382,6 @@ export default function AdminAdquirentesPage() {
                   className="font-mono text-sm"
                 />
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground">Sandbox</span>
-              <Switch
-                checked={newForm.ambiente === "production"}
-                onCheckedChange={v => setNewForm(f => ({ ...f, ambiente: v ? "production" : "sandbox" }))}
-              />
-              <span className="text-xs font-medium text-primary">Produção</span>
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={() => setShowAddForm(false)}>Cancelar</Button>
@@ -317,7 +394,6 @@ export default function AdminAdquirentesPage() {
         </Card>
       )}
 
-      {/* Configs Table */}
       {loading ? (
         <LoadingState />
       ) : configs.length === 0 ? (
@@ -326,157 +402,138 @@ export default function AdminAdquirentesPage() {
           description="Adicione a primeira configuração para integrar com Rede, Cielo, Stone ou outra adquirente."
         />
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Empresa</TableHead>
-                  <TableHead>Adquirente</TableHead>
-                  <TableHead>PV / Merchant ID</TableHead>
-                  <TableHead>PV Matriz (GV)</TableHead>
-                  <TableHead>Chave de Integração</TableHead>
-                  <TableHead>Ambiente</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-40">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {configs.map(config => {
-                  const form = editForms[config.id];
-                  if (!form) return null;
-                  const changed = isChanged(config);
-                  const isKeyVisible = showKeys[config.id];
+        <div className="space-y-4">
+          {configs.map(config => {
+            const form = editForms[config.id];
+            if (!form) return null;
+            const changed = isChanged(config);
 
-                  return (
-                    <TableRow key={config.id}>
-                      <TableCell className="font-medium">
-                        {getEmpresaNome(config.cod_empresa)}
+            return (
+              <Card key={config.id}>
+                <CardContent className="p-4 space-y-3">
+                  {/* Header row */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <span className="font-medium text-sm">{getEmpresaNome(config.cod_empresa)}</span>
                         <span className="text-xs text-muted-foreground ml-1">({config.cod_empresa})</span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{config.adquirente}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={form.merchant_id}
-                          onChange={e => updateForm(config.id, "merchant_id", e.target.value)}
-                          className="font-mono text-sm h-8 w-40"
-                          placeholder="PV"
+                      </div>
+                      <Badge variant="outline">{config.adquirente}</Badge>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {/* Ambiente toggle */}
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs ${form.ambiente === "sandbox" ? "font-medium text-foreground" : "text-muted-foreground"}`}>
+                          Sandbox
+                        </span>
+                        <Switch
+                          checked={form.ambiente === "production"}
+                          onCheckedChange={v => updateForm(config.id, "ambiente", v ? "production" : "sandbox")}
                         />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={form.pv_matriz}
-                          onChange={e => updateForm(config.id, "pv_matriz", e.target.value)}
-                          className="font-mono text-sm h-8 w-36"
-                          placeholder="PV Matriz"
+                        <span className={`text-xs ${form.ambiente === "production" ? "font-medium text-primary" : "text-muted-foreground"}`}>
+                          Produção
+                        </span>
+                      </div>
+                      {/* Ativo toggle */}
+                      <div className="flex items-center gap-1.5">
+                        <Switch
+                          checked={form.ativo}
+                          onCheckedChange={v => updateForm(config.id, "ativo", v)}
                         />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Input
-                            type={isKeyVisible ? "text" : "password"}
-                            value={form.integration_key_encrypted}
-                            onChange={e => updateForm(config.id, "integration_key_encrypted", e.target.value)}
-                            className="font-mono text-sm h-8 w-48"
-                            placeholder="••••••••••"
-                          />
-                          <Button
-                            variant="ghost" size="icon" className="h-8 w-8"
-                            onClick={() => setShowKeys(prev => ({ ...prev, [config.id]: !prev[config.id] }))}
-                          >
-                            {isKeyVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                          </Button>
-                        </div>
-                        {config.integration_key_encrypted && (
-                          <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
-                            <CheckCircle2 className="h-2.5 w-2.5 text-primary" /> Configurada
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={form.ambiente === "production"}
-                            onCheckedChange={v => updateForm(config.id, "ambiente", v ? "production" : "sandbox")}
-                          />
-                          <span className="text-xs">
-                            {form.ambiente === "production" ? (
-                              <span className="text-primary font-medium">Produção</span>
-                            ) : (
-                              <span className="text-muted-foreground">Sandbox</span>
-                            )}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={form.ativo}
-                            onCheckedChange={v => updateForm(config.id, "ativo", v)}
-                          />
-                          <Badge variant={form.ativo ? "default" : "secondary"}>
-                            {form.ativo ? "Ativa" : "Inativa"}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm" variant={changed ? "default" : "outline"}
-                            disabled={!changed || saving === config.id}
-                            onClick={() => handleSave(config)}
-                          >
-                            {saving === config.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                          </Button>
-                          <Button
-                            size="sm" variant="outline"
-                            disabled={testing === config.id}
-                            onClick={() => handleTestConnection(config)}
-                            title="Testar e.Rede"
-                          >
-                            {testing === config.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wifi className="h-3 w-3" />}
-                          </Button>
-                          {config.adquirente === "REDE" && (
-                            <Button
-                              size="sm" variant="outline"
-                              disabled={testing === config.id + "-gv"}
-                              onClick={() => handleTestGV(config)}
-                              title="Testar Gestão de Vendas"
-                              className="text-xs px-2"
-                            >
-                              {testing === config.id + "-gv" ? <Loader2 className="h-3 w-3 animate-spin" /> : "GV"}
-                            </Button>
-                          )}
+                        <Badge variant={form.ativo ? "default" : "secondary"} className="text-[10px]">
+                          {form.ativo ? "Ativa" : "Inativa"}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
 
+                  {/* Dual credential blocks */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <CredentialBlock configId={config.id} label="Sandbox" ambiente="sandbox" form={form} />
+                    <CredentialBlock configId={config.id} label="Produção" ambiente="production" form={form} />
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex gap-1.5 flex-wrap">
+                      {/* e.Rede tests */}
+                      <Button
+                        size="sm" variant="outline" className="text-xs h-7"
+                        disabled={testing?.startsWith(config.id + "-erede") || false}
+                        onClick={() => handleTestErede(config, "sandbox")}
+                        title="Testar e.Rede Sandbox"
+                      >
+                        {testing === `${config.id}-erede-sandbox` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
+                        e.Rede SB
+                      </Button>
+                      <Button
+                        size="sm" variant="outline" className="text-xs h-7"
+                        disabled={testing?.startsWith(config.id + "-erede") || false}
+                        onClick={() => handleTestErede(config, "production")}
+                        title="Testar e.Rede Produção"
+                      >
+                        {testing === `${config.id}-erede-production` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
+                        e.Rede Prod
+                      </Button>
+
+                      {/* GV tests (Rede only) */}
+                      {config.adquirente === "REDE" && (
+                        <>
                           <Button
-                            size="sm" variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(config.id)}
+                            size="sm" variant="outline" className="text-xs h-7"
+                            disabled={testing?.startsWith(config.id + "-gv") || false}
+                            onClick={() => handleTestGV(config, "sandbox")}
+                            title="Testar GV Sandbox"
                           >
-                            <Trash2 className="h-3 w-3" />
+                            {testing === `${config.id}-gv-sandbox` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                            GV SB
                           </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                          <Button
+                            size="sm" variant="outline" className="text-xs h-7"
+                            disabled={testing?.startsWith(config.id + "-gv") || false}
+                            onClick={() => handleTestGV(config, "production")}
+                            title="Testar GV Produção"
+                          >
+                            {testing === `${config.id}-gv-production` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                            GV Prod
+                          </Button>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="flex gap-1.5">
+                      <Button
+                        size="sm" variant={changed ? "default" : "outline"} className="h-7"
+                        disabled={!changed || saving === config.id}
+                        onClick={() => handleSave(config)}
+                      >
+                        {saving === config.id ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
+                        Salvar
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost" className="h-7 text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(config.id)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       )}
 
-      {/* Info Card */}
       <Card className="bg-muted/30">
         <CardContent className="pt-4 pb-3">
           <div className="flex items-start gap-3">
             <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <div className="text-sm text-muted-foreground space-y-1">
-              <p><strong>Rede (e.Rede):</strong> PV = Número de Filiação. Chave = Integration Key obtida no portal e.Rede.</p>
-              <p><strong>Sandbox:</strong> Use <code className="text-xs bg-muted px-1 rounded">sandbox-erede.useredecloud.com.br</code> para testes.</p>
-              <p><strong>Produção:</strong> Use <code className="text-xs bg-muted px-1 rounded">api.userede.com.br/erede</code> para transações reais.</p>
+              <p><strong>Sandbox:</strong> Credenciais de teste. Nenhuma transação real é processada.</p>
+              <p><strong>Produção:</strong> Credenciais reais. Transações processadas com cobrança efetiva.</p>
+              <p><strong>Ambiente Ativo:</strong> O toggle define qual conjunto de credenciais as integrações (links de pagamento, sync de vendas) utilizam.</p>
+              <p><strong>GV (Gestão de Vendas):</strong> API OAuth 2.0 para visibilidade de vendas POS. PV Matriz = PV da empresa mãe.</p>
             </div>
           </div>
         </CardContent>
