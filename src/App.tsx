@@ -40,6 +40,7 @@ import AdminPedidosAuditoriaPage from "./pages/AdminPedidosAuditoriaPage";
 import AdminHoyaConfigPage from "./pages/AdminHoyaConfigPage";
 import AdminFornecedoresPage from "./pages/AdminFornecedoresPage";
 import AdminBtgValidacaoPage from "./pages/AdminBtgValidacaoPage";
+import AdminAdquirentesPage from "./pages/AdminAdquirentesPage";
 import SystemPlayground from "./pages/_SystemPlayground";
 import NotFound from "./pages/NotFound";
 
