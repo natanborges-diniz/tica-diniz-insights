@@ -28,6 +28,7 @@ import BankingCobrancasDashboard from "./pages/BankingCobrancasDashboard";
 import BankingDdaDashboard from "./pages/BankingDdaDashboard";
 import FinanceiroHubPage from "./pages/FinanceiroHubPage";
 import ConciliacaoCartoesPage from "./pages/ConciliacaoCartoesPage";
+import PaymentLinksPage from "./pages/PaymentLinksPage";
 import FinanceiroClassificacaoPage from "./pages/FinanceiroClassificacaoPage";
 import FinanceiroOverviewPage from "./pages/FinanceiroOverviewPage";
 import InteligenciaVendasDashboard from "./pages/InteligenciaVendasDashboard";
@@ -93,6 +94,7 @@ const App = () => (
                   <Route path="/financeiro/overview" element={<FinanceiroOverviewPage />} />
                   <Route path="/financeiro/hub" element={<FinanceiroHubPage />} />
                   <Route path="/financeiro/cartoes" element={<ConciliacaoCartoesPage />} />
+                  <Route path="/financeiro/links-pagamento" element={<PaymentLinksPage />} />
                   <Route path="/financeiro/classificacao" element={<FinanceiroClassificacaoPage />} />
                   <Route path="/financeiro/dre" element={<FinanceiroDreDashboard />} />
                   <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaDashboard />} />
