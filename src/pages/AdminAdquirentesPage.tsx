@@ -120,14 +120,14 @@ export default function AdminAdquirentesPage() {
     }
     setSaving("new");
     const { error } = await supabase
-      .from("adquirentes_config" as never)
+      .from("adquirentes_config")
       .insert({
         cod_empresa: newForm.cod_empresa,
         adquirente: newForm.adquirente,
         ambiente: newForm.ambiente,
         merchant_id: newForm.merchant_id || null,
         integration_key_encrypted: newForm.integration_key_encrypted || null,
-      } as never);
+      });
 
     if (error) {
       toast.error("Erro ao adicionar: " + error.message);
