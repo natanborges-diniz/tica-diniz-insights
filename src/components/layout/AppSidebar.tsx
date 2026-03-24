@@ -1,7 +1,7 @@
 import { useLocation } from "react-router-dom";
 import { 
-  TrendingUp, BarChart3, Layers, Wallet, 
-  Package, ClipboardList, Wallet, FileText, ArrowLeftRight,
+  TrendingUp, BarChart3, Layers, Wallet,
+  Package, ClipboardList, FileText, ArrowLeftRight,
   Target, Users, Brain, Eye, RefreshCw, Activity, Truck, FlaskConical,
   AlertTriangle, Landmark, CreditCard, Receipt, FileSearch, Shield, Link2
 } from "lucide-react";
