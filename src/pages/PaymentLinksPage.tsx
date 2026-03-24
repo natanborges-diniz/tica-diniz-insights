@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Link2, Plus, XCircle, RefreshCw, Copy, ExternalLink,
-  CreditCard, Clock, CheckCircle2, AlertTriangle,
+  CreditCard, Clock, CheckCircle2, AlertTriangle, MessageCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
