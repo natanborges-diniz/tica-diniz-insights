@@ -95,13 +95,13 @@ export default function AdminAdquirentesPage() {
     setSaving(config.id);
 
     const { error } = await supabase
-      .from("adquirentes_config" as never)
+      .from("adquirentes_config")
       .update({
         ambiente: form.ambiente,
         merchant_id: form.merchant_id || null,
         integration_key_encrypted: form.integration_key_encrypted || null,
         ativo: form.ativo,
-      } as never)
+      })
       .eq("id", config.id);
 
     if (error) {
