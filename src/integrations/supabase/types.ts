@@ -24,6 +24,7 @@ export type Database = {
           id: string
           integration_key_encrypted: string | null
           merchant_id: string | null
+          pv_matriz: string | null
           updated_at: string
         }
         Insert: {
@@ -35,6 +36,7 @@ export type Database = {
           id?: string
           integration_key_encrypted?: string | null
           merchant_id?: string | null
+          pv_matriz?: string | null
           updated_at?: string
         }
         Update: {
@@ -46,6 +48,7 @@ export type Database = {
           id?: string
           integration_key_encrypted?: string | null
           merchant_id?: string | null
+          pv_matriz?: string | null
           updated_at?: string
         }
         Relationships: []
