@@ -80,3 +80,9 @@ verify_jwt = false
 
 [functions.payment-links]
 verify_jwt = false
+
+[functions.sync-vendas-cartao]
+verify_jwt = false
+
+[functions.conciliar-vendas]
+verify_jwt = false

@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
 import {
   CreditCard, Download, RefreshCw, AlertTriangle, CheckCircle2,
-  ChevronDown, ChevronRight, Eye, XCircle,
+  ChevronDown, ChevronRight, Search,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -17,35 +16,15 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 
-interface RecebiveisCartaoParcela {
-  id: string;
-  lancamento_id: string;
-  valor_parcela: number | null;
-  numero_parcela: number | null;
-}
-
-interface Recebivel {
-  id: string;
-  cod_empresa: number;
-  adquirente: string | null;
-  bandeira: string | null;
-  data_vencimento: string;
-  valor_bruto: number;
-  valor_liquido: number;
-  taxa_percentual: number | null;
-  taxa_valor: number | null;
-  status: string;
-  btg_receivable_id: string | null;
-  created_at: string;
-  recebiveis_cartao_parcelas: RecebiveisCartaoParcela[];
-}
-
 const STATUS_CFG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  PREVISTO: { label: "Previsto", variant: "secondary" },
   CONCILIADO: { label: "Conciliado", variant: "default" },
-  RECEBIDO: { label: "Recebido", variant: "default" },
   DIVERGENTE: { label: "Divergente", variant: "destructive" },
+  PENDENTE_ERP: { label: "Pendente ERP", variant: "outline" },
+  PENDENTE_ADQ: { label: "Pendente Adq.", variant: "secondary" },
 };
+
+const fmtCurrency = (v: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
 export default function ConciliacaoCartoesPage() {
   const { empresas } = useEmpresas();
@@ -54,7 +33,6 @@ export default function ConciliacaoCartoesPage() {
 
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
   const [filtroStatus, setFiltroStatus] = useState("todos");
-  const [filtroAdquirente, setFiltroAdquirente] = useState("todos");
   const [dataInicio, setDataInicio] = useState(() => {
     const d = new Date(); d.setDate(1);
     return d.toISOString().slice(0, 10);
@@ -65,103 +43,108 @@ export default function ConciliacaoCartoesPage() {
   });
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const invokeAction = async (action: string, extra: Record<string, unknown> = {}) => {
+  const invokeFunc = async (fnName: string, body: Record<string, unknown>) => {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     if (!token) throw new Error("Sessão expirada");
-
-    const { data, error } = await supabase.functions.invoke("btg-recebiveis-cartao", {
-      body: { action, ...extra },
+    const { data, error } = await supabase.functions.invoke(fnName, {
+      body,
       headers: { Authorization: `Bearer ${token}` },
     });
     if (error) throw error;
     return data;
   };
 
-  const { data: recebiveis = [], isLoading } = useQuery<Recebivel[]>({
-    queryKey: ["recebiveis-cartao", codEmpresa, filtroStatus, filtroAdquirente, dataInicio, dataFim],
+  // Vendas Cartão (source of truth for card transactions)
+  const { data: vendasCartao = [], isLoading: loadingVendas } = useQuery({
+    queryKey: ["vendas-cartao", codEmpresa, dataInicio, dataFim],
     queryFn: async () => {
-      const params: Record<string, unknown> = {
-        cod_empresa: codEmpresa,
-        data_inicio: dataInicio,
-        data_fim: dataFim,
-        limit: 500,
-      };
-      if (filtroStatus !== "todos") params.status = filtroStatus;
-      if (filtroAdquirente !== "todos") params.adquirente = filtroAdquirente;
-      return invokeAction("listar", params);
+      const { data, error } = await supabase
+        .from("vendas_cartao")
+        .select("*")
+        .eq("cod_empresa", codEmpresa)
+        .gte("data_venda", dataInicio)
+        .lte("data_venda", dataFim)
+        .order("data_venda", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      return data || [];
     },
   });
 
-  const { data: detalheData } = useQuery({
-    queryKey: ["recebivel-detalhe", expandedId],
-    queryFn: () => invokeAction("detalhe", { recebivel_id: expandedId }),
-    enabled: !!expandedId,
+  // Conciliação records
+  const { data: conciliacoes = [], isLoading: loadingConc } = useQuery({
+    queryKey: ["conciliacao-vendas", codEmpresa, filtroStatus],
+    queryFn: async () => {
+      let query = supabase
+        .from("conciliacao_vendas")
+        .select("*")
+        .eq("cod_empresa", codEmpresa)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (filtroStatus !== "todos") query = query.eq("status", filtroStatus);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
   });
 
-  const invalidateAll = () => queryClient.invalidateQueries({ queryKey: ["recebiveis-cartao"] });
+  const concMap = new Map(conciliacoes.map((c: any) => [c.venda_cartao_id, c]));
 
-  const importarMutation = useMutation({
-    mutationFn: () => invokeAction("importar_agenda", { cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim }),
-    onSuccess: (data: { total?: number; inserted?: number; skipped_duplicates?: number; total_no_periodo?: number; sandbox_no_periodo?: number; sandbox?: boolean }) => {
-      const totalApi = data?.total || 0;
-      const inserted = data?.inserted || 0;
-      const skipped = data?.skipped_duplicates || 0;
-      const totalNoPeriodo = data?.total_no_periodo || 0;
-      const sandboxNoPeriodo = data?.sandbox_no_periodo || 0;
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["vendas-cartao"] });
+    queryClient.invalidateQueries({ queryKey: ["conciliacao-vendas"] });
+  };
 
-      if (!data?.sandbox && totalApi === 0) {
-        toast.warning(
-          `BTG retornou 0 no período. Já existem ${totalNoPeriodo} recebíveis no painel${sandboxNoPeriodo > 0 ? ` (${sandboxNoPeriodo} de sandbox)` : ""}.`
-        );
-      } else {
-        toast.success(
-          `Importação concluída — BTG: ${totalApi} | novos: ${inserted} | já existentes: ${skipped}${data?.sandbox ? " (sandbox)" : ""}`
-        );
-      }
+  // Sync from Rede
+  const syncMutation = useMutation({
+    mutationFn: () => invokeFunc("sync-vendas-cartao", {
+      cod_empresa: codEmpresa,
+      data_inicio: dataInicio,
+      data_fim: dataFim,
+    }),
+    onSuccess: (data: any) => {
+      toast.success(`Sincronizado: ${data?.inserted || 0} novas transações | ${data?.skipped || 0} já existentes`);
       invalidateAll();
     },
-    onError: (e: Error) => toast.error(e.message || "Erro ao importar agenda"),
+    onError: (e: Error) => toast.error(e.message || "Erro ao sincronizar"),
   });
 
+  // Auto-conciliate
   const conciliarMutation = useMutation({
-    mutationFn: () => invokeAction("conciliar_auto", { cod_empresa: codEmpresa }),
-    onSuccess: (data: { conciliados?: number; taxas_geradas?: number }) => {
-      toast.success(`Conciliados: ${data?.conciliados || 0} | Taxas geradas: ${data?.taxas_geradas || 0}`);
+    mutationFn: () => invokeFunc("conciliar-vendas", {
+      action: "conciliar_auto",
+      cod_empresa: codEmpresa,
+      data_inicio: dataInicio,
+      data_fim: dataFim,
+    }),
+    onSuccess: (data: any) => {
+      toast.success(`Conciliados: ${data?.conciliados || 0} | Divergentes: ${data?.divergentes || 0}`);
       invalidateAll();
     },
     onError: (e: Error) => toast.error(e.message || "Erro na conciliação"),
   });
 
-  const divergenteMutation = useMutation({
-    mutationFn: (recebivelId: string) => invokeAction("marcar_divergente", { recebivel_id: recebivelId }),
-    onSuccess: () => { toast.success("Marcado como divergente"); invalidateAll(); },
-    onError: () => toast.error("Erro ao marcar divergência"),
-  });
-
-  const fmtCurrency = (v: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
-
   // KPIs
-  const totalBruto = recebiveis.reduce((s, r) => s + Number(r.valor_bruto), 0);
-  const totalLiquido = recebiveis.reduce((s, r) => s + Number(r.valor_liquido), 0);
-  const totalTaxas = recebiveis.reduce((s, r) => s + Number(r.taxa_valor || 0), 0);
-  const qtdPrevistos = recebiveis.filter(r => r.status === "PREVISTO").length;
-  const qtdConciliados = recebiveis.filter(r => r.status === "CONCILIADO").length;
-  const qtdDivergentes = recebiveis.filter(r => r.status === "DIVERGENTE").length;
+  const totalBruto = vendasCartao.reduce((s: number, r: any) => s + Number(r.valor_bruto || 0), 0);
+  const totalLiquido = vendasCartao.reduce((s: number, r: any) => s + Number(r.valor_liquido || 0), 0);
+  const totalTaxas = vendasCartao.reduce((s: number, r: any) => s + Number(r.taxa_valor || 0), 0);
+  const qtdConciliados = conciliacoes.filter((c: any) => c.status === "CONCILIADO").length;
+  const qtdDivergentes = conciliacoes.filter((c: any) => ["DIVERGENTE", "PENDENTE_ERP"].includes(c.status)).length;
+  const qtdPendentes = vendasCartao.length - conciliacoes.length;
 
-  const adquirentes = [...new Set(recebiveis.map(r => r.adquirente).filter(Boolean))] as string[];
+  const isLoading = loadingVendas || loadingConc;
 
   return (
     <div className="space-y-6">
       <ModuleHeader
         title="Conciliação de Cartões"
-        subtitle="Agenda de recebíveis — confronto ERP vs adquirentes"
+        subtitle="Vendas Rede × ERP — conciliação automática e manual"
         icon={<CreditCard className="h-5 w-5" />}
         actions={
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => importarMutation.mutate()} disabled={importarMutation.isPending}>
-              <Download className="h-4 w-4 mr-1" /> Importar Agenda
+            <Button size="sm" variant="outline" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
+              <Download className="h-4 w-4 mr-1" /> Importar Rede
             </Button>
             <Button size="sm" onClick={() => conciliarMutation.mutate()} disabled={conciliarMutation.isPending}>
               <RefreshCw className="h-4 w-4 mr-1" /> Conciliar Auto
@@ -171,160 +154,121 @@ export default function ConciliacaoCartoesPage() {
       />
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Card><CardContent className="pt-4 pb-3 text-center">
+          <p className="text-xs text-muted-foreground">Transações</p>
+          <p className="text-lg font-bold">{vendasCartao.length}</p>
+        </CardContent></Card>
         <Card><CardContent className="pt-4 pb-3 text-center">
           <p className="text-xs text-muted-foreground">Valor Bruto</p>
-          <p className="text-lg font-bold text-foreground">{fmtCurrency(totalBruto)}</p>
+          <p className="text-lg font-bold">{fmtCurrency(totalBruto)}</p>
         </CardContent></Card>
         <Card><CardContent className="pt-4 pb-3 text-center">
           <p className="text-xs text-muted-foreground">Valor Líquido</p>
           <p className="text-lg font-bold text-primary">{fmtCurrency(totalLiquido)}</p>
         </CardContent></Card>
         <Card><CardContent className="pt-4 pb-3 text-center">
-          <p className="text-xs text-muted-foreground">Total Taxas</p>
+          <p className="text-xs text-muted-foreground">Taxas</p>
           <p className="text-lg font-bold text-destructive">{fmtCurrency(totalTaxas)}</p>
         </CardContent></Card>
         <Card><CardContent className="pt-4 pb-3 text-center">
-          <p className="text-xs text-muted-foreground">Previstos</p>
-          <p className="text-lg font-bold">{qtdPrevistos}</p>
-        </CardContent></Card>
-        <Card><CardContent className="pt-4 pb-3 text-center">
-          <p className="text-xs text-muted-foreground">Conciliados</p>
+          <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><CheckCircle2 className="h-3 w-3" /> Conciliados</p>
           <p className="text-lg font-bold text-primary">{qtdConciliados}</p>
         </CardContent></Card>
         <Card><CardContent className="pt-4 pb-3 text-center">
-          <p className="text-xs text-muted-foreground">Divergentes</p>
-          <p className="text-lg font-bold text-destructive">{qtdDivergentes}</p>
+          <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><AlertTriangle className="h-3 w-3" /> Pendentes</p>
+          <p className="text-lg font-bold text-amber-500">{qtdPendentes > 0 ? qtdPendentes : qtdDivergentes}</p>
         </CardContent></Card>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-end">
         {empresas.length > 1 && (
-          <div className="w-40">
-            <Select value={String(codEmpresa)} onValueChange={v => setCodEmpresa(Number(v))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {empresas.map(e => (
-                  <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
-                    {e.nome || `Empresa ${e.codEmpresa}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <Select value={String(codEmpresa)} onValueChange={v => setCodEmpresa(Number(v))}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {empresas.map(e => (
+                <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
+                  {e.nome || `Empresa ${e.codEmpresa}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
         <Input type="date" className="w-36" value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
         <Input type="date" className="w-36" value={dataFim} onChange={e => setDataFim(e.target.value)} />
         <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos Status</SelectItem>
-            <SelectItem value="PREVISTO">Previsto</SelectItem>
             <SelectItem value="CONCILIADO">Conciliado</SelectItem>
-            <SelectItem value="RECEBIDO">Recebido</SelectItem>
             <SelectItem value="DIVERGENTE">Divergente</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filtroAdquirente} onValueChange={setFiltroAdquirente}>
-          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todas Adquirentes</SelectItem>
-            {adquirentes.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+            <SelectItem value="PENDENTE_ERP">Pendente ERP</SelectItem>
+            <SelectItem value="PENDENTE_ADQ">Pendente Adq.</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      {/* Table */}
+      {/* Transactions Table */}
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8"></TableHead>
-                <TableHead>Vencimento</TableHead>
-                <TableHead>Adquirente</TableHead>
+                <TableHead>Data</TableHead>
                 <TableHead>Bandeira</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>NSU</TableHead>
                 <TableHead className="text-right">Bruto</TableHead>
                 <TableHead className="text-right">Líquido</TableHead>
                 <TableHead className="text-right">Taxa</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Parcelas</TableHead>
-                <TableHead className="w-24">Ações</TableHead>
+                <TableHead>Parcelas</TableHead>
+                <TableHead>Conciliação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-              ) : recebiveis.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Nenhum recebível encontrado. Importe a agenda para começar.</TableCell></TableRow>
+              ) : vendasCartao.length === 0 ? (
+                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                  Nenhuma transação encontrada. Clique em "Importar Rede" para sincronizar.
+                </TableCell></TableRow>
               ) : (
-                recebiveis.map(r => {
-                  const isExpanded = expandedId === r.id;
-                  const stCfg = STATUS_CFG[r.status] || { label: r.status, variant: "outline" as const };
+                vendasCartao.map((vc: any) => {
+                  const conc = concMap.get(vc.id);
+                  const concStatus = conc ? STATUS_CFG[conc.status] || { label: conc.status, variant: "outline" as const } : null;
+                  const isExpanded = expandedId === vc.id;
+
                   return (
-                    <>
-                      <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setExpandedId(isExpanded ? null : r.id)}>
-                        <TableCell>
-                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">{r.data_vencimento}</TableCell>
-                        <TableCell>{r.adquirente}</TableCell>
-                        <TableCell>{r.bandeira}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtCurrency(r.valor_bruto)}</TableCell>
-                        <TableCell className="text-right font-mono text-primary">{fmtCurrency(r.valor_liquido)}</TableCell>
-                        <TableCell className="text-right font-mono text-destructive">
-                          {r.taxa_valor ? fmtCurrency(r.taxa_valor) : "—"}
-                          {r.taxa_percentual ? <span className="text-xs text-muted-foreground ml-1">({r.taxa_percentual}%)</span> : null}
-                        </TableCell>
-                        <TableCell><Badge variant={stCfg.variant}>{stCfg.label}</Badge></TableCell>
-                        <TableCell className="text-right">{r.recebiveis_cartao_parcelas?.length || 0}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                            {r.status === "PREVISTO" && (
-                              <Button size="icon" variant="ghost" title="Marcar divergente" onClick={() => divergenteMutation.mutate(r.id)}>
-                                <AlertTriangle className="h-4 w-4 text-destructive" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                      {isExpanded && detalheData && (
-                        <TableRow key={`${r.id}-detail`}>
-                          <TableCell colSpan={10} className="bg-muted/30 p-4">
-                            <div className="space-y-2">
-                              <p className="text-sm font-medium">Parcelas ERP vinculadas</p>
-                              {detalheData.lancamentos && detalheData.lancamentos.length > 0 ? (
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>Descrição</TableHead>
-                                      <TableHead>Pessoa</TableHead>
-                                      <TableHead className="text-right">Valor</TableHead>
-                                      <TableHead>Vencimento</TableHead>
-                                      <TableHead>Status</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {detalheData.lancamentos.map((l: { id: string; descricao: string; pessoa_nome?: string; valor: number; data_vencimento: string; status: string }) => (
-                                      <TableRow key={l.id}>
-                                        <TableCell className="text-sm">{l.descricao}</TableCell>
-                                        <TableCell className="text-sm">{l.pessoa_nome || "—"}</TableCell>
-                                        <TableCell className="text-right font-mono text-sm">{fmtCurrency(l.valor)}</TableCell>
-                                        <TableCell className="font-mono text-sm">{l.data_vencimento}</TableCell>
-                                        <TableCell><Badge variant="outline" className="text-xs">{l.status}</Badge></TableCell>
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              ) : (
-                                <p className="text-sm text-muted-foreground">Nenhuma parcela vinculada. Execute a conciliação automática ou vincule manualmente.</p>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </>
+                    <TableRow
+                      key={vc.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => setExpandedId(isExpanded ? null : vc.id)}
+                    >
+                      <TableCell>
+                        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">{vc.data_venda}</TableCell>
+                      <TableCell>{vc.bandeira || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">{vc.tipo}</Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{vc.nsu || "—"}</TableCell>
+                      <TableCell className="text-right font-mono">{fmtCurrency(Number(vc.valor_bruto))}</TableCell>
+                      <TableCell className="text-right font-mono text-primary">{fmtCurrency(Number(vc.valor_liquido))}</TableCell>
+                      <TableCell className="text-right font-mono text-destructive">
+                        {vc.taxa_valor ? fmtCurrency(Number(vc.taxa_valor)) : "—"}
+                      </TableCell>
+                      <TableCell className="text-center">{vc.parcelas || 1}x</TableCell>
+                      <TableCell>
+                        {concStatus ? (
+                          <Badge variant={concStatus.variant}>{concStatus.label}</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">Não conciliado</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}
