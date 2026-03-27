@@ -754,17 +754,17 @@ const PedidoFornecedorPage: React.FC = () => {
           afinamentoPrismatico: hasPrismaOd || hasPrismaOe,
           equilibrioLente: false,
         },
-        dadosMedida: {
+        dadosMedida: productReqs.needsDadosArmacao ? {
           larguraLente: armacao.larguraLente && armacao.larguraLente.trim() !== "" ? Number(armacao.larguraLente) : undefined,
           alturaLente: armacao.alturaLente && armacao.alturaLente.trim() !== "" ? Number(armacao.alturaLente) : undefined,
           ponteLente: armacao.ponteLente && armacao.ponteLente.trim() !== "" ? Number(armacao.ponteLente) : undefined,
           distanciaLeitura: null,
-        },
-        armacao: {
+        } : null,
+        armacao: productReqs.needsDadosArmacao ? {
           tipoArmacao,
           comPolimento: false,
           formaArmacao,
-        },
+        } : null,
         valorMontagemSemTriangulacao: (tipoServico === 1 || tipoServico === 3) ? valorMontagem : 0,
         condicaoPagamento: condicaoPagamentoSelecionada && condicaoPagamentoSelecionada !== "default" ? condicaoPagamentoSelecionada : undefined,
         garantia: {

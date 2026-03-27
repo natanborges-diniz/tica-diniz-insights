@@ -399,7 +399,7 @@ const PedidoZeissPage: React.FC = () => {
       medico,
       crm,
       voucher: voucher || "",
-      corcoloracao: "",
+      corcoloracao: selectedCor !== "none" ? selectedCor : "",
       amostracoloracao: "",
       observacao: observacao ? [observacao] : [],
     };
