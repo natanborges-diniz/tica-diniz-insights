@@ -2,36 +2,26 @@
 
 # Plano: Corrigir coloração Zeiss + armação Hoya lente pronta
 
-## Problema 1 — Zeiss: Coloração não é enviada no payload
+## Resumo do que está errado
 
-Em `PedidoZeissPage.tsx` linha 402, `corcoloracao` está hardcoded como `""`. O estado `selectedCor` é preenchido pelo componente `ZeissServicosSection` mas nunca é injetado no payload.
+### Zeiss — Cor não vai no payload
+O seletor de cor funciona normalmente na UI. O problema é que em `PedidoZeissPage.tsx` linha 402, o campo `corcoloracao` está fixo como `""`. Quando o usuário escolhe uma cor, ela não é enviada para a API.
 
-### Correção
-No `buildPayload()` de `PedidoZeissPage.tsx`:
-- Substituir `corcoloracao: ""` por `corcoloracao: selectedCor !== "none" ? selectedCor : ""`
-- Manter `amostracoloracao: ""` (campo opcional, raramente usado)
+**Correção**: Trocar `corcoloracao: ""` por `corcoloracao: selectedCor !== "none" ? selectedCor : ""`. Nada muda no seletor — ele já funciona. Apenas o payload passa a carregar o valor selecionado.
 
----
+### Hoya — Sistema exige armação para lente pronta
+A UI já esconde os campos de armação quando `productReqs.needsDadosArmacao === false` (linha 1807). Porém, o payload (linhas 757-767) **sempre** envia `dadosMedida` e `armacao` com valores default, mesmo para lentes prontas. Isso pode causar rejeição pela API Hoya ou confusão.
 
-## Problema 2 — Hoya: Payload envia armação mesmo para lente pronta
-
-A UI corretamente esconde os campos de armação quando `productReqs.needsDadosArmacao === false`. Porém, o payload montado nas linhas 757-767 **sempre** inclui `dadosMedida` e `armacao` com valores default (`tipoArmacao: 1`, `formaArmacao: 1`), o que pode causar rejeição pela API Hoya.
-
-### Correção
-No `buildPayload()` de `PedidoFornecedorPage.tsx`:
-- Condicionar `dadosMedida` e `armacao` ao `productReqs.needsDadosArmacao`
-- Quando lente pronta: enviar `dadosMedida: null` e `armacao: null` (ou omitir)
-
----
+**Correção**: No `buildPayload()`, condicionar os blocos `dadosMedida` e `armacao` ao `productReqs.needsDadosArmacao`. Para lentes prontas, enviar `null` nesses campos.
 
 ## Arquivos alterados
 
 | Arquivo | Mudança |
 |---------|---------|
-| `src/pages/PedidoZeissPage.tsx` | Injetar `selectedCor` no campo `corcoloracao` do payload |
-| `src/pages/PedidoFornecedorPage.tsx` | Condicionar `dadosMedida` e `armacao` ao `needsDadosArmacao` |
+| `src/pages/PedidoZeissPage.tsx` | Linha 402: usar `selectedCor` no campo `corcoloracao` |
+| `src/pages/PedidoFornecedorPage.tsx` | Linhas 757-767: enviar `dadosMedida` e `armacao` como `null` quando `needsDadosArmacao === false` |
 
 ## Ordem
-1. Fix Zeiss coloração no payload
-2. Fix Hoya armação condicional no payload
+1. Fix Zeiss — injetar cor selecionada no payload
+2. Fix Hoya — condicionar armação no payload
 
