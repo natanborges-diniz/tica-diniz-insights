@@ -174,6 +174,47 @@ const PedidoHaytekPage: React.FC = () => {
             dnp: String(os.oeDnp ?? ""),
             altura: String(os.oeAltura ?? ""),
           });
+
+          // Auto-fill armação
+          if (os.ponte) setFrameBridge(String(os.ponte));
+          if (os.aaVertical) setFrameHeight(String(os.aaVertical));
+          if (os.caHorizontal) setFrameWidth(String(os.caHorizontal));
+
+          // Auto-fill prisma
+          if (os.prisma) {
+            const pText = os.prisma.toUpperCase();
+            if (pText.includes("NASAL") || pText.includes("TEMPORAL")) {
+              setPrismaOd(prev => ({
+                ...prev,
+                hBase: pText.includes("NASAL") ? "Nasal" : "Temporal",
+                hValue: os.prismaAngulo ? String(os.prismaAngulo) : "",
+              }));
+            }
+            if (pText.includes("SUPERIOR") || pText.includes("INFERIOR")) {
+              setPrismaOd(prev => ({
+                ...prev,
+                vBase: pText.includes("SUPERIOR") ? "Superior" : "Inferior",
+                vValue: os.prismaAngulo ? String(os.prismaAngulo) : "",
+              }));
+            }
+          }
+          if (os.prisma1) {
+            const pText = os.prisma1.toUpperCase();
+            if (pText.includes("NASAL") || pText.includes("TEMPORAL")) {
+              setPrismaOe(prev => ({
+                ...prev,
+                hBase: pText.includes("NASAL") ? "Nasal" : "Temporal",
+                hValue: os.prisma1Angulo ? String(os.prisma1Angulo) : "",
+              }));
+            }
+            if (pText.includes("SUPERIOR") || pText.includes("INFERIOR")) {
+              setPrismaOe(prev => ({
+                ...prev,
+                vBase: pText.includes("SUPERIOR") ? "Superior" : "Inferior",
+                vValue: os.prisma1Angulo ? String(os.prisma1Angulo) : "",
+              }));
+            }
+          }
         }
       })
       .finally(() => setLoadingOs(false));
