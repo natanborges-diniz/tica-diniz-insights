@@ -41,6 +41,7 @@ import AdminSyncPage from "./pages/AdminSyncPage";
 import AdminHealthPage from "./pages/AdminHealthPage";
 import AdminPedidosAuditoriaPage from "./pages/AdminPedidosAuditoriaPage";
 import AdminHoyaConfigPage from "./pages/AdminHoyaConfigPage";
+import AdminHaytekConfigPage from "./pages/AdminHaytekConfigPage";
 import AdminFornecedoresPage from "./pages/AdminFornecedoresPage";
 import AdminBtgValidacaoPage from "./pages/AdminBtgValidacaoPage";
 import AdminAdquirentesPage from "./pages/AdminAdquirentesPage";
@@ -121,6 +122,7 @@ const App = () => (
                 <Route path="/admin/health" element={<AdminHealthPage />} />
                 <Route path="/admin/pedidos" element={<AdminPedidosAuditoriaPage />} />
                 <Route path="/admin/hoya-config" element={<AdminHoyaConfigPage />} />
+                <Route path="/admin/haytek-config" element={<AdminHaytekConfigPage />} />
                 <Route path="/admin/fornecedores" element={<AdminFornecedoresPage />} />
                 <Route path="/admin/btg-validacao" element={<AdminBtgValidacaoPage />} />
                 <Route path="/admin/adquirentes" element={<AdminAdquirentesPage />} />
