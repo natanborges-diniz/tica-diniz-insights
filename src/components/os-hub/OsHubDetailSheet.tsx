@@ -153,6 +153,12 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
     navigate(`/os/pedido-zeiss?${buildPedidoParams()}`);
   };
 
+  const handleGerarPedidoHaytek = () => {
+    if (!os) return;
+    onClose();
+    navigate(`/os/pedido-haytek?${buildPedidoParams()}`);
+  };
+
   // Build subtitle from available context
   const subtitle = os
     ? [os.empresa, os.dataEmissao].filter(Boolean).join(" · ")
@@ -179,6 +185,10 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
             <Button size="sm" variant="outline" onClick={handleGerarPedidoZeiss} className="gap-1.5">
               <Send className="h-4 w-4" />
               Pedido Zeiss
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleGerarPedidoHaytek} className="gap-1.5">
+              <Send className="h-4 w-4" />
+              Pedido Haytek
             </Button>
           </>
         ) : undefined
