@@ -153,6 +153,12 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
     navigate(`/os/pedido-zeiss?${buildPedidoParams()}`);
   };
 
+  const handleGerarPedidoHaytek = () => {
+    if (!os) return;
+    onClose();
+    navigate(`/os/pedido-haytek?${buildPedidoParams()}`);
+  };
+
   // Build subtitle from available context
   const subtitle = os
     ? [os.empresa, os.dataEmissao].filter(Boolean).join(" · ")
