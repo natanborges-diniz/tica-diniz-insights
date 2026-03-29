@@ -89,3 +89,6 @@ verify_jwt = false
 
 [functions.rede-gestao-vendas]
 verify_jwt = false
+
+[functions.haytek-proxy]
+verify_jwt = false
