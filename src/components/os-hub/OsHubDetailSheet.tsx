@@ -186,6 +186,10 @@ export const OsHubDetailSheet: React.FC<Props> = ({ os, onClose }) => {
               <Send className="h-4 w-4" />
               Pedido Zeiss
             </Button>
+            <Button size="sm" variant="outline" onClick={handleGerarPedidoHaytek} className="gap-1.5">
+              <Send className="h-4 w-4" />
+              Pedido Haytek
+            </Button>
           </>
         ) : undefined
       }
