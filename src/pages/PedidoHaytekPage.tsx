@@ -156,24 +156,23 @@ const PedidoHaytekPage: React.FC = () => {
         setOsData(os);
         if (os) {
           setPaciente(os.cliente || "");
-          setOsNumero(os.numero_os || String(codOs));
-          // Auto-fill prescrição
+          setOsNumero(os.numeroOs || String(codOs));
           const resolved = resolverPrescricaoCompleta(os);
           setPrescOd({
-            esferico: String(resolved.od_longe_esf ?? ""),
-            cilindrico: String(resolved.od_longe_cil ?? ""),
-            eixo: String(resolved.od_longe_eixo ?? ""),
-            adicao: String(resolved.od_adicao ?? ""),
-            dnp: String(resolved.od_dnp ?? ""),
-            altura: String(resolved.od_altura ?? ""),
+            esferico: String(resolved.od.esferico ?? ""),
+            cilindrico: String(resolved.od.cilindrico ?? ""),
+            eixo: String(resolved.od.eixo ?? ""),
+            adicao: String(resolved.od.adicao ?? ""),
+            dnp: String(os.odDnp ?? ""),
+            altura: String(os.odAltura ?? ""),
           });
           setPrescOe({
-            esferico: String(resolved.oe_longe_esf ?? ""),
-            cilindrico: String(resolved.oe_longe_cil ?? ""),
-            eixo: String(resolved.oe_longe_eixo ?? ""),
-            adicao: String(resolved.oe_adicao ?? ""),
-            dnp: String(resolved.oe_dnp ?? ""),
-            altura: String(resolved.oe_altura ?? ""),
+            esferico: String(resolved.oe.esferico ?? ""),
+            cilindrico: String(resolved.oe.cilindrico ?? ""),
+            eixo: String(resolved.oe.eixo ?? ""),
+            adicao: String(resolved.oe.adicao ?? ""),
+            dnp: String(os.oeDnp ?? ""),
+            altura: String(os.oeAltura ?? ""),
           });
         }
       })
@@ -191,7 +190,7 @@ const PedidoHaytekPage: React.FC = () => {
   // ── Auto-match when products + OS loaded ──
   useEffect(() => {
     if (!osData || produtos.length === 0) return;
-    const lensDesc = osData.lente_od_descricao || osData.lente_oe_descricao || "";
+    const lensDesc = osData.lenteOdDescricao || osData.lenteOeDescricao || "";
     if (!lensDesc) return;
 
     matchHaytekProducts(produtos, lensDesc).then((result) => {
@@ -217,7 +216,7 @@ const PedidoHaytekPage: React.FC = () => {
     setShowCandidates(false);
 
     // Save DE/PARA
-    const lensDesc = osData?.lente_od_descricao || osData?.lente_oe_descricao || "";
+    const lensDesc = osData?.lenteOdDescricao || osData?.lenteOeDescricao || "";
     if (lensDesc && candidate.source !== "depara") {
       await saveHaytekDepara(lensDesc, candidate.produto);
     }
@@ -299,7 +298,7 @@ const PedidoHaytekPage: React.FC = () => {
 
       if (resp.orderId) {
         toast({ title: `Pedido Haytek criado: ${resp.orderId}` });
-        registrarPedidoNoCache(codOs, codEmpresa, "HAYTEK", resp.orderId);
+        registrarPedidoNoCache(codOs, codEmpresa, "HAYTEK", String(resp.orderId));
       } else {
         toast({ title: "Pedido enviado", description: resp.message || "Aguardando confirmação" });
       }
@@ -439,7 +438,7 @@ const PedidoHaytekPage: React.FC = () => {
                   setProdutoSelecionado(p);
                   setAutoFillSource("manual");
                   setShowCandidates(false);
-                  const lensDesc = osData?.lente_od_descricao || osData?.lente_oe_descricao || "";
+                  const lensDesc = osData?.lenteOdDescricao || osData?.lenteOeDescricao || "";
                   if (lensDesc) saveHaytekDepara(lensDesc, p);
                 }
               }}>
