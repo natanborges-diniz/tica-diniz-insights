@@ -298,7 +298,7 @@ const PedidoHaytekPage: React.FC = () => {
 
       if (resp.orderId) {
         toast({ title: `Pedido Haytek criado: ${resp.orderId}` });
-        registrarPedidoNoCache(codOs, codEmpresa, "HAYTEK", String(resp.orderId));
+        registrarPedidoNoCache(codOs, String(resp.orderId), "HAYTEK", "CONFIRMADO");
       } else {
         toast({ title: "Pedido enviado", description: resp.message || "Aguardando confirmação" });
       }
