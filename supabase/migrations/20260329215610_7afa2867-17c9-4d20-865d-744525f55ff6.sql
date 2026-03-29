@@ -1,0 +1,1 @@
+ALTER TABLE haytek_produtos ADD CONSTRAINT haytek_produtos_product_id_unique UNIQUE (product_id);
