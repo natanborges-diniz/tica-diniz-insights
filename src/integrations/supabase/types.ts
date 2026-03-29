@@ -720,6 +720,90 @@ export type Database = {
         }
         Relationships: []
       }
+      haytek_empresa_config: {
+        Row: {
+          address_id: string | null
+          alias: string | null
+          ativo: boolean | null
+          cnpj: string | null
+          cod_empresa: number
+          created_at: string | null
+          id: string
+          store_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          address_id?: string | null
+          alias?: string | null
+          ativo?: boolean | null
+          cnpj?: string | null
+          cod_empresa: number
+          created_at?: string | null
+          id?: string
+          store_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          address_id?: string | null
+          alias?: string | null
+          ativo?: boolean | null
+          cnpj?: string | null
+          cod_empresa?: number
+          created_at?: string | null
+          id?: string
+          store_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      haytek_produtos: {
+        Row: {
+          adicao_maxima: number | null
+          adicao_minima: number | null
+          cilindrico_maximo: number | null
+          created_at: string | null
+          design: string | null
+          diametro: string | null
+          esferico_maximo: number | null
+          esferico_minimo: number | null
+          id: string
+          linha: string | null
+          material: string | null
+          nome_comercial: string | null
+          product_id: string
+        }
+        Insert: {
+          adicao_maxima?: number | null
+          adicao_minima?: number | null
+          cilindrico_maximo?: number | null
+          created_at?: string | null
+          design?: string | null
+          diametro?: string | null
+          esferico_maximo?: number | null
+          esferico_minimo?: number | null
+          id?: string
+          linha?: string | null
+          material?: string | null
+          nome_comercial?: string | null
+          product_id: string
+        }
+        Update: {
+          adicao_maxima?: number | null
+          adicao_minima?: number | null
+          cilindrico_maximo?: number | null
+          created_at?: string | null
+          design?: string | null
+          diametro?: string | null
+          esferico_maximo?: number | null
+          esferico_minimo?: number | null
+          id?: string
+          linha?: string | null
+          material?: string | null
+          nome_comercial?: string | null
+          product_id?: string
+        }
+        Relationships: []
+      }
       hoya_catalogo_cache: {
         Row: {
           data: Json
