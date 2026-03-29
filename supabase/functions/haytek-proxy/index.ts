@@ -37,7 +37,9 @@ async function loadHaytekConfig(sb: ReturnType<typeof createClient>): Promise<Ha
       const baseUrl = isProduction
         ? (data.base_url_production || "https://api.haytek.com.br")
         : (data.base_url_staging || "https://dev.haytek.com.br");
-      const apiKey = isProduction ? (data.api_key_production || null) : (data.api_key_staging || null);
+      const rawKey = isProduction ? (data.api_key_production || null) : (data.api_key_staging || null);
+      // Sanitize: remove whitespace/newlines that may have been saved accidentally
+      const apiKey = rawKey ? rawKey.replace(/\s+/g, "") : null;
       return { baseUrl, ambiente: data.ambiente, apiKey };
     }
   } catch (e) {
