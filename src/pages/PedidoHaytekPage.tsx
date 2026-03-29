@@ -669,10 +669,10 @@ const PedidoHaytekPage: React.FC = () => {
             <CardTitle className="text-sm">Coloração (opcional)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Select value={coloringColor} onValueChange={setColoringColor}>
+            <Select value={coloringColor || "NONE"} onValueChange={(v) => setColoringColor(v === "NONE" ? "" : v)}>
               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Cor..." /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Nenhuma</SelectItem>
+                <SelectItem value="NONE">Nenhuma</SelectItem>
                 {COLORING_COLORS.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
               </SelectContent>
             </Select>
