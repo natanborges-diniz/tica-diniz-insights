@@ -570,6 +570,188 @@ function ZeissEmpresasSection() {
 }
 
 // ─────────────────────────────────────────
+// Sub-component: Mapeamento por empresa (Haytek)
+// ─────────────────────────────────────────
+interface HaytekEmpresaConfig {
+  id: string;
+  cod_empresa: number;
+  alias: string | null;
+  cnpj: string | null;
+  store_id: string | null;
+  address_id: string | null;
+  ativo: boolean;
+  updated_at: string;
+}
+
+interface HaytekEditingRow {
+  cnpj: string;
+  store_id: string;
+  address_id: string;
+  alias: string;
+}
+
+function HaytekEmpresasSection() {
+  const [configs, setConfigs] = useState<HaytekEmpresaConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Record<string, HaytekEditingRow>>({});
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("haytek_empresa_config" as never)
+      .select("*")
+      .order("cod_empresa");
+
+    if (error) {
+      toast({ title: "Erro ao carregar", description: error.message, variant: "destructive" });
+    } else if (data) {
+      const rows = data as HaytekEmpresaConfig[];
+      setConfigs(rows);
+      const initial: Record<string, HaytekEditingRow> = {};
+      rows.forEach((r) => {
+        const cnpjDigits = (r.cnpj || "").replace(/\D/g, "");
+        initial[r.id] = {
+          cnpj: formatCnpjDisplay(cnpjDigits),
+          store_id: r.store_id || "",
+          address_id: r.address_id || "",
+          alias: r.alias || "",
+        };
+      });
+      setEditing(initial);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleChange = (id: string, field: keyof HaytekEditingRow, value: string) => {
+    if (field === "cnpj") value = formatCnpj(value);
+    setEditing((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
+  };
+
+  const handleSave = async (config: HaytekEmpresaConfig) => {
+    const row = editing[config.id];
+    if (!row) return;
+    const cnpjDigits = row.cnpj.replace(/\D/g, "") || null;
+    setSaving(config.id);
+    const { error } = await supabase
+      .from("haytek_empresa_config" as never)
+      .update({ cnpj: cnpjDigits, store_id: row.store_id.trim() || null, address_id: row.address_id.trim() || null, alias: row.alias.trim() || null } as never)
+      .eq("id", config.id);
+
+    if (error) {
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Empresa ${config.cod_empresa} atualizada` });
+      fetchData();
+    }
+    setSaving(null);
+  };
+
+  const handleDelete = async (config: HaytekEmpresaConfig) => {
+    const { error } = await supabase
+      .from("haytek_empresa_config" as never)
+      .delete()
+      .eq("id", config.id);
+    if (error) {
+      toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Empresa ${config.cod_empresa} removida` });
+      fetchData();
+    }
+  };
+
+  const isChanged = (config: HaytekEmpresaConfig) => {
+    const row = editing[config.id];
+    if (!row) return false;
+    const cnpjDigitsRow = row.cnpj.replace(/\D/g, "");
+    const cnpjDigitsConfig = (config.cnpj || "").replace(/\D/g, "");
+    return cnpjDigitsRow !== cnpjDigitsConfig ||
+      row.store_id !== (config.store_id || "") ||
+      row.address_id !== (config.address_id || "") ||
+      row.alias !== (config.alias || "");
+  };
+
+  const totalOk = configs.filter((c) => c.store_id != null && c.cnpj).length;
+
+  // Adapt to shared table — use cod_cliente_hoya for store_id display
+  const adaptedConfigs = configs.map(c => ({
+    ...c,
+    cod_cliente_hoya: c.store_id,
+  })) as unknown as EmpresaConfig[];
+
+  const adaptedEditing: Record<string, EditingRow> = {};
+  Object.entries(editing).forEach(([k, v]) => {
+    adaptedEditing[k] = { cnpj: v.cnpj, cod_cliente_hoya: v.store_id, alias: v.alias };
+  });
+
+  return (
+    <div className="space-y-4">
+      <EmpresasTable
+        configs={adaptedConfigs}
+        editing={adaptedEditing}
+        loading={loading}
+        saving={saving}
+        totalOk={totalOk}
+        codLabel="Store ID"
+        codField="cod_cliente_hoya"
+        fornecedorName="Haytek"
+        onChange={(id, field, value) => {
+          const haytekField = field === "cod_cliente_hoya" ? "store_id" : field;
+          handleChange(id, haytekField as keyof HaytekEditingRow, value);
+        }}
+        onSave={(config) => {
+          const original = configs.find(c => c.id === config.id);
+          if (original) handleSave(original);
+        }}
+        onDelete={(config) => {
+          const original = configs.find(c => c.id === config.id);
+          if (original) handleDelete(original);
+        }}
+        isChanged={(config) => {
+          const original = configs.find(c => c.id === config.id);
+          if (original) return isChanged(original);
+          return false;
+        }}
+      />
+      {/* Address ID inline for each row — shown separately */}
+      {configs.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-primary" />
+              Address ID por Empresa
+            </CardTitle>
+            <CardDescription>Código de endereço de entrega Haytek (addressId)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {configs.map((c) => {
+                const row = editing[c.id];
+                if (!row) return null;
+                return (
+                  <div key={c.id} className="flex items-center gap-3">
+                    <span className="font-mono text-sm text-muted-foreground w-10">{c.cod_empresa}</span>
+                    <Input
+                      className="h-8 text-sm font-mono max-w-[200px]"
+                      value={row.address_id}
+                      onChange={(e) => handleChange(c.id, "address_id", e.target.value)}
+                      placeholder="Ex: RJ106205"
+                    />
+                    <span className="text-xs text-muted-foreground">{row.alias || ""}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────
 // Shared CNPJ helpers
 // ─────────────────────────────────────────
 function formatCnpjDisplay(digits: string): string {
