@@ -375,7 +375,7 @@ const PedidoHaytekPage: React.FC = () => {
     const frameConfig = resolveFrameConfig();
 
     const payload: HaytekPedidoPayload = {
-      storeId: "", // injected by proxy
+      storeId: haytekStoreId, // explicit store ID from haytek_empresa_config
       osId: osNumero,
       patientName: paciente,
       products: {
