@@ -385,14 +385,47 @@ const PedidoHaytekPage: React.FC = () => {
       return;
     }
 
+    const fallbackCandidates = (matchResult?.candidates || [])
+      .map((c) => c.produto)
+      .filter((p) => p.product_id !== produtoSelecionado.product_id)
+      .filter((p) => !validateDioptriaForProduct(p));
+
     setSending(true);
     try {
-      const payload = buildPayload();
-      const resp = await criarPedidoHaytek(payload, codOs, codEmpresa);
+      const tryProducts = [produtoSelecionado, ...fallbackCandidates];
+      let resp: HaytekPedidoResponse | null = null;
+      let usedProduct: HaytekProduto = produtoSelecionado;
+      let lastError: any = null;
+
+      for (const candidate of tryProducts) {
+        try {
+          const payload = buildPayload(candidate);
+          resp = await criarPedidoHaytek(payload, codOs, codEmpresa);
+          usedProduct = candidate;
+          break;
+        } catch (err: any) {
+          lastError = err;
+          const msg = (err?.message || String(err)).toLowerCase();
+          const isDioptriaError = msg.includes("invalid dioptria");
+          if (!isDioptriaError) throw err;
+        }
+      }
+
+      if (!resp) {
+        throw lastError || new Error("Falha ao enviar pedido para todos os produtos tentados");
+      }
+
       setResultado(resp);
+      if (usedProduct.product_id !== produtoSelecionado.product_id) {
+        setProdutoSelecionado(usedProduct);
+        setAutoFillSource("manual");
+      }
 
       if (resp.orderId) {
-        toast({ title: `Pedido Haytek criado: ${resp.orderId}` });
+        const fallbackInfo = usedProduct.product_id !== produtoSelecionado.product_id
+          ? ` (fallback automático para ${usedProduct.product_id})`
+          : "";
+        toast({ title: `Pedido Haytek criado: ${resp.orderId}${fallbackInfo}` });
         registrarPedidoNoCache(codOs, String(resp.orderId), "HAYTEK", "CONFIRMADO");
       } else {
         toast({ title: "Pedido enviado", description: resp.message || "Aguardando confirmação" });
