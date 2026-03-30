@@ -220,13 +220,6 @@ export async function matchHaytekProducts(
     return { candidates: [], bestMatch: null, source: "none", erpDescription: erpDescription || "" };
   }
 
-  // 1. Try DE/PARA first
-  const deparaMatch = await lookupDepara(erpDescription, produtos);
-  if (deparaMatch) {
-    return { candidates: [deparaMatch], bestMatch: deparaMatch, source: "depara", erpDescription };
-  }
-
-  // 2. Score all products
   const normalized = normalize(erpDescription);
   const tokens = extractTokens(normalized);
   let materialIndex: string | null = null;
@@ -239,16 +232,33 @@ export async function matchHaytekProducts(
     if (idxMatch) materialIndex = `1.${idxMatch[1]}`;
   }
 
-  const candidates: HaytekMatchCandidate[] = [];
+  const scoredCandidates: HaytekMatchCandidate[] = [];
   for (const produto of produtos) {
     const { score, details } = scoreProduto(tokens, normalized, materialIndex, produto);
     if (score >= 10) {
-      candidates.push({ produto, score, scoreDetails: details, source: "match" });
+      scoredCandidates.push({ produto, score, scoreDetails: details, source: "match" });
     }
   }
 
-  candidates.sort((a, b) => b.score - a.score);
-  const topCandidates = candidates.slice(0, 10);
+  scoredCandidates.sort((a, b) => b.score - a.score);
+  const topCandidates = scoredCandidates.slice(0, 10);
+
+  // 1. Try DE/PARA first, but keep ranked alternatives for fallback
+  const deparaMatch = await lookupDepara(erpDescription, produtos);
+  if (deparaMatch) {
+    const mergedCandidates = [
+      deparaMatch,
+      ...topCandidates.filter((candidate) => candidate.produto.product_id !== deparaMatch.produto.product_id),
+    ].slice(0, 10);
+
+    return {
+      candidates: mergedCandidates,
+      bestMatch: deparaMatch,
+      source: "depara",
+      erpDescription,
+    };
+  }
+
   const bestMatch = topCandidates.length > 0 && topCandidates[0].score >= 20
     ? topCandidates[0]
     : null;
