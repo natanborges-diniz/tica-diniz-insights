@@ -74,6 +74,8 @@ function CredenciaisSection({
     api_key: config.api_key || "",
     api_key_staging: config.api_key_staging || "",
     api_key_production: config.api_key_production || "",
+    api_user_staging: config.api_user_staging || "",
+    api_user_production: config.api_user_production || "",
   });
   const [showClientId, setShowClientId] = useState(false);
   const [showKeySt, setShowKeySt] = useState(false);
