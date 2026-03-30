@@ -357,7 +357,8 @@ function CredenciaisSection({
         </Card>
       )}
 
-        <div className="flex justify-end">
+      <div className="flex justify-end">
+        <Button onClick={handleSave} disabled={saving}>
           {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
           Salvar Configurações
         </Button>
