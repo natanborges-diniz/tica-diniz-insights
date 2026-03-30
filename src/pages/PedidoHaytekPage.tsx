@@ -443,86 +443,58 @@ const PedidoHaytekPage: React.FC = () => {
       return;
     }
 
-    const fallbackCandidates = (matchResult?.candidates || [])
-      .map((c) => c.produto)
-      .filter((p) => p.product_id !== produtoSelecionado.product_id);
-
     setSending(true);
     setResultado(null);
     setTentativasEnvio([]);
     setErroEnvioDetalhado(null);
 
     try {
-      const tryProducts = [produtoSelecionado, ...fallbackCandidates].filter(
-        (product, index, self) => self.findIndex((item) => item.product_id === product.product_id) === index,
-      );
-
-      let resp: HaytekPedidoResponse | null = null;
-      let usedProduct: HaytekProduto = produtoSelecionado;
-      let lastError: unknown = null;
-      const attemptLogs: string[] = [];
-
-      for (const [index, candidate] of tryProducts.entries()) {
-        const payload = buildPayload(candidate);
-        const frameSummary = describePayloadFrame(payload);
-        const limitesResumo = buildLimitesResumo(candidate).replace(/\n/g, " | ");
-        const localValidationError = validateDioptriaForProduct(candidate);
-
-        if (localValidationError) {
-          attemptLogs.push(`Tentativa ${index + 1} — SKU ${candidate.product_id}: bloqueado local (${localValidationError}) | ${limitesResumo} | ${frameSummary}`);
-          continue;
-        }
-
-        try {
-          resp = await criarPedidoHaytek(payload, codOs, codEmpresa);
-          usedProduct = candidate;
-          attemptLogs.push(`Tentativa ${index + 1} — SKU ${candidate.product_id}: aprovado${resp.orderId ? ` | pedido ${resp.orderId}` : ""} | ${frameSummary}`);
-          break;
-        } catch (err: any) {
-          lastError = err;
-          const apiErrorMessage = extractApiErrorMessage(err);
-          const correlationId = typeof err?.correlationId === "string" ? err.correlationId : "";
-          const correlationText = correlationId ? ` | correlationId=${correlationId}` : "";
-
-          attemptLogs.push(`Tentativa ${index + 1} — SKU ${candidate.product_id}: erro API (${apiErrorMessage})${correlationText} | ${limitesResumo} | ${frameSummary}`);
-
-          if (err?.code !== "HAYTEK_API_ERROR") {
-            setTentativasEnvio(attemptLogs);
-            throw err;
-          }
-        }
+      // Validação local antes de enviar
+      const localValidationError = validateDioptriaForProduct(produtoSelecionado);
+      if (localValidationError) {
+        throw new Error(localValidationError);
       }
 
-      setTentativasEnvio(attemptLogs);
+      const payload = buildPayload(produtoSelecionado);
+      const frameSummary = describePayloadFrame(payload);
+      const limitesResumo = buildLimitesResumo(produtoSelecionado);
 
-      if (!resp) {
-        const prescResumo = `📋 Receita do paciente:\n  OD → Esf: ${prescOd.esferico || "0.00"}  Cil: ${prescOd.cilindrico || "0.00"}  Ad: ${prescOd.adicao || "0.00"}\n  OE → Esf: ${prescOe.esferico || "0.00"}  Cil: ${prescOe.cilindrico || "0.00"}  Ad: ${prescOe.adicao || "0.00"}`;
-        const ultimoErro = extractApiErrorMessage(lastError);
-        const detalhes = attemptLogs.length > 0 ? attemptLogs.join("\n") : "Nenhuma tentativa executada.";
-        throw new Error(`Nenhum fallback aceito.\n\nÚltimo erro da API: ${ultimoErro}\n\n${prescResumo}\n\nTentativas:\n${detalhes}`);
-      }
+      const resp = await criarPedidoHaytek(payload, codOs, codEmpresa);
 
       setResultado(resp);
       setErroEnvioDetalhado(null);
-      if (usedProduct.product_id !== produtoSelecionado.product_id) {
-        setProdutoSelecionado(usedProduct);
-        setAutoFillSource("manual");
-      }
 
       if (resp.orderId) {
-        const fallbackInfo = usedProduct.product_id !== produtoSelecionado.product_id
-          ? ` (fallback automático para ${usedProduct.product_id})`
-          : "";
-        toast({ title: `Pedido Haytek criado: ${resp.orderId}${fallbackInfo}` });
+        toast({ title: `Pedido Haytek criado: ${resp.orderId}` });
         registrarPedidoNoCache(codOs, String(resp.orderId), "HAYTEK", "CONFIRMADO");
       } else {
         toast({ title: "Pedido enviado", description: resp.message || "Aguardando confirmação" });
       }
     } catch (err: any) {
-      const msg = extractApiErrorMessage(err);
+      const apiMsg = extractApiErrorMessage(err);
+      const payload = buildPayload(produtoSelecionado);
+      const frameSummary = describePayloadFrame(payload);
+      const limitesResumo = buildLimitesResumo(produtoSelecionado);
+
+      // Montar resumo claro do payload enviado para o operador
+      const payloadRight = payload.products.right;
+      const payloadLeft = payload.products.left;
+      const detalhes = [
+        `❌ Erro da API: ${apiMsg}`,
+        ``,
+        `📦 Produto: ${produtoSelecionado.product_id} — ${produtoSelecionado.nome_comercial || ""}`,
+        limitesResumo,
+        ``,
+        `📋 Payload enviado:`,
+        `  OD → Esf: ${payloadRight.spherical}  Cil: ${payloadRight.cylindrical}  Eixo: ${payloadRight.axis || "-"}  Ad: ${(payloadRight as any).addition || "omitido"}  DNP: ${payloadRight.ndp || "-"}  Alt: ${payloadRight.height || "-"}`,
+        `  OE → Esf: ${payloadLeft.spherical}  Cil: ${payloadLeft.cylindrical}  Eixo: ${payloadLeft.axis || "-"}  Ad: ${(payloadLeft as any).addition || "omitido"}  DNP: ${payloadLeft.ndp || "-"}  Alt: ${payloadLeft.height || "-"}`,
+        `  Armação: ${frameSummary}`,
+        `  Tratamento: ${payload.products.treatment}`,
+      ];
+
       setResultado(null);
-      setErroEnvioDetalhado(msg);
-      toast({ title: "Erro ao enviar pedido", description: msg, variant: "destructive" });
+      setErroEnvioDetalhado(detalhes.join("\n"));
+      toast({ title: "Erro ao enviar pedido", description: apiMsg, variant: "destructive" });
     } finally {
       setSending(false);
     }
@@ -599,21 +571,14 @@ const PedidoHaytekPage: React.FC = () => {
         </Alert>
       )}
 
-      {(tentativasEnvio.length > 0 || erroEnvioDetalhado) && (
-        <Alert className={cn("border-border bg-muted/30", erroEnvioDetalhado && "border-destructive/40")}>
-          <AlertTriangle className={cn("h-4 w-4", erroEnvioDetalhado ? "text-destructive" : "text-primary")} />
-          <AlertDescription className="space-y-2">
-            <p className="text-sm font-medium">Histórico detalhado do envio / fallback</p>
-            {erroEnvioDetalhado && (
-              <p className="text-sm whitespace-pre-line">{erroEnvioDetalhado}</p>
-            )}
-            {tentativasEnvio.length > 0 && (
-              <ul className="space-y-1 text-xs text-muted-foreground">
-                {tentativasEnvio.map((tentativa, index) => (
-                  <li key={`${index}-${tentativa}`}>{tentativa}</li>
-                ))}
-              </ul>
-            )}
+      {erroEnvioDetalhado && (
+        <Alert className="border-destructive/40 bg-muted/30">
+          <AlertTriangle className="h-4 w-4 text-destructive" />
+          <AlertDescription>
+            <p className="text-sm font-medium mb-2">Erro no envio do pedido</p>
+            <pre className="text-xs whitespace-pre-line text-muted-foreground bg-background/60 rounded p-3 border border-border">
+              {erroEnvioDetalhado}
+            </pre>
           </AlertDescription>
         </Alert>
       )}
