@@ -74,7 +74,7 @@ async function loadStoreConfig(sb: ReturnType<typeof createClient>, codEmpresa: 
   return null;
 }
 
-async function fetchHaytek(url: string, options: RequestInit, correlationId: string, action: string, apiKey?: string | null): Promise<Response> {
+async function fetchHaytek(url: string, options: RequestInit, correlationId: string, action: string, apiKey?: string | null, apiUser?: string | null): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20000);
   const start = Date.now();
