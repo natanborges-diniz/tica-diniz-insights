@@ -264,7 +264,7 @@ const PedidoHaytekPage: React.FC = () => {
   }, [osData]);
 
   // ── Build payload ──
-  function buildPayload(): HaytekPedidoPayload {
+  function buildPayload(productOverride?: HaytekProduto): HaytekPedidoPayload {
     const buildEye = (presc: typeof prescOd, prisma: typeof prismaOd) => {
       const eye: Record<string, unknown> = {};
       // Only include non-empty prescription fields (API rejects empty strings for required fields)
