@@ -51,6 +51,7 @@ async function loadHaytekConfig(sb: ReturnType<typeof createClient>): Promise<Ha
     baseUrl: "https://dev.haytek.com.br",
     ambiente: "staging",
     apiKey: null,
+    apiUser: null,
   };
 }
 
