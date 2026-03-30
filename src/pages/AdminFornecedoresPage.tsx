@@ -95,6 +95,8 @@ function CredenciaisSection({
         api_key: form.api_key || null,
         api_key_staging: form.api_key_staging || null,
         api_key_production: form.api_key_production || null,
+        api_user_staging: form.api_user_staging || null,
+        api_user_production: form.api_user_production || null,
       } as never)
       .eq("id", config.id);
 

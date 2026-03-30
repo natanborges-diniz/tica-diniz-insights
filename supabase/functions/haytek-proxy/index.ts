@@ -242,7 +242,7 @@ serve(async (req) => {
         }
 
         const url = `${BASE_URL}/orders/${orderId}`;
-        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "consultar-pedido", haytekConfig.apiKey);
+        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "consultar-pedido", haytekConfig.apiKey, haytekConfig.apiUser);
         const data = await resp.json();
 
         if (resp.status >= 400) {
