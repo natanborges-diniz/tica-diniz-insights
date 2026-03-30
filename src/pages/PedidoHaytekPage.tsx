@@ -326,6 +326,40 @@ const PedidoHaytekPage: React.FC = () => {
     return payload;
   }
 
+  // ── Validação de dioptria contra catálogo ──
+  function validateDioptria(): string | null {
+    if (!produtoSelecionado) return null;
+    const p = produtoSelecionado;
+    const eyes = [
+      { label: "OD", presc: prescOd },
+      { label: "OE", presc: prescOe },
+    ];
+    for (const { label, presc } of eyes) {
+      const esf = parseFloat(presc.esferico || "0");
+      const cil = parseFloat(presc.cilindrico || "0");
+      const adi = parseFloat(presc.adicao || "0");
+
+      if (p.esferico_minimo != null && esf < p.esferico_minimo) {
+        return `${label}: Esférico ${esf} abaixo do mínimo (${p.esferico_minimo}) para ${p.product_id}`;
+      }
+      if (p.esferico_maximo != null && esf > p.esferico_maximo) {
+        return `${label}: Esférico ${esf} acima do máximo (${p.esferico_maximo}) para ${p.product_id}`;
+      }
+      if (p.cilindrico_maximo != null && Math.abs(cil) > Math.abs(p.cilindrico_maximo)) {
+        return `${label}: Cilíndrico ${cil} fora do limite (${p.cilindrico_maximo}) para ${p.product_id}`;
+      }
+      if (adi > 0) {
+        if (p.adicao_minima != null && adi < p.adicao_minima) {
+          return `${label}: Adição ${adi} abaixo da mínima (${p.adicao_minima}) para ${p.product_id}`;
+        }
+        if (p.adicao_maxima != null && adi > p.adicao_maxima) {
+          return `${label}: Adição ${adi} acima da máxima (${p.adicao_maxima}) para ${p.product_id}`;
+        }
+      }
+    }
+    return null;
+  }
+
   // ── Submit ──
   const handleSubmit = async () => {
     if (!produtoSelecionado) {
@@ -334,6 +368,13 @@ const PedidoHaytekPage: React.FC = () => {
     }
     if (!paciente.trim()) {
       toast({ title: "Nome do paciente é obrigatório", variant: "destructive" });
+      return;
+    }
+
+    // Validar dioptria antes de enviar
+    const dioptError = validateDioptria();
+    if (dioptError) {
+      toast({ title: "Prescrição incompatível com o produto", description: dioptError, variant: "destructive" });
       return;
     }
 
