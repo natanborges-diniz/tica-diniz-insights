@@ -247,9 +247,10 @@ export default function AdminAdquirentesPage() {
     return emp?.nome || `Empresa ${cod}`;
   };
 
-  const CredentialFields = ({ configId, ambiente, form }: {
-    configId: string; ambiente: "sandbox" | "production"; form: EditForm;
+  const CredentialFields = ({ config, ambiente, form }: {
+    config: AdquirenteConfig; ambiente: "sandbox" | "production"; form: EditForm;
   }) => {
+    const configId = config.id;
     const pvField = ambiente === "production" ? "merchant_id_production" : "merchant_id";
     const keyField = ambiente === "production" ? "integration_key_production" : "integration_key_encrypted";
     const pvMatrizField = ambiente === "production" ? "pv_matriz_production" : "pv_matriz";
@@ -265,7 +266,6 @@ export default function AdminAdquirentesPage() {
 
     return (
       <div className="space-y-4">
-        {/* Status indicator */}
         <div className={`flex items-center gap-2 p-2.5 rounded-md ${hasCredentials ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
           {hasCredentials ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
           <span className="text-xs font-medium">
@@ -277,61 +277,38 @@ export default function AdminAdquirentesPage() {
 
         <div className="grid gap-3">
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              PV (Nº Filiação) — {isSandbox ? "Teste" : "Produção"}
-            </Label>
-            <Input
-              value={pvValue}
-              onChange={e => updateForm(configId, pvField, e.target.value)}
-              className="font-mono text-sm"
-              placeholder={isSandbox ? "PV de teste fornecido pela Rede" : "PV real da loja"}
-            />
-            <p className="text-[10px] text-muted-foreground">
-              {isSandbox
-                ? "Obtido no Portal do Desenvolvedor e.Rede (ambiente de testes)"
-                : "Número de filiação real da sua loja na Rede"}
-            </p>
+            <Label className="text-xs font-medium">PV (Nº Filiação) — {isSandbox ? "Teste" : "Produção"}</Label>
+            <Input value={pvValue} onChange={e => updateForm(configId, pvField, e.target.value)} className="font-mono text-sm" placeholder={isSandbox ? "PV de teste fornecido pela Rede" : "PV real da loja"} />
+            <p className="text-[10px] text-muted-foreground">{isSandbox ? "Obtido no Portal do Desenvolvedor e.Rede (ambiente de testes)" : "Número de filiação real da sua loja na Rede"}</p>
           </div>
-
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              Chave de Integração — {isSandbox ? "Teste" : "Produção"}
-            </Label>
+            <Label className="text-xs font-medium">Chave de Integração — {isSandbox ? "Teste" : "Produção"}</Label>
             <div className="flex gap-1">
-              <Input
-                type={isKeyVisible ? "text" : "password"}
-                value={keyValue}
-                onChange={e => updateForm(configId, keyField, e.target.value)}
-                className="font-mono text-sm"
-                placeholder={isSandbox ? "Chave de teste" : "Chave de produção"}
-              />
-              <Button
-                variant="ghost" size="icon" className="shrink-0"
-                onClick={() => setShowKeys(prev => ({ ...prev, [keyVisibleId]: !prev[keyVisibleId] }))}
-              >
+              <Input type={isKeyVisible ? "text" : "password"} value={keyValue} onChange={e => updateForm(configId, keyField, e.target.value)} className="font-mono text-sm" placeholder={isSandbox ? "Chave de teste" : "Chave de produção"} />
+              <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setShowKeys(prev => ({ ...prev, [keyVisibleId]: !prev[keyVisibleId] }))}>
                 {isKeyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
           </div>
-
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              PV Matriz (Gestão de Vendas) — {isSandbox ? "Teste" : "Produção"}
-            </Label>
-            <Input
-              value={pvMatrizValue}
-              onChange={e => updateForm(configId, pvMatrizField, e.target.value)}
-              className="font-mono text-sm"
-              placeholder={isSandbox ? "PV Matriz de teste" : "PV Matriz de produção"}
-            />
-            <p className="text-[10px] text-muted-foreground">
-              Usado pela API Gestão de Vendas (OAuth 2.0) para consultar vendas POS de todas as filiais
-            </p>
+            <Label className="text-xs font-medium">PV Matriz (Gestão de Vendas) — {isSandbox ? "Teste" : "Produção"}</Label>
+            <Input value={pvMatrizValue} onChange={e => updateForm(configId, pvMatrizField, e.target.value)} className="font-mono text-sm" placeholder={isSandbox ? "PV Matriz de teste" : "PV Matriz de produção"} />
+            <p className="text-[10px] text-muted-foreground">Usado pela API Gestão de Vendas (OAuth 2.0) para consultar vendas POS de todas as filiais</p>
           </div>
         </div>
 
-        {/* Test buttons inside the tab */}
-        {/* Test buttons are rendered in parent with full config */}
+        <div className="flex gap-2 pt-1">
+          <Button size="sm" variant="outline" className="text-xs" disabled={!!testing} onClick={() => handleTestErede(config, ambiente)}>
+            {testing === `${configId}-erede-${ambiente}` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
+            Testar e.Rede
+          </Button>
+          {config.adquirente === "REDE" && (
+            <Button size="sm" variant="outline" className="text-xs" disabled={!!testing} onClick={() => handleTestGV(config, ambiente)}>
+              {testing === `${configId}-gv-${ambiente}` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
+              Testar GV
+            </Button>
+          )}
+        </div>
       </div>
     );
   };
