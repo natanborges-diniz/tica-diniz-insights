@@ -271,7 +271,7 @@ const PedidoHaytekPage: React.FC = () => {
       if (presc.esferico) eye.spherical = presc.esferico;
       if (presc.cilindrico) eye.cylindrical = presc.cilindrico;
       if (presc.eixo) eye.axis = presc.eixo;
-      if (presc.adicao) eye.addition = presc.adicao;
+      eye.addition = presc.adicao || "0.00";
       if (presc.dnp) eye.ndp = presc.dnp;
       if (presc.altura) eye.height = presc.altura;
 
