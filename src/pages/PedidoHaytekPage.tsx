@@ -327,9 +327,7 @@ const PedidoHaytekPage: React.FC = () => {
   }
 
   // ── Validação de dioptria contra catálogo ──
-  function validateDioptria(): string | null {
-    if (!produtoSelecionado) return null;
-    const p = produtoSelecionado;
+  function validateDioptriaForProduct(product: HaytekProduto): string | null {
     const eyes = [
       { label: "OD", presc: prescOd },
       { label: "OE", presc: prescOe },
@@ -339,29 +337,34 @@ const PedidoHaytekPage: React.FC = () => {
       const cil = parseFloat(presc.cilindrico || "0");
       const adi = parseFloat(presc.adicao || "0");
 
-      if (p.esferico_minimo != null && esf < p.esferico_minimo) {
-        return `${label}: Esférico ${esf} abaixo do mínimo (${p.esferico_minimo}) para ${p.product_id}`;
+      if (product.esferico_minimo != null && esf < product.esferico_minimo) {
+        return `${label}: Esférico ${esf} abaixo do mínimo (${product.esferico_minimo}) para ${product.product_id}`;
       }
-      if (p.esferico_maximo != null && esf > p.esferico_maximo) {
-        return `${label}: Esférico ${esf} acima do máximo (${p.esferico_maximo}) para ${p.product_id}`;
+      if (product.esferico_maximo != null && esf > product.esferico_maximo) {
+        return `${label}: Esférico ${esf} acima do máximo (${product.esferico_maximo}) para ${product.product_id}`;
       }
-      if (p.cilindrico_maximo != null && Math.abs(cil) > Math.abs(p.cilindrico_maximo)) {
-        return `${label}: Cilíndrico ${cil} fora do limite (${p.cilindrico_maximo}) para ${p.product_id}`;
+      if (product.cilindrico_maximo != null && Math.abs(cil) > Math.abs(product.cilindrico_maximo)) {
+        return `${label}: Cilíndrico ${cil} fora do limite (${product.cilindrico_maximo}) para ${product.product_id}`;
       }
       // Produto exige adição mas prescrição não tem
-      if (p.adicao_minima != null && p.adicao_minima > 0 && adi === 0) {
-        return `${label}: Produto ${p.product_id} exige adição (mín ${p.adicao_minima}), mas a prescrição não possui. Selecione um produto de visão simples.`;
+      if (product.adicao_minima != null && product.adicao_minima > 0 && adi === 0) {
+        return `${label}: Produto ${product.product_id} exige adição (mín ${product.adicao_minima}), mas a prescrição não possui. Selecione um produto de visão simples.`;
       }
       if (adi > 0) {
-        if (p.adicao_minima != null && adi < p.adicao_minima) {
-          return `${label}: Adição ${adi} abaixo da mínima (${p.adicao_minima}) para ${p.product_id}`;
+        if (product.adicao_minima != null && adi < product.adicao_minima) {
+          return `${label}: Adição ${adi} abaixo da mínima (${product.adicao_minima}) para ${product.product_id}`;
         }
-        if (p.adicao_maxima != null && adi > p.adicao_maxima) {
-          return `${label}: Adição ${adi} acima da máxima (${p.adicao_maxima}) para ${p.product_id}`;
+        if (product.adicao_maxima != null && adi > product.adicao_maxima) {
+          return `${label}: Adição ${adi} acima da máxima (${product.adicao_maxima}) para ${product.product_id}`;
         }
       }
     }
     return null;
+  }
+
+  function validateDioptria(): string | null {
+    if (!produtoSelecionado) return null;
+    return validateDioptriaForProduct(produtoSelecionado);
   }
 
   // ── Submit ──
