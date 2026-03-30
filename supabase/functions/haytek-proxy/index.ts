@@ -88,6 +88,10 @@ async function fetchHaytek(url: string, options: RequestInit, correlationId: str
     const masked = apiKey.length > 15 ? `${apiKey.slice(0, 10)}...${apiKey.slice(-5)}` : "***";
     console.log(`[haytek-proxy] [${correlationId}] Token (masked): ${masked}`);
   }
+  if (apiUser) {
+    headers["X-User"] = apiUser;
+    console.log(`[haytek-proxy] [${correlationId}] X-User: ${apiUser}`);
+  }
 
   try {
     const resp = await fetch(url, { ...options, headers, signal: controller.signal });
