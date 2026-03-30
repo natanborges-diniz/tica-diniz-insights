@@ -41,7 +41,8 @@ async function loadHaytekConfig(sb: ReturnType<typeof createClient>): Promise<Ha
       const rawKey = isProduction ? (data.api_key_production || null) : (data.api_key_staging || null);
       // Sanitize: remove whitespace/newlines that may have been saved accidentally
       const apiKey = rawKey ? rawKey.replace(/\s+/g, "") : null;
-      return { baseUrl, ambiente: data.ambiente, apiKey };
+      const apiUser = isProduction ? (data.api_user_production || null) : (data.api_user_staging || null);
+      return { baseUrl, ambiente: data.ambiente, apiKey, apiUser };
     }
   } catch (e) {
     console.warn("[haytek-proxy] Could not load DB config:", e);
