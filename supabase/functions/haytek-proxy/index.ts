@@ -21,6 +21,7 @@ interface HaytekRuntimeConfig {
   baseUrl: string;
   ambiente: string;
   apiKey: string | null;
+  apiUser: string | null;
 }
 
 async function loadHaytekConfig(sb: ReturnType<typeof createClient>): Promise<HaytekRuntimeConfig> {
