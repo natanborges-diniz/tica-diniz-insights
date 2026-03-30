@@ -412,7 +412,23 @@ const PedidoHaytekPage: React.FC = () => {
       }
 
       if (!resp) {
-        throw lastError || new Error("Falha ao enviar pedido para todos os produtos tentados");
+        // Montar resumo de dioptrias aceitas por cada produto tentado
+        const resumo = tryProducts.map((p) => {
+          const faixas: string[] = [];
+          if (p.esferico_minimo != null || p.esferico_maximo != null)
+            faixas.push(`Esf: ${p.esferico_minimo ?? "?"} a ${p.esferico_maximo ?? "?"}`);
+          if (p.cilindrico_maximo != null)
+            faixas.push(`Cil: 0 a ${p.cilindrico_maximo}`);
+          if (p.adicao_minima != null || p.adicao_maxima != null)
+            faixas.push(`Ad: ${p.adicao_minima ?? "?"} a ${p.adicao_maxima ?? "?"}`);
+          return `• ${p.product_id} (${p.nome_comercial || p.design || ""}): ${faixas.join(" | ") || "sem limites cadastrados"}`;
+        }).join("\n");
+
+        const prescResumo = `Receita → OD: Esf ${prescOd.esferico || "0"} Cil ${prescOd.cilindrico || "0"} Ad ${prescOd.adicao || "0"} | OE: Esf ${prescOe.esferico || "0"} Cil ${prescOe.cilindrico || "0"} Ad ${prescOe.adicao || "0"}`;
+
+        throw new Error(
+          `Nenhum produto compatível com a receita.\n\n${prescResumo}\n\nProdutos testados:\n${resumo}`
+        );
       }
 
       setResultado(resp);
