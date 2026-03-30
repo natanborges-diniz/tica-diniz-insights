@@ -1,46 +1,40 @@
 
 
-# Plano: Adicionar campo USUARIO à configuração Haytek e corrigir autenticação
+# Plano: Corrigir URL e simplificar autenticação Haytek
 
-## Problema identificado
+## Problema raiz
 
-A documentação Haytek fornece **três dados de acesso**:
-- LOJA: `SP0156`
-- USUARIO: `sp.osasco.adm@oticasdiniz.com.br`
-- TOKEN: `eyJhbGciOiJIUzI1NiIs...`
+A URL da API estava **completamente errada**. Comparação:
 
-Porém nosso sistema **só armazena o TOKEN** (campo `api_key_staging` na tabela `fornecedor_configuracao`). O campo USUARIO não existe em nenhum lugar do sistema.
-
-Além disso, o token salvo no banco tem **127 caracteres**, mas o token correto fornecido tem **~131 caracteres** — indicando que pode estar truncado ou ser de uma versão anterior.
+| Item | Nosso sistema | Correto (fornecedor) |
+|------|--------------|---------------------|
+| Base URL | `https://dev.haytek.com.br` | `https://stg-api.haytek.com.br` |
+| Path pedido | `/orders/lab` | `/external/api/v1/haytek-public/orders/lab` |
+| Path consulta | `/orders/{id}` | `/external/api/v1/haytek-public/orders/{id}` |
+| Auth | Múltiplas tentativas com headers extras | Apenas `Authorization: Bearer {TOKEN}` |
 
 ## Correções
 
-### 1. Migração: adicionar campos de usuário à tabela `fornecedor_configuracao`
+### 1. Atualizar `base_url_staging` no banco
 
-Adicionar `api_user_staging` e `api_user_production` (text, nullable) para armazenar o email/usuário do fornecedor por ambiente.
+```sql
+UPDATE fornecedor_configuracao 
+SET base_url_staging = 'https://stg-api.haytek.com.br'
+WHERE fornecedor = 'HAYTEK';
+```
 
-### 2. Atualizar dados: salvar o usuário e o token correto
+### 2. Proxy `haytek-proxy/index.ts` — corrigir paths
 
-- `api_user_staging` = `sp.osasco.adm@oticasdiniz.com.br`
-- `api_key_staging` = token completo sem quebras de linha (131 chars)
+- Criar pedido: `${BASE_URL}/external/api/v1/haytek-public/orders/lab`
+- Consultar pedido: `${BASE_URL}/external/api/v1/haytek-public/orders/${orderId}`
+- Simplificar `fetchHaytek`: remover estratégias de fallback, usar apenas `Authorization: Bearer {TOKEN}`
+- Remover headers extras (`X-User`, `X-Api-User`, `Username`, etc.) — não são necessários
 
-### 3. Proxy `haytek-proxy/index.ts`
+### 3. Fallback URL padrão
 
-- Carregar `api_user_staging`/`api_user_production` junto com os demais campos
-- Enviar o usuário no header `X-User` (ou campo equivalente) nas chamadas à API Haytek
-- Se a API não aceitar como header, tentar como campo `user` no body do payload
-- Log mascarado do usuário para debug
-
-### 4. Tela Admin Fornecedores (`AdminFornecedoresPage.tsx`)
-
-- Adicionar campo "Usuário API" (staging e produção) na seção de credenciais da aba Haytek
-- Segue o mesmo padrão visual dos campos de API Key existentes
-
-### 5. Tipos (`haytekService.ts`)
-
-- Atualizar `HaytekRuntimeConfig` no proxy para incluir `apiUser`
+Atualizar o fallback no código de `https://dev.haytek.com.br` para `https://stg-api.haytek.com.br`.
 
 ## Resultado esperado
 
-O proxy enviará tanto o token (`Authorization: Bearer`) quanto o usuário (header ou body) conforme necessário, resolvendo o 401.
+Com a URL e path corretos + autenticação simplificada, o pedido será aceito pela API Haytek.
 
