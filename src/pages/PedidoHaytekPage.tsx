@@ -148,6 +148,7 @@ const PedidoHaytekPage: React.FC = () => {
   const [resultado, setResultado] = useState<HaytekPedidoResponse | null>(null);
   const [tentativasEnvio, setTentativasEnvio] = useState<string[]>([]);
   const [erroEnvioDetalhado, setErroEnvioDetalhado] = useState<string | null>(null);
+  const [haytekStoreId, setHaytekStoreId] = useState<string>("");
 
   function parsePositiveInt(value: string): number | null {
     const parsed = parseInt(value, 10);
@@ -275,6 +276,20 @@ const PedidoHaytekPage: React.FC = () => {
       .finally(() => setLoadingProdutos(false));
   }, []);
 
+  // ── Load storeId da empresa ──
+  useEffect(() => {
+    if (!codEmpresa) return;
+    supabase
+      .from("haytek_empresa_config" as never)
+      .select("store_id")
+      .eq("cod_empresa", codEmpresa)
+      .eq("ativo", true)
+      .maybeSingle()
+      .then(({ data }) => {
+        if ((data as any)?.store_id) setHaytekStoreId((data as any).store_id);
+      });
+  }, [codEmpresa]);
+
   // ── Auto-match when products + OS loaded ──
   useEffect(() => {
     if (!osData || produtos.length === 0) return;
@@ -360,7 +375,7 @@ const PedidoHaytekPage: React.FC = () => {
     const frameConfig = resolveFrameConfig();
 
     const payload: HaytekPedidoPayload = {
-      storeId: "", // injected by proxy
+      storeId: haytekStoreId, // explicit store ID from haytek_empresa_config
       osId: osNumero,
       patientName: paciente,
       products: {
