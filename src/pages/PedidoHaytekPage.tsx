@@ -417,9 +417,14 @@ const PedidoHaytekPage: React.FC = () => {
       return;
     }
 
-    const fallbackCandidates = (matchResult?.candidates || [])
-      .map((c) => c.produto)
-      .filter((p) => p.product_id !== produtoSelecionado.product_id);
+    // Validação local antes de enviar
+    const localError = validateDioptriaForProduct(produtoSelecionado);
+    if (localError) {
+      const limites = buildLimitesResumo(produtoSelecionado);
+      setErroEnvioDetalhado(`⚠️ Validação local bloqueou o envio:\n${localError}\n\n${limites}\n\nCorrija a prescrição ou selecione outro produto.`);
+      toast({ title: "Prescrição fora dos limites do produto", description: localError, variant: "destructive" });
+      return;
+    }
 
     setSending(true);
     setResultado(null);
@@ -427,75 +432,58 @@ const PedidoHaytekPage: React.FC = () => {
     setErroEnvioDetalhado(null);
 
     try {
-      const tryProducts = [produtoSelecionado, ...fallbackCandidates].filter(
-        (product, index, self) => self.findIndex((item) => item.product_id === product.product_id) === index,
-      );
-
-      let resp: HaytekPedidoResponse | null = null;
-      let usedProduct: HaytekProduto = produtoSelecionado;
-      let lastError: any = null;
-      const attemptLogs: string[] = [];
-
-      for (const [index, candidate] of tryProducts.entries()) {
-        const payload = buildPayload(candidate);
-        const frameSummary = describePayloadFrame(payload);
-        const localValidationError = validateDioptriaForProduct(candidate);
-
-        if (localValidationError) {
-          attemptLogs.push(`Tentativa ${index + 1} — SKU ${candidate.product_id}: bloqueado localmente (${localValidationError}) | ${frameSummary}`);
-          continue;
-        }
-
-        try {
-          resp = await criarPedidoHaytek(payload, codOs, codEmpresa);
-          usedProduct = candidate;
-          attemptLogs.push(`Tentativa ${index + 1} — SKU ${candidate.product_id}: aprovado | ${frameSummary}${resp.orderId ? ` | pedido ${resp.orderId}` : ""}`);
-          break;
-        } catch (err: any) {
-          lastError = err;
-          const apiErrorMessage = extractApiErrorMessage(err);
-          attemptLogs.push(`Tentativa ${index + 1} — SKU ${candidate.product_id}: erro API (${apiErrorMessage}) | ${frameSummary}`);
-
-          if (err?.code !== "HAYTEK_API_ERROR") {
-            setTentativasEnvio(attemptLogs);
-            throw err;
-          }
-        }
-      }
-
-      setTentativasEnvio(attemptLogs);
-
-      if (!resp) {
-        const prescResumo = `Receita → OD: Esf ${prescOd.esferico || "0"} Cil ${prescOd.cilindrico || "0"} Ad ${prescOd.adicao || "0"} | OE: Esf ${prescOe.esferico || "0"} Cil ${prescOe.cilindrico || "0"} Ad ${prescOe.adicao || "0"}`;
-        const detalhes = attemptLogs.length > 0 ? attemptLogs.join("\n") : "Nenhuma tentativa executada.";
-        throw new Error(`Nenhum fallback aceito.\n\n${prescResumo}\n\nTentativas:\n${detalhes}`);
-      }
+      const payload = buildPayload(produtoSelecionado);
+      const resp = await criarPedidoHaytek(payload, codOs, codEmpresa);
 
       setResultado(resp);
       setErroEnvioDetalhado(null);
-      if (usedProduct.product_id !== produtoSelecionado.product_id) {
-        setProdutoSelecionado(usedProduct);
-        setAutoFillSource("manual");
-      }
 
       if (resp.orderId) {
-        const fallbackInfo = usedProduct.product_id !== produtoSelecionado.product_id
-          ? ` (fallback automático para ${usedProduct.product_id})`
-          : "";
-        toast({ title: `Pedido Haytek criado: ${resp.orderId}${fallbackInfo}` });
+        toast({ title: `Pedido Haytek criado: ${resp.orderId}` });
         registrarPedidoNoCache(codOs, String(resp.orderId), "HAYTEK", "CONFIRMADO");
       } else {
         toast({ title: "Pedido enviado", description: resp.message || "Aguardando confirmação" });
       }
     } catch (err: any) {
-      const msg = extractApiErrorMessage(err);
+      const apiMsg = extractApiErrorMessage(err);
+      const limites = buildLimitesResumo(produtoSelecionado);
+      const prescResumo = `📋 Receita do paciente:\n  OD → Esf: ${prescOd.esferico || "0.00"}  Cil: ${prescOd.cilindrico || "0.00"}  Ad: ${prescOd.adicao || "0.00"}\n  OE → Esf: ${prescOe.esferico || "0.00"}  Cil: ${prescOe.cilindrico || "0.00"}  Ad: ${prescOe.adicao || "0.00"}`;
+      const frameSummary = describePayloadFrame(buildPayload(produtoSelecionado));
+
+      const detalhe = [
+        `❌ Erro da API Haytek: ${apiMsg}`,
+        "",
+        `🏷️ Produto selecionado: ${produtoSelecionado.product_id} — ${produtoSelecionado.nome_comercial || ""}`,
+        limites,
+        "",
+        prescResumo,
+        "",
+        `🔲 Armação enviada: ${frameSummary}`,
+        "",
+        "👉 Corrija os campos acima e tente novamente.",
+      ].join("\n");
+
       setResultado(null);
-      setErroEnvioDetalhado(msg);
-      toast({ title: "Erro ao enviar pedido", description: msg, variant: "destructive" });
+      setErroEnvioDetalhado(detalhe);
+      toast({ title: "Erro ao enviar pedido", description: apiMsg, variant: "destructive" });
     } finally {
       setSending(false);
     }
   };
+
+  function buildLimitesResumo(product: HaytekProduto): string {
+    const lines: string[] = [`📊 Limites do produto ${product.product_id}:`];
+    if (product.esferico_minimo != null || product.esferico_maximo != null) {
+      lines.push(`  Esférico: ${product.esferico_minimo ?? "?"} a ${product.esferico_maximo ?? "?"}`);
+    }
+    if (product.cilindrico_maximo != null) {
+      lines.push(`  Cilíndrico: até ${product.cilindrico_maximo}`);
+    }
+    if (product.adicao_minima != null || product.adicao_maxima != null) {
+      lines.push(`  Adição: ${product.adicao_minima ?? "?"} a ${product.adicao_maxima ?? "?"}`);
+    }
+    return lines.join("\n");
+  }
 
   // ── Loading state ──
   if (loadingOs || loadingProdutos) {
