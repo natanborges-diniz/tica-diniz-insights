@@ -311,16 +311,42 @@ const PedidoHaytekPage: React.FC = () => {
   }, [osData]);
 
   // ── Build payload ──
+  // Format dioptria value: always 2 decimal places with explicit sign (e.g. "+1.25", "-0.50", "0.00")
+  function formatDioptria(val: string | undefined | null): string {
+    if (!val || val.trim() === "") return "0.00";
+    const num = parseFloat(val.replace(",", "."));
+    if (isNaN(num)) return "0.00";
+    const formatted = Math.abs(num).toFixed(2);
+    if (num > 0) return `+${formatted}`;
+    if (num < 0) return `-${formatted}`;
+    return formatted; // "0.00"
+  }
+
+  // Format decimal measurement (ndp, height): always 1 decimal place (e.g. "31.0", "20.0")
+  function formatMeasurement(val: string | undefined | null): string | null {
+    if (!val || val.trim() === "") return null;
+    const num = parseFloat(val.replace(",", "."));
+    if (isNaN(num)) return null;
+    return num.toFixed(1);
+  }
+
   function buildPayload(productOverride?: HaytekProduto): HaytekPedidoPayload {
+    const prodId = productOverride?.product_id || produtoSelecionado?.product_id || "";
+    const isSingleVision = prodId.startsWith("SS") || (!isProgressivo && !prescOd.adicao && !prescOe.adicao);
+
     const buildEye = (presc: typeof prescOd, prisma: typeof prismaOd) => {
       const eye: Record<string, unknown> = {};
-      // Only include non-empty prescription fields (API rejects empty strings for required fields)
-      if (presc.esferico) eye.spherical = presc.esferico;
-      if (presc.cilindrico) eye.cylindrical = presc.cilindrico;
+      eye.spherical = formatDioptria(presc.esferico);
+      eye.cylindrical = formatDioptria(presc.cilindrico);
       if (presc.eixo) eye.axis = presc.eixo;
-      eye.addition = presc.adicao || "0.00";
-      if (presc.dnp) eye.ndp = presc.dnp;
-      if (presc.altura) eye.height = presc.altura;
+      // Omit addition for single vision; format with 2 decimals otherwise
+      if (!isSingleVision) {
+        eye.addition = formatDioptria(presc.adicao || "0.00");
+      }
+      const ndp = formatMeasurement(presc.dnp);
+      if (ndp) eye.ndp = ndp;
+      const height = formatMeasurement(presc.altura);
+      if (height) eye.height = height;
 
       if (prisma.hBase || prisma.vBase) {
         eye.prism = {};
