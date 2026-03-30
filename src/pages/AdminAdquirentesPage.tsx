@@ -474,11 +474,11 @@ export default function AdminAdquirentesPage() {
                     </TabsList>
 
                     <TabsContent value="sandbox" className="mt-3">
-                      <CredentialFields configId={config.id} ambiente="sandbox" form={form} />
+                      <CredentialFields config={config} ambiente="sandbox" form={form} />
                     </TabsContent>
 
                     <TabsContent value="production" className="mt-3">
-                      <CredentialFields configId={config.id} ambiente="production" form={form} />
+                      <CredentialFields config={config} ambiente="production" form={form} />
                     </TabsContent>
                   </Tabs>
 
