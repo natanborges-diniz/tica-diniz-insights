@@ -19,7 +19,6 @@ const HAYTEK_FORMATOS: { code: string; label: string; file: string }[] = [
   { code: "010", label: "010", file: "10.jpg" },
   { code: "011", label: "011", file: "11.jpg" },
   { code: "012", label: "012", file: "12.jpg" },
-  { code: "013", label: "013", file: "13.jpg" },
 ];
 
 interface Props {

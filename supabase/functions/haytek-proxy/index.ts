@@ -82,6 +82,8 @@ async function fetchHaytek(url: string, options: RequestInit, correlationId: str
   };
   if (apiKey) {
     headers["Authorization"] = `Bearer ${apiKey}`;
+    const masked = apiKey.length > 15 ? `${apiKey.slice(0, 10)}...${apiKey.slice(-5)}` : "***";
+    console.log(`[haytek-proxy] [${correlationId}] Token (masked): ${masked}`);
   }
 
   try {

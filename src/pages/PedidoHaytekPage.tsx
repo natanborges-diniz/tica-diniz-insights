@@ -266,14 +266,15 @@ const PedidoHaytekPage: React.FC = () => {
   // ── Build payload ──
   function buildPayload(): HaytekPedidoPayload {
     const buildEye = (presc: typeof prescOd, prisma: typeof prismaOd) => {
-      const eye: Record<string, unknown> = {
-        spherical: presc.esferico,
-        cylindrical: presc.cilindrico,
-        axis: presc.eixo,
-        addition: presc.adicao,
-        ndp: presc.dnp,
-        height: presc.altura,
-      };
+      const eye: Record<string, unknown> = {};
+      // Only include non-empty prescription fields (API rejects empty strings for required fields)
+      if (presc.esferico) eye.spherical = presc.esferico;
+      if (presc.cilindrico) eye.cylindrical = presc.cilindrico;
+      if (presc.eixo) eye.axis = presc.eixo;
+      if (presc.adicao) eye.addition = presc.adicao;
+      if (presc.dnp) eye.ndp = presc.dnp;
+      if (presc.altura) eye.height = presc.altura;
+
       if (prisma.hBase || prisma.vBase) {
         eye.prism = {};
         if (prisma.hBase && prisma.hValue) {
@@ -286,6 +287,11 @@ const PedidoHaytekPage: React.FC = () => {
       return eye;
     };
 
+    // Parse frame dimensions as integers (API expects integer, not string)
+    const parsedBridge = frameBridge ? parseInt(frameBridge, 10) : undefined;
+    const parsedHeight = frameHeight ? parseInt(frameHeight, 10) : undefined;
+    const parsedWidth = frameWidth ? parseInt(frameWidth, 10) : undefined;
+
     const payload: HaytekPedidoPayload = {
       storeId: "", // injected by proxy
       osId: osNumero,
@@ -296,10 +302,10 @@ const PedidoHaytekPage: React.FC = () => {
         frame: {
           code: frameCode,
           material: frameMaterial,
-          modelImage: frameModelImage,
-          bridge: frameBridge,
-          height: frameHeight,
-          width: frameWidth,
+          modelImage: frameModelImage || undefined,
+          bridge: !isNaN(parsedBridge as number) ? parsedBridge as number : undefined,
+          height: !isNaN(parsedHeight as number) ? parsedHeight as number : undefined,
+          width: !isNaN(parsedWidth as number) ? parsedWidth as number : undefined,
         },
         right: buildEye(prescOd, prismaOd) as any,
         left: buildEye(prescOe, prismaOe) as any,

@@ -23,10 +23,10 @@ export interface HaytekEyeInput {
 export interface HaytekFrameInput {
   code: string; // 3PC, ARF, FIN, FIA
   material?: string; // Acetato, Metal
-  modelImage?: string; // 001-013
-  bridge?: string;
-  height?: string;
-  width?: string;
+  modelImage?: string; // 001-012
+  bridge?: number;
+  height?: number;
+  width?: number;
 }
 
 export interface HaytekColoringInput {
