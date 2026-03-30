@@ -146,6 +146,53 @@ const PedidoHaytekPage: React.FC = () => {
   // ── Submission ──
   const [sending, setSending] = useState(false);
   const [resultado, setResultado] = useState<HaytekPedidoResponse | null>(null);
+  const [tentativasEnvio, setTentativasEnvio] = useState<string[]>([]);
+  const [erroEnvioDetalhado, setErroEnvioDetalhado] = useState<string | null>(null);
+
+  function parsePositiveInt(value: string): number | null {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  function resolveFrameConfig() {
+    const parsedBridge = parsePositiveInt(frameBridge);
+    const parsedHeight = parsePositiveInt(frameHeight);
+    const parsedWidth = parsePositiveInt(frameWidth);
+    const trimmedModelImage = frameModelImage.trim();
+
+    return {
+      code: frameCode || "ARF",
+      material: frameMaterial || "Acetato",
+      modelImage: trimmedModelImage || "009",
+      bridge: parsedBridge ?? 10,
+      height: parsedHeight ?? 32,
+      width: parsedWidth ?? 35,
+      fallbackFields: [
+        !trimmedModelImage ? "modelImage=009" : null,
+        parsedBridge == null ? "ponte=10" : null,
+        parsedHeight == null ? "altura=32" : null,
+        parsedWidth == null ? "largura=35" : null,
+      ].filter(Boolean) as string[],
+    };
+  }
+
+  function describePayloadFrame(payload: HaytekPedidoPayload): string {
+    const frame = payload.products.frame;
+    const fallbackFields = resolveFrameConfig().fallbackFields;
+    const frameSummary = `aro code=${frame.code}, modelImage=${frame.modelImage}, bridge=${frame.bridge}, height=${frame.height}, width=${frame.width}`;
+
+    return fallbackFields.length > 0
+      ? `${frameSummary} | defaults: ${fallbackFields.join(", ")}`
+      : frameSummary;
+  }
+
+  function extractApiErrorMessage(err: unknown): string {
+    if (typeof err === "object" && err !== null && "message" in err) {
+      return String((err as { message?: unknown }).message ?? "Erro desconhecido").replace(/\s+/g, " ").trim();
+    }
+
+    return String(err ?? "Erro desconhecido").replace(/\s+/g, " ").trim();
+  }
 
   // ── Load OS data ──
   useEffect(() => {
@@ -287,10 +334,7 @@ const PedidoHaytekPage: React.FC = () => {
       return eye;
     };
 
-    // Parse frame dimensions as integers (API expects integer, not string)
-    const parsedBridge = frameBridge ? parseInt(frameBridge, 10) : undefined;
-    const parsedHeight = frameHeight ? parseInt(frameHeight, 10) : undefined;
-    const parsedWidth = frameWidth ? parseInt(frameWidth, 10) : undefined;
+    const frameConfig = resolveFrameConfig();
 
     const payload: HaytekPedidoPayload = {
       storeId: "", // injected by proxy
@@ -300,12 +344,12 @@ const PedidoHaytekPage: React.FC = () => {
         productId: productOverride?.product_id || produtoSelecionado?.product_id || "",
         treatment,
         frame: {
-          code: frameCode,
-          material: frameMaterial,
-          modelImage: frameModelImage || undefined,
-          bridge: !isNaN(parsedBridge as number) ? parsedBridge as number : undefined,
-          height: !isNaN(parsedHeight as number) ? parsedHeight as number : undefined,
-          width: !isNaN(parsedWidth as number) ? parsedWidth as number : undefined,
+          code: frameConfig.code,
+          material: frameConfig.material,
+          modelImage: frameConfig.modelImage,
+          bridge: frameConfig.bridge,
+          height: frameConfig.height,
+          width: frameConfig.width,
         },
         right: buildEye(prescOd, prismaOd) as any,
         left: buildEye(prescOe, prismaOe) as any,
@@ -362,11 +406,6 @@ const PedidoHaytekPage: React.FC = () => {
     return null;
   }
 
-  function validateDioptria(): string | null {
-    if (!produtoSelecionado) return null;
-    return validateDioptriaForProduct(produtoSelecionado);
-  }
-
   // ── Submit ──
   const handleSubmit = async () => {
     if (!produtoSelecionado) {
@@ -378,60 +417,62 @@ const PedidoHaytekPage: React.FC = () => {
       return;
     }
 
-    // Validar dioptria antes de enviar
-    const dioptError = validateDioptria();
-    if (dioptError) {
-      toast({ title: "Prescrição incompatível com o produto", description: dioptError, variant: "destructive" });
-      return;
-    }
-
     const fallbackCandidates = (matchResult?.candidates || [])
       .map((c) => c.produto)
-      .filter((p) => p.product_id !== produtoSelecionado.product_id)
-      .filter((p) => !validateDioptriaForProduct(p));
+      .filter((p) => p.product_id !== produtoSelecionado.product_id);
 
     setSending(true);
+    setResultado(null);
+    setTentativasEnvio([]);
+    setErroEnvioDetalhado(null);
+
     try {
-      const tryProducts = [produtoSelecionado, ...fallbackCandidates];
+      const tryProducts = [produtoSelecionado, ...fallbackCandidates].filter(
+        (product, index, self) => self.findIndex((item) => item.product_id === product.product_id) === index,
+      );
+
       let resp: HaytekPedidoResponse | null = null;
       let usedProduct: HaytekProduto = produtoSelecionado;
       let lastError: any = null;
+      const attemptLogs: string[] = [];
 
-      for (const candidate of tryProducts) {
+      for (const [index, candidate] of tryProducts.entries()) {
+        const payload = buildPayload(candidate);
+        const frameSummary = describePayloadFrame(payload);
+        const localValidationError = validateDioptriaForProduct(candidate);
+
+        if (localValidationError) {
+          attemptLogs.push(`Tentativa ${index + 1} — SKU ${candidate.product_id}: bloqueado localmente (${localValidationError}) | ${frameSummary}`);
+          continue;
+        }
+
         try {
-          const payload = buildPayload(candidate);
           resp = await criarPedidoHaytek(payload, codOs, codEmpresa);
           usedProduct = candidate;
+          attemptLogs.push(`Tentativa ${index + 1} — SKU ${candidate.product_id}: aprovado | ${frameSummary}${resp.orderId ? ` | pedido ${resp.orderId}` : ""}`);
           break;
         } catch (err: any) {
           lastError = err;
-          const msg = (err?.message || String(err)).toLowerCase();
-          const isDioptriaError = msg.includes("invalid dioptria");
-          if (!isDioptriaError) throw err;
+          const apiErrorMessage = extractApiErrorMessage(err);
+          attemptLogs.push(`Tentativa ${index + 1} — SKU ${candidate.product_id}: erro API (${apiErrorMessage}) | ${frameSummary}`);
+
+          if (err?.code !== "HAYTEK_API_ERROR") {
+            setTentativasEnvio(attemptLogs);
+            throw err;
+          }
         }
       }
 
+      setTentativasEnvio(attemptLogs);
+
       if (!resp) {
-        // Montar resumo de dioptrias aceitas por cada produto tentado
-        const resumo = tryProducts.map((p) => {
-          const faixas: string[] = [];
-          if (p.esferico_minimo != null || p.esferico_maximo != null)
-            faixas.push(`Esf: ${p.esferico_minimo ?? "?"} a ${p.esferico_maximo ?? "?"}`);
-          if (p.cilindrico_maximo != null)
-            faixas.push(`Cil: 0 a ${p.cilindrico_maximo}`);
-          if (p.adicao_minima != null || p.adicao_maxima != null)
-            faixas.push(`Ad: ${p.adicao_minima ?? "?"} a ${p.adicao_maxima ?? "?"}`);
-          return `• ${p.product_id} (${p.nome_comercial || p.design || ""}): ${faixas.join(" | ") || "sem limites cadastrados"}`;
-        }).join("\n");
-
         const prescResumo = `Receita → OD: Esf ${prescOd.esferico || "0"} Cil ${prescOd.cilindrico || "0"} Ad ${prescOd.adicao || "0"} | OE: Esf ${prescOe.esferico || "0"} Cil ${prescOe.cilindrico || "0"} Ad ${prescOe.adicao || "0"}`;
-
-        throw new Error(
-          `Nenhum produto compatível com a receita.\n\n${prescResumo}\n\nProdutos testados:\n${resumo}`
-        );
+        const detalhes = attemptLogs.length > 0 ? attemptLogs.join("\n") : "Nenhuma tentativa executada.";
+        throw new Error(`Nenhum fallback aceito.\n\n${prescResumo}\n\nTentativas:\n${detalhes}`);
       }
 
       setResultado(resp);
+      setErroEnvioDetalhado(null);
       if (usedProduct.product_id !== produtoSelecionado.product_id) {
         setProdutoSelecionado(usedProduct);
         setAutoFillSource("manual");
@@ -447,7 +488,9 @@ const PedidoHaytekPage: React.FC = () => {
         toast({ title: "Pedido enviado", description: resp.message || "Aguardando confirmação" });
       }
     } catch (err: any) {
-      const msg = err?.message || String(err);
+      const msg = extractApiErrorMessage(err);
+      setResultado(null);
+      setErroEnvioDetalhado(msg);
       toast({ title: "Erro ao enviar pedido", description: msg, variant: "destructive" });
     } finally {
       setSending(false);
@@ -507,6 +550,25 @@ const PedidoHaytekPage: React.FC = () => {
           <CheckCircle2 className="h-4 w-4 text-emerald-600" />
           <AlertDescription className="text-emerald-800">
             Pedido criado com sucesso! Nº <strong>{resultado.orderId}</strong>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {(tentativasEnvio.length > 0 || erroEnvioDetalhado) && (
+        <Alert className={cn("border-border bg-muted/30", erroEnvioDetalhado && "border-destructive/40")}>
+          <AlertTriangle className={cn("h-4 w-4", erroEnvioDetalhado ? "text-destructive" : "text-primary")} />
+          <AlertDescription className="space-y-2">
+            <p className="text-sm font-medium">Histórico detalhado do envio / fallback</p>
+            {erroEnvioDetalhado && (
+              <p className="text-sm whitespace-pre-line">{erroEnvioDetalhado}</p>
+            )}
+            {tentativasEnvio.length > 0 && (
+              <ul className="space-y-1 text-xs text-muted-foreground">
+                {tentativasEnvio.map((tentativa, index) => (
+                  <li key={`${index}-${tentativa}`}>{tentativa}</li>
+                ))}
+              </ul>
+            )}
           </AlertDescription>
         </Alert>
       )}
