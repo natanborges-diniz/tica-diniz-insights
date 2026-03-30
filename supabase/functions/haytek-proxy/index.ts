@@ -28,7 +28,7 @@ async function loadHaytekConfig(sb: ReturnType<typeof createClient>): Promise<Ha
   try {
     const { data } = await sb
       .from("fornecedor_configuracao")
-      .select("ambiente, base_url_staging, base_url_production, api_key_staging, api_key_production")
+      .select("ambiente, base_url_staging, base_url_production, api_key_staging, api_key_production, api_user_staging, api_user_production")
       .eq("fornecedor", "HAYTEK")
       .eq("ativo", true)
       .maybeSingle();
