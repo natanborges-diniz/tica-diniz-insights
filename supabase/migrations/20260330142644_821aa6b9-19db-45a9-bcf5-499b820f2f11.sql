@@ -1,0 +1,1 @@
+ALTER TABLE public.fornecedor_configuracao ADD COLUMN IF NOT EXISTS api_user_staging text, ADD COLUMN IF NOT EXISTS api_user_production text;

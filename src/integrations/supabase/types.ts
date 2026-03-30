@@ -621,6 +621,8 @@ export type Database = {
           api_key: string | null
           api_key_production: string | null
           api_key_staging: string | null
+          api_user_production: string | null
+          api_user_staging: string | null
           ativo: boolean
           base_url_production: string | null
           base_url_staging: string | null
@@ -636,6 +638,8 @@ export type Database = {
           api_key?: string | null
           api_key_production?: string | null
           api_key_staging?: string | null
+          api_user_production?: string | null
+          api_user_staging?: string | null
           ativo?: boolean
           base_url_production?: string | null
           base_url_staging?: string | null
@@ -651,6 +655,8 @@ export type Database = {
           api_key?: string | null
           api_key_production?: string | null
           api_key_staging?: string | null
+          api_user_production?: string | null
+          api_user_staging?: string | null
           ativo?: boolean
           base_url_production?: string | null
           base_url_staging?: string | null
