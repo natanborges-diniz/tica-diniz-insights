@@ -6,6 +6,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authGuard, corsHeaders } from "../_shared/authGuard.ts";
 
+const HAYTEK_API_PATH = "/external/api/v1/haytek-public";
+
 const HAYTEK_ERROR_CODES = {
   TIMEOUT: "HAYTEK_TIMEOUT",
   UNAVAILABLE: "HAYTEK_UNAVAILABLE",
@@ -21,14 +23,13 @@ interface HaytekRuntimeConfig {
   baseUrl: string;
   ambiente: string;
   apiKey: string | null;
-  apiUser: string | null;
 }
 
 async function loadHaytekConfig(sb: ReturnType<typeof createClient>): Promise<HaytekRuntimeConfig> {
   try {
     const { data } = await sb
       .from("fornecedor_configuracao")
-      .select("ambiente, base_url_staging, base_url_production, api_key_staging, api_key_production, api_user_staging, api_user_production")
+      .select("ambiente, base_url_staging, base_url_production, api_key_staging, api_key_production")
       .eq("fornecedor", "HAYTEK")
       .eq("ativo", true)
       .maybeSingle();
@@ -37,21 +38,18 @@ async function loadHaytekConfig(sb: ReturnType<typeof createClient>): Promise<Ha
       const isProduction = data.ambiente === "production";
       const baseUrl = isProduction
         ? (data.base_url_production || "https://api.haytek.com.br")
-        : (data.base_url_staging || "https://dev.haytek.com.br");
+        : (data.base_url_staging || "https://stg-api.haytek.com.br");
       const rawKey = isProduction ? (data.api_key_production || null) : (data.api_key_staging || null);
-      // Sanitize: remove whitespace/newlines that may have been saved accidentally
       const apiKey = rawKey ? rawKey.replace(/\s+/g, "") : null;
-      const apiUser = isProduction ? (data.api_user_production || null) : (data.api_user_staging || null);
-      return { baseUrl, ambiente: data.ambiente, apiKey, apiUser };
+      return { baseUrl, ambiente: data.ambiente, apiKey };
     }
   } catch (e) {
     console.warn("[haytek-proxy] Could not load DB config:", e);
   }
   return {
-    baseUrl: "https://dev.haytek.com.br",
+    baseUrl: "https://stg-api.haytek.com.br",
     ambiente: "staging",
     apiKey: null,
-    apiUser: null,
   };
 }
 
@@ -74,87 +72,31 @@ async function loadStoreConfig(sb: ReturnType<typeof createClient>, codEmpresa: 
   return null;
 }
 
-function maskEmail(value: string): string {
-  const [local, domain] = value.split("@");
-  if (!local || !domain) return "***";
-  return `${local.slice(0, 2)}***@${domain}`;
-}
-
-function buildHaytekBody(body: RequestInit["body"], apiUser?: string | null, includeUserInBody = false): RequestInit["body"] {
-  if (!includeUserInBody || !apiUser || typeof body !== "string") return body;
-  try {
-    const parsed = JSON.parse(body);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && !("user" in parsed)) {
-      return JSON.stringify({ ...parsed, user: apiUser });
-    }
-  } catch {
-    return body;
-  }
-  return body;
-}
-
-async function fetchHaytek(url: string, options: RequestInit, correlationId: string, action: string, apiKey?: string | null, apiUser?: string | null): Promise<Response> {
+async function fetchHaytek(url: string, options: RequestInit, correlationId: string, action: string, apiKey?: string | null): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20000);
   const start = Date.now();
 
-  const baseHeaders: Record<string, string> = {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...((options.headers as Record<string, string>) || {}),
   };
 
   if (apiKey) {
+    headers["Authorization"] = `Bearer ${apiKey}`;
     const masked = apiKey.length > 15 ? `${apiKey.slice(0, 10)}...${apiKey.slice(-5)}` : "***";
     console.log(`[haytek-proxy] [${correlationId}] Token (masked): ${masked}`);
   }
-  if (apiUser) {
-    console.log(`[haytek-proxy] [${correlationId}] API User: ${maskEmail(apiUser)}`);
-  }
-
-  const authStrategies = apiKey
-    ? [
-        { name: "raw-authorization", authorization: apiKey, includeUserInBody: false },
-        { name: "raw-authorization+body-user", authorization: apiKey, includeUserInBody: true },
-        { name: "bearer-authorization", authorization: `Bearer ${apiKey}`, includeUserInBody: false },
-      ]
-    : [{ name: "no-auth-header", authorization: undefined, includeUserInBody: false }];
 
   try {
-    for (let index = 0; index < authStrategies.length; index += 1) {
-      const strategy = authStrategies[index];
-      const headers: Record<string, string> = { ...baseHeaders };
-
-      if (strategy.authorization) {
-        headers["Authorization"] = strategy.authorization;
-      }
-      if (apiUser) {
-        headers["X-User"] = apiUser;
-        headers["X-Api-User"] = apiUser;
-        headers["X-Username"] = apiUser;
-        headers["Username"] = apiUser;
-      }
-
-      const requestBody = buildHaytekBody(options.body, apiUser, strategy.includeUserInBody);
-      console.log(`[haytek-proxy] [${correlationId}] Auth strategy: ${strategy.name}`);
-
-      const resp = await fetch(url, {
-        ...options,
-        headers,
-        body: requestBody,
-        signal: controller.signal,
-      });
-
-      if (resp.status !== 401 || index === authStrategies.length - 1) {
-        clearTimeout(timer);
-        console.log(`[haytek-proxy] [${correlationId}] ${action} -> ${resp.status} (${Date.now() - start}ms) [${strategy.name}]`);
-        return resp;
-      }
-
-      const retryResponse = await resp.text();
-      console.warn(`[haytek-proxy] [${correlationId}] 401 with ${strategy.name}, retrying next strategy. Response: ${retryResponse.substring(0, 300)}`);
-    }
-
-    throw new Error("Falha inesperada ao autenticar na API Haytek");
+    const resp = await fetch(url, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    console.log(`[haytek-proxy] [${correlationId}] ${action} -> ${resp.status} (${Date.now() - start}ms)`);
+    return resp;
   } catch (err) {
     clearTimeout(timer);
     const isTimeout = err instanceof DOMException && err.name === "AbortError";
@@ -182,7 +124,7 @@ serve(async (req) => {
     const haytekConfig = await loadHaytekConfig(sbService);
     const BASE_URL = haytekConfig.baseUrl;
 
-    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${haytekConfig.ambiente} | User: ${user.userId}`);
+    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${haytekConfig.ambiente} | Base: ${BASE_URL} | User: ${user.userId}`);
 
     switch (action) {
       // ── Criar Pedido ──
@@ -197,7 +139,6 @@ serve(async (req) => {
         }
 
         const pedidoPayload = params.pedido || {};
-        // Inject storeId
         pedidoPayload.storeId = store.storeId;
         if (store.addressId) {
           pedidoPayload.addressId = store.addressId;
@@ -227,14 +168,14 @@ serve(async (req) => {
           });
         }
 
-        const url = `${BASE_URL}/orders/lab`;
+        const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/lab`;
         console.log(`[haytek-proxy] [${correlationId}] criar-pedido URL: ${url}`);
         console.log(`[haytek-proxy] [${correlationId}] criar-pedido BODY: ${payloadStr.substring(0, 2000)}`);
 
         const resp = await fetchHaytek(url, {
           method: "POST",
           body: payloadStr,
-        }, correlationId, "criar-pedido", haytekConfig.apiKey, haytekConfig.apiUser);
+        }, correlationId, "criar-pedido", haytekConfig.apiKey);
 
         const respText = await resp.text();
         let respData: Record<string, unknown>;
@@ -298,8 +239,8 @@ serve(async (req) => {
           });
         }
 
-        const url = `${BASE_URL}/orders/${orderId}`;
-        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "consultar-pedido", haytekConfig.apiKey, haytekConfig.apiUser);
+        const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/${orderId}`;
+        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "consultar-pedido", haytekConfig.apiKey);
         const data = await resp.json();
 
         if (resp.status >= 400) {
