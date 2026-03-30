@@ -571,21 +571,14 @@ const PedidoHaytekPage: React.FC = () => {
         </Alert>
       )}
 
-      {(tentativasEnvio.length > 0 || erroEnvioDetalhado) && (
-        <Alert className={cn("border-border bg-muted/30", erroEnvioDetalhado && "border-destructive/40")}>
-          <AlertTriangle className={cn("h-4 w-4", erroEnvioDetalhado ? "text-destructive" : "text-primary")} />
-          <AlertDescription className="space-y-2">
-            <p className="text-sm font-medium">Histórico detalhado do envio / fallback</p>
-            {erroEnvioDetalhado && (
-              <p className="text-sm whitespace-pre-line">{erroEnvioDetalhado}</p>
-            )}
-            {tentativasEnvio.length > 0 && (
-              <ul className="space-y-1 text-xs text-muted-foreground">
-                {tentativasEnvio.map((tentativa, index) => (
-                  <li key={`${index}-${tentativa}`}>{tentativa}</li>
-                ))}
-              </ul>
-            )}
+      {erroEnvioDetalhado && (
+        <Alert className="border-destructive/40 bg-muted/30">
+          <AlertTriangle className="h-4 w-4 text-destructive" />
+          <AlertDescription>
+            <p className="text-sm font-medium mb-2">Erro no envio do pedido</p>
+            <pre className="text-xs whitespace-pre-line text-muted-foreground bg-background/60 rounded p-3 border border-border">
+              {erroEnvioDetalhado}
+            </pre>
           </AlertDescription>
         </Alert>
       )}
