@@ -301,7 +301,62 @@ function CredenciaisSection({
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
+      {/* Usuário API (não BTG) */}
+      {!isBtg && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-primary" />
+              Usuário API
+            </CardTitle>
+            <CardDescription>
+              Email/usuário de acesso à API do fornecedor, separado por ambiente.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-sm">
+                <span className="h-2 w-2 rounded-full bg-muted-foreground inline-block" />
+                Usuário — Homologação (Staging)
+                {!isProduction && <span className="text-xs font-medium text-primary ml-1">(ativo)</span>}
+              </Label>
+              <Input
+                value={form.api_user_staging}
+                onChange={(e) => setForm((f) => ({ ...f, api_user_staging: e.target.value }))}
+                placeholder="usuario@exemplo.com"
+                className="font-mono text-sm"
+              />
+              {config.api_user_staging && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-primary" />
+                  Usuário de homologação configurado.
+                </p>
+              )}
+            </div>
+            <div className="border-t" />
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-sm">
+                <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+                Usuário — Produção
+                {isProduction && <span className="text-xs font-medium text-primary ml-1">(ativo)</span>}
+              </Label>
+              <Input
+                value={form.api_user_production}
+                onChange={(e) => setForm((f) => ({ ...f, api_user_production: e.target.value }))}
+                placeholder="usuario@exemplo.com"
+                className="font-mono text-sm"
+              />
+              {config.api_user_production && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-primary" />
+                  Usuário de produção configurado.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
         <Button onClick={handleSave} disabled={saving}>
           {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
           Salvar Configurações
