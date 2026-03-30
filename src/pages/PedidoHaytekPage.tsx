@@ -313,13 +313,12 @@ const PedidoHaytekPage: React.FC = () => {
   // ── Build payload ──
   // Format dioptria value: always 2 decimal places with explicit sign (e.g. "+1.25", "-0.50", "0.00")
   function formatDioptria(val: string | undefined | null): string {
-    if (!val || val.trim() === "") return "0.00";
+    if (!val || val.trim() === "") return "+0.00";
     const num = parseFloat(val.replace(",", "."));
-    if (isNaN(num)) return "0.00";
+    if (isNaN(num)) return "+0.00";
     const formatted = Math.abs(num).toFixed(2);
-    if (num > 0) return `+${formatted}`;
     if (num < 0) return `-${formatted}`;
-    return formatted; // "0.00"
+    return `+${formatted}`; // "+0.00" or "+1.25"
   }
 
   // Format decimal measurement (ndp, height): always 1 decimal place (e.g. "31.0", "20.0")
