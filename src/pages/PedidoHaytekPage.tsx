@@ -339,10 +339,8 @@ const PedidoHaytekPage: React.FC = () => {
       eye.spherical = formatDioptria(presc.esferico);
       eye.cylindrical = formatDioptria(presc.cilindrico);
       if (presc.eixo) eye.axis = presc.eixo;
-      // Omit addition for single vision; format with 2 decimals otherwise
-      if (!isSingleVision) {
-        eye.addition = formatDioptria(presc.adicao || "0.00");
-      }
+      // Always send addition — API requires it even for single vision (send "0.00")
+      eye.addition = formatDioptria(presc.adicao || "0.00");
       const ndp = formatMeasurement(presc.dnp);
       if (ndp) eye.ndp = ndp;
       const height = formatMeasurement(presc.altura);
