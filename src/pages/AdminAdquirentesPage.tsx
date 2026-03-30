@@ -8,12 +8,13 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { LoadingState, EmptyState } from "@/components/system/states";
 import { toast } from "sonner";
 import {
   Loader2, Save, Plus, Eye, EyeOff, CreditCard,
-  CheckCircle2, AlertCircle, Trash2, Wifi,
+  CheckCircle2, AlertCircle, Trash2, Wifi, ShieldCheck, FlaskConical,
 } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -170,8 +171,6 @@ export default function AdminAdquirentesPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Sessão expirada");
 
-      // Temporarily save the config with target ambiente before testing
-      const form = editForms[config.id];
       const { data, error } = await supabase.functions.invoke("rede-proxy", {
         body: { action: "health", cod_empresa: config.cod_empresa },
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -248,10 +247,9 @@ export default function AdminAdquirentesPage() {
     return emp?.nome || `Empresa ${cod}`;
   };
 
-  const CredentialBlock = ({ configId, label, ambiente, form }: {
-    configId: string; label: string; ambiente: "sandbox" | "production"; form: EditForm;
+  const CredentialFields = ({ configId, ambiente, form }: {
+    configId: string; ambiente: "sandbox" | "production"; form: EditForm;
   }) => {
-    const prefix = ambiente === "production" ? "_production" : "";
     const pvField = ambiente === "production" ? "merchant_id_production" : "merchant_id";
     const keyField = ambiente === "production" ? "integration_key_production" : "integration_key_encrypted";
     const pvMatrizField = ambiente === "production" ? "pv_matriz_production" : "pv_matriz";
@@ -261,61 +259,95 @@ export default function AdminAdquirentesPage() {
     const pvMatrizValue = (form as any)[pvMatrizField] || "";
     const keyVisibleId = `${configId}-${ambiente}`;
     const isKeyVisible = showKeys[keyVisibleId];
-    const isActive = form.ambiente === ambiente;
+
+    const isSandbox = ambiente === "sandbox";
+    const hasCredentials = !!pvValue && !!keyValue;
 
     return (
-      <div className={`p-3 rounded-lg border space-y-2 ${isActive ? "border-primary/40 bg-primary/5" : "border-border/50 bg-muted/20 opacity-75"}`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Badge variant={isActive ? "default" : "secondary"} className="text-[10px]">
-              {label}
-            </Badge>
-            {isActive && (
-              <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
-                ATIVO
-              </Badge>
-            )}
-          </div>
-          {pvValue && <CheckCircle2 className="h-3 w-3 text-primary" />}
+      <div className="space-y-4">
+        {/* Status indicator */}
+        <div className={`flex items-center gap-2 p-2.5 rounded-md ${hasCredentials ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
+          {hasCredentials ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+          <span className="text-xs font-medium">
+            {hasCredentials
+              ? `Credenciais de ${isSandbox ? "teste" : "produção"} configuradas`
+              : `Preencha o PV e a Chave de ${isSandbox ? "teste" : "produção"}`}
+          </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          <div className="space-y-0.5">
-            <Label className="text-[10px] text-muted-foreground">PV</Label>
+        <div className="grid gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">
+              PV (Nº Filiação) — {isSandbox ? "Teste" : "Produção"}
+            </Label>
             <Input
               value={pvValue}
               onChange={e => updateForm(configId, pvField, e.target.value)}
-              className="font-mono text-xs h-7"
-              placeholder="Nº filiação"
+              className="font-mono text-sm"
+              placeholder={isSandbox ? "PV de teste fornecido pela Rede" : "PV real da loja"}
             />
+            <p className="text-[10px] text-muted-foreground">
+              {isSandbox
+                ? "Obtido no Portal do Desenvolvedor e.Rede (ambiente de testes)"
+                : "Número de filiação real da sua loja na Rede"}
+            </p>
           </div>
-          <div className="space-y-0.5">
-            <Label className="text-[10px] text-muted-foreground">Chave</Label>
-            <div className="flex gap-0.5">
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">
+              Chave de Integração — {isSandbox ? "Teste" : "Produção"}
+            </Label>
+            <div className="flex gap-1">
               <Input
                 type={isKeyVisible ? "text" : "password"}
                 value={keyValue}
                 onChange={e => updateForm(configId, keyField, e.target.value)}
-                className="font-mono text-xs h-7"
-                placeholder="••••"
+                className="font-mono text-sm"
+                placeholder={isSandbox ? "Chave de teste" : "Chave de produção"}
               />
               <Button
-                variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                variant="ghost" size="icon" className="shrink-0"
                 onClick={() => setShowKeys(prev => ({ ...prev, [keyVisibleId]: !prev[keyVisibleId] }))}
               >
-                {isKeyVisible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                {isKeyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
           </div>
-          <div className="space-y-0.5">
-            <Label className="text-[10px] text-muted-foreground">PV Matriz (GV)</Label>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">
+              PV Matriz (Gestão de Vendas) — {isSandbox ? "Teste" : "Produção"}
+            </Label>
             <Input
               value={pvMatrizValue}
               onChange={e => updateForm(configId, pvMatrizField, e.target.value)}
-              className="font-mono text-xs h-7"
-              placeholder="PV Matriz"
+              className="font-mono text-sm"
+              placeholder={isSandbox ? "PV Matriz de teste" : "PV Matriz de produção"}
             />
+            <p className="text-[10px] text-muted-foreground">
+              Usado pela API Gestão de Vendas (OAuth 2.0) para consultar vendas POS de todas as filiais
+            </p>
           </div>
+        </div>
+
+        {/* Test buttons inside the tab */}
+        <div className="flex gap-2 pt-1">
+          <Button
+            size="sm" variant="outline" className="text-xs"
+            disabled={!!testing}
+            onClick={() => handleTestErede({ id: configId } as AdquirenteConfig & { cod_empresa: number }, ambiente)}
+          >
+            {testing === `${configId}-erede-${ambiente}` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
+            Testar e.Rede
+          </Button>
+          <Button
+            size="sm" variant="outline" className="text-xs"
+            disabled={!!testing}
+            onClick={() => handleTestGV({ id: configId, adquirente: "REDE" } as any, ambiente)}
+          >
+            {testing === `${configId}-gv-${ambiente}` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
+            Testar GV
+          </Button>
         </div>
       </div>
     );
@@ -407,10 +439,11 @@ export default function AdminAdquirentesPage() {
             const form = editForms[config.id];
             if (!form) return null;
             const changed = isChanged(config);
+            const isProduction = form.ambiente === "production";
 
             return (
               <Card key={config.id}>
-                <CardContent className="p-4 space-y-3">
+                <CardContent className="p-4 space-y-4">
                   {/* Header row */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -421,19 +454,6 @@ export default function AdminAdquirentesPage() {
                       <Badge variant="outline">{config.adquirente}</Badge>
                     </div>
                     <div className="flex items-center gap-3">
-                      {/* Ambiente toggle */}
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs ${form.ambiente === "sandbox" ? "font-medium text-foreground" : "text-muted-foreground"}`}>
-                          Sandbox
-                        </span>
-                        <Switch
-                          checked={form.ambiente === "production"}
-                          onCheckedChange={v => updateForm(config.id, "ambiente", v ? "production" : "sandbox")}
-                        />
-                        <span className={`text-xs ${form.ambiente === "production" ? "font-medium text-primary" : "text-muted-foreground"}`}>
-                          Produção
-                        </span>
-                      </div>
                       {/* Ativo toggle */}
                       <div className="flex items-center gap-1.5">
                         <Switch
@@ -447,63 +467,67 @@ export default function AdminAdquirentesPage() {
                     </div>
                   </div>
 
-                  {/* Dual credential blocks */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <CredentialBlock configId={config.id} label="Sandbox" ambiente="sandbox" form={form} />
-                    <CredentialBlock configId={config.id} label="Produção" ambiente="production" form={form} />
+                  {/* Ambiente ativo — clear visual */}
+                  <div className={`flex items-center gap-3 p-3 rounded-lg border-2 ${isProduction ? "border-primary bg-primary/5" : "border-warning bg-warning/5"}`}>
+                    {isProduction ? (
+                      <ShieldCheck className="h-5 w-5 text-primary shrink-0" />
+                    ) : (
+                      <FlaskConical className="h-5 w-5 text-warning shrink-0" />
+                    )}
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">
+                        Ambiente ativo: <span className={isProduction ? "text-primary" : "text-warning"}>{isProduction ? "PRODUÇÃO" : "SANDBOX"}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {isProduction
+                          ? "Links de pagamento e sync usam as credenciais de produção abaixo"
+                          : "Links de pagamento e sync usam as credenciais de teste abaixo — nenhuma transação real"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs ${!isProduction ? "font-semibold" : "text-muted-foreground"}`}>Sandbox</span>
+                      <Switch
+                        checked={isProduction}
+                        onCheckedChange={v => updateForm(config.id, "ambiente", v ? "production" : "sandbox")}
+                      />
+                      <span className={`text-xs ${isProduction ? "font-semibold text-primary" : "text-muted-foreground"}`}>Produção</span>
+                    </div>
                   </div>
 
+                  {/* Tabs for credentials */}
+                  <Tabs defaultValue={form.ambiente} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="sandbox" className="gap-1.5">
+                        <FlaskConical className="h-3.5 w-3.5" />
+                        Credenciais Sandbox
+                        {form.ambiente === "sandbox" && (
+                          <Badge variant="secondary" className="text-[9px] ml-1 px-1 py-0">EM USO</Badge>
+                        )}
+                      </TabsTrigger>
+                      <TabsTrigger value="production" className="gap-1.5">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        Credenciais Produção
+                        {form.ambiente === "production" && (
+                          <Badge variant="secondary" className="text-[9px] ml-1 px-1 py-0">EM USO</Badge>
+                        )}
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="sandbox" className="mt-3">
+                      <CredentialFields configId={config.id} ambiente="sandbox" form={form} />
+                    </TabsContent>
+
+                    <TabsContent value="production" className="mt-3">
+                      <CredentialFields configId={config.id} ambiente="production" form={form} />
+                    </TabsContent>
+                  </Tabs>
+
                   {/* Actions */}
-                  <div className="flex items-center justify-between pt-1">
-                    <div className="flex gap-1.5 flex-wrap">
-                      {/* e.Rede tests */}
-                      <Button
-                        size="sm" variant="outline" className="text-xs h-7"
-                        disabled={testing?.startsWith(config.id + "-erede") || false}
-                        onClick={() => handleTestErede(config, "sandbox")}
-                        title="Testar e.Rede Sandbox"
-                      >
-                        {testing === `${config.id}-erede-sandbox` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
-                        e.Rede SB
-                      </Button>
-                      <Button
-                        size="sm" variant="outline" className="text-xs h-7"
-                        disabled={testing?.startsWith(config.id + "-erede") || false}
-                        onClick={() => handleTestErede(config, "production")}
-                        title="Testar e.Rede Produção"
-                      >
-                        {testing === `${config.id}-erede-production` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
-                        e.Rede Prod
-                      </Button>
-
-                      {/* GV tests (Rede only) */}
-                      {config.adquirente === "REDE" && (
-                        <>
-                          <Button
-                            size="sm" variant="outline" className="text-xs h-7"
-                            disabled={testing?.startsWith(config.id + "-gv") || false}
-                            onClick={() => handleTestGV(config, "sandbox")}
-                            title="Testar GV Sandbox"
-                          >
-                            {testing === `${config.id}-gv-sandbox` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                            GV SB
-                          </Button>
-                          <Button
-                            size="sm" variant="outline" className="text-xs h-7"
-                            disabled={testing?.startsWith(config.id + "-gv") || false}
-                            onClick={() => handleTestGV(config, "production")}
-                            title="Testar GV Produção"
-                          >
-                            {testing === `${config.id}-gv-production` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                            GV Prod
-                          </Button>
-                        </>
-                      )}
-                    </div>
-
+                  <div className="flex items-center justify-between pt-1 border-t">
+                    <div />
                     <div className="flex gap-1.5">
                       <Button
-                        size="sm" variant={changed ? "default" : "outline"} className="h-7"
+                        size="sm" variant={changed ? "default" : "outline"}
                         disabled={!changed || saving === config.id}
                         onClick={() => handleSave(config)}
                       >
@@ -511,7 +535,7 @@ export default function AdminAdquirentesPage() {
                         Salvar
                       </Button>
                       <Button
-                        size="sm" variant="ghost" className="h-7 text-destructive hover:text-destructive"
+                        size="sm" variant="ghost" className="text-destructive hover:text-destructive"
                         onClick={() => handleDelete(config.id)}
                       >
                         <Trash2 className="h-3 w-3" />
@@ -530,10 +554,9 @@ export default function AdminAdquirentesPage() {
           <div className="flex items-start gap-3">
             <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <div className="text-sm text-muted-foreground space-y-1">
-              <p><strong>Sandbox:</strong> Credenciais de teste. Nenhuma transação real é processada.</p>
-              <p><strong>Produção:</strong> Credenciais reais. Transações processadas com cobrança efetiva.</p>
-              <p><strong>Ambiente Ativo:</strong> O toggle define qual conjunto de credenciais as integrações (links de pagamento, sync de vendas) utilizam.</p>
-              <p><strong>GV (Gestão de Vendas):</strong> API OAuth 2.0 para visibilidade de vendas POS. PV Matriz = PV da empresa mãe.</p>
+              <p><strong>Como funciona:</strong> Cada adquirente tem dois conjuntos de credenciais independentes — Sandbox (teste) e Produção (real).</p>
+              <p><strong>Ambiente Ativo:</strong> O toggle no topo define qual conjunto é usado pelos links de pagamento e sync de vendas. Altere para <strong>Produção</strong> quando estiver pronto para transações reais.</p>
+              <p><strong>GV (Gestão de Vendas):</strong> O PV Matriz consulta vendas POS de todas as filiais via OAuth 2.0.</p>
             </div>
           </div>
         </CardContent>
