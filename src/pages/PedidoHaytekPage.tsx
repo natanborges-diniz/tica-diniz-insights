@@ -297,7 +297,7 @@ const PedidoHaytekPage: React.FC = () => {
       osId: osNumero,
       patientName: paciente,
       products: {
-        productId: produtoSelecionado?.product_id || "",
+        productId: productOverride?.product_id || produtoSelecionado?.product_id || "",
         treatment,
         frame: {
           code: frameCode,
