@@ -276,6 +276,20 @@ const PedidoHaytekPage: React.FC = () => {
       .finally(() => setLoadingProdutos(false));
   }, []);
 
+  // ── Load storeId da empresa ──
+  useEffect(() => {
+    if (!codEmpresa) return;
+    supabase
+      .from("haytek_empresa_config" as never)
+      .select("store_id")
+      .eq("cod_empresa", codEmpresa)
+      .eq("ativo", true)
+      .maybeSingle()
+      .then(({ data }) => {
+        if ((data as any)?.store_id) setHaytekStoreId((data as any).store_id);
+      });
+  }, [codEmpresa]);
+
   // ── Auto-match when products + OS loaded ──
   useEffect(() => {
     if (!osData || produtos.length === 0) return;
