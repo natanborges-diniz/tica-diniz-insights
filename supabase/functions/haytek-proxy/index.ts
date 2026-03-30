@@ -177,7 +177,7 @@ serve(async (req) => {
         const resp = await fetchHaytek(url, {
           method: "POST",
           body: payloadStr,
-        }, correlationId, "criar-pedido", haytekConfig.apiKey);
+        }, correlationId, "criar-pedido", haytekConfig.apiKey, haytekConfig.apiUser);
 
         const respText = await resp.text();
         let respData: Record<string, unknown>;
