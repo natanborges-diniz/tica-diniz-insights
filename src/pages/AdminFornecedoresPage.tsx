@@ -38,6 +38,8 @@ interface FornecedorConfig {
   api_key: string | null;
   api_key_staging: string | null;
   api_key_production: string | null;
+  api_user_staging: string | null;
+  api_user_production: string | null;
   ativo: boolean;
   updated_at: string;
 }
