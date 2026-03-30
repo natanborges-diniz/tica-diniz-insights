@@ -331,24 +331,7 @@ export default function AdminAdquirentesPage() {
         </div>
 
         {/* Test buttons inside the tab */}
-        <div className="flex gap-2 pt-1">
-          <Button
-            size="sm" variant="outline" className="text-xs"
-            disabled={!!testing}
-            onClick={() => handleTestErede({ id: configId } as AdquirenteConfig & { cod_empresa: number }, ambiente)}
-          >
-            {testing === `${configId}-erede-${ambiente}` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
-            Testar e.Rede
-          </Button>
-          <Button
-            size="sm" variant="outline" className="text-xs"
-            disabled={!!testing}
-            onClick={() => handleTestGV({ id: configId, adquirente: "REDE" } as any, ambiente)}
-          >
-            {testing === `${configId}-gv-${ambiente}` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
-            Testar GV
-          </Button>
-        </div>
+        {/* Test buttons are rendered in parent with full config */}
       </div>
     );
   };
