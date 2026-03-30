@@ -348,6 +348,10 @@ const PedidoHaytekPage: React.FC = () => {
       if (p.cilindrico_maximo != null && Math.abs(cil) > Math.abs(p.cilindrico_maximo)) {
         return `${label}: Cilíndrico ${cil} fora do limite (${p.cilindrico_maximo}) para ${p.product_id}`;
       }
+      // Produto exige adição mas prescrição não tem
+      if (p.adicao_minima != null && p.adicao_minima > 0 && adi === 0) {
+        return `${label}: Produto ${p.product_id} exige adição (mín ${p.adicao_minima}), mas a prescrição não possui. Selecione um produto de visão simples.`;
+      }
       if (adi > 0) {
         if (p.adicao_minima != null && adi < p.adicao_minima) {
           return `${label}: Adição ${adi} abaixo da mínima (${p.adicao_minima}) para ${p.product_id}`;
