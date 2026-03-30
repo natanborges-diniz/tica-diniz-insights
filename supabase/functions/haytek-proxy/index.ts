@@ -74,30 +74,87 @@ async function loadStoreConfig(sb: ReturnType<typeof createClient>, codEmpresa: 
   return null;
 }
 
+function maskEmail(value: string): string {
+  const [local, domain] = value.split("@");
+  if (!local || !domain) return "***";
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
+function buildHaytekBody(body: RequestInit["body"], apiUser?: string | null, includeUserInBody = false): RequestInit["body"] {
+  if (!includeUserInBody || !apiUser || typeof body !== "string") return body;
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && !("user" in parsed)) {
+      return JSON.stringify({ ...parsed, user: apiUser });
+    }
+  } catch {
+    return body;
+  }
+  return body;
+}
+
 async function fetchHaytek(url: string, options: RequestInit, correlationId: string, action: string, apiKey?: string | null, apiUser?: string | null): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20000);
   const start = Date.now();
 
-  const headers: Record<string, string> = {
+  const baseHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     ...((options.headers as Record<string, string>) || {}),
   };
+
   if (apiKey) {
-    headers["Authorization"] = `Bearer ${apiKey}`;
     const masked = apiKey.length > 15 ? `${apiKey.slice(0, 10)}...${apiKey.slice(-5)}` : "***";
     console.log(`[haytek-proxy] [${correlationId}] Token (masked): ${masked}`);
   }
   if (apiUser) {
-    headers["X-User"] = apiUser;
-    console.log(`[haytek-proxy] [${correlationId}] X-User: ${apiUser}`);
+    console.log(`[haytek-proxy] [${correlationId}] API User: ${maskEmail(apiUser)}`);
   }
 
+  const authStrategies = apiKey
+    ? [
+        { name: "raw-authorization", authorization: apiKey, includeUserInBody: false },
+        { name: "raw-authorization+body-user", authorization: apiKey, includeUserInBody: true },
+        { name: "bearer-authorization", authorization: `Bearer ${apiKey}`, includeUserInBody: false },
+      ]
+    : [{ name: "no-auth-header", authorization: undefined, includeUserInBody: false }];
+
   try {
-    const resp = await fetch(url, { ...options, headers, signal: controller.signal });
-    clearTimeout(timer);
-    console.log(`[haytek-proxy] [${correlationId}] ${action} -> ${resp.status} (${Date.now() - start}ms)`);
-    return resp;
+    for (let index = 0; index < authStrategies.length; index += 1) {
+      const strategy = authStrategies[index];
+      const headers: Record<string, string> = { ...baseHeaders };
+
+      if (strategy.authorization) {
+        headers["Authorization"] = strategy.authorization;
+      }
+      if (apiUser) {
+        headers["X-User"] = apiUser;
+        headers["X-Api-User"] = apiUser;
+        headers["X-Username"] = apiUser;
+        headers["Username"] = apiUser;
+      }
+
+      const requestBody = buildHaytekBody(options.body, apiUser, strategy.includeUserInBody);
+      console.log(`[haytek-proxy] [${correlationId}] Auth strategy: ${strategy.name}`);
+
+      const resp = await fetch(url, {
+        ...options,
+        headers,
+        body: requestBody,
+        signal: controller.signal,
+      });
+
+      if (resp.status !== 401 || index === authStrategies.length - 1) {
+        clearTimeout(timer);
+        console.log(`[haytek-proxy] [${correlationId}] ${action} -> ${resp.status} (${Date.now() - start}ms) [${strategy.name}]`);
+        return resp;
+      }
+
+      const retryResponse = await resp.text();
+      console.warn(`[haytek-proxy] [${correlationId}] 401 with ${strategy.name}, retrying next strategy. Response: ${retryResponse.substring(0, 300)}`);
+    }
+
+    throw new Error("Falha inesperada ao autenticar na API Haytek");
   } catch (err) {
     clearTimeout(timer);
     const isTimeout = err instanceof DOMException && err.name === "AbortError";
