@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Link2, Plus, XCircle, RefreshCw, Copy, ExternalLink,
-  CreditCard, Clock, CheckCircle2, AlertTriangle, MessageCircle,
+  CreditCard, Clock, CheckCircle2, AlertTriangle, MessageCircle, Receipt,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import ReceiptSheet from "@/components/checkout/ReceiptSheet";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType }> = {
   ATIVO: { label: "Ativo", variant: "default", icon: Clock },
@@ -34,6 +35,7 @@ export default function PaymentLinksPage() {
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [receiptLink, setReceiptLink] = useState<any>(null);
 
   // New link form
   const [newLink, setNewLink] = useState({
@@ -97,15 +99,6 @@ export default function PaymentLinksPage() {
     toast.success("URL copiada!");
   };
 
-  const shareWhatsApp = (link: { url_pagamento: string | null; descricao: string; valor: number; cliente_telefone: string | null }) => {
-    if (!link.url_pagamento) return;
-    const msg = encodeURIComponent(
-      `💳 Link de Pagamento\n\n${link.descricao}\nValor: ${fmtCurrency(Number(link.valor))}\n\n${link.url_pagamento}`
-    );
-    const phone = link.cliente_telefone?.replace(/\D/g, "") || "";
-    const waUrl = phone ? `https://wa.me/55${phone}?text=${msg}` : `https://wa.me/?text=${msg}`;
-    window.open(waUrl, "_blank");
-  };
 
   // KPIs
   const totalAtivos = links.filter((l: { status: string }) => l.status === "ATIVO" || l.status === "PENDENTE").length;
@@ -268,6 +261,7 @@ export default function PaymentLinksPage() {
                   id: string; descricao: string; cliente_nome: string | null; cliente_telefone: string | null;
                   valor: number; parcelas_max: number; status: string; origem: string;
                   url_pagamento: string | null; tid: string | null; created_at: string;
+                  dados_extras: any;
                 }) => {
                   const st = STATUS_MAP[link.status] || { label: link.status, variant: "outline" as const, icon: Clock };
                   const Icon = st.icon;
@@ -321,6 +315,11 @@ export default function PaymentLinksPage() {
                               </Button>
                             </>
                           )}
+                          {link.status === "PAGO" && link.dados_extras?.rede_response && (
+                            <Button size="icon" variant="ghost" title="Ver Comprovante" onClick={() => setReceiptLink(link)}>
+                              <Receipt className="h-3 w-3" />
+                            </Button>
+                          )}
                           {(link.status === "ATIVO" || link.status === "PENDENTE") && (
                             <Button
                               size="icon" variant="ghost" title="Cancelar"
@@ -340,6 +339,15 @@ export default function PaymentLinksPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <ReceiptSheet
+        open={!!receiptLink}
+        onOpenChange={(v) => { if (!v) setReceiptLink(null); }}
+        dadosExtras={receiptLink?.dados_extras}
+        descricao={receiptLink?.descricao || ""}
+        valor={Number(receiptLink?.valor || 0)}
+        fmtCurrency={fmtCurrency}
+      />
     </div>
   );
 }
