@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Link2, Plus, XCircle, RefreshCw, Copy, ExternalLink,
-  CreditCard, Clock, CheckCircle2, AlertTriangle, MessageCircle,
+  CreditCard, Clock, CheckCircle2, AlertTriangle, MessageCircle, Receipt,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import ReceiptSheet from "@/components/checkout/ReceiptSheet";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType }> = {
   ATIVO: { label: "Ativo", variant: "default", icon: Clock },

@@ -273,8 +273,14 @@ serve(async (req) => {
                 payment_link_id: link_id,
                 status: "PAGO",
                 tid: redeData.tid,
+                nsu: redeData.nsu,
                 authorization: redeData.authorizationCode,
+                date: redeData.date,
+                time: redeData.time,
                 valor: link.valor,
+                installments: redeData.installments,
+                cardBin: redeData.cardBin,
+                last4: redeData.last4,
                 origem_ref: link.origem_ref,
               }),
             });
@@ -285,7 +291,15 @@ serve(async (req) => {
           success: true,
           status: "PAGO",
           tid: redeData.tid,
+          nsu: redeData.nsu,
           authorization: redeData.authorizationCode,
+          date: redeData.date,
+          time: redeData.time,
+          installments: redeData.installments,
+          cardBin: redeData.cardBin,
+          last4: redeData.last4,
+          amount: redeData.amount,
+          returnMessage: redeData.returnMessage,
         };
         break;
       }
