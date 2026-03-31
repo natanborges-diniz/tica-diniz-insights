@@ -324,6 +324,11 @@ export default function PaymentLinksPage() {
                               </Button>
                             </>
                           )}
+                          {link.status === "PAGO" && link.dados_extras?.rede_response && (
+                            <Button size="icon" variant="ghost" title="Ver Comprovante" onClick={() => setReceiptLink(link)}>
+                              <Receipt className="h-3 w-3" />
+                            </Button>
+                          )}
                           {(link.status === "ATIVO" || link.status === "PENDENTE") && (
                             <Button
                               size="icon" variant="ghost" title="Cancelar"
