@@ -45,6 +45,7 @@ async function getRedeCredentials(supabaseAdmin: ReturnType<typeof createClient>
     : config.integration_key_encrypted;
 
   if (!pv) throw new Error(`PV (Merchant ID) não configurado para ambiente ${config.ambiente}`);
+  if (pv === "PENDENTE") throw new Error(`PV de filiação da empresa ${codEmpresa} ainda está como PENDENTE. Atualize o Merchant ID em Adquirentes.`);
   if (!key) throw new Error(`Chave de integração não configurada para ambiente ${config.ambiente}`);
 
   const baseUrl = isProduction ? REDE_PRODUCTION_URL : REDE_SANDBOX_URL;

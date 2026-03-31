@@ -38,6 +38,30 @@ export default function PaymentLinksPage() {
   const [receiptLink, setReceiptLink] = useState<any>(null);
   const [newLinkEmpresa, setNewLinkEmpresa] = useState<number>(codEmpresaDefault || 1);
 
+  // Fetch adquirentes_config to know which stores have valid PV
+  const { data: adqConfigs = [] } = useQuery({
+    queryKey: ["adquirentes-config-pv"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("adquirentes_config")
+        .select("cod_empresa, merchant_id, merchant_id_production, ambiente, ativo")
+        .eq("adquirente", "REDE")
+        .eq("ativo", true);
+      return data || [];
+    },
+  });
+
+  const empresasPvPendente = useMemo(() => {
+    const pendentes = new Set<number>();
+    for (const cfg of adqConfigs) {
+      const pv = cfg.ambiente === "production"
+        ? (cfg.merchant_id_production || cfg.merchant_id)
+        : cfg.merchant_id;
+      if (!pv || pv === "PENDENTE") pendentes.add(cfg.cod_empresa);
+    }
+    return pendentes;
+  }, [adqConfigs]);
+
   // New link form
   const [newLink, setNewLink] = useState({
     valor: "",
