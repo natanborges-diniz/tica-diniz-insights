@@ -127,7 +127,21 @@ export default function PaymentLinksPage() {
                 <DialogTitle>Criar Link de Pagamento</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 pt-2">
-                <div className="grid grid-cols-2 gap-3">
+                {empresas.length > 1 && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Loja</Label>
+                    <Select value={String(newLinkEmpresa)} onValueChange={v => setNewLinkEmpresa(Number(v))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {empresas.map(e => (
+                          <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
+                            {e.nome || `Empresa ${e.codEmpresa}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                   <div className="space-y-1">
                     <Label className="text-xs">Valor (R$)</Label>
                     <Input
