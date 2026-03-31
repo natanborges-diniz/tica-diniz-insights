@@ -1,12 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { CreditCard, Lock, CheckCircle2, XCircle, Clock, AlertTriangle, Loader2, Receipt } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
+import { CheckCircle2, XCircle, Clock, AlertTriangle, Loader2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import CheckoutReceipt from "@/components/checkout/CheckoutReceipt";
 import CheckoutForm from "@/components/checkout/CheckoutForm";
 
@@ -49,25 +44,24 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (!linkId) return;
+    const fetchLink = async () => {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/payment-links`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY },
+          body: JSON.stringify({ action: "detalhe_publico", link_id: linkId }),
+        });
+        const data = await res.json();
+        if (data.error) { setError(data.error); return; }
+        setLinkData(data);
+      } catch {
+        setError("Erro ao carregar dados do pagamento");
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchLink();
   }, [linkId]);
-
-  const fetchLink = async () => {
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/payment-links`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY },
-        body: JSON.stringify({ action: "detalhe_publico", link_id: linkId }),
-      });
-      const data = await res.json();
-      if (data.error) { setError(data.error); return; }
-      setLinkData(data);
-    } catch {
-      setError("Erro ao carregar dados do pagamento");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handlePaymentSuccess = (data: ReceiptData) => {
     setReceiptData(data);
@@ -123,21 +117,8 @@ export default function CheckoutPage() {
   }
 
   if (success && receiptData) {
-    return (
-      <CheckoutReceipt
-        receipt={receiptData}
-        linkData={linkData}
-        fmtCurrency={fmtCurrency}
-      />
-    );
+    return <CheckoutReceipt receipt={receiptData} linkData={linkData} fmtCurrency={fmtCurrency} />;
   }
 
-  return (
-    <CheckoutForm
-      linkData={linkData}
-      linkId={linkId!}
-      fmtCurrency={fmtCurrency}
-      onSuccess={handlePaymentSuccess}
-    />
-  );
+  return <CheckoutForm linkData={linkData} linkId={linkId!} fmtCurrency={fmtCurrency} onSuccess={handlePaymentSuccess} />;
 }

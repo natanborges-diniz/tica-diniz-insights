@@ -35,6 +35,7 @@ export default function PaymentLinksPage() {
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [receiptLink, setReceiptLink] = useState<any>(null);
 
   // New link form
   const [newLink, setNewLink] = useState({
