@@ -1,65 +1,49 @@
 
 
-## Plano: Comprovante de Pagamento (Picote) com dados da Rede
+## Plano: Destacar NSU no Comprovante (Picote)
 
-### Contexto
+### Alterações neste projeto (Infoco Optical Business)
 
-A API e.Rede já retorna no response da transação todos os dados do "picote": `tid`, `nsu`, `authorizationCode`, `date`, `time`, `returnCode`, `returnMessage`, `reference`, `amount`, `installments`, `cardBin` (primeiros 6 dígitos). Esses dados já estão sendo salvos em `dados_extras.rede_response` na tabela `payment_links`, mas não estão sendo exibidos nem devolvidos ao Connect & Flow.
+**1. `src/components/checkout/CheckoutReceipt.tsx`** — NSU em destaque no picote do checkout
 
-### O que será feito
+- Separar a linha do NSU das demais, renderizando-a com fundo colorido (bg-emerald-100), texto maior (text-base font-bold) e bordas arredondadas
+- Adicionar label "NSU (para baixa no sistema)" para orientar o cliente/loja
 
-**1. Edge Function `payment-links` — Enriquecer retorno e webhook**
+**2. `src/components/checkout/ReceiptSheet.tsx`** — NSU em destaque no comprovante admin
 
-- No `result` do `processar_pagamento` (linha 284), incluir os campos do picote extraídos do `redeData`:
-  - `nsu`, `authorizationCode`, `date`, `time`, `cardBin` (últimos 4 dígitos mascarados), `installments`, `amount`, `returnMessage`
-- No webhook para o Connect & Flow (linha 272), adicionar os mesmos campos: `nsu`, `date`, `time`, `cardBin`, `installments`
+- Mesmo tratamento visual: linha do NSU com fundo destacado (bg-primary/10), texto maior e bold
+- Manter as demais linhas no estilo mono padrão
 
-**2. Checkout (`CheckoutPage.tsx`) — Tela de sucesso com comprovante**
+### Orientações para o Connect & Flow
 
-- Ao receber sucesso, armazenar os dados do picote no state (retorno do `processar_pagamento`)
-- Substituir a tela de sucesso simples por um **comprovante visual** estilo picote com:
-  - TID, NSU, Código de Autorização
-  - Data e hora do processamento
-  - Valor, parcelas, últimos 4 dígitos do cartão
-  - Descrição da compra
-  - Nome do cliente
+No projeto **Connect & Flow** (2a6a2d63-e981-4d12-ac70-37d22a777184), ao receber o webhook `payment-webhook`, a mensagem WhatsApp de confirmação deve destacar o NSU. Exemplo de template sugerido:
 
-**3. Tela de Links (`PaymentLinksPage.tsx`) — Detalhe do picote para links pagos**
+```text
+✅ *Pagamento Confirmado!*
 
-- Na tabela, para links com status `PAGO`, adicionar botão "Ver Comprovante"
-- Ao clicar, abrir um Sheet/Dialog com os dados do `dados_extras.rede_response`:
-  - TID, NSU, Autorização, Data/Hora, Valor, Parcelas, Bandeira/BIN
+💰 Valor: R$ {valor}
+📋 {descricao}
 
-**4. Connect & Flow — Consumo do webhook enriquecido**
+━━━━━━━━━━━━━━━━━━
+🔑 *NSU: {nsu}*
+   ↳ Use este número para baixa no sistema
+━━━━━━━━━━━━━━━━━━
 
-- O payload do webhook já enviado para `payment-webhook` será ampliado com `nsu`, `date`, `time`, `cardBin`, `installments`
-- O bot no Connect & Flow poderá montar uma mensagem de confirmação com os dados do picote para enviar ao solicitante via WhatsApp
+🆔 TID: {tid}
+🔐 Autorização: {authorization}
+📅 Data: {date} às {time}
+💳 Cartão: **** {last4}
+📦 Parcelas: {installments}x
+```
+
+O NSU deve ficar entre separadores e em **negrito** (*NSU: xxx*) para fácil identificação visual no WhatsApp.
 
 ### Detalhes técnicos
 
-Campos disponíveis no response da e.Rede (já salvos em `dados_extras`):
-```text
-tid               — Identificador único da transação (20 chars)
-nsu               — Sequencial Rede (até 12 chars)  
-authorizationCode — Código autorização emissor (6 chars)
-date              — Data formato yyyyMMdd
-time              — Hora formato HH:mm:ss
-returnCode        — Código retorno ("00" = aprovado)
-returnMessage     — Mensagem retorno
-reference         — Referência do pedido
-amount            — Valor em centavos
-installments      — Parcelas
-cardBin           — BIN do cartão (6 primeiros dígitos)
-last4             — Últimos 4 dígitos do cartão
-```
-
-Nenhuma migração de banco necessária — os dados já estão em `dados_extras` (JSONB).
-
-### Arquivos a modificar
-
 | Arquivo | Alteração |
 |---|---|
-| `supabase/functions/payment-links/index.ts` | Enriquecer `result` e webhook com campos do picote |
-| `src/pages/CheckoutPage.tsx` | Tela de sucesso com comprovante visual |
-| `src/pages/PaymentLinksPage.tsx` | Botão "Ver Comprovante" + Sheet de detalhes |
+| `src/components/checkout/CheckoutReceipt.tsx` | NSU com bg-emerald-100, text-base font-bold, label explicativo |
+| `src/components/checkout/ReceiptSheet.tsx` | NSU com bg-primary/10, text-base font-bold |
+
+Nenhuma alteração no backend — apenas visual nos 2 componentes de comprovante.
 
