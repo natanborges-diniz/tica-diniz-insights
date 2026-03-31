@@ -270,6 +270,7 @@ export default function PaymentLinksPage() {
                   id: string; descricao: string; cliente_nome: string | null; cliente_telefone: string | null;
                   valor: number; parcelas_max: number; status: string; origem: string;
                   url_pagamento: string | null; tid: string | null; created_at: string;
+                  dados_extras: any;
                 }) => {
                   const st = STATUS_MAP[link.status] || { label: link.status, variant: "outline" as const, icon: Clock };
                   const Icon = st.icon;
