@@ -67,7 +67,7 @@ export default function PaymentLinksPage() {
 
   const criarMutation = useMutation({
     mutationFn: () => invokeAction("criar", {
-      cod_empresa: codEmpresa,
+      cod_empresa: newLinkEmpresa,
       valor: parseFloat(newLink.valor),
       descricao: newLink.descricao,
       parcelas_max: parseInt(newLink.parcelas_max),
