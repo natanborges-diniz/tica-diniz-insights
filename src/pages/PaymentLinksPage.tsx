@@ -157,13 +157,13 @@ export default function PaymentLinksPage() {
                 <DialogTitle>Criar Link de Pagamento</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 pt-2">
-                {empresas.length > 1 && (
+                {empresasAdquirente.length > 1 && (
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold">Loja</Label>
                     <Select value={String(newLinkEmpresa)} onValueChange={v => setNewLinkEmpresa(Number(v))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {empresas.map(e => {
+                        {empresasAdquirente.map(e => {
                           const isPending = empresasPvPendente.has(e.codEmpresa);
                           return (
                             <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)} disabled={isPending}>
