@@ -348,6 +348,15 @@ export default function PaymentLinksPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <ReceiptSheet
+        open={!!receiptLink}
+        onOpenChange={(v) => { if (!v) setReceiptLink(null); }}
+        dadosExtras={receiptLink?.dados_extras}
+        descricao={receiptLink?.descricao || ""}
+        valor={Number(receiptLink?.valor || 0)}
+        fmtCurrency={fmtCurrency}
+      />
     </div>
   );
 }
