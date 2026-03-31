@@ -157,13 +157,20 @@ export default function PaymentLinksPage() {
                     <Select value={String(newLinkEmpresa)} onValueChange={v => setNewLinkEmpresa(Number(v))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {empresas.map(e => (
-                          <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
-                            {e.nome || `Empresa ${e.codEmpresa}`}
-                          </SelectItem>
-                        ))}
+                        {empresas.map(e => {
+                          const isPending = empresasPvPendente.has(e.codEmpresa);
+                          return (
+                            <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)} disabled={isPending}>
+                              {e.nome || `Empresa ${e.codEmpresa}`}
+                              {isPending && " ⚠ PV Pendente"}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
+                    {empresasPvPendente.has(newLinkEmpresa) && (
+                      <p className="text-xs text-destructive">Esta loja não possui PV de filiação configurado. Atualize em Adquirentes.</p>
+                    )}
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
