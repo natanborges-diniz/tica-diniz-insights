@@ -42,7 +42,12 @@ export default function ReceiptSheet({ open, onOpenChange, dadosExtras, descrica
 
           <div className="bg-muted/50 rounded-lg p-4 space-y-2 font-mono text-xs">
             <Row label="TID" value={rede.tid} />
-            <Row label="NSU" value={rede.nsu} />
+            {rede.nsu && (
+              <div className="bg-primary/10 rounded-md px-3 py-2 flex justify-between items-center -mx-1">
+                <span className="text-primary text-xs">NSU (para baixa no sistema)</span>
+                <span className="text-primary text-base font-bold tracking-wide">{rede.nsu}</span>
+              </div>
+            )}
             <Row label="Autorização" value={rede.authorizationCode} />
             <Row label="Data" value={formatRedeDate(rede.date)} />
             <Row label="Hora" value={rede.time} />
