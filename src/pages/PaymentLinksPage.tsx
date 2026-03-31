@@ -221,7 +221,7 @@ export default function PaymentLinksPage() {
                 </div>
                 <Button
                   className="w-full"
-                  disabled={!newLink.valor || !newLink.descricao || criarMutation.isPending}
+                  disabled={!newLink.valor || !newLink.descricao || criarMutation.isPending || empresasPvPendente.has(newLinkEmpresa)}
                   onClick={() => criarMutation.mutate()}
                 >
                   {criarMutation.isPending ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <CreditCard className="h-4 w-4 mr-1" />}
