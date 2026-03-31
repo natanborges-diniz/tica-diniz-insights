@@ -57,7 +57,12 @@ export default function CheckoutReceipt({ receipt, linkData, fmtCurrency }: Prop
               <span className="text-slate-600 font-sans text-sm font-medium">Comprovante</span>
             </div>
             <Row label="TID" value={receipt.tid} />
-            <Row label="NSU" value={receipt.nsu} />
+            {receipt.nsu && (
+              <div className="bg-emerald-100 rounded-md px-3 py-2 flex justify-between items-center -mx-1">
+                <span className="text-emerald-700 text-xs">NSU (para baixa no sistema)</span>
+                <span className="text-emerald-900 text-base font-bold tracking-wide">{receipt.nsu}</span>
+              </div>
+            )}
             <Row label="Autorização" value={receipt.authorization} />
             <Row label="Data" value={formatRedeDate(receipt.date)} />
             <Row label="Hora" value={receipt.time} />
