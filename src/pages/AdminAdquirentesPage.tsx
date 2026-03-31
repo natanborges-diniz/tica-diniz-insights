@@ -412,6 +412,9 @@ export default function AdminAdquirentesPage() {
                         <span className="text-xs text-muted-foreground ml-1">({config.cod_empresa})</span>
                       </div>
                       <Badge variant="outline">{config.adquirente}</Badge>
+                      {(config.merchant_id_production === "PENDENTE" || (!config.merchant_id_production && form.ambiente === "production")) && (
+                        <Badge className="bg-warning/15 text-warning border-warning/30 text-[10px]">⚠ PV Pendente</Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-3">
                       {/* Ativo toggle */}
