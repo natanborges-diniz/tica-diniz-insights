@@ -60,6 +60,27 @@ serve(async (req) => {
         const { cod_empresa, valor, descricao, parcelas_max, cliente_nome, cliente_documento, cliente_telefone, origem, origem_ref } = params;
         if (!cod_empresa || !valor || !descricao) throw new Error("cod_empresa, valor e descricao são obrigatórios");
 
+        // Validate that the store has a valid PV configured
+        const { data: adqConfig } = await admin
+          .from("adquirentes_config")
+          .select("merchant_id, merchant_id_production, ambiente, ativo")
+          .eq("cod_empresa", cod_empresa)
+          .eq("adquirente", "REDE")
+          .eq("ativo", true)
+          .single();
+
+        if (!adqConfig) {
+          throw new Error(`Loja ${cod_empresa} não possui configuração de adquirente ativa.`);
+        }
+
+        const activePv = adqConfig.ambiente === "production"
+          ? (adqConfig.merchant_id_production || adqConfig.merchant_id)
+          : adqConfig.merchant_id;
+
+        if (!activePv || activePv === "PENDENTE") {
+          throw new Error(`Loja ${cod_empresa} ainda não possui PV de filiação configurado. Atualize em Adquirentes.`);
+        }
+
         const linkOrigem = origem || (auth.isService ? "CHATBOT" : "MANUAL");
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 

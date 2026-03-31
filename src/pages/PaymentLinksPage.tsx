@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Link2, Plus, XCircle, RefreshCw, Copy, ExternalLink,
@@ -37,6 +37,30 @@ export default function PaymentLinksPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [receiptLink, setReceiptLink] = useState<any>(null);
   const [newLinkEmpresa, setNewLinkEmpresa] = useState<number>(codEmpresaDefault || 1);
+
+  // Fetch adquirentes_config to know which stores have valid PV
+  const { data: adqConfigs = [] } = useQuery({
+    queryKey: ["adquirentes-config-pv"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("adquirentes_config")
+        .select("cod_empresa, merchant_id, merchant_id_production, ambiente, ativo")
+        .eq("adquirente", "REDE")
+        .eq("ativo", true);
+      return data || [];
+    },
+  });
+
+  const empresasPvPendente = useMemo(() => {
+    const pendentes = new Set<number>();
+    for (const cfg of adqConfigs) {
+      const pv = cfg.ambiente === "production"
+        ? (cfg.merchant_id_production || cfg.merchant_id)
+        : cfg.merchant_id;
+      if (!pv || pv === "PENDENTE") pendentes.add(cfg.cod_empresa);
+    }
+    return pendentes;
+  }, [adqConfigs]);
 
   // New link form
   const [newLink, setNewLink] = useState({
@@ -133,13 +157,20 @@ export default function PaymentLinksPage() {
                     <Select value={String(newLinkEmpresa)} onValueChange={v => setNewLinkEmpresa(Number(v))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {empresas.map(e => (
-                          <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
-                            {e.nome || `Empresa ${e.codEmpresa}`}
-                          </SelectItem>
-                        ))}
+                        {empresas.map(e => {
+                          const isPending = empresasPvPendente.has(e.codEmpresa);
+                          return (
+                            <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)} disabled={isPending}>
+                              {e.nome || `Empresa ${e.codEmpresa}`}
+                              {isPending && " ⚠ PV Pendente"}
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
+                    {empresasPvPendente.has(newLinkEmpresa) && (
+                      <p className="text-xs text-destructive">Esta loja não possui PV de filiação configurado. Atualize em Adquirentes.</p>
+                    )}
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
@@ -190,7 +221,7 @@ export default function PaymentLinksPage() {
                 </div>
                 <Button
                   className="w-full"
-                  disabled={!newLink.valor || !newLink.descricao || criarMutation.isPending}
+                  disabled={!newLink.valor || !newLink.descricao || criarMutation.isPending || empresasPvPendente.has(newLinkEmpresa)}
                   onClick={() => criarMutation.mutate()}
                 >
                   {criarMutation.isPending ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <CreditCard className="h-4 w-4 mr-1" />}
