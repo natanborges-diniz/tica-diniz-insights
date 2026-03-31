@@ -99,15 +99,6 @@ export default function PaymentLinksPage() {
     toast.success("URL copiada!");
   };
 
-  const shareWhatsApp = (link: { url_pagamento: string | null; descricao: string; valor: number; cliente_telefone: string | null }) => {
-    if (!link.url_pagamento) return;
-    const msg = encodeURIComponent(
-      `💳 Link de Pagamento\n\n${link.descricao}\nValor: ${fmtCurrency(Number(link.valor))}\n\n${link.url_pagamento}`
-    );
-    const phone = link.cliente_telefone?.replace(/\D/g, "") || "";
-    const waUrl = phone ? `https://wa.me/55${phone}?text=${msg}` : `https://wa.me/?text=${msg}`;
-    window.open(waUrl, "_blank");
-  };
 
   // KPIs
   const totalAtivos = links.filter((l: { status: string }) => l.status === "ATIVO" || l.status === "PENDENTE").length;
