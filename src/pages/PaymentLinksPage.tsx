@@ -261,12 +261,12 @@ export default function PaymentLinksPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-end">
-        {empresas.length > 1 && (
+        {empresasAdquirente.length > 1 && (
           <div className="w-40">
             <Select value={String(codEmpresa)} onValueChange={v => setCodEmpresa(Number(v))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {empresas.map(e => (
+                {empresasAdquirente.map(e => (
                   <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
                     {e.nome || `Empresa ${e.codEmpresa}`}
                   </SelectItem>
