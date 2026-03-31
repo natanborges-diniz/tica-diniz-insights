@@ -263,6 +263,24 @@ serve(async (req) => {
           .eq("origem", "LINK_PAGAMENTO")
           .eq("origem_id", link_id);
 
+        // Notify Connect & Flow about payment confirmation
+        if (link.origem === "CHATBOT") {
+          try {
+            await fetch("https://kvggebtnqmxydtwaumqz.supabase.co/functions/v1/payment-webhook", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-service-key": INTERNAL_SERVICE_SECRET },
+              body: JSON.stringify({
+                payment_link_id: link_id,
+                status: "PAGO",
+                tid: redeData.tid,
+                authorization: redeData.authorizationCode,
+                valor: link.valor,
+                origem_ref: link.origem_ref,
+              }),
+            });
+          } catch (e) { console.warn("[payment-links] CF webhook notify error:", e); }
+        }
+
         result = {
           success: true,
           status: "PAGO",
