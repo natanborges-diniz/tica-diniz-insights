@@ -36,6 +36,7 @@ export default function PaymentLinksPage() {
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [receiptLink, setReceiptLink] = useState<any>(null);
+  const [newLinkEmpresa, setNewLinkEmpresa] = useState<number>(codEmpresaDefault || 1);
 
   // New link form
   const [newLink, setNewLink] = useState({
@@ -66,7 +67,7 @@ export default function PaymentLinksPage() {
 
   const criarMutation = useMutation({
     mutationFn: () => invokeAction("criar", {
-      cod_empresa: codEmpresa,
+      cod_empresa: newLinkEmpresa,
       valor: parseFloat(newLink.valor),
       descricao: newLink.descricao,
       parcelas_max: parseInt(newLink.parcelas_max),
@@ -126,6 +127,21 @@ export default function PaymentLinksPage() {
                 <DialogTitle>Criar Link de Pagamento</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 pt-2">
+                {empresas.length > 1 && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Loja</Label>
+                    <Select value={String(newLinkEmpresa)} onValueChange={v => setNewLinkEmpresa(Number(v))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {empresas.map(e => (
+                          <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
+                            {e.nome || `Empresa ${e.codEmpresa}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs">Valor (R$)</Label>
