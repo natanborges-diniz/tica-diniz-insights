@@ -51,6 +51,12 @@ export default function PaymentLinksPage() {
     },
   });
 
+  // Build store list from adquirentes_config (only stores registered there)
+  const empresasAdquirente = useMemo(() => {
+    const adqCodEmpresas = new Set(adqConfigs.map(c => c.cod_empresa));
+    return empresas.filter(e => adqCodEmpresas.has(e.codEmpresa));
+  }, [empresas, adqConfigs]);
+
   const empresasPvPendente = useMemo(() => {
     const pendentes = new Set<number>();
     for (const cfg of adqConfigs) {
