@@ -22,9 +22,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { BaseDialog } from "@/components/system/BaseDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { WorkflowStepper } from "@/components/financeiro-hub/WorkflowStepper";
+import { PrepararPagamentoSheet } from "@/components/financeiro-hub/PrepararPagamentoSheet";
+import { BorderoGuidedActions } from "@/components/financeiro-hub/BorderoGuidedActions";
 
 interface Lancamento {
   id: string;
@@ -97,16 +99,9 @@ const CATEGORIAS = [
   "OUTROS",
 ];
 
-const PAYMENT_TYPES = [
-  { value: "PIX_KEY", label: "PIX (Chave)" },
-  { value: "BANKSLIP", label: "Boleto" },
-  { value: "TED", label: "TED" },
-  { value: "DARF", label: "DARF (Tributo)" },
-];
-
 export default function FinanceiroHubPage() {
   const { empresas } = useEmpresas();
-  const { codEmpresa: codEmpresaDefault, isAdmin } = useDefaultEmpresa();
+  const { codEmpresa: codEmpresaDefault } = useDefaultEmpresa();
   const { isAdmin: authIsAdmin } = useAuth();
   const queryClient = useQueryClient();
 
@@ -131,13 +126,6 @@ export default function FinanceiroHubPage() {
   const [formCategoria, setFormCategoria] = useState("");
   const [formFormaPgto, setFormFormaPgto] = useState("");
   const [formBorderoDesc, setFormBorderoDesc] = useState("");
-  // Payment prep form
-  const [formPayType, setFormPayType] = useState("PIX_KEY");
-  const [formPayPixKey, setFormPayPixKey] = useState("");
-  const [formPayBarcode, setFormPayBarcode] = useState("");
-  const [formPayBanco, setFormPayBanco] = useState("");
-  const [formPayAgencia, setFormPayAgencia] = useState("");
-  const [formPayConta, setFormPayConta] = useState("");
   // Banking data for creation
   const [formDadosPixKey, setFormDadosPixKey] = useState("");
   const [formDadosBarcode, setFormDadosBarcode] = useState("");
@@ -146,7 +134,6 @@ export default function FinanceiroHubPage() {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
     if (!token) throw new Error("Sessão expirada");
-
     const { data, error } = await supabase.functions.invoke("financeiro-lancamentos", {
       body: { action, ...extra },
       headers: { Authorization: `Bearer ${token}` },
@@ -221,12 +208,12 @@ export default function FinanceiroHubPage() {
 
   const importErpMutation = useMutation({
     mutationFn: () => invokeAction("importar_erp_auto", { cod_empresa: codEmpresa }),
-    onSuccess: (data: { inserted?: number; skipped?: number; dda_vinculados?: number; dda_orfaos?: number; total?: number; message?: string }) => {
+    onSuccess: (data: { inserted?: number; skipped?: number; dda_vinculados?: number; dda_orfaos?: number; message?: string }) => {
       if (data?.message) {
         toast.info(data.message);
       } else {
         toast.success(
-          `Importação concluída: ${data?.inserted || 0} importados, ${data?.skipped || 0} existentes, ${data?.dda_vinculados || 0} vinculados ao DDA, ${data?.dda_orfaos || 0} DDA órfãos criados`
+          `Importação concluída: ${data?.inserted || 0} importados, ${data?.skipped || 0} existentes, ${data?.dda_vinculados || 0} DDA vinculados, ${data?.dda_orfaos || 0} DDA órfãos`
         );
       }
       invalidateAll();
@@ -259,25 +246,26 @@ export default function FinanceiroHubPage() {
       lancamento_ids: Array.from(selectedIds),
     }),
     onSuccess: () => {
-      toast.success("Borderô criado");
+      toast.success("Borderô criado — vá à aba Borderôs para aprovar e enviar");
       invalidateAll();
       setBorderoDialogOpen(false);
       setSelectedIds(new Set());
       setFormBorderoDesc("");
+      setActiveTab("borderos");
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao criar borderô"),
   });
 
   const aprovarBorderoMutation = useMutation({
     mutationFn: (borderoId: string) => invokeAction("aprovar_bordero", { bordero_id: borderoId }),
-    onSuccess: () => { toast.success("Borderô aprovado — lançamentos autorizados"); invalidateAll(); },
+    onSuccess: () => { toast.success("Borderô aprovado — agora envie ao banco BTG"); invalidateAll(); },
     onError: (e: Error) => toast.error(e.message || "Erro ao aprovar"),
   });
 
   const enviarBorderoMutation = useMutation({
     mutationFn: (borderoId: string) => invokeAction("enviar_bordero_btg", { bordero_id: borderoId }),
     onSuccess: (data: { sandbox?: boolean }) => {
-      toast.success(data?.sandbox ? "Borderô enviado (sandbox)" : "Borderô enviado ao BTG");
+      toast.success(data?.sandbox ? "Borderô enviado ao BTG (sandbox)" : "Borderô enviado ao BTG — aguarde processamento");
       invalidateAll();
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao enviar"),
@@ -286,7 +274,7 @@ export default function FinanceiroHubPage() {
   const confirmarProcessamentoMutation = useMutation({
     mutationFn: (borderoId: string) => invokeAction("confirmar_processamento", { bordero_id: borderoId }),
     onSuccess: (data: { baixados?: number }) => {
-      toast.success(`Processamento confirmado — ${data?.baixados || 0} lançamentos baixados`);
+      toast.success(`✓ ${data?.baixados || 0} lançamentos baixados — registrados no DRE e Fluxo de Caixa`);
       invalidateAll();
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao confirmar"),
@@ -299,31 +287,13 @@ export default function FinanceiroHubPage() {
   });
 
   const prepararPagamentoMutation = useMutation({
-    mutationFn: async () => {
-      if (!prepPaymentLanc) throw new Error("Nenhum lançamento selecionado");
-      const dadosExtras: Record<string, unknown> = {
-        ...(prepPaymentLanc.dados_extras || {}),
-        btg_payment_type: formPayType,
-      };
-
-      if (formPayType === "PIX_KEY") {
-        dadosExtras.btg_details = { pixKey: formPayPixKey };
-      } else if (formPayType === "BANKSLIP") {
-        dadosExtras.linha_digitavel = formPayBarcode;
-        dadosExtras.btg_details = { barcode: formPayBarcode };
-      } else if (formPayType === "TED") {
-        dadosExtras.btg_details = { bankCode: formPayBanco, branch: formPayAgencia, account: formPayConta };
-      } else if (formPayType === "DARF") {
-        dadosExtras.btg_details = { barcode: formPayBarcode };
-      }
-
-      return invokeAction("editar", { id: prepPaymentLanc.id, dados_extras: dadosExtras });
+    mutationFn: async ({ id, dadosExtras }: { id: string; dadosExtras: Record<string, unknown> }) => {
+      return invokeAction("editar", { id, dados_extras: dadosExtras });
     },
     onSuccess: () => {
-      toast.success("Dados de pagamento salvos");
+      toast.success("Dados de pagamento salvos — selecione na tabela para incluir no borderô");
       invalidateAll();
       setPrepPaymentLanc(null);
-      resetPaymentForm();
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao salvar dados"),
   });
@@ -333,23 +303,6 @@ export default function FinanceiroHubPage() {
     setFormPessoa(""); setFormDocumento(""); setFormNatureza("");
     setFormCategoria(""); setFormFormaPgto("");
     setFormDadosPixKey(""); setFormDadosBarcode("");
-  };
-
-  const resetPaymentForm = () => {
-    setFormPayType("PIX_KEY"); setFormPayPixKey(""); setFormPayBarcode("");
-    setFormPayBanco(""); setFormPayAgencia(""); setFormPayConta("");
-  };
-
-  const openPrepPayment = (l: Lancamento) => {
-    setPrepPaymentLanc(l);
-    const dados = l.dados_extras || {};
-    setFormPayType(String(dados.btg_payment_type || "PIX_KEY"));
-    setFormPayBarcode(String(dados.linha_digitavel || ""));
-    const details = (dados.btg_details || {}) as Record<string, unknown>;
-    setFormPayPixKey(String(details.pixKey || ""));
-    setFormPayBanco(String(details.bankCode || ""));
-    setFormPayAgencia(String(details.branch || ""));
-    setFormPayConta(String(details.account || ""));
   };
 
   const fmtCurrency = (v: number) =>
@@ -389,19 +342,43 @@ export default function FinanceiroHubPage() {
     return !!(d.btg_payment_type || d.linha_digitavel || d.pix_key);
   };
 
-  // KPIs
+  // KPIs & workflow counts
   const totalPagar = lancamentos.filter(l => l.tipo === "PAGAR" && !["CANCELADO", "BAIXADO"].includes(l.status)).reduce((s, l) => s + l.valor, 0);
   const totalReceber = lancamentos.filter(l => l.tipo === "RECEBER" && !["CANCELADO", "BAIXADO"].includes(l.status)).reduce((s, l) => s + l.valor, 0);
   const pendentesValidacao = lancamentos.filter(l => l.requer_validacao).length;
   const vencidos = lancamentos.filter(l => l.status === "PREVISTO" && new Date(l.data_vencimento) < new Date()).length;
   const borderosAbertos = borderos.filter(b => ["MONTAGEM", "APROVADO"].includes(b.status)).length;
 
+  // Workflow step counts
+  const countPrevistos = lancamentos.filter(l => l.tipo === "PAGAR" && l.status === "PREVISTO").length;
+  const countComPagamento = lancamentos.filter(l => l.tipo === "PAGAR" && l.status === "PREVISTO" && hasPaymentData(l)).length;
+  const countBorderoMontagem = borderos.filter(b => b.status === "MONTAGEM").length;
+  const countBorderoAprovado = borderos.filter(b => b.status === "APROVADO").length;
+  const countBorderoEnviado = borderos.filter(b => b.status === "ENVIADO").length;
+  
+
+  // Determine active step
+  const getActiveStep = () => {
+    if (countBorderoEnviado > 0) return 5;
+    if (countBorderoAprovado > 0) return 4;
+    if (countBorderoMontagem > 0) return 3;
+    if (countComPagamento > 0) return 2;
+    return 1;
+  };
+  const activeStep = getActiveStep();
+
+  const stepStatus = (step: number): "completed" | "active" | "pending" => {
+    if (step < activeStep) return "completed";
+    if (step === activeStep) return "active";
+    return "pending";
+  };
+
   return (
     <TooltipProvider>
       <div className="space-y-6">
         <ModuleHeader
           title="Hub Financeiro"
-          subtitle="Lançamentos centralizados — fonte única de verdade"
+          subtitle="Contas a pagar e receber — controle centralizado com envio ao banco"
           icon={<Landmark className="h-5 w-5" />}
           actions={
             <div className="flex gap-2">
@@ -420,11 +397,52 @@ export default function FinanceiroHubPage() {
           }
         />
 
+        {/* ── Workflow Stepper ── */}
+        <WorkflowStepper
+          steps={[
+            {
+              number: 1,
+              title: "Cadastrar Contas",
+              description: "Importe do ERP ou crie manualmente",
+              status: stepStatus(1),
+              count: countPrevistos,
+            },
+            {
+              number: 2,
+              title: "Preparar Pagamento",
+              description: "Defina PIX, boleto ou TED",
+              status: stepStatus(2),
+              count: countComPagamento,
+            },
+            {
+              number: 3,
+              title: "Montar Borderô",
+              description: "Agrupe em lote para aprovação",
+              status: stepStatus(3),
+              count: countBorderoMontagem,
+            },
+            {
+              number: 4,
+              title: "Aprovar e Enviar",
+              description: "Autorize e transmita ao BTG",
+              status: stepStatus(4),
+              count: countBorderoAprovado,
+            },
+            {
+              number: 5,
+              title: "Confirmar Baixa",
+              description: "Registre no DRE e fluxo de caixa",
+              status: stepStatus(5),
+              count: countBorderoEnviado,
+            },
+          ]}
+        />
+
         {/* Dialog criar lançamento */}
         <BaseDialog
           open={dialogOpen}
           onOpenChange={setDialogOpen}
-          title="Criar Lançamento"
+          title="Novo Lançamento — Passo 1"
           footer={
             <>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
@@ -432,15 +450,26 @@ export default function FinanceiroHubPage() {
                 onClick={() => criarMutation.mutate()}
                 disabled={criarMutation.isPending || !formDescricao || !formValor || !formVencimento || !formNatureza}
               >
-                Criar
+                Criar Lançamento
               </Button>
             </>
           }
         >
           <div className="space-y-4 py-2">
+            {/* Guidance banner */}
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex items-start gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-primary">Cadastre a conta a pagar ou receber</p>
+                <p className="text-xs text-muted-foreground">
+                  Preencha os dados do lançamento. Campos com * são obrigatórios para garantir a classificação no DRE.
+                </p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label>Tipo</Label>
+                <Label>Tipo *</Label>
                 <Select value={formTipo} onValueChange={setFormTipo}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -510,11 +539,14 @@ export default function FinanceiroHubPage() {
               </div>
             </div>
 
-            {/* Banking data section for PAGAR */}
+            {/* Banking data for PAGAR */}
             {formTipo === "PAGAR" && (
               <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
                 <p className="text-sm font-medium flex items-center gap-2">
-                  <Banknote className="h-4 w-4" /> Dados para pagamento (opcional)
+                  <Banknote className="h-4 w-4" /> Dados para pagamento
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Se já tiver a chave PIX ou código de barras, preencha aqui. Caso contrário, você poderá configurar depois no passo "Preparar Pagamento".
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
@@ -528,6 +560,13 @@ export default function FinanceiroHubPage() {
                 </div>
               </div>
             )}
+
+            {/* Next step hint */}
+            <div className="bg-muted/30 rounded-lg p-2.5 border border-dashed">
+              <p className="text-xs text-muted-foreground">
+                <strong>Após criar:</strong> Configure a forma de pagamento (PIX/Boleto/TED) clicando no ícone <CreditCard className="h-3 w-3 inline" /> na tabela, depois agrupe em um borderô para enviar ao banco.
+              </p>
+            </div>
           </div>
         </BaseDialog>
 
@@ -535,9 +574,7 @@ export default function FinanceiroHubPage() {
         <BaseDialog
           open={borderoDialogOpen}
           onOpenChange={setBorderoDialogOpen}
-          title={`Criar Borderô — ${selectedIds.size} lançamento(s) — ${fmtCurrency(
-            previstosPagar.filter(l => selectedIds.has(l.id)).reduce((s, l) => s + l.valor, 0)
-          )}`}
+          title="Passo 3 — Montar Borderô"
           footer={
             <>
               <Button variant="outline" onClick={() => setBorderoDialogOpen(false)}>Cancelar</Button>
@@ -548,12 +585,23 @@ export default function FinanceiroHubPage() {
           }
         >
           <div className="space-y-3 py-2">
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex items-start gap-2">
+              <Package className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-primary">Agrupar {selectedIds.size} lançamento(s) em lote</p>
+                <p className="text-xs text-muted-foreground">
+                  Total: <strong>{fmtCurrency(previstosPagar.filter(l => selectedIds.has(l.id)).reduce((s, l) => s + l.valor, 0))}</strong> — O borderô será criado em montagem para revisão antes do envio.
+                </p>
+              </div>
+            </div>
             <div className="space-y-1">
-              <Label>Descrição do Lote (opcional)</Label>
+              <Label>Descrição do lote (opcional)</Label>
               <Input value={formBorderoDesc} onChange={e => setFormBorderoDesc(e.target.value)} placeholder="Ex: Fornecedores Janeiro" />
             </div>
-            <div className="text-sm text-muted-foreground">
-              O borderô será criado em status <Badge variant="secondary">Montagem</Badge> — você poderá adicionar ou remover lançamentos antes de solicitar aprovação.
+            <div className="bg-muted/30 rounded-lg p-2.5 border border-dashed">
+              <p className="text-xs text-muted-foreground">
+                <strong>Próximos passos:</strong> Após criar, vá à aba "Borderôs" → Aprove o lote → Envie ao BTG → Confirme a baixa após o processamento bancário.
+              </p>
             </div>
           </div>
         </BaseDialog>
@@ -562,20 +610,48 @@ export default function FinanceiroHubPage() {
         <BaseDialog
           open={!!borderoDetalheId}
           onOpenChange={(open) => { if (!open) setBorderoDetalheId(null); }}
-          title={`Borderô ${borderoDetalhe?.bordero?.descricao || borderoDetalheId?.slice(0, 8) || ""} — ${borderoDetalhe?.bordero ? `${fmtCurrency(borderoDetalhe.bordero.total_valor)} — ${borderoDetalhe.bordero.qtd_lancamentos} lançamentos` : ""}`}
+          title={`Borderô ${borderoDetalhe?.bordero?.descricao || borderoDetalheId?.slice(0, 8) || ""}`}
         >
           <div className="space-y-3 py-2">
             {borderoDetalhe?.bordero && (
-              <div className="flex gap-2 items-center">
-                <Badge variant={BORDERO_STATUS[borderoDetalhe.bordero.status]?.variant || "outline"}>
-                  {BORDERO_STATUS[borderoDetalhe.bordero.status]?.label || borderoDetalhe.bordero.status}
-                </Badge>
-                {borderoDetalhe.bordero.aprovado_em && (
-                  <span className="text-xs text-muted-foreground">
-                    Aprovado em {format(new Date(borderoDetalhe.bordero.aprovado_em), "dd/MM/yy HH:mm")}
-                  </span>
+              <>
+                <div className="flex gap-2 items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={BORDERO_STATUS[borderoDetalhe.bordero.status]?.variant || "outline"}>
+                      {BORDERO_STATUS[borderoDetalhe.bordero.status]?.label || borderoDetalhe.bordero.status}
+                    </Badge>
+                    <span className="text-sm font-medium">{fmtCurrency(borderoDetalhe.bordero.total_valor)}</span>
+                    <span className="text-xs text-muted-foreground">({borderoDetalhe.bordero.qtd_lancamentos} lançamentos)</span>
+                  </div>
+                  {borderoDetalhe.bordero.aprovado_em && (
+                    <span className="text-xs text-muted-foreground">
+                      Aprovado: {format(new Date(borderoDetalhe.bordero.aprovado_em), "dd/MM/yy HH:mm")}
+                    </span>
+                  )}
+                </div>
+                {/* Step hint inside detail */}
+                {borderoDetalhe.bordero.status === "MONTAGEM" && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                    <p className="text-xs text-amber-800">
+                      <strong>Passo 3:</strong> Revise os lançamentos abaixo. Se estiver tudo correto, feche este detalhe e clique em "Aprovar" na tabela de borderôs.
+                    </p>
+                  </div>
                 )}
-              </div>
+                {borderoDetalhe.bordero.status === "APROVADO" && (
+                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-2.5">
+                    <p className="text-xs text-primary">
+                      <strong>Passo 4:</strong> Borderô aprovado. Clique em "Enviar BTG" para transmitir os pagamentos ao banco.
+                    </p>
+                  </div>
+                )}
+                {borderoDetalhe.bordero.status === "ENVIADO" && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-2.5">
+                    <p className="text-xs text-green-800">
+                      <strong>Passo 5:</strong> Lote enviado ao banco. Após confirmação do processamento, clique em "Confirmar Baixa" para registrar no financeiro.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
             <Table>
               <TableHeader>
@@ -584,108 +660,48 @@ export default function FinanceiroHubPage() {
                   <TableHead>Pessoa</TableHead>
                   <TableHead>Vencimento</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
+                  <TableHead>Pagamento</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(borderoDetalhe?.lancamentos || []).map((l: Lancamento) => (
-                  <TableRow key={l.id}>
-                    <TableCell className="text-sm">{l.descricao}</TableCell>
-                    <TableCell className="text-sm">{l.pessoa_nome || "—"}</TableCell>
-                    <TableCell className="text-sm">{format(new Date(l.data_vencimento), "dd/MM/yy")}</TableCell>
-                    <TableCell className="text-sm text-right">{fmtCurrency(l.valor)}</TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_CONFIG[l.status]?.variant || "outline"}>
-                        {STATUS_CONFIG[l.status]?.label || l.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {(borderoDetalhe?.lancamentos || []).map((l: Lancamento) => {
+                  const payType = l.dados_extras?.btg_payment_type;
+                  return (
+                    <TableRow key={l.id}>
+                      <TableCell className="text-sm">{l.descricao}</TableCell>
+                      <TableCell className="text-sm">{l.pessoa_nome || "—"}</TableCell>
+                      <TableCell className="text-sm">{format(new Date(l.data_vencimento), "dd/MM/yy")}</TableCell>
+                      <TableCell className="text-sm text-right">{fmtCurrency(l.valor)}</TableCell>
+                      <TableCell>
+                        {payType ? (
+                          <Badge variant="outline" className="text-[10px]">
+                            {String(payType).replace("_", " ")}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-destructive">⚠ Sem dados</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={STATUS_CONFIG[l.status]?.variant || "outline"}>
+                          {STATUS_CONFIG[l.status]?.label || l.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
         </BaseDialog>
 
         {/* Sheet: Preparar Pagamento */}
-        <Sheet open={!!prepPaymentLanc} onOpenChange={(open) => { if (!open) { setPrepPaymentLanc(null); resetPaymentForm(); } }}>
-          <SheetContent className="sm:max-w-md">
-            <SheetHeader>
-              <SheetTitle>Preparar Pagamento</SheetTitle>
-              <SheetDescription>
-                Defina como este lançamento será pago pelo banco.
-              </SheetDescription>
-            </SheetHeader>
-            {prepPaymentLanc && (
-              <div className="space-y-4 mt-4">
-                <div className="bg-muted/50 rounded-lg p-3 space-y-1">
-                  <p className="text-sm font-medium">{prepPaymentLanc.descricao}</p>
-                  <p className="text-lg font-bold">{fmtCurrency(prepPaymentLanc.valor)}</p>
-                  <p className="text-xs text-muted-foreground">Venc: {format(new Date(prepPaymentLanc.data_vencimento), "dd/MM/yyyy")}</p>
-                  {prepPaymentLanc.btg_dda_id && (
-                    <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200 mt-1">
-                      ✓ Vinculado ao DDA
-                    </Badge>
-                  )}
-                  {prepPaymentLanc.dados_extras?.dda_emissor && (
-                    <p className="text-xs text-muted-foreground">Emissor: {String(prepPaymentLanc.dados_extras.dda_emissor)}</p>
-                  )}
-                  {prepPaymentLanc.dados_extras?.dda_banco && (
-                    <p className="text-xs text-muted-foreground">Banco: {String(prepPaymentLanc.dados_extras.dda_banco)}</p>
-                  )}
-                </div>
-
-                <div className="space-y-1">
-                  <Label>Tipo de pagamento</Label>
-                  <Select value={formPayType} onValueChange={setFormPayType}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {PAYMENT_TYPES.map(pt => (
-                        <SelectItem key={pt.value} value={pt.value}>{pt.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {formPayType === "PIX_KEY" && (
-                  <div className="space-y-1">
-                    <Label>Chave PIX</Label>
-                    <Input value={formPayPixKey} onChange={e => setFormPayPixKey(e.target.value)} placeholder="CPF, CNPJ, email, telefone..." />
-                  </div>
-                )}
-
-                {(formPayType === "BANKSLIP" || formPayType === "DARF") && (
-                  <div className="space-y-1">
-                    <Label>Linha digitável / Código de barras</Label>
-                    <Input value={formPayBarcode} onChange={e => setFormPayBarcode(e.target.value)} placeholder="Código de barras do boleto" />
-                  </div>
-                )}
-
-                {formPayType === "TED" && (
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <Label>Código do Banco</Label>
-                      <Input value={formPayBanco} onChange={e => setFormPayBanco(e.target.value)} placeholder="Ex: 341" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <Label>Agência</Label>
-                        <Input value={formPayAgencia} onChange={e => setFormPayAgencia(e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label>Conta</Label>
-                        <Input value={formPayConta} onChange={e => setFormPayConta(e.target.value)} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <Button className="w-full" onClick={() => prepararPagamentoMutation.mutate()} disabled={prepararPagamentoMutation.isPending}>
-                  <ShieldCheck className="h-4 w-4 mr-1" /> Salvar Dados de Pagamento
-                </Button>
-              </div>
-            )}
-          </SheetContent>
-        </Sheet>
+        <PrepararPagamentoSheet
+          lancamento={prepPaymentLanc}
+          onClose={() => setPrepPaymentLanc(null)}
+          onSave={(id, dadosExtras) => prepararPagamentoMutation.mutate({ id, dadosExtras })}
+          isPending={prepararPagamentoMutation.isPending}
+        />
 
         {/* Filters */}
         <div className="flex flex-wrap items-end gap-3">
@@ -785,6 +801,24 @@ export default function FinanceiroHubPage() {
 
           {/* ── Tab Lançamentos ── */}
           <TabsContent value="lancamentos">
+            {/* Contextual hint */}
+            {countPrevistos > 0 && countComPagamento === 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-start gap-2">
+                <CreditCard className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                <p className="text-xs text-amber-800">
+                  <strong>Dica:</strong> Você tem {countPrevistos} lançamento(s) a pagar sem forma de pagamento configurada. Clique no ícone <CreditCard className="h-3 w-3 inline" /> para definir como cada um será pago (PIX, boleto ou TED) antes de criar o borderô.
+                </p>
+              </div>
+            )}
+            {countComPagamento > 0 && selectedIds.size === 0 && (
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 mb-4 flex items-start gap-2">
+                <Package className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <p className="text-xs text-primary">
+                  <strong>Próximo passo:</strong> Selecione os lançamentos com o checkbox à esquerda e clique em "Criar Borderô" para agrupá-los em um lote de pagamento.
+                </p>
+              </div>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Lançamentos Financeiros</CardTitle>
@@ -810,7 +844,7 @@ export default function FinanceiroHubPage() {
                         <TableHead className="w-[90px]">Natureza</TableHead>
                         <TableHead className="w-[100px]">Status</TableHead>
                         <TableHead className="w-[80px]">DDA</TableHead>
-                        <TableHead className="w-[55px]">Origem</TableHead>
+                        <TableHead className="w-[65px]">Pgto</TableHead>
                         <TableHead className="w-[200px] text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -824,6 +858,7 @@ export default function FinanceiroHubPage() {
                         const isVencido = l.status === "PREVISTO" && new Date(l.data_vencimento) < new Date();
                         const canSelect = l.tipo === "PAGAR" && l.status === "PREVISTO";
                         const hasPay = hasPaymentData(l);
+                        const payType = l.dados_extras?.btg_payment_type;
                         return (
                           <TableRow key={l.id} className={isVencido ? "bg-destructive/5" : undefined}>
                             <TableCell>
@@ -849,17 +884,30 @@ export default function FinanceiroHubPage() {
                             <TableCell className="text-xs text-muted-foreground">{l.natureza?.replace(/_/g, " ") || "—"}</TableCell>
                             <TableCell><Badge variant={sc.variant}>{sc.label}</Badge></TableCell>
                             <TableCell>{getDdaBadge(l)}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{l.origem}</TableCell>
+                            <TableCell>
+                              {hasPay && payType ? (
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
+                                      {String(payType).replace("_", " ")}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Pagamento configurado</TooltipContent>
+                                </Tooltip>
+                              ) : l.tipo === "PAGAR" && l.status === "PREVISTO" ? (
+                                <span className="text-[10px] text-muted-foreground">—</span>
+                              ) : null}
+                            </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-1">
                                 {l.tipo === "PAGAR" && l.status === "PREVISTO" && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <Button size="sm" variant={hasPay ? "outline" : "ghost"} onClick={() => openPrepPayment(l)}>
+                                      <Button size="sm" variant={hasPay ? "outline" : "ghost"} onClick={() => setPrepPaymentLanc(l)}>
                                         <CreditCard className={`h-3.5 w-3.5 ${hasPay ? "text-primary" : ""}`} />
                                       </Button>
                                     </TooltipTrigger>
-                                    <TooltipContent>{hasPay ? "Dados de pagamento configurados" : "Preparar pagamento"}</TooltipContent>
+                                    <TooltipContent>{hasPay ? "Editar dados de pagamento" : "Passo 2: Configurar pagamento"}</TooltipContent>
                                   </Tooltip>
                                 )}
                                 {l.status === "PREVISTO" && authIsAdmin && (
@@ -891,11 +939,35 @@ export default function FinanceiroHubPage() {
 
           {/* ── Tab Borderôs ── */}
           <TabsContent value="borderos">
+            {/* Contextual guidance */}
+            {borderos.some(b => b.status === "MONTAGEM") && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-start gap-2">
+                <FileCheck className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                <p className="text-xs text-amber-800">
+                  <strong>Passo 3:</strong> Revise os borderôs em montagem. Clique no nome para ver os lançamentos incluídos, depois clique em "Aprovar" para liberar o envio ao banco.
+                </p>
+              </div>
+            )}
+            {borderos.some(b => b.status === "APROVADO") && (
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 mb-4 flex items-start gap-2">
+                <Send className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <p className="text-xs text-primary">
+                  <strong>Passo 4:</strong> Borderô(s) aprovado(s) pronto(s) para envio. Clique em "Enviar BTG" para transmitir ao banco.
+                </p>
+              </div>
+            )}
+            {borderos.some(b => b.status === "ENVIADO") && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 flex items-start gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                <p className="text-xs text-green-800">
+                  <strong>Passo 5:</strong> Lote(s) enviado(s) ao banco. Após confirmação do processamento, clique em "Confirmar Baixa" para finalizar e registrar no DRE.
+                </p>
+              </div>
+            )}
+
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Borderôs de Pagamento</CardTitle>
-                </div>
+                <CardTitle className="text-base">Borderôs de Pagamento</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
@@ -908,14 +980,14 @@ export default function FinanceiroHubPage() {
                         <TableHead className="w-[120px]">Status</TableHead>
                         <TableHead className="w-[100px]">Criado em</TableHead>
                         <TableHead className="w-[100px]">Aprovado em</TableHead>
-                        <TableHead className="w-[280px] text-right">Ações</TableHead>
+                        <TableHead className="w-[320px] text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {borderosLoading ? (
                         <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
                       ) : borderos.length === 0 ? (
-                        <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum borderô criado.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum borderô criado. Selecione lançamentos na aba anterior e clique em "Criar Borderô".</TableCell></TableRow>
                       ) : borderos.map(b => {
                         const bs = BORDERO_STATUS[b.status] || { label: b.status, variant: "outline" as const };
                         return (
@@ -933,28 +1005,18 @@ export default function FinanceiroHubPage() {
                               {b.aprovado_em ? format(new Date(b.aprovado_em), "dd/MM/yy HH:mm") : "—"}
                             </TableCell>
                             <TableCell className="text-right">
-                              <div className="flex justify-end gap-1">
-                                {b.status === "MONTAGEM" && authIsAdmin && (
-                                  <Button size="sm" variant="outline" onClick={() => aprovarBorderoMutation.mutate(b.id)} disabled={aprovarBorderoMutation.isPending}>
-                                    <FileCheck className="h-3.5 w-3.5 mr-1" /> Aprovar
-                                  </Button>
-                                )}
-                                {b.status === "APROVADO" && authIsAdmin && (
-                                  <Button size="sm" variant="default" onClick={() => enviarBorderoMutation.mutate(b.id)} disabled={enviarBorderoMutation.isPending}>
-                                    <Send className="h-3.5 w-3.5 mr-1" /> Enviar BTG
-                                  </Button>
-                                )}
-                                {b.status === "ENVIADO" && authIsAdmin && (
-                                  <Button size="sm" variant="default" onClick={() => confirmarProcessamentoMutation.mutate(b.id)} disabled={confirmarProcessamentoMutation.isPending}>
-                                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Confirmar Baixa
-                                  </Button>
-                                )}
-                                {["MONTAGEM", "APROVADO"].includes(b.status) && (
-                                  <Button size="sm" variant="ghost" onClick={() => cancelarBorderoMutation.mutate(b.id)} disabled={cancelarBorderoMutation.isPending}>
-                                    <XCircle className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
-                              </div>
+                              <BorderoGuidedActions
+                                status={b.status}
+                                isAdmin={!!authIsAdmin}
+                                onAprovar={() => aprovarBorderoMutation.mutate(b.id)}
+                                onEnviar={() => enviarBorderoMutation.mutate(b.id)}
+                                onConfirmar={() => confirmarProcessamentoMutation.mutate(b.id)}
+                                onCancelar={() => cancelarBorderoMutation.mutate(b.id)}
+                                isPendingAprovar={aprovarBorderoMutation.isPending}
+                                isPendingEnviar={enviarBorderoMutation.isPending}
+                                isPendingConfirmar={confirmarProcessamentoMutation.isPending}
+                                isPendingCancelar={cancelarBorderoMutation.isPending}
+                              />
                             </TableCell>
                           </TableRow>
                         );
