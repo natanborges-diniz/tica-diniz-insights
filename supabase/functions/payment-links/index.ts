@@ -267,12 +267,47 @@ serve(async (req) => {
           throw new Error(`Pagamento recusado: ${returnMsg} (código ${returnCode})`);
         }
 
+        // Fetch empresa info for receipts
+        let empresaNome = "";
+        let empresaCnpj = "";
+        try {
+          const { data: emp } = await admin
+            .from("empresa")
+            .select("nome_fantasia, cnpj")
+            .eq("cod_empresa", link.cod_empresa)
+            .single();
+          empresaNome = emp?.nome_fantasia || "";
+          empresaCnpj = emp?.cnpj || "";
+        } catch { /* ignore */ }
+
+        // Fetch PV for establishment receipt
+        let merchantPv = "";
+        try {
+          const { data: adq } = await admin
+            .from("adquirentes_config")
+            .select("merchant_id, merchant_id_production, ambiente")
+            .eq("cod_empresa", link.cod_empresa)
+            .eq("adquirente", "REDE")
+            .eq("ativo", true)
+            .single();
+          if (adq) {
+            merchantPv = adq.ambiente === "production"
+              ? (adq.merchant_id_production || adq.merchant_id || "")
+              : (adq.merchant_id || "");
+          }
+        } catch { /* ignore */ }
+
         // Update link status
         await admin.from("payment_links").update({
           status: "PAGO",
           tid: redeData.tid || null,
           pago_em: new Date().toISOString(),
-          dados_extras: { rede_response: redeData },
+          dados_extras: {
+            rede_response: redeData,
+            empresa_nome: empresaNome,
+            empresa_cnpj: empresaCnpj,
+            merchant_pv: merchantPv,
+          },
         }).eq("id", link_id);
 
         // Update ledger
