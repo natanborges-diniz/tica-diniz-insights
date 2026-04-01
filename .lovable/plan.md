@@ -1,74 +1,105 @@
 
 
-## Plano: Via do Estabelecimento + Via do Cliente — Padrão de Mercado
+## Plano Revisado: Fluxo Completo de Contas a Pagar (com Conciliação DDA)
 
-### Contexto
+### O que já existe
 
-O `ReceiptSheet.tsx` (painel admin) é a **via do estabelecimento**. O `CheckoutReceipt.tsx` (checkout público) é a **via do cliente**. Ambos precisam seguir o padrão brasileiro de comprovantes de cartão, com campos e labels adequados a cada via.
+A edge function `btg-dda` já possui `conciliar_auto` que:
+- Busca títulos DDA pendentes no banco (tabela `btg_dda_titulos`)
+- Consulta parcelas a pagar do ERP via Firebird Bridge
+- Faz match por **CNPJ + valor + vencimento** (preciso) ou **valor + vencimento** (fallback)
+- Marca os títulos DDA como `CONCILIADO`
 
-### Padrão de mercado — Diferenças entre vias
+**Lacuna**: essa conciliação vive isolada na tela Banking DDA e não alimenta o ledger (`lancamentos_financeiros`). O match confirma que "o banco reconhece aquele boleto", mas não cria/atualiza o lançamento financeiro correspondente.
+
+### Ajuste ao plano: etapa DDA → Ledger
+
+Ao importar parcelas do ERP para o ledger (action `importar_erp_auto`), o sistema deve **cruzar automaticamente com DDA** para enriquecer o lançamento:
 
 ```text
-VIA DO ESTABELECIMENTO             VIA DO CLIENTE
-─────────────────────────          ─────────────────────────
-Nome do Estabelecimento            Nome do Estabelecimento
-CNPJ: XX.XXX.XXX/XXXX-XX          (sem CNPJ)
-PV: 123456                         (sem PV)
-─────────────────────────          ─────────────────────────
-CRÉDITO À VISTA / PARCELADO        CRÉDITO À VISTA / PARCELADO
-Valor: R$ XXX,XX                   Valor: R$ XXX,XX
-Parcelas: Xx de R$ XX,XX           Parcelas: Xx de R$ XX,XX
-─────────────────────────          ─────────────────────────
-Cartão: •••• •••• •••• 1234        Cartão: •••• •••• •••• 1234
-Bandeira: Visa/Master              Bandeira: Visa/Master
-─────────────────────────          ─────────────────────────
-NSU: 123456789    ← DESTAQUE       NSU: 123456789    ← DESTAQUE
-TID: XXXXXXX                       Autorização: ABC123
-Autorização: ABC123                Data: DD/MM/AAAA HH:MM
-Código Retorno: 00                 ─────────────────────────
-Referência: PL-X-XXXX              VIA DO CLIENTE
-Data: DD/MM/AAAA HH:MM
-─────────────────────────
-VIA DO ESTABELECIMENTO
+parcelas_cache (ERP a Pagar)
+        │
+        ├── Match com btg_dda_titulos?
+        │     ├── SIM → Lançamento criado com:
+        │     │         - btg_dda_id preenchido
+        │     │         - linha_digitavel nos dados_extras
+        │     │         - status: PREVISTO (pronto para borderô)
+        │     │         - Badge visual: "✓ DDA Confirmado"
+        │     │
+        │     └── NÃO → Lançamento criado com:
+        │               - btg_dda_id = null
+        │               - Badge visual: "⚠ Sem DDA"
+        │               - Pode ser boleto não registrado ou outra forma
+        │
+        └── Títulos DDA sem match no ERP:
+              → Lançamentos sugeridos com requer_validacao=true
+              → Badge: "DDA sem parcela ERP"
 ```
-
-A via do estabelecimento tem mais campos técnicos (PV, código retorno, referência, TID) relevantes para conciliação.
 
 ### Alterações
 
-**1. `supabase/functions/payment-links/index.ts`** — Enriquecer resultado do `processar_pagamento`
+**1. `supabase/functions/financeiro-lancamentos/index.ts`** — Action `importar_erp_auto`
 
-- Adicionar ao result: `brand`, `kind`, `reference`, `dateTime` (campos que a Rede retorna)
-- Buscar nome da empresa (`empresa.nome_fantasia`) para exibir no comprovante
-- Retornar `empresa_nome` no resultado
+- Após consultar `parcelas_cache` tipo PAGAR, buscar `btg_dda_titulos` pendentes da mesma empresa
+- Cruzar por CNPJ + valor + vencimento (mesma lógica do `btg-dda`)
+- Se match: preencher `btg_dda_id` e salvar `linha_digitavel` em `dados_extras`
+- Após processar todas as parcelas ERP, varrer DDA órfãos (sem match) e criar lançamentos sugeridos com `requer_validacao=true`, `origem='DDA'`
 
-**2. `src/components/checkout/CheckoutReceipt.tsx`** — Adequar como Via do Cliente
+**2. `supabase/functions/financeiro-lancamentos/index.ts`** — Action `enviarBorderoBtg`
 
-- Expandir `ReceiptData` com campos opcionais: `brand`, `kind`, `reference`, `dateTime`, `empresaNome`
-- Adicionar cabeçalho com nome do estabelecimento
-- Adicionar label de modalidade: "CRÉDITO À VISTA" ou "CRÉDITO PARCELADO"
-- Tratar fallback `dateTime` ISO quando `date`/`time` separados não vierem
-- Rodapé: "VIA DO CLIENTE" em destaque
+- Para lançamentos com `btg_dda_id` preenchido e `linha_digitavel` em `dados_extras`, montar payload tipo `BANKSLIP` automaticamente (o boleto já é conhecido via DDA)
 
-**3. `src/components/checkout/ReceiptSheet.tsx`** — Adequar como Via do Estabelecimento
+**3. `src/pages/FinanceiroHubPage.tsx`** — Indicadores visuais
 
-- Adicionar cabeçalho com nome da empresa (recebido via props ou dados extras)
-- Adicionar label "VIA DO ESTABELECIMENTO" no rodapé
-- Adicionar modalidade (CRÉDITO À VISTA / PARCELADO)
-- Manter campos técnicos (Código Retorno, Referência) que já estão lá
-- Tratar fallback `dateTime` ISO
+- Badge "✓ DDA" verde em lançamentos que possuem `btg_dda_id`
+- Badge "⚠ Sem DDA" amarelo em lançamentos a pagar sem vínculo DDA
+- Badge "DDA sem ERP" laranja em lançamentos sugeridos vindos do DDA
+- No botão "Importar ERP", incluir resultado: "X importados, Y vinculados ao DDA, Z DDA órfãos criados"
 
-**4. `src/pages/CheckoutPage.tsx`** — Expandir interface e mapear novos campos
+**4. `src/pages/FinanceiroHubPage.tsx`** — Sheet "Preparar Pagamento"
 
-- Expandir `ReceiptData` interface com: `brand?`, `kind?`, `reference?`, `dateTime?`, `empresaNome?`
-- Mapear os novos campos vindos do resultado do pagamento
+- Quando o lançamento tem `btg_dda_id` e `linha_digitavel`, pré-selecionar tipo "Boleto" e preencher código de barras automaticamente
+- Exibir dados do DDA (emissor, banco) como referência
+
+**5. Demais itens do plano original** (mantidos sem alteração)
+
+- Botão "Importar ERP" no header
+- Formulário com dados bancários do beneficiário
+- Classificação DRE obrigatória na criação
+- Action `confirmar_processamento` para baixa pós-banco
+- Borderôs com payload estruturado por tipo
+
+### Fluxo revisado
+
+```text
+┌──────────────┐     ┌─────────────┐     ┌──────────────────┐
+│  Parcelas    │────▶│  Importar   │────▶│  Ledger           │
+│  ERP (cache) │     │  do ERP     │     │  (PREVISTO)       │
+└──────────────┘     │             │     │  ┌──────────────┐ │
+                     │  ┌────────┐ │     │  │ ✓ DDA vinc.  │ │
+┌──────────────┐     │  │ Cross  │ │     │  │ ⚠ Sem DDA    │ │
+│  DDA Títulos │────▶│  │ Match  │─│────▶│  │ 🔶 DDA órfão │ │
+│  (BTG Banco) │     │  └────────┘ │     │  └──────────────┘ │
+└──────────────┘     └─────────────┘     └────────┬─────────┘
+                                                  │
+                                    ┌─────────────▼──────────┐
+                                    │ Preparar Pagamento      │
+                                    │ (auto-preenche boleto   │
+                                    │  se DDA vinculado)      │
+                                    └─────────────┬──────────┘
+                                                  │
+                                         Borderô → BTG → Baixa
+```
 
 ### Detalhes técnicos
 
 | Arquivo | Alteração |
 |---|---|
-| `supabase/functions/payment-links/index.ts` | Adicionar `brand`, `kind`, `reference`, `dateTime`, `empresa_nome` ao result de `processar_pagamento` |
-| `src/pages/CheckoutPage.tsx` | Expandir `ReceiptData` com campos opcionais |
-| `src/components/checkout/CheckoutReceipt.tsx` | Cabeçalho estabelecimento, modalidade, bandeira, rodapé "VIA DO CLIENTE" |
-| `src/components/checkout/ReceiptSheet.tsx` | Cabeçalho estabelecimento, modalidade, rodapé "VIA DO ESTABELECIMENTO", manter campos técnicos |
+| `supabase/functions/financeiro-lancamentos/index.ts` | Action `importar_erp_auto`: cross-match parcelas×DDA; criar órfãos DDA; `enviarBorderoBtg`: payload BANKSLIP auto para DDA; action `confirmar_processamento` |
+| `src/pages/FinanceiroHubPage.tsx` | Botão importar ERP; badges DDA; sheet preparar pagamento com auto-preenchimento; classificação obrigatória |
+
+### O que NÃO muda
+- Tabela `btg_dda_titulos` (estrutura inalterada)
+- Edge function `btg-dda` (importação e conciliação isolada continuam funcionando)
+- Nenhuma migração SQL necessária (`dados_extras` jsonb já suporta os campos extras)
 
