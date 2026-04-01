@@ -1,30 +1,74 @@
 
 
-## Problema: Link gerado para loja com PV "PENDENTE"
+## Plano: Via do Estabelecimento + Via do Cliente — Padrão de Mercado
 
-O fluxo de **criação** do link (action `criar` em `payment-links/index.ts`) não valida as credenciais Rede — ele apenas salva o registro no banco. A validação do PV só acontece no `rede-proxy` no momento do **pagamento** (`processar_pagamento`), onde `getRedeCredentials` verifica se o PV existe mas **não verifica se é `'PENDENTE'`**.
+### Contexto
 
-Resultado: o link é gerado com sucesso, mas quando o cliente tentar pagar, a Rede rejeitará a transação com erro de autenticação (PV inválido).
+O `ReceiptSheet.tsx` (painel admin) é a **via do estabelecimento**. O `CheckoutReceipt.tsx` (checkout público) é a **via do cliente**. Ambos precisam seguir o padrão brasileiro de comprovantes de cartão, com campos e labels adequados a cada via.
 
-### Correções necessárias
+### Padrão de mercado — Diferenças entre vias
 
-**1. `supabase/functions/payment-links/index.ts`** — Validar PV na criação do link
+```text
+VIA DO ESTABELECIMENTO             VIA DO CLIENTE
+─────────────────────────          ─────────────────────────
+Nome do Estabelecimento            Nome do Estabelecimento
+CNPJ: XX.XXX.XXX/XXXX-XX          (sem CNPJ)
+PV: 123456                         (sem PV)
+─────────────────────────          ─────────────────────────
+CRÉDITO À VISTA / PARCELADO        CRÉDITO À VISTA / PARCELADO
+Valor: R$ XXX,XX                   Valor: R$ XXX,XX
+Parcelas: Xx de R$ XX,XX           Parcelas: Xx de R$ XX,XX
+─────────────────────────          ─────────────────────────
+Cartão: •••• •••• •••• 1234        Cartão: •••• •••• •••• 1234
+Bandeira: Visa/Master              Bandeira: Visa/Master
+─────────────────────────          ─────────────────────────
+NSU: 123456789    ← DESTAQUE       NSU: 123456789    ← DESTAQUE
+TID: XXXXXXX                       Autorização: ABC123
+Autorização: ABC123                Data: DD/MM/AAAA HH:MM
+Código Retorno: 00                 ─────────────────────────
+Referência: PL-X-XXXX              VIA DO CLIENTE
+Data: DD/MM/AAAA HH:MM
+─────────────────────────
+VIA DO ESTABELECIMENTO
+```
 
-No action `criar`, antes de inserir o registro, consultar `adquirentes_config` para verificar se o `merchant_id_production` da loja é `'PENDENTE'`. Se for, bloquear com erro claro: *"A loja X ainda não possui PV de filiação configurado. Atualize em Adquirentes."*
+A via do estabelecimento tem mais campos técnicos (PV, código retorno, referência, TID) relevantes para conciliação.
 
-**2. `supabase/functions/rede-proxy/index.ts`** — Rejeitar PV placeholder no processamento
+### Alterações
 
-Na função `getRedeCredentials`, adicionar check: se o PV resolvido for `'PENDENTE'`, lançar erro específico ao invés de tentar autenticar na Rede com valor inválido.
+**1. `supabase/functions/payment-links/index.ts`** — Enriquecer resultado do `processar_pagamento`
 
-**3. `src/pages/PaymentLinksPage.tsx`** — Filtrar lojas com PV pendente no seletor
+- Adicionar ao result: `brand`, `kind`, `reference`, `dateTime` (campos que a Rede retorna)
+- Buscar nome da empresa (`empresa.nome_fantasia`) para exibir no comprovante
+- Retornar `empresa_nome` no resultado
 
-No Select de empresa do dialog de criação, desabilitar ou ocultar lojas cujo PV ainda esteja como `'PENDENTE'`, com tooltip explicativo.
+**2. `src/components/checkout/CheckoutReceipt.tsx`** — Adequar como Via do Cliente
+
+- Expandir `ReceiptData` com campos opcionais: `brand`, `kind`, `reference`, `dateTime`, `empresaNome`
+- Adicionar cabeçalho com nome do estabelecimento
+- Adicionar label de modalidade: "CRÉDITO À VISTA" ou "CRÉDITO PARCELADO"
+- Tratar fallback `dateTime` ISO quando `date`/`time` separados não vierem
+- Rodapé: "VIA DO CLIENTE" em destaque
+
+**3. `src/components/checkout/ReceiptSheet.tsx`** — Adequar como Via do Estabelecimento
+
+- Adicionar cabeçalho com nome da empresa (recebido via props ou dados extras)
+- Adicionar label "VIA DO ESTABELECIMENTO" no rodapé
+- Adicionar modalidade (CRÉDITO À VISTA / PARCELADO)
+- Manter campos técnicos (Código Retorno, Referência) que já estão lá
+- Tratar fallback `dateTime` ISO
+
+**4. `src/pages/CheckoutPage.tsx`** — Expandir interface e mapear novos campos
+
+- Expandir `ReceiptData` interface com: `brand?`, `kind?`, `reference?`, `dateTime?`, `empresaNome?`
+- Mapear os novos campos vindos do resultado do pagamento
 
 ### Detalhes técnicos
 
 | Arquivo | Alteração |
 |---|---|
-| `supabase/functions/payment-links/index.ts` | Query `adquirentes_config` no action `criar` para validar PV |
-| `supabase/functions/rede-proxy/index.ts` | Check `pv === 'PENDENTE'` em `getRedeCredentials` |
-| `src/pages/PaymentLinksPage.tsx` | Filtrar/desabilitar lojas sem PV no seletor de criação |
+| `supabase/functions/payment-links/index.ts` | Adicionar `brand`, `kind`, `reference`, `dateTime`, `empresa_nome` ao result de `processar_pagamento` |
+| `src/pages/CheckoutPage.tsx` | Expandir `ReceiptData` com campos opcionais |
+| `src/components/checkout/CheckoutReceipt.tsx` | Cabeçalho estabelecimento, modalidade, bandeira, rodapé "VIA DO CLIENTE" |
+| `src/components/checkout/ReceiptSheet.tsx` | Cabeçalho estabelecimento, modalidade, rodapé "VIA DO ESTABELECIMENTO", manter campos técnicos |
 
