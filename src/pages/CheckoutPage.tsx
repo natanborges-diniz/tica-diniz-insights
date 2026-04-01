@@ -24,11 +24,18 @@ interface ReceiptData {
   authorization: string;
   date: string;
   time: string;
+  dateTime?: string;
   installments: number;
   cardBin: string;
   last4: string;
   amount: number;
   returnMessage: string;
+  returnCode?: string;
+  brand?: string;
+  kind?: string;
+  reference?: string;
+  empresaNome?: string;
+  merchantPv?: string;
 }
 
 const fmtCurrency = (v: number) =>
