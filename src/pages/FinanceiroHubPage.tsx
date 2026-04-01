@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import {
   Landmark, Plus, CheckCircle2, XCircle, Eye,
   ArrowDownCircle, ArrowUpCircle, AlertTriangle,
-  Package, Send, FileCheck, Trash2, PlusCircle,
+  Package, Send, FileCheck,
   Download, CreditCard, Banknote, ShieldCheck,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
