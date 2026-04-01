@@ -34,12 +34,16 @@ Deno.serve(async (req) => {
         return await cancelar(body);
       case "importar_erp":
         return await importarErp(body, auth.userId);
+      case "importar_erp_auto":
+        return await importarErpAuto(body, auth.userId);
       case "classificar":
         return await classificar(body, auth.userId);
       case "listar_pendentes_validacao":
         return await listarPendentesValidacao(body);
       case "resumo_financeiro":
         return await resumoFinanceiro(body);
+      case "confirmar_processamento":
+        return await confirmarProcessamento(body, auth.userId);
 
       // ── Borderôs ──
       case "listar_borderos":
@@ -137,6 +141,7 @@ async function criar(body: Record<string, unknown>, userId: string) {
     origem_id: body.origem_id || null,
     recorrente: body.recorrente || false,
     recorrencia_tipo: body.recorrencia_tipo || null,
+    dados_extras: body.dados_extras || {},
     criado_por: userId,
     status: "PREVISTO",
   };
@@ -280,7 +285,6 @@ async function criarBordero(body: Record<string, unknown>, userId: string) {
 
   const ids = (lancamento_ids as string[]) || [];
 
-  // Create borderô
   const { data: bordero, error: bErr } = await supabase
     .from("borderos")
     .insert({
@@ -296,7 +300,6 @@ async function criarBordero(body: Record<string, unknown>, userId: string) {
 
   if (bErr) throw new Error(bErr.message);
 
-  // Link lancamentos if provided
   if (ids.length > 0) {
     const { error: uErr } = await supabase
       .from("lancamentos_financeiros")
@@ -306,8 +309,6 @@ async function criarBordero(body: Record<string, unknown>, userId: string) {
       .eq("tipo", "PAGAR");
 
     if (uErr) throw new Error(uErr.message);
-
-    // Recalculate totals
     await recalcBordero(bordero.id);
   }
 
@@ -321,7 +322,6 @@ async function adicionarAoBordero(body: Record<string, unknown>) {
   const ids = (lancamento_ids as string[]) || [];
   if (ids.length === 0) throw new Error("lancamento_ids obrigatório");
 
-  // Verify borderô is in MONTAGEM
   const { data: bordero } = await supabase.from("borderos").select("status").eq("id", bordero_id).single();
   if (!bordero) throw new Error("Borderô não encontrado");
   if (bordero.status !== "MONTAGEM") throw new Error("Borderô não está em montagem");
@@ -350,7 +350,7 @@ async function removerDoBordero(body: Record<string, unknown>) {
 
   const { error } = await supabase
     .from("lancamentos_financeiros")
-    .update({ bordero_id: null, status: "PREVISTO" })
+    .update({ bordero_id: null, status: "PREVISTO", autorizado_por: null, autorizado_em: null })
     .in("id", ids)
     .eq("bordero_id", bordero_id);
 
@@ -369,7 +369,6 @@ async function aprovarBordero(body: Record<string, unknown>, userId: string) {
   if (bordero.status !== "MONTAGEM") throw new Error(`Borderô com status ${bordero.status} não pode ser aprovado`);
   if (bordero.qtd_lancamentos === 0) throw new Error("Borderô vazio — adicione lançamentos antes de aprovar");
 
-  // Update borderô
   const { error: bErr } = await supabase
     .from("borderos")
     .update({
@@ -381,7 +380,6 @@ async function aprovarBordero(body: Record<string, unknown>, userId: string) {
 
   if (bErr) throw new Error(bErr.message);
 
-  // Update linked lancamentos
   const { error: lErr } = await supabase
     .from("lancamentos_financeiros")
     .update({
@@ -416,8 +414,14 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
 
   const isSandbox = !config || config.ambiente !== "production";
 
+  // Fetch lancamentos for this borderô
+  const { data: lancamentos } = await supabase
+    .from("lancamentos_financeiros")
+    .select("*")
+    .eq("bordero_id", bordero_id)
+    .eq("status", "AUTORIZADO");
+
   if (isSandbox) {
-    // Sandbox mock
     const mockBatchId = `sandbox-batch-${Date.now()}`;
     await supabase.from("borderos").update({
       status: "ENVIADO",
@@ -441,7 +445,6 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   if (!tokenData) throw new Error("Token BTG não encontrado para esta empresa");
   if (new Date(tokenData.expires_at) < new Date()) throw new Error("Token BTG expirado");
 
-  // Get CNPJ
   const { data: conta } = await supabase
     .from("btg_contas_bancarias")
     .select("cnpj")
@@ -472,20 +475,26 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   const batchData = await batchRes.json();
   const batchId = batchData.batchId || batchData.id;
 
-  // 2. Fetch lancamentos for this borderô
-  const { data: lancamentos } = await supabase
-    .from("lancamentos_financeiros")
-    .select("*")
-    .eq("bordero_id", bordero_id)
-    .eq("status", "AUTORIZADO");
-
-  // 3. Add each payment to the batch
+  // 2. Add each payment to the batch — auto-detect type from dados_extras
   for (const lanc of (lancamentos || [])) {
     const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
+    
+    // Auto-detect payment type: DDA-linked → BANKSLIP, otherwise use configured type
+    let paymentType = String(dados.btg_payment_type || "PIX_KEY");
+    const paymentDetails: Record<string, unknown> = {};
+
+    if (lanc.btg_dda_id && dados.linha_digitavel) {
+      // DDA-linked: force BANKSLIP with barcode
+      paymentType = "BANKSLIP";
+      paymentDetails.barcode = String(dados.linha_digitavel);
+    } else if (dados.btg_details) {
+      Object.assign(paymentDetails, dados.btg_details as Record<string, unknown>);
+    }
+
     const paymentPayload: Record<string, unknown> = {
-      type: dados.btg_payment_type || "PIX_KEY",
+      type: paymentType,
       amount: Number(lanc.valor),
-      details: dados.btg_details || {},
+      details: paymentDetails,
     };
     if (dados.scheduledDate) paymentPayload.scheduledDate = dados.scheduledDate;
 
@@ -499,7 +508,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     });
   }
 
-  // 4. Process the batch
+  // 3. Process the batch
   await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}`, {
     method: "PATCH",
     headers: {
@@ -509,7 +518,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     body: JSON.stringify({ action: "PROCESS" }),
   });
 
-  // 5. Update local records
+  // 4. Update local records
   await supabase.from("borderos").update({
     status: "ENVIADO",
     btg_batch_id: batchId,
@@ -532,7 +541,6 @@ async function cancelarBordero(body: Record<string, unknown>) {
     throw new Error("Borderô já enviado ou processado não pode ser cancelado");
   }
 
-  // Unlink lancamentos back to PREVISTO
   await supabase
     .from("lancamentos_financeiros")
     .update({ bordero_id: null, status: "PREVISTO", autorizado_por: null, autorizado_em: null })
@@ -577,7 +585,7 @@ async function recalcBordero(borderoId: string) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// IMPORT ERP → LEDGER
+// IMPORT ERP → LEDGER (manual, receives parcelas array)
 // ═══════════════════════════════════════════════════════════
 
 async function importarErp(body: Record<string, unknown>, userId: string) {
@@ -644,6 +652,255 @@ async function importarErp(body: Record<string, unknown>, userId: string) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// IMPORT ERP AUTO — reads from parcelas_cache + DDA cross-match
+// ═══════════════════════════════════════════════════════════
+
+async function importarErpAuto(body: Record<string, unknown>, userId: string) {
+  const { cod_empresa, data_inicio, data_fim, tipo_filtro } = body;
+  if (!cod_empresa) throw new Error("cod_empresa obrigatório");
+
+  const codEmp = Number(cod_empresa);
+
+  // Default: current month
+  const hoje = new Date();
+  const defaultIni = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  const defaultFim = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${lastDay}`;
+
+  const dtIni = String(data_inicio || defaultIni);
+  const dtFim = String(data_fim || defaultFim);
+  const tipoFiltro = String(tipo_filtro || "TODOS"); // TODOS | PAGAR | RECEBER
+
+  // 1. Fetch parcelas from cache
+  let cacheQuery = supabase
+    .from("parcelas_cache")
+    .select("*")
+    .eq("cod_empresa", codEmp)
+    .gte("data_vencimento", dtIni)
+    .lte("data_vencimento", dtFim);
+
+  if (tipoFiltro !== "TODOS") {
+    cacheQuery = cacheQuery.eq("tipo_lancamento", tipoFiltro);
+  }
+
+  const { data: parcelas, error: pErr } = await cacheQuery;
+  if (pErr) throw new Error(`Erro ao buscar parcelas_cache: ${pErr.message}`);
+  if (!parcelas || parcelas.length === 0) {
+    return json({ ok: true, inserted: 0, skipped: 0, dda_vinculados: 0, dda_orfaos: 0, total: 0, message: "Nenhuma parcela encontrada no cache para o período." });
+  }
+
+  // 2. Fetch DDA titles for cross-match (only PAGAR parcelas)
+  const { data: ddaTitulos } = await supabase
+    .from("btg_dda_titulos")
+    .select("*")
+    .eq("cod_empresa", codEmp)
+    .eq("status", "PENDENTE")
+    .gte("data_vencimento", dtIni)
+    .lte("data_vencimento", dtFim);
+
+  const ddaList = ddaTitulos || [];
+  const ddaUsed = new Set<string>();
+
+  // Helper: auto-classify natureza based on type and forma_pagamento
+  function autoClassify(tipo: string, forma?: string | null): { natureza: string; categoria: string } {
+    if (tipo === "RECEBER") {
+      return { natureza: "RECEITA_BRUTA", categoria: "VENDA_PRODUTO" };
+    }
+    // PAGAR
+    if (forma) {
+      const fp = forma.toUpperCase();
+      if (fp.includes("CARTAO") || fp.includes("CREDITO") || fp.includes("DEBITO")) {
+        return { natureza: "TAXA_ADQUIRENTE", categoria: "TAXAS_BANCARIAS" };
+      }
+    }
+    return { natureza: "DESPESAS_OPERACIONAIS", categoria: "FORNECEDORES" };
+  }
+
+  // 3. Process parcelas
+  let inserted = 0;
+  let skipped = 0;
+  let ddaVinculados = 0;
+
+  for (const p of parcelas) {
+    const origemId = `ERP-${codEmp}-${p.documento || p.id}`;
+
+    // Check duplicates
+    const { data: existing } = await supabase
+      .from("lancamentos_financeiros")
+      .select("id")
+      .eq("origem", "ERP")
+      .eq("origem_id", origemId)
+      .eq("cod_empresa", codEmp)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      skipped++;
+      continue;
+    }
+
+    const tipo = p.tipo_lancamento === "PAGAR" ? "PAGAR" : "RECEBER";
+    const classification = autoClassify(tipo, p.forma_pagamento_tipo);
+
+    const record: Record<string, unknown> = {
+      cod_empresa: codEmp,
+      tipo,
+      descricao: p.pessoa_nome ? `${p.pessoa_nome} - ${p.documento || 'Parcela ERP'}` : (p.documento || "Parcela ERP"),
+      valor: Number(p.valor || 0),
+      data_vencimento: p.data_vencimento,
+      data_emissao: p.data_emissao || null,
+      pessoa_nome: p.pessoa_nome || null,
+      forma_pagamento: p.forma_pagamento_tipo || null,
+      natureza: classification.natureza,
+      categoria: classification.categoria,
+      origem: "ERP",
+      origem_id: origemId,
+      criado_por: userId,
+      status: "PREVISTO",
+      dados_extras: {},
+    };
+
+    // Cross-match with DDA (only for PAGAR)
+    if (tipo === "PAGAR" && ddaList.length > 0) {
+      const matchedDda = ddaList.find(d => {
+        if (ddaUsed.has(d.id)) return false;
+        // Match by value + due date (precise enough for most cases)
+        const sameValor = Math.abs(Number(d.valor) - Number(p.valor)) < 0.01;
+        const sameVenc = d.data_vencimento === p.data_vencimento;
+        if (!sameValor || !sameVenc) return false;
+        // Bonus: CNPJ match if available
+        if (d.documento_emissor && p.pessoa_nome) {
+          // documento_emissor is CNPJ of the issuer — loose check
+          return true;
+        }
+        return true;
+      });
+
+      if (matchedDda) {
+        ddaUsed.add(matchedDda.id);
+        record.btg_dda_id = matchedDda.id;
+        (record.dados_extras as Record<string, unknown>).linha_digitavel = matchedDda.linha_digitavel;
+        (record.dados_extras as Record<string, unknown>).dda_emissor = matchedDda.emissor;
+        (record.dados_extras as Record<string, unknown>).dda_banco = matchedDda.banco_emissor;
+        (record.dados_extras as Record<string, unknown>).btg_payment_type = "BANKSLIP";
+        ddaVinculados++;
+      }
+    }
+
+    const { error: insErr } = await supabase
+      .from("lancamentos_financeiros")
+      .insert(record);
+
+    if (insErr) {
+      console.error("[importar_erp_auto] erro:", insErr.message);
+      skipped++;
+    } else {
+      inserted++;
+    }
+  }
+
+  // 4. Create orphan DDA entries (DDA titles without ERP match)
+  let ddaOrfaos = 0;
+  for (const dda of ddaList) {
+    if (ddaUsed.has(dda.id)) continue;
+
+    // Check if already imported as DDA orphan
+    const { data: existingDda } = await supabase
+      .from("lancamentos_financeiros")
+      .select("id")
+      .eq("btg_dda_id", dda.id)
+      .eq("cod_empresa", codEmp)
+      .limit(1);
+
+    if (existingDda && existingDda.length > 0) continue;
+
+    const { error: ddaInsErr } = await supabase
+      .from("lancamentos_financeiros")
+      .insert({
+        cod_empresa: codEmp,
+        tipo: "PAGAR",
+        descricao: `DDA: ${dda.emissor || dda.documento_emissor || 'Título sem identificação'}`,
+        valor: Number(dda.valor),
+        data_vencimento: dda.data_vencimento,
+        pessoa_nome: dda.emissor || null,
+        pessoa_documento: dda.documento_emissor || null,
+        natureza: "DESPESAS_OPERACIONAIS",
+        categoria: "FORNECEDORES",
+        origem: "DDA",
+        origem_id: `DDA-${dda.id}`,
+        btg_dda_id: dda.id,
+        requer_validacao: true,
+        criado_por: userId,
+        status: "PREVISTO",
+        dados_extras: {
+          linha_digitavel: dda.linha_digitavel,
+          dda_emissor: dda.emissor,
+          dda_banco: dda.banco_emissor,
+          btg_payment_type: "BANKSLIP",
+        },
+      });
+
+    if (!ddaInsErr) ddaOrfaos++;
+  }
+
+  return json({
+    ok: true,
+    inserted,
+    skipped,
+    dda_vinculados: ddaVinculados,
+    dda_orfaos: ddaOrfaos,
+    total: parcelas.length,
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// CONFIRMAR PROCESSAMENTO (baixar lotes pós-banco)
+// ═══════════════════════════════════════════════════════════
+
+async function confirmarProcessamento(body: Record<string, unknown>, userId: string) {
+  const { bordero_id } = body;
+  if (!bordero_id) throw new Error("bordero_id obrigatório");
+  await requireAdmin(userId);
+
+  const { data: bordero } = await supabase.from("borderos").select("*").eq("id", bordero_id).single();
+  if (!bordero) throw new Error("Borderô não encontrado");
+  if (bordero.status !== "ENVIADO") throw new Error("Borderô precisa estar ENVIADO para confirmação");
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const agora = new Date().toISOString();
+
+  // Baixar todos os lançamentos do borderô
+  const { data: lancamentos, error: qErr } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id, valor")
+    .eq("bordero_id", bordero_id)
+    .eq("status", "PROCESSANDO");
+
+  if (qErr) throw new Error(qErr.message);
+
+  let baixados = 0;
+  for (const l of (lancamentos || [])) {
+    const { error: uErr } = await supabase
+      .from("lancamentos_financeiros")
+      .update({
+        status: "BAIXADO",
+        valor_pago: l.valor,
+        data_pagamento: hoje,
+        data_baixa: hoje,
+        baixado_por: userId,
+        baixado_em: agora,
+      })
+      .eq("id", l.id);
+
+    if (!uErr) baixados++;
+  }
+
+  // Update borderô status
+  await supabase.from("borderos").update({ status: "PROCESSADO" }).eq("id", bordero_id);
+
+  return json({ ok: true, baixados, status: "PROCESSADO" });
+}
+
+// ═══════════════════════════════════════════════════════════
 // CLASSIFICAR LANÇAMENTOS (requer_validacao)
 // ═══════════════════════════════════════════════════════════
 
@@ -693,7 +950,6 @@ async function resumoFinanceiro(body: Record<string, unknown>) {
   const { cod_empresa, data_inicio, data_fim } = body;
   const codEmp = cod_empresa && Number(cod_empresa) > 0 ? Number(cod_empresa) : null;
 
-  // ── 1. Try lancamentos_financeiros (ledger) ──
   let query = supabase
     .from("lancamentos_financeiros")
     .select("tipo, status, valor, valor_pago, requer_validacao, data_vencimento")
@@ -739,7 +995,6 @@ async function resumoFinanceiro(body: Record<string, unknown>) {
       }
     }
   } else {
-    // ── Fallback: parcelas_cache (ERP data) ──
     console.log("[resumo] Ledger vazio, usando parcelas_cache como fallback");
     let cacheQuery = supabase
       .from("parcelas_cache")
@@ -774,7 +1029,6 @@ async function resumoFinanceiro(body: Record<string, unknown>) {
     }
   }
 
-  // ── Borderôs ──
   let bQuery = supabase
     .from("borderos")
     .select("status, total_valor")
@@ -786,7 +1040,6 @@ async function resumoFinanceiro(body: Record<string, unknown>) {
   const borderosAbertos = (borderosData || []).length;
   const borderosTotalValor = (borderosData || []).reduce((s: number, b: { total_valor: number }) => s + Number(b.total_valor || 0), 0);
 
-  // ── Recebíveis cartão ──
   let rcQuery = supabase
     .from("recebiveis_cartao")
     .select("status, valor_bruto, valor_liquido, taxa_valor");
