@@ -343,33 +343,7 @@ serve(async (req) => {
           } catch (e) { console.warn("[payment-links] CF webhook notify error:", e); }
         }
 
-        // Fetch empresa name for receipt
-        let empresaNome = "";
-        try {
-          const { data: emp } = await admin
-            .from("empresa")
-            .select("nome_fantasia, cnpj")
-            .eq("cod_empresa", link.cod_empresa)
-            .single();
-          empresaNome = emp?.nome_fantasia || "";
-        } catch { /* ignore */ }
 
-        // Fetch PV for establishment receipt
-        let merchantPv = "";
-        try {
-          const { data: adq } = await admin
-            .from("adquirentes_config")
-            .select("merchant_id, merchant_id_production, ambiente")
-            .eq("cod_empresa", link.cod_empresa)
-            .eq("adquirente", "REDE")
-            .eq("ativo", true)
-            .single();
-          if (adq) {
-            merchantPv = adq.ambiente === "production"
-              ? (adq.merchant_id_production || adq.merchant_id || "")
-              : (adq.merchant_id || "");
-          }
-        } catch { /* ignore */ }
 
         result = {
           success: true,
