@@ -1,4 +1,4 @@
-import { Info, FileCheck, Send, CheckCircle2, XCircle } from "lucide-react";
+import { FileCheck, Send, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 

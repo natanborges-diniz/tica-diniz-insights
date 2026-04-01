@@ -355,7 +355,7 @@ export default function FinanceiroHubPage() {
   const countBorderoMontagem = borderos.filter(b => b.status === "MONTAGEM").length;
   const countBorderoAprovado = borderos.filter(b => b.status === "APROVADO").length;
   const countBorderoEnviado = borderos.filter(b => b.status === "ENVIADO").length;
-  const countBaixados = lancamentos.filter(l => l.status === "BAIXADO").length;
+  
 
   // Determine active step
   const getActiveStep = () => {

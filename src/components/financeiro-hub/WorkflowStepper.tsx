@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, ArrowRight } from "lucide-react";
+import { CheckCircle2, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Step {
