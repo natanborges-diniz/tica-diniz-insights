@@ -341,6 +341,25 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro na baixa manual"),
   });
 
+  const resetForm = () => {
+    setFormDescricao(""); setFormValor(""); setFormVencimento("");
+    setFormPessoa(""); setFormDocumento(""); setFormNatureza("");
+    setFormCategoria(""); setFormFormaPgto("");
+    setFormDadosPixKey(""); setFormDadosBarcode("");
+  };
+
+  const openEditNatureza = (l: Lancamento) => {
+    setEditLanc(l);
+    setEditNatureza(l.natureza || "");
+    setEditCategoria(l.categoria || "");
+  };
+
+  const openBaixaManual = (l: Lancamento) => {
+    setBaixaManualLanc(l);
+    setBaixaValorPago(String(l.valor));
+    setBaixaDataPgto(format(new Date(), "yyyy-MM-dd"));
+  };
+
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
