@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, startOfMonth, endOfMonth } from "date-fns";
-import { CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
 import {
   Landmark, Plus, CheckCircle2, XCircle, Eye,
   ArrowDownCircle, ArrowUpCircle, AlertTriangle,
@@ -748,9 +747,95 @@ export default function FinanceiroHubPage() {
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Campo Data</label>
+            <Select value={filtroCampoData} onValueChange={setFiltroCampoData}>
+              <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="VENCIMENTO">Vencimento</SelectItem>
+                <SelectItem value="EMISSAO">Emissão</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">De</label>
+            <Input
+              type="date"
+              className="w-[150px] h-9"
+              value={filtroDataInicio}
+              onChange={e => setFiltroDataInicio(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Até</label>
+            <Input
+              type="date"
+              className="w-[150px] h-9"
+              value={filtroDataFim}
+              onChange={e => setFiltroDataFim(e.target.value)}
+            />
+          </div>
+          {(filtroDataInicio || filtroDataFim) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 text-xs"
+              onClick={() => { setFiltroDataInicio(""); setFiltroDataFim(""); }}
+            >
+              <XCircle className="h-3.5 w-3.5 mr-1" /> Limpar datas
+            </Button>
+          )}
         </div>
 
-        {/* KPIs */}
+        {/* Quick filters */}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline" size="sm" className="h-7 text-xs"
+            onClick={() => {
+              const today = format(new Date(), "yyyy-MM-dd");
+              setFiltroCampoData("VENCIMENTO");
+              setFiltroDataInicio(today);
+              setFiltroDataFim(today);
+            }}
+          >
+            Hoje (vencimento)
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-7 text-xs"
+            onClick={() => {
+              const today = new Date();
+              setFiltroCampoData("VENCIMENTO");
+              setFiltroDataInicio(format(today, "yyyy-MM-dd"));
+              const nextWeek = new Date(today);
+              nextWeek.setDate(nextWeek.getDate() + 7);
+              setFiltroDataFim(format(nextWeek, "yyyy-MM-dd"));
+            }}
+          >
+            Próximos 7 dias
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-7 text-xs"
+            onClick={() => {
+              const now = new Date();
+              setFiltroCampoData("VENCIMENTO");
+              setFiltroDataInicio(format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd"));
+              setFiltroDataFim(format(new Date(now.getFullYear(), now.getMonth() + 1, 0), "yyyy-MM-dd"));
+            }}
+          >
+            Mês atual
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-7 text-xs"
+            onClick={() => {
+              setFiltroCampoData("VENCIMENTO");
+              setFiltroDataInicio("");
+              setFiltroDataFim(format(new Date(new Date().setDate(new Date().getDate() - 1)), "yyyy-MM-dd"));
+              setFiltroStatus("PREVISTO");
+            }}
+          >
+            Vencidos
+          </Button>
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card>
             <CardHeader className="pb-2">
