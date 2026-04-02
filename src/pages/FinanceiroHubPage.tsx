@@ -758,6 +758,114 @@ export default function FinanceiroHubPage() {
           isPending={prepararPagamentoMutation.isPending}
         />
 
+        {/* Dialog: Editar classificação (natureza/categoria) */}
+        <BaseDialog
+          open={!!editLanc}
+          onOpenChange={(open) => { if (!open) setEditLanc(null); }}
+          title="Classificar Lançamento"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setEditLanc(null)}>Cancelar</Button>
+              <Button
+                onClick={() => editLanc && editNaturezaMutation.mutate({ id: editLanc.id, natureza: editNatureza, categoria: editCategoria })}
+                disabled={editNaturezaMutation.isPending || !editNatureza}
+              >
+                Salvar Classificação
+              </Button>
+            </>
+          }
+        >
+          {editLanc && (
+            <div className="space-y-4 py-2">
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-sm font-medium">{editLanc.descricao}</p>
+                <p className="text-xs text-muted-foreground">{editLanc.pessoa_nome || "—"} — {fmtCurrency(editLanc.valor)}</p>
+                <Badge variant={STATUS_CONFIG[editLanc.status]?.variant || "outline"} className="mt-1">
+                  {STATUS_CONFIG[editLanc.status]?.label || editLanc.status}
+                </Badge>
+              </div>
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+                <p className="text-xs text-muted-foreground">
+                  A classificação (natureza e categoria) determina onde este lançamento aparece no DRE e relatórios financeiros.
+                  Parcelas importadas do ERP recebem uma classificação automática, mas você pode ajustá-la aqui.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Natureza (DRE) *</Label>
+                  <Select value={editNatureza} onValueChange={setEditNatureza}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {NATUREZAS.map(n => <SelectItem key={n} value={n}>{n.replace(/_/g, " ")}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Categoria</Label>
+                  <Select value={editCategoria} onValueChange={setEditCategoria}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIAS.map(c => <SelectItem key={c} value={c}>{c.replace(/_/g, " ")}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
+        </BaseDialog>
+
+        {/* Dialog: Baixa Manual */}
+        <BaseDialog
+          open={!!baixaManualLanc}
+          onOpenChange={(open) => { if (!open) setBaixaManualLanc(null); }}
+          title="Baixa Manual"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setBaixaManualLanc(null)}>Cancelar</Button>
+              <Button
+                onClick={() => baixaManualLanc && baixaManualMutation.mutate({
+                  id: baixaManualLanc.id,
+                  valor_pago: Number(baixaValorPago) || undefined,
+                  data_pagamento: baixaDataPgto || undefined,
+                })}
+                disabled={baixaManualMutation.isPending}
+              >
+                <CheckCircle2 className="h-4 w-4 mr-1" /> Confirmar Baixa Manual
+              </Button>
+            </>
+          }
+        >
+          {baixaManualLanc && (
+            <div className="space-y-4 py-2">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-xs text-amber-800">
+                  <strong>Atenção:</strong> A baixa manual registra o pagamento sem passar pelo fluxo de borderô/banco.
+                  Use apenas para pagamentos realizados diretamente (dinheiro, transferência manual, etc.).
+                  Após a baixa, o lançamento será contabilizado no DRE e Fluxo de Caixa.
+                </p>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-sm font-medium">{baixaManualLanc.descricao}</p>
+                <p className="text-xs text-muted-foreground">{baixaManualLanc.pessoa_nome || "—"}</p>
+                <p className="text-lg font-bold mt-1">{fmtCurrency(baixaManualLanc.valor)}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Valor pago (R$)</Label>
+                  <Input type="number" step="0.01" value={baixaValorPago} onChange={e => setBaixaValorPago(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Data do pagamento</Label>
+                  <Input type="date" value={baixaDataPgto} onChange={e => setBaixaDataPgto(e.target.value)} />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                💡 Caso precise reverter, use o botão <RotateCcw className="h-3 w-3 inline" /> "Reabrir" na tabela para voltar o lançamento ao status Previsto.
+              </p>
+            </div>
+          )}
+        </BaseDialog>
+
         {/* Filters */}
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
