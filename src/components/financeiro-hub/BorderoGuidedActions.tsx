@@ -31,7 +31,7 @@ const STEP_HINTS: Record<string, { step: number; label: string; hint: string; co
   ENVIADO: {
     step: 5,
     label: "Passo 5 — Confirmar processamento",
-    hint: "O lote foi enviado ao banco. Após confirmação de pagamento, clique em 'Confirmar Baixa' para registrar no financeiro.",
+    hint: "O lote foi enviado ao banco. Quando o banco confirmar o processamento (via extrato ou webhook), clique em 'Confirmar Processado' para registrar a baixa no DRE.",
     color: "text-green-600",
   },
 };
@@ -65,7 +65,7 @@ export function BorderoGuidedActions({
       )}
       {status === "ENVIADO" && isAdmin && (
         <Button size="sm" variant="default" onClick={onConfirmar} disabled={isPendingConfirmar}>
-          <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Confirmar Baixa
+          <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Confirmar Processado
         </Button>
       )}
       {["MONTAGEM", "APROVADO"].includes(status) && (

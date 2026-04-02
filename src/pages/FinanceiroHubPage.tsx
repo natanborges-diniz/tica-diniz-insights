@@ -6,6 +6,7 @@ import {
   ArrowDownCircle, ArrowUpCircle, AlertTriangle,
   Package, Send, FileCheck,
   Download, CreditCard, Banknote, ShieldCheck,
+  Pencil, RotateCcw, ArrowDown,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -117,6 +118,10 @@ export default function FinanceiroHubPage() {
   const [activeTab, setActiveTab] = useState("lancamentos");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [prepPaymentLanc, setPrepPaymentLanc] = useState<Lancamento | null>(null);
+  const [editLanc, setEditLanc] = useState<Lancamento | null>(null);
+  const [baixaManualLanc, setBaixaManualLanc] = useState<Lancamento | null>(null);
+  const [baixaValorPago, setBaixaValorPago] = useState("");
+  const [baixaDataPgto, setBaixaDataPgto] = useState("");
 
   // Form state
   const [formTipo, setFormTipo] = useState("PAGAR");
@@ -129,9 +134,11 @@ export default function FinanceiroHubPage() {
   const [formCategoria, setFormCategoria] = useState("");
   const [formFormaPgto, setFormFormaPgto] = useState("");
   const [formBorderoDesc, setFormBorderoDesc] = useState("");
-  // Banking data for creation
   const [formDadosPixKey, setFormDadosPixKey] = useState("");
   const [formDadosBarcode, setFormDadosBarcode] = useState("");
+  // Edit dialog state
+  const [editNatureza, setEditNatureza] = useState("");
+  const [editCategoria, setEditCategoria] = useState("");
 
   const invokeAction = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -233,11 +240,7 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao autorizar"),
   });
 
-  const baixarMutation = useMutation({
-    mutationFn: (id: string) => invokeAction("baixar", { id }),
-    onSuccess: () => { toast.success("Lançamento baixado"); invalidateAll(); },
-    onError: () => toast.error("Erro ao baixar"),
-  });
+  // baixa happens via borderô confirmation or baixa manual dialog
 
   const cancelarMutation = useMutation({
     mutationFn: (id: string) => invokeAction("cancelar", { id }),
@@ -304,11 +307,53 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao salvar dados"),
   });
 
+  const reabrirMutation = useMutation({
+    mutationFn: (id: string) => invokeAction("reabrir", { id }),
+    onSuccess: () => { toast.success("Lançamento reaberto — voltou para PREVISTO"); invalidateAll(); },
+    onError: (e: Error) => toast.error(e.message || "Erro ao reabrir"),
+  });
+
+  const editNaturezaMutation = useMutation({
+    mutationFn: async ({ id, natureza, categoria }: { id: string; natureza: string; categoria: string }) => {
+      return invokeAction("editar", { id, natureza, categoria });
+    },
+    onSuccess: () => {
+      toast.success("Classificação atualizada");
+      invalidateAll();
+      setEditLanc(null);
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro ao classificar"),
+  });
+
+  const baixaManualMutation = useMutation({
+    mutationFn: async ({ id, valor_pago, data_pagamento }: { id: string; valor_pago?: number; data_pagamento?: string }) => {
+      return invokeAction("baixar", { id, valor_pago, data_pagamento });
+    },
+    onSuccess: () => {
+      toast.success("Baixa manual realizada — registrado no DRE");
+      invalidateAll();
+      setBaixaManualLanc(null);
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro na baixa manual"),
+  });
+
   const resetForm = () => {
     setFormDescricao(""); setFormValor(""); setFormVencimento("");
     setFormPessoa(""); setFormDocumento(""); setFormNatureza("");
     setFormCategoria(""); setFormFormaPgto("");
     setFormDadosPixKey(""); setFormDadosBarcode("");
+  };
+
+  const openEditNatureza = (l: Lancamento) => {
+    setEditLanc(l);
+    setEditNatureza(l.natureza || "");
+    setEditCategoria(l.categoria || "");
+  };
+
+  const openBaixaManual = (l: Lancamento) => {
+    setBaixaManualLanc(l);
+    setBaixaValorPago(String(l.valor));
+    setBaixaDataPgto(format(new Date(), "yyyy-MM-dd"));
   };
 
   const fmtCurrency = (v: number) =>
@@ -430,14 +475,14 @@ export default function FinanceiroHubPage() {
             {
               number: 4,
               title: "Aprovar e Enviar",
-              description: "Autorize e transmita ao BTG",
+              description: "Admin revisa e transmite ao BTG",
               status: stepStatus(4),
               count: countBorderoAprovado,
             },
             {
               number: 5,
-              title: "Confirmar Baixa",
-              description: "Registre no DRE e fluxo de caixa",
+              title: "Aguardar Banco",
+              description: "Baixa confirmada pelo retorno do banco",
               status: stepStatus(5),
               count: countBorderoEnviado,
             },
@@ -708,6 +753,114 @@ export default function FinanceiroHubPage() {
           onSave={(id, dadosExtras) => prepararPagamentoMutation.mutate({ id, dadosExtras })}
           isPending={prepararPagamentoMutation.isPending}
         />
+
+        {/* Dialog: Editar classificação (natureza/categoria) */}
+        <BaseDialog
+          open={!!editLanc}
+          onOpenChange={(open) => { if (!open) setEditLanc(null); }}
+          title="Classificar Lançamento"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setEditLanc(null)}>Cancelar</Button>
+              <Button
+                onClick={() => editLanc && editNaturezaMutation.mutate({ id: editLanc.id, natureza: editNatureza, categoria: editCategoria })}
+                disabled={editNaturezaMutation.isPending || !editNatureza}
+              >
+                Salvar Classificação
+              </Button>
+            </>
+          }
+        >
+          {editLanc && (
+            <div className="space-y-4 py-2">
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-sm font-medium">{editLanc.descricao}</p>
+                <p className="text-xs text-muted-foreground">{editLanc.pessoa_nome || "—"} — {fmtCurrency(editLanc.valor)}</p>
+                <Badge variant={STATUS_CONFIG[editLanc.status]?.variant || "outline"} className="mt-1">
+                  {STATUS_CONFIG[editLanc.status]?.label || editLanc.status}
+                </Badge>
+              </div>
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+                <p className="text-xs text-muted-foreground">
+                  A classificação (natureza e categoria) determina onde este lançamento aparece no DRE e relatórios financeiros.
+                  Parcelas importadas do ERP recebem uma classificação automática, mas você pode ajustá-la aqui.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Natureza (DRE) *</Label>
+                  <Select value={editNatureza} onValueChange={setEditNatureza}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {NATUREZAS.map(n => <SelectItem key={n} value={n}>{n.replace(/_/g, " ")}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Categoria</Label>
+                  <Select value={editCategoria} onValueChange={setEditCategoria}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIAS.map(c => <SelectItem key={c} value={c}>{c.replace(/_/g, " ")}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
+        </BaseDialog>
+
+        {/* Dialog: Baixa Manual */}
+        <BaseDialog
+          open={!!baixaManualLanc}
+          onOpenChange={(open) => { if (!open) setBaixaManualLanc(null); }}
+          title="Baixa Manual"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setBaixaManualLanc(null)}>Cancelar</Button>
+              <Button
+                onClick={() => baixaManualLanc && baixaManualMutation.mutate({
+                  id: baixaManualLanc.id,
+                  valor_pago: Number(baixaValorPago) || undefined,
+                  data_pagamento: baixaDataPgto || undefined,
+                })}
+                disabled={baixaManualMutation.isPending}
+              >
+                <CheckCircle2 className="h-4 w-4 mr-1" /> Confirmar Baixa Manual
+              </Button>
+            </>
+          }
+        >
+          {baixaManualLanc && (
+            <div className="space-y-4 py-2">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-xs text-amber-800">
+                  <strong>Atenção:</strong> A baixa manual registra o pagamento sem passar pelo fluxo de borderô/banco.
+                  Use apenas para pagamentos realizados diretamente (dinheiro, transferência manual, etc.).
+                  Após a baixa, o lançamento será contabilizado no DRE e Fluxo de Caixa.
+                </p>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-sm font-medium">{baixaManualLanc.descricao}</p>
+                <p className="text-xs text-muted-foreground">{baixaManualLanc.pessoa_nome || "—"}</p>
+                <p className="text-lg font-bold mt-1">{fmtCurrency(baixaManualLanc.valor)}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Valor pago (R$)</Label>
+                  <Input type="number" step="0.01" value={baixaValorPago} onChange={e => setBaixaValorPago(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label>Data do pagamento</Label>
+                  <Input type="date" value={baixaDataPgto} onChange={e => setBaixaDataPgto(e.target.value)} />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                💡 Caso precise reverter, use o botão <RotateCcw className="h-3 w-3 inline" /> "Reabrir" na tabela para voltar o lançamento ao status Previsto.
+              </p>
+            </div>
+          )}
+        </BaseDialog>
 
         {/* Filters */}
         <div className="flex flex-wrap items-end gap-3">
@@ -992,6 +1145,17 @@ export default function FinanceiroHubPage() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-1">
+                                {/* Edit natureza - available on any status */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="sm" variant="ghost" onClick={() => openEditNatureza(l)}>
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Editar classificação (natureza/categoria)</TooltipContent>
+                                </Tooltip>
+
+                                {/* Configure payment - only for PAGAR + PREVISTO */}
                                 {l.tipo === "PAGAR" && l.status === "PREVISTO" && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
@@ -1002,20 +1166,43 @@ export default function FinanceiroHubPage() {
                                     <TooltipContent>{hasPay ? "Editar dados de pagamento" : "Passo 2: Configurar pagamento"}</TooltipContent>
                                   </Tooltip>
                                 )}
+
+                                {/* Autorizar - admin only, PREVISTO */}
                                 {l.status === "PREVISTO" && authIsAdmin && (
                                   <Button size="sm" variant="outline" onClick={() => autorizarMutation.mutate(l.id)} disabled={autorizarMutation.isPending}>
                                     <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Autorizar
                                   </Button>
                                 )}
+
+                                {/* Cancelar - PREVISTO only */}
                                 {l.status === "PREVISTO" && (
                                   <Button size="sm" variant="ghost" onClick={() => cancelarMutation.mutate(l.id)} disabled={cancelarMutation.isPending}>
                                     <XCircle className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
-                                {(l.status === "AUTORIZADO" || l.status === "PROCESSANDO") && (
-                                  <Button size="sm" variant="default" onClick={() => baixarMutation.mutate(l.id)} disabled={baixarMutation.isPending}>
-                                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Baixar
-                                  </Button>
+
+                                {/* Baixa manual - admin, for PREVISTO/AUTORIZADO (outside borderô flow) */}
+                                {["PREVISTO", "AUTORIZADO"].includes(l.status) && authIsAdmin && !l.bordero_id && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button size="sm" variant="ghost" onClick={() => openBaixaManual(l)}>
+                                        <ArrowDown className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Baixa manual (sem borderô)</TooltipContent>
+                                  </Tooltip>
+                                )}
+
+                                {/* Reabrir - admin, for BAIXADO */}
+                                {l.status === "BAIXADO" && authIsAdmin && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button size="sm" variant="ghost" onClick={() => reabrirMutation.mutate(l.id)} disabled={reabrirMutation.isPending}>
+                                        <RotateCcw className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Reabrir lançamento (voltar para Previsto)</TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             </TableCell>
