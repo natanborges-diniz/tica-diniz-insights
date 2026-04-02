@@ -17,6 +17,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
 import type { ModuleKey } from "./AppLayout";
@@ -144,7 +145,7 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
   }
 
   return (
-    <Sidebar collapsible="icon" className="border-r">
+    <Sidebar collapsible="icon" className="border-r top-14 h-[calc(100svh-3.5rem)]">
       <SidebarContent className="pt-2">
         {sections.map((section) => (
           <SidebarGroup key={section.label}>
@@ -204,6 +205,7 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
           </SidebarGroup>
         ))}
       </SidebarContent>
+      <SidebarRail />
     </Sidebar>
   );
 }
