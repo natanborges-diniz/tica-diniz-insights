@@ -1664,19 +1664,31 @@ const PedidoFornecedorPage: React.FC = () => {
         {/* Prescrição */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Eye className="h-4 w-4" /> Prescrição
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Eye className="h-4 w-4" /> Prescrição
+                {prescriptionAutoFilled && !confirmedPrescription && (
+                  <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-300 ml-2">
+                    <AlertTriangle className="h-3 w-3 mr-1" /> Revisar
+                  </Badge>
+                )}
+                {confirmedPrescription && (
+                  <Badge className="bg-emerald-600 text-white gap-1 text-xs ml-2">
+                    <CheckCircle2 className="h-3 w-3" /> Confirmada
+                  </Badge>
+                )}
+              </CardTitle>
               {prescriptionAutoFilled && !confirmedPrescription && (
-                <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-300 ml-2">
-                  Pré-preenchida da OS
-                </Badge>
+                <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => setConfirmedPrescription(true)}>
+                  <Check className="h-3 w-3" /> Confirmar Receita
+                </Button>
               )}
               {confirmedPrescription && (
-                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 border-emerald-300 ml-2">
-                  <CheckCircle2 className="h-3 w-3 mr-1" /> Confirmada
-                </Badge>
+                <Button size="sm" variant="ghost" className="gap-1 h-7 text-xs text-muted-foreground" onClick={() => setConfirmedPrescription(false)}>
+                  <Pencil className="h-3 w-3" /> Editar
+                </Button>
               )}
-            </CardTitle>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* OD */}
@@ -1697,8 +1709,8 @@ const PedidoFornecedorPage: React.FC = () => {
                       value={prescOd[field]}
                       onChange={(e) => {
                         setPrescOd(prev => ({ ...prev, [field]: e.target.value }));
-                        // Any manual edit auto-confirms prescription
-                        if (prescriptionAutoFilled) setConfirmedPrescription(true);
+                        // Reset confirmation when prescription is edited
+                        if (confirmedPrescription) setConfirmedPrescription(false);
                       }}
                       className="h-8 text-sm font-mono"
                     />
@@ -1758,7 +1770,8 @@ const PedidoFornecedorPage: React.FC = () => {
                       value={prescOe[field]}
                       onChange={(e) => {
                         setPrescOe(prev => ({ ...prev, [field]: e.target.value }));
-                        if (prescriptionAutoFilled) setConfirmedPrescription(true);
+                        // Reset confirmation when prescription is edited
+                        if (confirmedPrescription) setConfirmedPrescription(false);
                       }}
                       className="h-8 text-sm font-mono"
                     />

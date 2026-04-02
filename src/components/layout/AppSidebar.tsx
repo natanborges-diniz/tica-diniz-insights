@@ -17,6 +17,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
 import type { ModuleKey } from "./AppLayout";
@@ -204,6 +205,7 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
           </SidebarGroup>
         ))}
       </SidebarContent>
+      <SidebarRail />
     </Sidebar>
   );
 }

@@ -24,7 +24,7 @@ export function AppLayout() {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex flex-col w-full bg-app-bg">
+      <div className="min-h-screen flex flex-col w-full bg-app-bg" style={{ "--sidebar-top-offset": "3.5rem" } as React.CSSProperties}>
         <TopNavigation activeModule={activeModule} />
         <div className="flex flex-1 w-full">
           <AppSidebar activeModule={activeModule} />
