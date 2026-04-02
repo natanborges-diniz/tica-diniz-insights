@@ -30,6 +30,8 @@ Deno.serve(async (req) => {
         return await autorizar(body, auth.userId);
       case "baixar":
         return await baixar(body, auth.userId);
+      case "reabrir":
+        return await reabrir(body, auth.userId);
       case "cancelar":
         return await cancelar(body);
       case "importar_erp":
@@ -169,11 +171,20 @@ async function editar(body: Record<string, unknown>, _userId: string) {
     .single();
 
   if (!existing) throw new Error("Lançamento não encontrado");
+
+  // Allow editing natureza/categoria/observacao on any non-CANCELADO status
+  // Full edit only on PREVISTO
+  const allowedFieldsAnyStatus = ["natureza", "categoria", "subcategoria", "observacao", "dados_extras"];
+  delete fields.action;
+
   if (existing.status !== "PREVISTO") {
-    throw new Error("Apenas lançamentos PREVISTO podem ser editados");
+    const editKeys = Object.keys(fields);
+    const disallowed = editKeys.filter(k => !allowedFieldsAnyStatus.includes(k));
+    if (disallowed.length > 0) {
+      throw new Error(`Lançamento com status ${existing.status}: só é possível editar classificação (natureza, categoria). Campos bloqueados: ${disallowed.join(", ")}`);
+    }
   }
 
-  delete fields.action;
   const { data, error } = await supabase
     .from("lancamentos_financeiros")
     .update(fields)
@@ -257,6 +268,41 @@ async function cancelar(body: Record<string, unknown>) {
 
   if (error) throw new Error(error.message);
   if (!data) throw new Error("Lançamento não encontrado ou já baixado");
+  return json(data);
+}
+
+async function reabrir(body: Record<string, unknown>, userId: string) {
+  const { id } = body;
+  if (!id) throw new Error("id obrigatório");
+  await requireAdmin(userId);
+
+  const { data: existing } = await supabase
+    .from("lancamentos_financeiros")
+    .select("status")
+    .eq("id", id)
+    .single();
+
+  if (!existing) throw new Error("Lançamento não encontrado");
+  if (existing.status !== "BAIXADO") {
+    throw new Error("Apenas lançamentos BAIXADOS podem ser reabertos");
+  }
+
+  const { data, error } = await supabase
+    .from("lancamentos_financeiros")
+    .update({
+      status: "PREVISTO",
+      valor_pago: null,
+      data_pagamento: null,
+      data_baixa: null,
+      baixado_por: null,
+      baixado_em: null,
+      bordero_id: null,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
   return json(data);
 }
 
