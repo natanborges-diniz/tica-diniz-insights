@@ -311,12 +311,35 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao salvar dados"),
   });
 
-  const resetForm = () => {
-    setFormDescricao(""); setFormValor(""); setFormVencimento("");
-    setFormPessoa(""); setFormDocumento(""); setFormNatureza("");
-    setFormCategoria(""); setFormFormaPgto("");
-    setFormDadosPixKey(""); setFormDadosBarcode("");
-  };
+  const reabrirMutation = useMutation({
+    mutationFn: (id: string) => invokeAction("reabrir", { id }),
+    onSuccess: () => { toast.success("Lançamento reaberto — voltou para PREVISTO"); invalidateAll(); },
+    onError: (e: Error) => toast.error(e.message || "Erro ao reabrir"),
+  });
+
+  const editNaturezaMutation = useMutation({
+    mutationFn: async ({ id, natureza, categoria }: { id: string; natureza: string; categoria: string }) => {
+      return invokeAction("editar", { id, natureza, categoria });
+    },
+    onSuccess: () => {
+      toast.success("Classificação atualizada");
+      invalidateAll();
+      setEditLanc(null);
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro ao classificar"),
+  });
+
+  const baixaManualMutation = useMutation({
+    mutationFn: async ({ id, valor_pago, data_pagamento }: { id: string; valor_pago?: number; data_pagamento?: string }) => {
+      return invokeAction("baixar", { id, valor_pago, data_pagamento });
+    },
+    onSuccess: () => {
+      toast.success("Baixa manual realizada — registrado no DRE");
+      invalidateAll();
+      setBaixaManualLanc(null);
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro na baixa manual"),
+  });
 
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
