@@ -48,7 +48,7 @@ import ZeissValidationPanel from "@/components/zeiss-pedido/ZeissValidationPanel
 import {
   ArrowLeft, Send, Eye, Glasses, Package, Loader2, Check, AlertTriangle,
   Search, ShieldCheck, CheckCircle2, DollarSign, Zap, Sparkles, ChevronDown,
-  ChevronUp, XCircle, Ban, Copy, Ticket,
+  ChevronUp, XCircle, Ban, Copy, Ticket, Pencil,
 } from "lucide-react";
 
 // ============================================
