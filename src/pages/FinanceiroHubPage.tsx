@@ -118,6 +118,10 @@ export default function FinanceiroHubPage() {
   const [activeTab, setActiveTab] = useState("lancamentos");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [prepPaymentLanc, setPrepPaymentLanc] = useState<Lancamento | null>(null);
+  const [editLanc, setEditLanc] = useState<Lancamento | null>(null);
+  const [baixaManualLanc, setBaixaManualLanc] = useState<Lancamento | null>(null);
+  const [baixaValorPago, setBaixaValorPago] = useState("");
+  const [baixaDataPgto, setBaixaDataPgto] = useState("");
 
   // Form state
   const [formTipo, setFormTipo] = useState("PAGAR");
@@ -130,9 +134,11 @@ export default function FinanceiroHubPage() {
   const [formCategoria, setFormCategoria] = useState("");
   const [formFormaPgto, setFormFormaPgto] = useState("");
   const [formBorderoDesc, setFormBorderoDesc] = useState("");
-  // Banking data for creation
   const [formDadosPixKey, setFormDadosPixKey] = useState("");
   const [formDadosBarcode, setFormDadosBarcode] = useState("");
+  // Edit dialog state
+  const [editNatureza, setEditNatureza] = useState("");
+  const [editCategoria, setEditCategoria] = useState("");
 
   const invokeAction = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
