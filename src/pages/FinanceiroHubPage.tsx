@@ -108,6 +108,9 @@ export default function FinanceiroHubPage() {
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
+  const [filtroCampoData, setFiltroCampoData] = useState<string>("VENCIMENTO");
+  const [filtroDataInicio, setFiltroDataInicio] = useState<string>("");
+  const [filtroDataFim, setFiltroDataFim] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [borderoDialogOpen, setBorderoDialogOpen] = useState(false);
   const [borderoDetalheId, setBorderoDetalheId] = useState<string | null>(null);
@@ -144,11 +147,14 @@ export default function FinanceiroHubPage() {
 
   // ── Queries ──
   const { data: lancamentos = [], isLoading } = useQuery<Lancamento[]>({
-    queryKey: ["lancamentos", codEmpresa, filtroTipo, filtroStatus],
+    queryKey: ["lancamentos", codEmpresa, filtroTipo, filtroStatus, filtroCampoData, filtroDataInicio, filtroDataFim],
     queryFn: async () => {
       const params: Record<string, unknown> = { cod_empresa: codEmpresa, limit: 500 };
       if (filtroTipo !== "todos") params.tipo = filtroTipo;
       if (filtroStatus !== "todos") params.status = filtroStatus;
+      if (filtroDataInicio) params.data_inicio = filtroDataInicio;
+      if (filtroDataFim) params.data_fim = filtroDataFim;
+      if (filtroCampoData) params.campo_data = filtroCampoData;
       return invokeAction("listar", params);
     },
   });
@@ -741,9 +747,95 @@ export default function FinanceiroHubPage() {
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Campo Data</label>
+            <Select value={filtroCampoData} onValueChange={setFiltroCampoData}>
+              <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="VENCIMENTO">Vencimento</SelectItem>
+                <SelectItem value="EMISSAO">Emissão</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">De</label>
+            <Input
+              type="date"
+              className="w-[150px] h-9"
+              value={filtroDataInicio}
+              onChange={e => setFiltroDataInicio(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Até</label>
+            <Input
+              type="date"
+              className="w-[150px] h-9"
+              value={filtroDataFim}
+              onChange={e => setFiltroDataFim(e.target.value)}
+            />
+          </div>
+          {(filtroDataInicio || filtroDataFim) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 text-xs"
+              onClick={() => { setFiltroDataInicio(""); setFiltroDataFim(""); }}
+            >
+              <XCircle className="h-3.5 w-3.5 mr-1" /> Limpar datas
+            </Button>
+          )}
         </div>
 
-        {/* KPIs */}
+        {/* Quick filters */}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline" size="sm" className="h-7 text-xs"
+            onClick={() => {
+              const today = format(new Date(), "yyyy-MM-dd");
+              setFiltroCampoData("VENCIMENTO");
+              setFiltroDataInicio(today);
+              setFiltroDataFim(today);
+            }}
+          >
+            Hoje (vencimento)
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-7 text-xs"
+            onClick={() => {
+              const today = new Date();
+              setFiltroCampoData("VENCIMENTO");
+              setFiltroDataInicio(format(today, "yyyy-MM-dd"));
+              const nextWeek = new Date(today);
+              nextWeek.setDate(nextWeek.getDate() + 7);
+              setFiltroDataFim(format(nextWeek, "yyyy-MM-dd"));
+            }}
+          >
+            Próximos 7 dias
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-7 text-xs"
+            onClick={() => {
+              const now = new Date();
+              setFiltroCampoData("VENCIMENTO");
+              setFiltroDataInicio(format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd"));
+              setFiltroDataFim(format(new Date(now.getFullYear(), now.getMonth() + 1, 0), "yyyy-MM-dd"));
+            }}
+          >
+            Mês atual
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-7 text-xs"
+            onClick={() => {
+              setFiltroCampoData("VENCIMENTO");
+              setFiltroDataInicio("");
+              setFiltroDataFim(format(new Date(new Date().setDate(new Date().getDate() - 1)), "yyyy-MM-dd"));
+              setFiltroStatus("PREVISTO");
+            }}
+          >
+            Vencidos
+          </Button>
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card>
             <CardHeader className="pb-2">
