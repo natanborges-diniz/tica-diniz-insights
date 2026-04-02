@@ -145,7 +145,7 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
   }
 
   return (
-    <Sidebar collapsible="icon" className="border-r top-14 h-[calc(100svh-3.5rem)]">
+    <Sidebar collapsible="icon" className="border-r">
       <SidebarContent className="pt-2">
         {sections.map((section) => (
           <SidebarGroup key={section.label}>
