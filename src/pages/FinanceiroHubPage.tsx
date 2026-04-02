@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth } from "date-fns";
+import { CalendarIcon } from "lucide-react";
 import {
   Landmark, Plus, CheckCircle2, XCircle, Eye,
   ArrowDownCircle, ArrowUpCircle, AlertTriangle,
@@ -108,6 +109,9 @@ export default function FinanceiroHubPage() {
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
+  const [filtroCampoData, setFiltroCampoData] = useState<string>("VENCIMENTO");
+  const [filtroDataInicio, setFiltroDataInicio] = useState<string>("");
+  const [filtroDataFim, setFiltroDataFim] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [borderoDialogOpen, setBorderoDialogOpen] = useState(false);
   const [borderoDetalheId, setBorderoDetalheId] = useState<string | null>(null);
@@ -144,11 +148,14 @@ export default function FinanceiroHubPage() {
 
   // ── Queries ──
   const { data: lancamentos = [], isLoading } = useQuery<Lancamento[]>({
-    queryKey: ["lancamentos", codEmpresa, filtroTipo, filtroStatus],
+    queryKey: ["lancamentos", codEmpresa, filtroTipo, filtroStatus, filtroCampoData, filtroDataInicio, filtroDataFim],
     queryFn: async () => {
       const params: Record<string, unknown> = { cod_empresa: codEmpresa, limit: 500 };
       if (filtroTipo !== "todos") params.tipo = filtroTipo;
       if (filtroStatus !== "todos") params.status = filtroStatus;
+      if (filtroDataInicio) params.data_inicio = filtroDataInicio;
+      if (filtroDataFim) params.data_fim = filtroDataFim;
+      if (filtroCampoData) params.campo_data = filtroCampoData;
       return invokeAction("listar", params);
     },
   });
