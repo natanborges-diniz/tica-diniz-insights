@@ -196,6 +196,7 @@ const PedidoFornecedorPage: React.FC = () => {
   // ============================================
   const [confirmedProduct, setConfirmedProduct] = useState(false);
   const [confirmedPrescription, setConfirmedPrescription] = useState(false);
+  const [confirmedFrame, setConfirmedFrame] = useState(false);
   const [autoFillSource, setAutoFillSource] = useState<AutoFillSource>(null);
   const [prescriptionAutoFilled, setPrescriptionAutoFilled] = useState(false);
 
@@ -680,9 +681,8 @@ const PedidoFornecedorPage: React.FC = () => {
     : getDefaultRequirements();
   const produtoIsSurfacada = !productReqs.isLentePronta;
 
-  // FASE 5: Check if both confirmations are done
-  // If prescription was NOT auto-filled, no confirmation needed; if it was, user must confirm
-  const isReadyToSubmit = confirmedProduct && (confirmedPrescription || !prescriptionAutoFilled) && !!produtoSelecionado;
+  // FASE 5: Check if all confirmations are done
+  const isReadyToSubmit = confirmedProduct && confirmedPrescription && !!produtoSelecionado;
 
   // ---- Submit order ----
   const handleEnviarPedido = async () => {
@@ -1667,9 +1667,9 @@ const PedidoFornecedorPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Eye className="h-4 w-4" /> Prescrição
-                {prescriptionAutoFilled && !confirmedPrescription && (
+                {!confirmedPrescription && (
                   <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-300 ml-2">
-                    <AlertTriangle className="h-3 w-3 mr-1" /> Revisar
+                    <AlertTriangle className="h-3 w-3 mr-1" /> Revisar e confirmar
                   </Badge>
                 )}
                 {confirmedPrescription && (
@@ -1678,8 +1678,8 @@ const PedidoFornecedorPage: React.FC = () => {
                   </Badge>
                 )}
               </CardTitle>
-              {prescriptionAutoFilled && !confirmedPrescription && (
-                <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => setConfirmedPrescription(true)}>
+              {!confirmedPrescription && (
+                <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs border-emerald-400 text-emerald-700 hover:bg-emerald-50" onClick={() => setConfirmedPrescription(true)}>
                   <Check className="h-3 w-3" /> Confirmar Receita
                 </Button>
               )}
@@ -1820,7 +1820,31 @@ const PedidoFornecedorPage: React.FC = () => {
           {productReqs.needsDadosArmacao && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Dados de Medida / Armação</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Glasses className="h-4 w-4" /> Dados de Medida / Armação
+                  {!confirmedFrame && (
+                    <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-300 ml-2">
+                      <AlertTriangle className="h-3 w-3 mr-1" /> Revisar
+                    </Badge>
+                  )}
+                  {confirmedFrame && (
+                    <Badge className="bg-emerald-600 text-white gap-1 text-xs ml-2">
+                      <CheckCircle2 className="h-3 w-3" /> Confirmada
+                    </Badge>
+                  )}
+                </CardTitle>
+                {!confirmedFrame && (
+                  <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs border-emerald-400 text-emerald-700 hover:bg-emerald-50" onClick={() => setConfirmedFrame(true)}>
+                    <Check className="h-3 w-3" /> Confirmar Armação
+                  </Button>
+                )}
+                {confirmedFrame && (
+                  <Button size="sm" variant="ghost" className="gap-1 h-7 text-xs text-muted-foreground" onClick={() => setConfirmedFrame(false)}>
+                    <Pencil className="h-3 w-3" /> Editar
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-3 gap-2">
