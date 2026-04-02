@@ -6,6 +6,7 @@ import {
   ArrowDownCircle, ArrowUpCircle, AlertTriangle,
   Package, Send, FileCheck,
   Download, CreditCard, Banknote, ShieldCheck,
+  Pencil, RotateCcw, ArrowDown,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
