@@ -1041,6 +1041,17 @@ export default function FinanceiroHubPage() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-1">
+                                {/* Edit natureza - available on any status */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="sm" variant="ghost" onClick={() => openEditNatureza(l)}>
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Editar classificação (natureza/categoria)</TooltipContent>
+                                </Tooltip>
+
+                                {/* Configure payment - only for PAGAR + PREVISTO */}
                                 {l.tipo === "PAGAR" && l.status === "PREVISTO" && (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
@@ -1051,20 +1062,43 @@ export default function FinanceiroHubPage() {
                                     <TooltipContent>{hasPay ? "Editar dados de pagamento" : "Passo 2: Configurar pagamento"}</TooltipContent>
                                   </Tooltip>
                                 )}
+
+                                {/* Autorizar - admin only, PREVISTO */}
                                 {l.status === "PREVISTO" && authIsAdmin && (
                                   <Button size="sm" variant="outline" onClick={() => autorizarMutation.mutate(l.id)} disabled={autorizarMutation.isPending}>
                                     <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Autorizar
                                   </Button>
                                 )}
+
+                                {/* Cancelar - PREVISTO only */}
                                 {l.status === "PREVISTO" && (
                                   <Button size="sm" variant="ghost" onClick={() => cancelarMutation.mutate(l.id)} disabled={cancelarMutation.isPending}>
                                     <XCircle className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
-                                {(l.status === "AUTORIZADO" || l.status === "PROCESSANDO") && (
-                                  <Button size="sm" variant="default" onClick={() => baixarMutation.mutate(l.id)} disabled={baixarMutation.isPending}>
-                                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Baixar
-                                  </Button>
+
+                                {/* Baixa manual - admin, for PREVISTO/AUTORIZADO (outside borderô flow) */}
+                                {["PREVISTO", "AUTORIZADO"].includes(l.status) && authIsAdmin && !l.bordero_id && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button size="sm" variant="ghost" onClick={() => openBaixaManual(l)}>
+                                        <ArrowDown className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Baixa manual (sem borderô)</TooltipContent>
+                                  </Tooltip>
+                                )}
+
+                                {/* Reabrir - admin, for BAIXADO */}
+                                {l.status === "BAIXADO" && authIsAdmin && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button size="sm" variant="ghost" onClick={() => reabrirMutation.mutate(l.id)} disabled={reabrirMutation.isPending}>
+                                        <RotateCcw className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Reabrir lançamento (voltar para Previsto)</TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             </TableCell>
