@@ -35,7 +35,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import HaytekFormatoAroSelector from "@/components/haytek/HaytekFormatoAroSelector";
 import {
   ArrowLeft, Send, Eye, Glasses, Package, Loader2, Check, AlertTriangle,
-  Search, CheckCircle2, Zap, Sparkles, ChevronDown, ChevronUp,
+  Search, CheckCircle2, Zap, Sparkles, ChevronDown, ChevronUp, Pencil,
 } from "lucide-react";
 
 // ============================================
@@ -690,15 +690,40 @@ const PedidoHaytekPage: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Prescrição Header */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <Eye className="h-4 w-4" /> Prescrição
+          {!confirmedPrescription && (
+            <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-300">
+              <AlertTriangle className="h-3 w-3 mr-1" /> Revisar e confirmar
+            </Badge>
+          )}
+          {confirmedPrescription && (
+            <Badge className="bg-emerald-600 text-white gap-1 text-xs">
+              <CheckCircle2 className="h-3 w-3" /> Confirmada
+            </Badge>
+          )}
+        </div>
+        {!confirmedPrescription && (
+          <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs border-emerald-400 text-emerald-700 hover:bg-emerald-50" onClick={() => setConfirmedPrescription(true)}>
+            <Check className="h-3 w-3" /> Confirmar Receita
+          </Button>
+        )}
+        {confirmedPrescription && (
+          <Button size="sm" variant="ghost" className="gap-1 h-7 text-xs text-muted-foreground" onClick={() => setConfirmedPrescription(false)}>
+            <Pencil className="h-3 w-3" /> Editar
+          </Button>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Prescrição OD */}
         <Card>
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Eye className="h-4 w-4 text-primary" /> Olho Direito (OD)
-              </CardTitle>
-            </div>
+            <CardTitle className="text-sm flex items-center gap-2">
+              Olho Direito (OD)
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-2">
@@ -715,7 +740,10 @@ const PedidoHaytekPage: React.FC = () => {
                   <Input
                     className="h-8 text-sm"
                     value={(prescOd as any)[field]}
-                    onChange={(e) => setPrescOd(prev => ({ ...prev, [field]: e.target.value }))}
+                    onChange={(e) => {
+                      setPrescOd(prev => ({ ...prev, [field]: e.target.value }));
+                      if (confirmedPrescription) setConfirmedPrescription(false);
+                    }}
                   />
                 </div>
               ))}
@@ -760,7 +788,7 @@ const PedidoHaytekPage: React.FC = () => {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
-              <Eye className="h-4 w-4 text-primary" /> Olho Esquerdo (OE)
+              Olho Esquerdo (OE)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -778,7 +806,10 @@ const PedidoHaytekPage: React.FC = () => {
                   <Input
                     className="h-8 text-sm"
                     value={(prescOe as any)[field]}
-                    onChange={(e) => setPrescOe(prev => ({ ...prev, [field]: e.target.value }))}
+                    onChange={(e) => {
+                      setPrescOe(prev => ({ ...prev, [field]: e.target.value }));
+                      if (confirmedPrescription) setConfirmedPrescription(false);
+                    }}
                   />
                 </div>
               ))}
@@ -819,20 +850,34 @@ const PedidoHaytekPage: React.FC = () => {
         </Card>
       </div>
 
-      {/* Confirm Prescription inline */}
-      <div className="flex items-center justify-end gap-2 px-1">
-        <Badge variant="outline" className="text-xs text-muted-foreground">Dados da receita pré-preenchidos da OS</Badge>
-        <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => toast({ title: "✓ Receita conferida pelo operador" })}>
-          <Check className="h-3.5 w-3.5" /> Confirmar Receita
-        </Button>
-      </div>
-
       {/* Armação */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Glasses className="h-4 w-4 text-primary" /> Armação
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Glasses className="h-4 w-4 text-primary" /> Armação
+              {!confirmedFrame && (
+                <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-300">
+                  <AlertTriangle className="h-3 w-3 mr-1" /> Revisar
+                </Badge>
+              )}
+              {confirmedFrame && (
+                <Badge className="bg-emerald-600 text-white gap-1 text-xs">
+                  <CheckCircle2 className="h-3 w-3" /> Confirmada
+                </Badge>
+              )}
+            </CardTitle>
+            {!confirmedFrame && (
+              <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs border-emerald-400 text-emerald-700 hover:bg-emerald-50" onClick={() => setConfirmedFrame(true)}>
+                <Check className="h-3 w-3" /> Confirmar Armação
+              </Button>
+            )}
+            {confirmedFrame && (
+              <Button size="sm" variant="ghost" className="gap-1 h-7 text-xs text-muted-foreground" onClick={() => setConfirmedFrame(false)}>
+                <Pencil className="h-3 w-3" /> Editar
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

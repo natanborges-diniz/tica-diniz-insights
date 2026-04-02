@@ -139,6 +139,7 @@ const PedidoZeissPage: React.FC = () => {
     prisma: "", eixoPrisma: "",
   });
   const [confirmedPrescription, setConfirmedPrescription] = useState(false);
+  const [confirmedFrame, setConfirmedFrame] = useState(false);
   const [prescAutoFilled, setPrescAutoFilled] = useState(false);
 
   // Armação
