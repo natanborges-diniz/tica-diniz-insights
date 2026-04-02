@@ -96,7 +96,9 @@ async function requireAdmin(userId: string) {
 // ═══════════════════════════════════════════════════════════
 
 async function listar(body: Record<string, unknown>) {
-  const { cod_empresa, tipo, status, natureza, origem, data_inicio, data_fim, requer_validacao, limit: lim } = body;
+  const { cod_empresa, tipo, status, natureza, origem, data_inicio, data_fim, campo_data, requer_validacao, limit: lim } = body;
+
+  const dateColumn = campo_data === "EMISSAO" ? "data_emissao" : "data_vencimento";
 
   let query = supabase
     .from("lancamentos_financeiros")
@@ -108,8 +110,8 @@ async function listar(body: Record<string, unknown>) {
   if (status) query = query.eq("status", status);
   if (natureza) query = query.eq("natureza", natureza);
   if (origem) query = query.eq("origem", origem);
-  if (data_inicio) query = query.gte("data_vencimento", data_inicio);
-  if (data_fim) query = query.lte("data_vencimento", data_fim);
+  if (data_inicio) query = query.gte(dateColumn, data_inicio);
+  if (data_fim) query = query.lte(dateColumn, data_fim);
   if (requer_validacao !== undefined) query = query.eq("requer_validacao", requer_validacao);
   if (lim) query = query.limit(Number(lim));
 
