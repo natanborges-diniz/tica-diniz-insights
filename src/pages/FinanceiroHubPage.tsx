@@ -240,11 +240,7 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao autorizar"),
   });
 
-  const baixarMutation = useMutation({
-    mutationFn: (id: string) => invokeAction("baixar", { id }),
-    onSuccess: () => { toast.success("Lançamento baixado"); invalidateAll(); },
-    onError: () => toast.error("Erro ao baixar"),
-  });
+  // baixa happens via borderô confirmation or baixa manual dialog
 
   const cancelarMutation = useMutation({
     mutationFn: (id: string) => invokeAction("cancelar", { id }),
