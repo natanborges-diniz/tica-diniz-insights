@@ -479,14 +479,14 @@ export default function FinanceiroHubPage() {
             {
               number: 4,
               title: "Aprovar e Enviar",
-              description: "Autorize e transmita ao BTG",
+              description: "Admin revisa e transmite ao BTG",
               status: stepStatus(4),
               count: countBorderoAprovado,
             },
             {
               number: 5,
-              title: "Confirmar Baixa",
-              description: "Registre no DRE e fluxo de caixa",
+              title: "Aguardar Banco",
+              description: "Baixa confirmada pelo retorno do banco",
               status: stepStatus(5),
               count: countBorderoEnviado,
             },
