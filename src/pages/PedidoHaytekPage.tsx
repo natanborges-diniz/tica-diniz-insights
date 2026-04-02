@@ -690,9 +690,11 @@ const PedidoHaytekPage: React.FC = () => {
         {/* Prescrição OD */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Eye className="h-4 w-4 text-primary" /> Olho Direito (OD)
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Eye className="h-4 w-4 text-primary" /> Olho Direito (OD)
+              </CardTitle>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-2">
@@ -811,6 +813,14 @@ const PedidoHaytekPage: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Confirm Prescription inline */}
+      <div className="flex items-center justify-end gap-2 px-1">
+        <Badge variant="outline" className="text-xs text-muted-foreground">Dados da receita pré-preenchidos da OS</Badge>
+        <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => toast({ title: "✓ Receita conferida pelo operador" })}>
+          <Check className="h-3.5 w-3.5" /> Confirmar Receita
+        </Button>
       </div>
 
       {/* Armação */}
