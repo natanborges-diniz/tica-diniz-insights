@@ -1171,9 +1171,9 @@ const PedidoZeissPage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <Glasses className="h-4 w-4" /> Prescrição
-                    {prescAutoFilled && !confirmedPrescription && (
+                    {!confirmedPrescription && (
                       <Badge variant="outline" className="text-xs text-amber-600 bg-amber-500/10 border-amber-300 gap-1">
-                        <AlertTriangle className="h-3 w-3" /> Revisar
+                        <AlertTriangle className="h-3 w-3" /> Revisar e confirmar
                       </Badge>
                     )}
                     {confirmedPrescription && (
@@ -1182,9 +1182,14 @@ const PedidoZeissPage: React.FC = () => {
                       </Badge>
                     )}
                   </CardTitle>
-                  {prescAutoFilled && !confirmedPrescription && (
-                    <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => setConfirmedPrescription(true)}>
+                  {!confirmedPrescription && (
+                    <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs border-emerald-400 text-emerald-700 hover:bg-emerald-50" onClick={() => setConfirmedPrescription(true)}>
                       <Check className="h-3 w-3" /> Confirmar Rx
+                    </Button>
+                  )}
+                  {confirmedPrescription && (
+                    <Button size="sm" variant="ghost" className="gap-1 h-7 text-xs text-muted-foreground" onClick={() => setConfirmedPrescription(false)}>
+                      <Pencil className="h-3 w-3" /> Editar
                     </Button>
                   )}
                 </div>
@@ -1229,7 +1234,33 @@ const PedidoZeissPage: React.FC = () => {
 
             {/* ── Frame ── */}
             <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-sm">Armação</CardTitle></CardHeader>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    Armação
+                    {!confirmedFrame && (
+                      <Badge variant="outline" className="text-xs text-amber-600 bg-amber-500/10 border-amber-300 gap-1">
+                        <AlertTriangle className="h-3 w-3" /> Revisar
+                      </Badge>
+                    )}
+                    {confirmedFrame && (
+                      <Badge className="bg-emerald-600 text-white gap-1 text-xs">
+                        <CheckCircle2 className="h-3 w-3" /> OK
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  {!confirmedFrame && (
+                    <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs border-emerald-400 text-emerald-700 hover:bg-emerald-50" onClick={() => setConfirmedFrame(true)}>
+                      <Check className="h-3 w-3" /> Confirmar Armação
+                    </Button>
+                  )}
+                  {confirmedFrame && (
+                    <Button size="sm" variant="ghost" className="gap-1 h-7 text-xs text-muted-foreground" onClick={() => setConfirmedFrame(false)}>
+                      <Pencil className="h-3 w-3" /> Editar
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
                   <div>
