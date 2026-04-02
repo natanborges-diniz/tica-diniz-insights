@@ -143,6 +143,10 @@ const PedidoHaytekPage: React.FC = () => {
   const [paciente, setPaciente] = useState("");
   const [osNumero, setOsNumero] = useState("");
 
+  // ── Confirmation state ──
+  const [confirmedPrescription, setConfirmedPrescription] = useState(false);
+  const [confirmedFrame, setConfirmedFrame] = useState(false);
+
   // ── Submission ──
   const [sending, setSending] = useState(false);
   const [resultado, setResultado] = useState<HaytekPedidoResponse | null>(null);
