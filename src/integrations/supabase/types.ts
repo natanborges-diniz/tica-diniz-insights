@@ -522,6 +522,39 @@ export type Database = {
           },
         ]
       }
+      dre_plano_contas: {
+        Row: {
+          ativo: boolean
+          categoria: string
+          conta_descricao: string
+          conta_numero: string
+          created_at: string
+          grupo_dre: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          categoria: string
+          conta_descricao: string
+          conta_numero: string
+          created_at?: string
+          grupo_dre: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          categoria?: string
+          conta_descricao?: string
+          conta_numero?: string
+          created_at?: string
+          grupo_dre?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       empresa: {
         Row: {
           ativa: boolean
