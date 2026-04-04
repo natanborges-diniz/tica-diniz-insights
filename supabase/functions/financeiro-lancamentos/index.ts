@@ -749,19 +749,60 @@ async function importarErpAuto(body: Record<string, unknown>, userId: string) {
   const ddaList = ddaTitulos || [];
   const ddaUsed = new Set<string>();
 
-  // Helper: auto-classify natureza based on type and forma_pagamento
-  function autoClassify(tipo: string, forma?: string | null): { natureza: string; categoria: string } {
-    if (tipo === "RECEBER") {
-      return { natureza: "RECEITA_BRUTA", categoria: "VENDA_PRODUTO" };
+  // Load dre_plano_contas mapping table
+  const { data: planoContas } = await supabase
+    .from("dre_plano_contas")
+    .select("conta_numero, conta_descricao, grupo_dre, categoria")
+    .eq("ativo", true);
+
+  const planoMap = new Map<string, { grupo_dre: string; categoria: string }>();
+  for (const pc of (planoContas || [])) {
+    planoMap.set(pc.conta_numero, { grupo_dre: pc.grupo_dre, categoria: pc.categoria });
+  }
+
+  // Helper: auto-classify using dre_plano_contas table with prefix fallback
+  function autoClassify(
+    tipo: string,
+    contaNumero?: string | null,
+    contaDescricao?: string | null,
+    forma?: string | null
+  ): { natureza: string; categoria: string; subcategoria: string | null } {
+    // 1. Try exact match from plano de contas
+    if (contaNumero && planoMap.has(contaNumero)) {
+      const match = planoMap.get(contaNumero)!;
+      return { natureza: match.grupo_dre, categoria: match.categoria, subcategoria: contaDescricao || null };
     }
-    // PAGAR
+
+    // 2. Try prefix fallback (e.g. "3.4.28" → "3.4" → "3")
+    if (contaNumero) {
+      const parts = contaNumero.split(".");
+      while (parts.length > 1) {
+        parts.pop();
+        const prefix = parts.join(".");
+        if (planoMap.has(prefix)) {
+          const match = planoMap.get(prefix)!;
+          return { natureza: match.grupo_dre, categoria: match.categoria, subcategoria: contaDescricao || null };
+        }
+      }
+      // Try first character
+      const firstChar = contaNumero.charAt(0);
+      if (planoMap.has(firstChar)) {
+        const match = planoMap.get(firstChar)!;
+        return { natureza: match.grupo_dre, categoria: match.categoria, subcategoria: contaDescricao || null };
+      }
+    }
+
+    // 3. Generic fallback
+    if (tipo === "RECEBER") {
+      return { natureza: "RECEITA_BRUTA", categoria: "VENDAS", subcategoria: contaDescricao || null };
+    }
     if (forma) {
       const fp = forma.toUpperCase();
       if (fp.includes("CARTAO") || fp.includes("CREDITO") || fp.includes("DEBITO")) {
-        return { natureza: "TAXA_ADQUIRENTE", categoria: "TAXAS_BANCARIAS" };
+        return { natureza: "DEDUCOES", categoria: "TAXAS", subcategoria: contaDescricao || "Taxas Adquirentes" };
       }
     }
-    return { natureza: "DESPESAS_OPERACIONAIS", categoria: "FORNECEDORES" };
+    return { natureza: "DESPESAS_OPERACIONAIS", categoria: "OUTROS", subcategoria: contaDescricao || null };
   }
 
   // 3. Process parcelas
@@ -787,7 +828,7 @@ async function importarErpAuto(body: Record<string, unknown>, userId: string) {
     }
 
     const tipo = p.tipo_lancamento === "PAGAR" ? "PAGAR" : "RECEBER";
-    const classification = autoClassify(tipo, p.forma_pagamento_tipo);
+    const classification = autoClassify(tipo, p.conta_numero, p.conta_descricao, p.forma_pagamento_tipo);
 
     const record: Record<string, unknown> = {
       cod_empresa: codEmp,
@@ -800,11 +841,15 @@ async function importarErpAuto(body: Record<string, unknown>, userId: string) {
       forma_pagamento: p.forma_pagamento_tipo || null,
       natureza: classification.natureza,
       categoria: classification.categoria,
+      subcategoria: classification.subcategoria,
       origem: "ERP",
       origem_id: origemId,
       criado_por: userId,
       status: "PREVISTO",
-      dados_extras: {},
+      dados_extras: {
+        conta_numero: p.conta_numero || null,
+        conta_descricao: p.conta_descricao || null,
+      },
     };
 
     // Cross-match with DDA (only for PAGAR)

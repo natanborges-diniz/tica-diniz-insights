@@ -101,27 +101,39 @@ async function gerarDre(body: DreParams) {
  * - Categorias especiais mapeiam para grupos específicos
  */
 function classificarGrupoDre(tipo: string, categoria: string | null, natureza: string | null): string {
-  const cat = (categoria || "").toUpperCase();
   const nat = (natureza || "").toUpperCase();
+  const cat = (categoria || "").toUpperCase();
 
-  // Taxa de adquirente → Deduções
-  if (cat === "TAXA_ADQUIRENTE" || cat === "TAXA") return "DEDUCOES";
+  // If natureza is already set from dre_plano_contas, use it directly
+  if (nat === "RECEITA_BRUTA") return "RECEITA_BRUTA";
+  if (nat === "DEDUCOES") return "DEDUCOES";
+  if (nat === "CUSTO_MERCADORIA") return "CUSTO_MERCADORIA";
+  if (nat === "DESPESAS_OPERACIONAIS") return "DESPESAS_OPERACIONAIS";
+  if (nat === "OUTRAS_DESPESAS") return "OUTRAS_DESPESAS";
+  if (nat === "INVESTIMENTOS") return "INVESTIMENTOS";
 
-  // Impostos → Deduções
-  if (cat === "IMPOSTO" || cat === "TRIBUTO" || cat.includes("IMPOSTO")) return "DEDUCOES";
+  // Legacy/fallback mappings
+  if (cat === "TAXA_ADQUIRENTE" || cat === "TAXA" || cat === "TAXAS") return "DEDUCOES";
+  if (cat === "IMPOSTO" || cat === "IMPOSTOS" || cat === "TRIBUTO" || cat.includes("IMPOSTO")) return "DEDUCOES";
+  if (cat === "COMISSOES") return "DEDUCOES";
+  if (cat === "CMV" || cat === "FORNECEDORES_PRODUTO" || cat.includes("CUSTO")) return "CUSTO_MERCADORIA";
 
-  // CMV / Custo de mercadoria
-  if (cat === "CMV" || cat === "CUSTO_MERCADORIA" || cat === "FORNECEDOR" || cat.includes("CUSTO")) return "CUSTO_MERCADORIA";
+  // Category-based grouping for operational expenses
+  const opCategories = ["PESSOAL", "OCUPACAO", "COMUNICACAO", "MARKETING", "ADMINISTRATIVO",
+    "SERVICOS", "MANUTENCAO", "FINANCEIRO_OPERACIONAL", "SEGURANCA", "DEVOLUCOES"];
+  if (opCategories.includes(cat)) return "DESPESAS_OPERACIONAIS";
 
-  // Receita
+  if (cat === "FINANCEIRO" || cat === "PRO_LABORE") return "OUTRAS_DESPESAS";
+  if (cat === "INVESTIMENTOS") return "INVESTIMENTOS";
+
+  // Type-based fallback
   if (tipo === "RECEBER") {
-    if (cat === "OUTRAS_RECEITAS" || cat === "FINANCEIRA" || nat === "FINANCEIRA") return "OUTRAS_RECEITAS";
+    if (cat === "OUTRAS_RECEITAS" || cat === "FINANCEIRA") return "OUTRAS_RECEITAS";
     return "RECEITA_BRUTA";
   }
 
-  // Despesas
   if (tipo === "PAGAR") {
-    if (cat === "OUTRAS_DESPESAS" || cat === "FINANCEIRA" || nat === "FINANCEIRA") return "OUTRAS_DESPESAS";
+    if (cat === "OUTRAS_DESPESAS" || cat === "FINANCEIRA") return "OUTRAS_DESPESAS";
     return "DESPESAS_OPERACIONAIS";
   }
 

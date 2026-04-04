@@ -45,6 +45,7 @@ import AdminHaytekConfigPage from "./pages/AdminHaytekConfigPage";
 import AdminFornecedoresPage from "./pages/AdminFornecedoresPage";
 import AdminBtgValidacaoPage from "./pages/AdminBtgValidacaoPage";
 import AdminAdquirentesPage from "./pages/AdminAdquirentesPage";
+import AdminDreConfigPage from "./pages/AdminDreConfigPage";
 import SystemPlayground from "./pages/_SystemPlayground";
 import CheckoutPage from "./pages/CheckoutPage";
 import NotFound from "./pages/NotFound";
@@ -126,6 +127,7 @@ const App = () => (
                 <Route path="/admin/fornecedores" element={<AdminFornecedoresPage />} />
                 <Route path="/admin/btg-validacao" element={<AdminBtgValidacaoPage />} />
                 <Route path="/admin/adquirentes" element={<AdminAdquirentesPage />} />
+                <Route path="/admin/dre-config" element={<AdminDreConfigPage />} />
 
                 {/* Dev playground — system design */}
                 <Route path="/dev/playground" element={<SystemPlayground />} />
