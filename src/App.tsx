@@ -45,6 +45,7 @@ import AdminHaytekConfigPage from "./pages/AdminHaytekConfigPage";
 import AdminFornecedoresPage from "./pages/AdminFornecedoresPage";
 import AdminBtgValidacaoPage from "./pages/AdminBtgValidacaoPage";
 import AdminAdquirentesPage from "./pages/AdminAdquirentesPage";
+import AdminDreConfigPage from "./pages/AdminDreConfigPage";
 import SystemPlayground from "./pages/_SystemPlayground";
 import CheckoutPage from "./pages/CheckoutPage";
 import NotFound from "./pages/NotFound";
