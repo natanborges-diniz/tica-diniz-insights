@@ -828,7 +828,7 @@ async function importarErpAuto(body: Record<string, unknown>, userId: string) {
     }
 
     const tipo = p.tipo_lancamento === "PAGAR" ? "PAGAR" : "RECEBER";
-    const classification = autoClassify(tipo, p.forma_pagamento_tipo);
+    const classification = autoClassify(tipo, p.conta_numero, p.conta_descricao, p.forma_pagamento_tipo);
 
     const record: Record<string, unknown> = {
       cod_empresa: codEmp,
@@ -841,11 +841,15 @@ async function importarErpAuto(body: Record<string, unknown>, userId: string) {
       forma_pagamento: p.forma_pagamento_tipo || null,
       natureza: classification.natureza,
       categoria: classification.categoria,
+      subcategoria: classification.subcategoria,
       origem: "ERP",
       origem_id: origemId,
       criado_por: userId,
       status: "PREVISTO",
-      dados_extras: {},
+      dados_extras: {
+        conta_numero: p.conta_numero || null,
+        conta_descricao: p.conta_descricao || null,
+      },
     };
 
     // Cross-match with DDA (only for PAGAR)

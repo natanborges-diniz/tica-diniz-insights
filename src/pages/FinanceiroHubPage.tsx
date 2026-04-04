@@ -1127,7 +1127,18 @@ export default function FinanceiroHubPage() {
                             <TableCell className="text-sm">{l.pessoa_nome || "—"}</TableCell>
                             <TableCell className="text-sm">{format(new Date(l.data_vencimento), "dd/MM/yy")}</TableCell>
                             <TableCell className="text-sm text-right font-medium">{fmtCurrency(l.valor)}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{l.natureza?.replace(/_/g, " ") || "—"}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {l.subcategoria ? (
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <span>{l.categoria?.replace(/_/g, " ") || ""} › <strong>{l.subcategoria}</strong></span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>{l.natureza?.replace(/_/g, " ") || "—"}</TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                l.natureza?.replace(/_/g, " ") || "—"
+                              )}
+                            </TableCell>
                             <TableCell><Badge variant={sc.variant}>{sc.label}</Badge></TableCell>
                             <TableCell>{getDdaBadge(l)}</TableCell>
                             <TableCell>
