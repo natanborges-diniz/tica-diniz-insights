@@ -36,6 +36,7 @@ interface Lancamento {
   status: string;
   natureza: string | null;
   categoria: string | null;
+  subcategoria: string | null;
   descricao: string;
   pessoa_nome: string | null;
   pessoa_documento: string | null;
