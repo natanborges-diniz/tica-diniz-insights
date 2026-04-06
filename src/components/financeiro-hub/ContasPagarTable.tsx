@@ -197,6 +197,9 @@ export function ContasPagarTable({
                 if (l.bordero_id && ["BORDERO", "AUTORIZADO"].includes(l.status) && onRemoverDoBordero) {
                   secondaryActions.push({ label: "Remover do Borderô", icon: Unlink, onClick: () => onRemoverDoBordero(l), destructive: true });
                 }
+                if (!l.bordero_id && l.status === "AUTORIZADO") {
+                  secondaryActions.push({ label: "Desautorizar", icon: RotateCcw, onClick: () => onReabrir(l.id) });
+                }
 
                 return (
                   <TableRow key={l.id} className={isVencido ? "bg-destructive/5" : undefined}>
