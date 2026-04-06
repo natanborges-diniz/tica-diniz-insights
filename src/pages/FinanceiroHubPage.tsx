@@ -1129,16 +1129,18 @@ export default function FinanceiroHubPage() {
                             <TableCell className="text-sm">{l.pessoa_nome || "—"}</TableCell>
                             <TableCell className="text-sm">{format(new Date(l.data_vencimento), "dd/MM/yy")}</TableCell>
                             <TableCell className="text-sm text-right font-medium">{fmtCurrency(l.valor)}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
+                            <TableCell className="text-xs">
                               {l.subcategoria ? (
                                 <Tooltip>
                                   <TooltipTrigger>
-                                    <span>{l.categoria?.replace(/_/g, " ") || ""} › <strong>{l.subcategoria}</strong></span>
+                                    <span className="font-medium">{l.subcategoria}</span>
                                   </TooltipTrigger>
-                                  <TooltipContent>{l.natureza?.replace(/_/g, " ") || "—"}</TooltipContent>
+                                  <TooltipContent>
+                                    {l.natureza?.replace(/_/g, " ") || "—"} › {l.categoria?.replace(/_/g, " ") || "—"}
+                                  </TooltipContent>
                                 </Tooltip>
                               ) : (
-                                l.natureza?.replace(/_/g, " ") || "—"
+                                <span className="text-muted-foreground">{l.descricao?.substring(0, 20) || "—"}</span>
                               )}
                             </TableCell>
                             <TableCell><Badge variant={sc.variant}>{sc.label}</Badge></TableCell>
