@@ -1,114 +1,75 @@
 
 
-## Plano: Classificação Automática pelo Plano de Contas do ERP + Tabela de Parametrização DRE
+## Plano: Completar Seed da Tabela `dre_plano_contas` com Todas as Contas Reais do ERP
 
-### Problema atual
+### Problema
 
-A função `autoClassify` ignora `conta_numero` e `conta_descricao` do ERP, classificando tudo genericamente. O ERP já traz um plano de contas detalhado (ex: "3.4.1 Salário", "3.2.1 Aluguel", "3.8.1 Fornecedores de Lentes") que precisa ser preservado no lançamento e usado para classificação hierárquica automática.
+O seed inicial da `dre_plano_contas` tem ~30 contas, mas o ERP real usa ~75 contas distintas. Contas como `3.1.14 ROYALTIES` caem no fallback por prefixo `3.1` → IMPOSTOS, quando na verdade é FRANQUIA. Resultado: classificação errada na importação.
 
-### Abordagem
+### Diagnóstico do print
 
-A `conta_descricao` do ERP é a informação primária do lançamento (ex: "Salário", "FGTS", "Aluguel"). O sistema mapeia automaticamente para a hierarquia DRE padrão usando uma **tabela de parametrização configurável** (`dre_plano_contas`). Isso permite ajustes futuros sem código.
+O lançamento "DINIZ FRANCHISING AD" (R$ 3.691,21) tem `conta_numero = 3.1.14` e `conta_descricao = ROYALTIES`. Pelo fallback, herda DEDUCOES/IMPOSTOS. A classificação correta é DESPESAS_OPERACIONAIS/FRANQUIA.
 
-### Hierarquia (3 níveis)
+### Solução
+
+Inserir na `dre_plano_contas` **todas as contas reais** encontradas no `parcelas_cache`, com classificação correta. Contas que já existem no seed permanecem inalteradas.
+
+### Migração — INSERT das contas faltantes
+
+Contas a inserir com a classificação correta:
 
 ```text
-grupo_dre (nível DRE)         → ex: DESPESAS_OPERACIONAIS
-  └─ categoria (subgrupo)     → ex: PESSOAL
-       └─ subcategoria (item) → ex: Salário  ← vem do ERP (conta_descricao)
+conta_numero  conta_descricao                          grupo_dre                categoria
+──────────────────────────────────────────────────────────────────────────────────────────
+3.1.11        IRPF                                     DEDUCOES                 IMPOSTOS
+3.1.12        Contribuições Sindicais e Associativas   DESPESAS_OPERACIONAIS    PESSOAL
+3.1.14        ROYALTIES                                DESPESAS_OPERACIONAIS    FRANQUIA
+3.10          MANUTENÇÃO E CONSERVAÇÃO                 DESPESAS_OPERACIONAIS    MANUTENCAO
+3.10.2        AR CONDICIONADO                          DESPESAS_OPERACIONAIS    MANUTENCAO
+3.10.9        EQUIPAMENTOS DE PREVENÇÃO                DESPESAS_OPERACIONAIS    MANUTENCAO
+3.10.10       DEDETIZACAO                              DESPESAS_OPERACIONAIS    MANUTENCAO
+3.10.15       LIMPEZA DE VITRINE                       DESPESAS_OPERACIONAIS    MANUTENCAO
+3.2.2         Outros despesas ocupação                 DESPESAS_OPERACIONAIS    OCUPACAO
+3.2.4         Fundo de participação                    DESPESAS_OPERACIONAIS    OCUPACAO
+3.2.10        SEGURO                                   DESPESAS_OPERACIONAIS    OCUPACAO
+3.3.5         Telefone/Internet                        DESPESAS_OPERACIONAIS    COMUNICACAO
+3.3.6         Licenças de software/ERP                 DESPESAS_OPERACIONAIS    COMUNICACAO
+3.4           DESPESAS COM PESSOAL                     DESPESAS_OPERACIONAIS    PESSOAL
+3.4.16        Contribuição Sindical                    DESPESAS_OPERACIONAIS    PESSOAL
+3.4.19        Auxílio Moradia                          DESPESAS_OPERACIONAIS    PESSOAL
+3.4.20        Premiação                                DESPESAS_OPERACIONAIS    PESSOAL
+3.4.28        AUXILIO ALIMENTACAO                      DESPESAS_OPERACIONAIS    PESSOAL
+3.4.29        FREE LANCER                              DESPESAS_OPERACIONAIS    PESSOAL
+3.5.12        MARKETING DIGITAL                        DESPESAS_OPERACIONAIS    MARKETING
+3.5.13        MÍDIA NACIONAL (Franquia)                DESPESAS_OPERACIONAIS    MARKETING
+3.5.16        MARKETING                                DESPESAS_OPERACIONAIS    MARKETING
+3.6.3         Consulta de crédito (SPC/Serasa)         DESPESAS_OPERACIONAIS    FINANCEIRO_OPERACIONAL
+3.6.5         REEMBOLSO CLIENTES                       DESPESAS_OPERACIONAIS    FINANCEIRO_OPERACIONAL
+3.7.1         MATERIAL BAR                             DESPESAS_OPERACIONAIS    ADMINISTRATIVO
+3.7.10        CARTORIO                                 DESPESAS_OPERACIONAIS    ADMINISTRATIVO
+3.7.13        MANUTENÇÃO VEÍCULOS                      DESPESAS_OPERACIONAIS    ADMINISTRATIVO
+3.7.18        TRANSFERENCIA SAIDA                      DESPESAS_OPERACIONAIS    ADMINISTRATIVO
+3.7.19        MATERIAL P/ SUPORTE AS LOJAS             DESPESAS_OPERACIONAIS    ADMINISTRATIVO
+3.8           FORNECEDORES DE PRODUTOS (Revenda)       CUSTO_MERCADORIA         FORNECEDORES_PRODUTO
+3.9.3         FRANQUIA (ROYALTIES)                     DESPESAS_OPERACIONAIS    FRANQUIA
+3.9.4         MEDICOS / OPTOMETRISTAS                  DESPESAS_OPERACIONAIS    SERVICOS
+3.9.5         Serviços de Montagem e Laboratório       DESPESAS_OPERACIONAIS    SERVICOS
+3.9.8         CONSULTORIA E GESTÃO                     DESPESAS_OPERACIONAIS    SERVICOS
+5.3           Máquinas e Equipamentos Ópticos          OUTRAS_DESPESAS          INVESTIMENTOS
+5.5           Veículos                                 OUTRAS_DESPESAS          INVESTIMENTOS
+5.7           Benfeitorias Prediais                    OUTRAS_DESPESAS          INVESTIMENTOS
+5.8           Outros Investimentos                     OUTRAS_DESPESAS          INVESTIMENTOS
 ```
-
-### 1. Migração — Tabela `dre_plano_contas`
-
-Tabela de parametrização que mapeia `conta_numero` → grupo DRE + categoria:
-
-```sql
-CREATE TABLE public.dre_plano_contas (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  conta_numero text NOT NULL,
-  conta_descricao text NOT NULL,
-  grupo_dre text NOT NULL,        -- RECEITA_BRUTA, DEDUCOES, CUSTO_MERCADORIA, etc.
-  categoria text NOT NULL,         -- PESSOAL, OCUPACAO, MARKETING, etc.
-  ativo boolean NOT NULL DEFAULT true,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE(conta_numero)
-);
-
-ALTER TABLE public.dre_plano_contas ENABLE ROW LEVEL SECURITY;
-
--- RLS: admin lê/escreve, authenticated lê
-CREATE POLICY "Admin full access dre_plano_contas" ON public.dre_plano_contas
-  FOR ALL TO authenticated USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
-CREATE POLICY "Authenticated read dre_plano_contas" ON public.dre_plano_contas
-  FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Service role full access dre_plano_contas" ON public.dre_plano_contas
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
-```
-
-Seed com dados reais do ERP:
-
-| conta_numero | conta_descricao | grupo_dre | categoria |
-|---|---|---|---|
-| 1.9 | CREDITOS FORNECEDORES | RECEITA_BRUTA | VENDAS |
-| 1.10 | TRANSFERENCIA ENTRADA | RECEITA_BRUTA | OUTRAS_RECEITAS |
-| 1.13 | CAIXA | RECEITA_BRUTA | VENDAS |
-| 2.1 | SIMPLES NACIONAL | DEDUCOES | IMPOSTOS |
-| 2.2 | COMISSÕES | DEDUCOES | COMISSOES |
-| 2.3 | TAXAS ADQUIRENTES | DEDUCOES | TAXAS |
-| 3.1.x | Taxas Municipais, ICMS, IRPF... | DEDUCOES | IMPOSTOS |
-| 3.2.x | Aluguel, Condomínios, Água, Energia, IPTU... | DESPESAS_OPERACIONAIS | OCUPACAO |
-| 3.3.x | Telefone, Internet, Software... | DESPESAS_OPERACIONAIS | COMUNICACAO |
-| 3.4.x | Salário, FGTS, Vale Transporte, Férias... | DESPESAS_OPERACIONAIS | PESSOAL |
-| 3.5.x | Marketing, Eventos, Brindes... | DESPESAS_OPERACIONAIS | MARKETING |
-| 3.6.x | Tarifas Bancárias, Reembolsos... | DESPESAS_OPERACIONAIS | FINANCEIRO_OPERACIONAL |
-| 3.7.x | Material, Embalagens, Correios... | DESPESAS_OPERACIONAIS | ADMINISTRATIVO |
-| 3.8.x | Fornecedores Lentes, Armações... | CUSTO_MERCADORIA | FORNECEDORES_PRODUTO |
-| 3.9.x | Franquia, Médicos, Laboratório... | DESPESAS_OPERACIONAIS | SERVICOS |
-| 3.10.x | Manutenção, Dedetização... | DESPESAS_OPERACIONAIS | MANUTENCAO |
-| 3.11 | CRÉDITOS DE CLIENTES | OUTRAS_DESPESAS | DEVOLUCOES |
-| 4.x | Empréstimos, Juros... | OUTRAS_DESPESAS | FINANCEIRO |
-| 5.x | Software, Equipamentos, Veículos... | INVESTIMENTOS | INVESTIMENTOS |
-| 6.1 | Retirada Mensal | OUTRAS_DESPESAS | PRO_LABORE |
-
-### 2. Edge function `financeiro-lancamentos` — Refatorar `autoClassify`
-
-- Ao importar (`importar_erp_auto`), consultar `dre_plano_contas` para montar um mapa `conta_numero → {grupo_dre, categoria}`
-- Se match exato: usar `grupo_dre` como `natureza`, `categoria` como `categoria`, `conta_descricao` do ERP como `subcategoria`
-- Se sem match exato: fallback por prefixo (ex: "3.4.28" → tenta "3.4" → "3")
-- Se sem match nenhum: fallback genérico atual
-- Salvar `conta_numero` e `conta_descricao` em `dados_extras` para rastreabilidade
-
-### 3. Edge function `financeiro-relatorios` — `classificarGrupoDre`
-
-- Atualizar para reconhecer as novas categorias (PESSOAL, OCUPACAO, COMUNICACAO, etc.) e mapeá-las corretamente nos grupos DRE
-- O DRE agrupa por `natureza` (grupo) e pode detalhar por `categoria` (subgrupo)
-
-### 4. UI — `FinanceiroHubPage.tsx`
-
-- Coluna classificação exibe: `categoria › subcategoria` (ex: "PESSOAL › Salário")
-- Quando `subcategoria` vem do ERP, exibir com ícone indicando origem automática
-
-### 5. UI — Página de parametrização DRE (nova rota `/admin/dre-config`)
-
-- Tabela editável com as contas cadastradas
-- CRUD: adicionar/editar/desativar contas
-- Colunas: conta_numero, conta_descricao, grupo_dre (select), categoria (select/editável)
-- Acessível apenas para admins
 
 ### Detalhes técnicos
 
 | Arquivo | Alteração |
 |---|---|
-| Migração SQL | Criar tabela `dre_plano_contas` + seed com ~50 contas do ERP |
-| `supabase/functions/financeiro-lancamentos/index.ts` | Refatorar `autoClassify`: consultar tabela, fallback por prefixo, salvar `subcategoria` = `conta_descricao`, `dados_extras` com `conta_numero` |
-| `supabase/functions/financeiro-relatorios/index.ts` | Expandir `classificarGrupoDre` para novas categorias |
-| `src/pages/FinanceiroHubPage.tsx` | Exibir `categoria › subcategoria` na coluna classificação |
-| `src/pages/AdminDreConfigPage.tsx` (novo) | CRUD da tabela `dre_plano_contas` |
-| `src/App.tsx` | Rota `/admin/dre-config` |
+| Migração SQL | INSERT ~38 contas faltantes na `dre_plano_contas` com ON CONFLICT para não duplicar |
 
 ### O que NÃO muda
-- Tabela `lancamentos_financeiros` (sem migração — campos já existem)
-- Lançamentos já importados (mantêm classificação atual)
-- Fluxo de borderô, autorização e baixa
+- Lógica de `autoClassify` (fallback por prefixo já funciona — agora terá match exato)
+- Tabela `lancamentos_financeiros`
+- Lançamentos já importados (mantêm classificação atual; editáveis manualmente)
+- UI do Hub e da página de parametrização DRE
 
