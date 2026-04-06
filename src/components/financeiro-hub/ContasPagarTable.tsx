@@ -1,7 +1,7 @@
 import { format } from "date-fns";
 import {
   Pencil, CreditCard, XCircle, ArrowDown, RotateCcw,
-  MoreHorizontal,
+  MoreHorizontal, Unlink,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
