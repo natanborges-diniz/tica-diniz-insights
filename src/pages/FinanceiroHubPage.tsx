@@ -785,28 +785,38 @@ export default function FinanceiroHubPage() {
               </div>
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
                 <p className="text-xs text-muted-foreground">
-                  A classificação (natureza e categoria) determina onde este lançamento aparece no DRE e relatórios financeiros.
-                  Parcelas importadas do ERP recebem uma classificação automática, mas você pode ajustá-la aqui.
+                  O <strong>nome da conta</strong> identifica o lançamento (ex: Aluguel, Salário, ROYALTIES).
+                  A natureza e categoria determinam o agrupamento no DRE. Parcelas do ERP recebem classificação automática.
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-3">
                 <div className="space-y-1">
-                  <Label>Natureza (DRE) *</Label>
-                  <Select value={editNatureza} onValueChange={setEditNatureza}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {NATUREZAS.map(n => <SelectItem key={n} value={n}>{n.replace(/_/g, " ")}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Label>Nome da Conta *</Label>
+                  <Input
+                    value={editSubcategoria}
+                    onChange={(e) => setEditSubcategoria(e.target.value)}
+                    placeholder="Ex: Aluguel, Salário, ROYALTIES..."
+                  />
                 </div>
-                <div className="space-y-1">
-                  <Label>Categoria</Label>
-                  <Select value={editCategoria} onValueChange={setEditCategoria}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIAS.map(c => <SelectItem key={c} value={c}>{c.replace(/_/g, " ")}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Natureza (DRE)</Label>
+                    <Select value={editNatureza} onValueChange={setEditNatureza}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        {NATUREZAS.map(n => <SelectItem key={n} value={n}>{n.replace(/_/g, " ")}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Categoria</Label>
+                    <Select value={editCategoria} onValueChange={setEditCategoria}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        {CATEGORIAS.map(c => <SelectItem key={c} value={c}>{c.replace(/_/g, " ")}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
             </div>
