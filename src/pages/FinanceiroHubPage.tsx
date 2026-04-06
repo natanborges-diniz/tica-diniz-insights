@@ -1167,7 +1167,7 @@ export default function FinanceiroHubPage() {
                                 return contaNome ? (
                                   <Tooltip>
                                     <TooltipTrigger>
-                                      <span className="font-medium">{contaNome}</span>
+                                      <span className="font-medium uppercase">{contaNome.toUpperCase()}</span>
                                     </TooltipTrigger>
                                     <TooltipContent>
                                       {l.natureza?.replace(/_/g, " ") || "—"} › {l.categoria?.replace(/_/g, " ") || "—"}
