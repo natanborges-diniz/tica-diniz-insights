@@ -168,6 +168,19 @@ export default function FinanceiroHubPage() {
     },
   });
 
+  const { data: planoContas = [] } = useQuery<{ id: string; conta_numero: string; conta_descricao: string; grupo_dre: string; categoria: string; ativo: boolean }[]>({
+    queryKey: ["dre-plano-contas-ativas"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("dre_plano_contas")
+        .select("id, conta_numero, conta_descricao, grupo_dre, categoria, ativo")
+        .eq("ativo", true)
+        .order("conta_descricao", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const { data: borderos = [], isLoading: borderosLoading } = useQuery<Bordero[]>({
     queryKey: ["borderos", codEmpresa],
     queryFn: () => invokeAction("listar_borderos", { cod_empresa: codEmpresa }),
