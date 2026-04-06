@@ -1089,7 +1089,7 @@ export default function FinanceiroHubPage() {
                         <TableHead>Pessoa</TableHead>
                         <TableHead className="w-[95px]">Vencimento</TableHead>
                         <TableHead className="w-[110px] text-right">Valor</TableHead>
-                        <TableHead className="w-[90px]">Natureza</TableHead>
+                        <TableHead className="w-[130px]">Conta</TableHead>
                         <TableHead className="w-[100px]">Status</TableHead>
                         <TableHead className="w-[80px]">DDA</TableHead>
                         <TableHead className="w-[65px]">Pgto</TableHead>
