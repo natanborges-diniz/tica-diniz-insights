@@ -140,6 +140,7 @@ export default function FinanceiroHubPage() {
   // Edit dialog state
   const [editNatureza, setEditNatureza] = useState("");
   const [editCategoria, setEditCategoria] = useState("");
+  const [editSubcategoria, setEditSubcategoria] = useState("");
 
   const invokeAction = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -315,8 +316,8 @@ export default function FinanceiroHubPage() {
   });
 
   const editNaturezaMutation = useMutation({
-    mutationFn: async ({ id, natureza, categoria }: { id: string; natureza: string; categoria: string }) => {
-      return invokeAction("editar", { id, natureza, categoria });
+    mutationFn: async ({ id, natureza, categoria, subcategoria }: { id: string; natureza: string; categoria: string; subcategoria: string }) => {
+      return invokeAction("editar", { id, natureza, categoria, subcategoria });
     },
     onSuccess: () => {
       toast.success("Classificação atualizada");
@@ -349,6 +350,7 @@ export default function FinanceiroHubPage() {
     setEditLanc(l);
     setEditNatureza(l.natureza || "");
     setEditCategoria(l.categoria || "");
+    setEditSubcategoria(l.subcategoria || "");
   };
 
   const openBaixaManual = (l: Lancamento) => {
@@ -764,8 +766,8 @@ export default function FinanceiroHubPage() {
             <>
               <Button variant="outline" onClick={() => setEditLanc(null)}>Cancelar</Button>
               <Button
-                onClick={() => editLanc && editNaturezaMutation.mutate({ id: editLanc.id, natureza: editNatureza, categoria: editCategoria })}
-                disabled={editNaturezaMutation.isPending || !editNatureza}
+                onClick={() => editLanc && editNaturezaMutation.mutate({ id: editLanc.id, natureza: editNatureza, categoria: editCategoria, subcategoria: editSubcategoria })}
+                disabled={editNaturezaMutation.isPending || !editSubcategoria}
               >
                 Salvar Classificação
               </Button>
@@ -783,28 +785,38 @@ export default function FinanceiroHubPage() {
               </div>
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
                 <p className="text-xs text-muted-foreground">
-                  A classificação (natureza e categoria) determina onde este lançamento aparece no DRE e relatórios financeiros.
-                  Parcelas importadas do ERP recebem uma classificação automática, mas você pode ajustá-la aqui.
+                  O <strong>nome da conta</strong> identifica o lançamento (ex: Aluguel, Salário, ROYALTIES).
+                  A natureza e categoria determinam o agrupamento no DRE. Parcelas do ERP recebem classificação automática.
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-3">
                 <div className="space-y-1">
-                  <Label>Natureza (DRE) *</Label>
-                  <Select value={editNatureza} onValueChange={setEditNatureza}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {NATUREZAS.map(n => <SelectItem key={n} value={n}>{n.replace(/_/g, " ")}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Label>Nome da Conta *</Label>
+                  <Input
+                    value={editSubcategoria}
+                    onChange={(e) => setEditSubcategoria(e.target.value)}
+                    placeholder="Ex: Aluguel, Salário, ROYALTIES..."
+                  />
                 </div>
-                <div className="space-y-1">
-                  <Label>Categoria</Label>
-                  <Select value={editCategoria} onValueChange={setEditCategoria}>
-                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIAS.map(c => <SelectItem key={c} value={c}>{c.replace(/_/g, " ")}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Natureza (DRE)</Label>
+                    <Select value={editNatureza} onValueChange={setEditNatureza}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        {NATUREZAS.map(n => <SelectItem key={n} value={n}>{n.replace(/_/g, " ")}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Categoria</Label>
+                    <Select value={editCategoria} onValueChange={setEditCategoria}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        {CATEGORIAS.map(c => <SelectItem key={c} value={c}>{c.replace(/_/g, " ")}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1087,7 +1099,7 @@ export default function FinanceiroHubPage() {
                         <TableHead>Pessoa</TableHead>
                         <TableHead className="w-[95px]">Vencimento</TableHead>
                         <TableHead className="w-[110px] text-right">Valor</TableHead>
-                        <TableHead className="w-[90px]">Natureza</TableHead>
+                        <TableHead className="w-[130px]">Conta</TableHead>
                         <TableHead className="w-[100px]">Status</TableHead>
                         <TableHead className="w-[80px]">DDA</TableHead>
                         <TableHead className="w-[65px]">Pgto</TableHead>
@@ -1127,16 +1139,18 @@ export default function FinanceiroHubPage() {
                             <TableCell className="text-sm">{l.pessoa_nome || "—"}</TableCell>
                             <TableCell className="text-sm">{format(new Date(l.data_vencimento), "dd/MM/yy")}</TableCell>
                             <TableCell className="text-sm text-right font-medium">{fmtCurrency(l.valor)}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
+                            <TableCell className="text-xs">
                               {l.subcategoria ? (
                                 <Tooltip>
                                   <TooltipTrigger>
-                                    <span>{l.categoria?.replace(/_/g, " ") || ""} › <strong>{l.subcategoria}</strong></span>
+                                    <span className="font-medium">{l.subcategoria}</span>
                                   </TooltipTrigger>
-                                  <TooltipContent>{l.natureza?.replace(/_/g, " ") || "—"}</TooltipContent>
+                                  <TooltipContent>
+                                    {l.natureza?.replace(/_/g, " ") || "—"} › {l.categoria?.replace(/_/g, " ") || "—"}
+                                  </TooltipContent>
                                 </Tooltip>
                               ) : (
-                                l.natureza?.replace(/_/g, " ") || "—"
+                                <span className="text-muted-foreground">{l.descricao?.substring(0, 20) || "—"}</span>
                               )}
                             </TableCell>
                             <TableCell><Badge variant={sc.variant}>{sc.label}</Badge></TableCell>
@@ -1164,7 +1178,7 @@ export default function FinanceiroHubPage() {
                                       <Pencil className="h-3.5 w-3.5" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Editar classificação (natureza/categoria)</TooltipContent>
+                                  <TooltipContent>Editar conta / classificação</TooltipContent>
                                 </Tooltip>
 
                                 {/* Configure payment - only for PAGAR + PREVISTO */}
