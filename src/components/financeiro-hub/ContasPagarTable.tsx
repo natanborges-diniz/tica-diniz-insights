@@ -94,7 +94,7 @@ export function ContasPagarTable({
   lancamentos: rawLancamentos, isLoading, selectedIds, isAdmin, stepFilter,
   onToggleSelect, onToggleSelectAll,
   onClassificar, onPrepararPagamento, onBaixaManual,
-  onCancelar, onReabrir, isCancelando, isReabrindo,
+  onCancelar, onReabrir, onRemoverDoBordero, isCancelando, isReabrindo, isRemovendoDoBordero,
 }: ContasPagarTableProps) {
   // Apply step-based filtering
   const lancamentos = stepFilter ? rawLancamentos.filter(l => {
