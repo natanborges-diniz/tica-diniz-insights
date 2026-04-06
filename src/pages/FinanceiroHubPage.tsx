@@ -316,8 +316,8 @@ export default function FinanceiroHubPage() {
   });
 
   const editNaturezaMutation = useMutation({
-    mutationFn: async ({ id, natureza, categoria }: { id: string; natureza: string; categoria: string }) => {
-      return invokeAction("editar", { id, natureza, categoria });
+    mutationFn: async ({ id, natureza, categoria, subcategoria }: { id: string; natureza: string; categoria: string; subcategoria: string }) => {
+      return invokeAction("editar", { id, natureza, categoria, subcategoria });
     },
     onSuccess: () => {
       toast.success("Classificação atualizada");
