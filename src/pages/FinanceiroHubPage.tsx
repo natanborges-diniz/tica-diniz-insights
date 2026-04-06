@@ -1178,7 +1178,7 @@ export default function FinanceiroHubPage() {
                                       <Pencil className="h-3.5 w-3.5" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Editar classificação (natureza/categoria)</TooltipContent>
+                                  <TooltipContent>Editar conta / classificação</TooltipContent>
                                 </Tooltip>
 
                                 {/* Configure payment - only for PAGAR + PREVISTO */}
