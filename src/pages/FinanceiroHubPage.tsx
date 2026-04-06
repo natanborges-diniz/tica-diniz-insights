@@ -237,6 +237,13 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao cancelar"),
   });
 
+  const removerDoBorderoMutation = useMutation({
+    mutationFn: ({ bordero_id, lancamento_ids }: { bordero_id: string; lancamento_ids: string[] }) =>
+      invokeAction("remover_do_bordero", { bordero_id, lancamento_ids }),
+    onSuccess: () => { toast.success("Lançamento removido do borderô"); invalidateAll(); },
+    onError: (e: Error) => toast.error(e.message || "Erro ao remover do borderô"),
+  });
+
   const prepararPagamentoMutation = useMutation({
     mutationFn: async ({ id, dadosExtras }: { id: string; dadosExtras: Record<string, unknown> }) => {
       return invokeAction("editar", { id, dados_extras: dadosExtras });
@@ -453,6 +460,7 @@ export default function FinanceiroHubPage() {
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead>Pgto</TableHead>
                   <TableHead>Status</TableHead>
+                  {borderoDetalhe?.bordero?.status === "MONTAGEM" && <TableHead className="w-[80px]"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -476,6 +484,22 @@ export default function FinanceiroHubPage() {
                           {STATUS_CONFIG[l.status]?.label || l.status}
                         </Badge>
                       </TableCell>
+                      {borderoDetalhe?.bordero?.status === "MONTAGEM" && (
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs text-destructive hover:text-destructive"
+                            disabled={removerDoBorderoMutation.isPending}
+                            onClick={() => removerDoBorderoMutation.mutate({
+                              bordero_id: borderoDetalhe.bordero.id,
+                              lancamento_ids: [l.id],
+                            })}
+                          >
+                            <XCircle className="h-3.5 w-3.5 mr-1" /> Remover
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -751,8 +775,12 @@ export default function FinanceiroHubPage() {
               onBaixaManual={openBaixaManual}
               onCancelar={(id) => cancelarMutation.mutate(id)}
               onReabrir={(id) => reabrirMutation.mutate(id)}
+              onRemoverDoBordero={(l) => {
+                if (l.bordero_id) removerDoBorderoMutation.mutate({ bordero_id: l.bordero_id, lancamento_ids: [l.id] });
+              }}
               isCancelando={cancelarMutation.isPending}
               isReabrindo={reabrirMutation.isPending}
+              isRemovendoDoBordero={removerDoBorderoMutation.isPending}
               stepFilter={selectedStep}
             />
           </TabsContent>

@@ -1,7 +1,7 @@
 import { format } from "date-fns";
 import {
   Pencil, CreditCard, XCircle, ArrowDown, RotateCcw,
-  MoreHorizontal,
+  MoreHorizontal, Unlink,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,8 +63,10 @@ interface ContasPagarTableProps {
   onBaixaManual: (l: Lancamento) => void;
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
+  onRemoverDoBordero?: (lancamento: Lancamento) => void;
   isCancelando: boolean;
   isReabrindo: boolean;
+  isRemovendoDoBordero?: boolean;
 }
 
 const fmtCurrency = (v: number) =>
@@ -92,7 +94,7 @@ export function ContasPagarTable({
   lancamentos: rawLancamentos, isLoading, selectedIds, isAdmin, stepFilter,
   onToggleSelect, onToggleSelectAll,
   onClassificar, onPrepararPagamento, onBaixaManual,
-  onCancelar, onReabrir, isCancelando, isReabrindo,
+  onCancelar, onReabrir, onRemoverDoBordero, isCancelando, isReabrindo, isRemovendoDoBordero,
 }: ContasPagarTableProps) {
   // Apply step-based filtering
   const lancamentos = stepFilter ? rawLancamentos.filter(l => {
@@ -192,6 +194,9 @@ export function ContasPagarTable({
                 if (l.status === "BAIXADO" && isAdmin) {
                   secondaryActions.push({ label: "Reabrir", icon: RotateCcw, onClick: () => onReabrir(l.id) });
                 }
+                if (l.bordero_id && l.status === "BORDERO" && onRemoverDoBordero) {
+                  secondaryActions.push({ label: "Remover do Borderô", icon: Unlink, onClick: () => onRemoverDoBordero(l), destructive: true });
+                }
 
                 return (
                   <TableRow key={l.id} className={isVencido ? "bg-destructive/5" : undefined}>
@@ -244,7 +249,7 @@ export function ContasPagarTable({
                                     key={a.label}
                                     onClick={a.onClick}
                                     className={a.destructive ? "text-destructive" : ""}
-                                    disabled={a.destructive ? isCancelando : a.label === "Reabrir" ? isReabrindo : false}
+                                    disabled={a.destructive ? (a.label === "Remover do Borderô" ? isRemovendoDoBordero : isCancelando) : a.label === "Reabrir" ? isReabrindo : false}
                                   >
                                     <Icon className="h-3.5 w-3.5 mr-2" /> {a.label}
                                   </DropdownMenuItem>
