@@ -283,8 +283,8 @@ async function reabrir(body: Record<string, unknown>, userId: string) {
     .single();
 
   if (!existing) throw new Error("Lançamento não encontrado");
-  if (existing.status !== "BAIXADO") {
-    throw new Error("Apenas lançamentos BAIXADOS podem ser reabertos");
+  if (!["BAIXADO", "AUTORIZADO"].includes(existing.status)) {
+    throw new Error("Apenas lançamentos BAIXADOS ou AUTORIZADOS podem ser reabertos");
   }
 
   const { data, error } = await supabase
