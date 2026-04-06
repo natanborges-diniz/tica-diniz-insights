@@ -1,86 +1,44 @@
 
-## Plano: Reorganizar Hub Financeiro — UX Limpa e Intuitiva
 
-### Problemas identificados
+## Plano: Corrigir WorkflowStepper — Lógica de Passo Ativo + Navegação por Clique
 
-1. **Ações confusas na tabela**: Cada linha PREVISTO mostra "Autorizar", "Configurar Pagamento", "Classificar", "Cancelar", "Baixa Manual" — tudo junto, sem hierarquia visual. O usuário não sabe o que fazer primeiro.
-2. **"Autorizar" individual não faz sentido**: O fluxo definido é via Borderô (lote), mas existe um botão "Autorizar" avulso que pula o fluxo.
-3. **Listas hardcoded obsoletas**: `NATUREZAS` e `CATEGORIAS` (linhas 90-102) ainda existem no Hub — lixo que deveria usar `dre_plano_contas`.
-4. **Classificação duplicada**: A página `/financeiro/classificacao` e o dialog de edição no Hub fazem a mesma coisa com UIs diferentes.
-5. **Sidebar fragmentado**: "Lançamentos" e "Classificação" são itens separados para funções que deveriam estar integradas.
-6. **Página monolítica**: 1364 linhas num único arquivo, difícil de manter.
+### Problemas
+
+1. **Passo ativo calculado errado**: `getActiveStep()` usa lógica de "marco mais alto" — se existe **qualquer** borderô em MONTAGEM, pula direto para passo 3. Mas o usuário pode ter lançamentos em todos os estágios simultaneamente. O stepper deveria refletir **onde há mais trabalho pendente**, não o marco mais avançado.
+
+2. **Steps não são clicáveis**: O stepper é puramente visual. Clicar em "Classificar" deveria filtrar a tabela para mostrar apenas os itens pendentes de classificação. Clicar em "Preparar Pgto" deveria filtrar os classificados sem dados de pagamento, etc.
 
 ### Solução
 
-Unificar tudo no Hub com 3 abas claras e eliminar a página de Classificação separada.
+**A. Corrigir lógica do passo ativo**
+- Trocar de "marco mais alto" para "onde há itens pendentes com prioridade":
+  - Se há PREVISTOS sem conta → passo 2 (Classificar) é ativo
+  - Se há classificados sem pagamento → passo 3 é ativo
+  - Se não há pendências → passo mais avançado com contagem > 0
+- Marcar como "completed" apenas os passos onde a contagem é 0 (nada pendente)
 
-```text
-Hub Financeiro (página única)
-├── [Aba] Contas a Pagar    ← foco: classificar + preparar pagamento
-├── [Aba] Borderôs          ← foco: lotes, aprovação, envio ao banco  
-└── [Aba] Contas a Receber  ← foco: recebíveis (futuro)
-```
+**B. Tornar steps clicáveis**
+- Adicionar prop `onStepClick(stepNumber)` ao `WorkflowStepper`
+- Cada step vira um `<button>` com cursor pointer e hover
+- No Hub, ao clicar num step:
+  - Steps 1-3 → mudam aba para "Contas a Pagar" + aplicam filtro de status na tabela
+  - Steps 4-6 → mudam aba para "Borderôs" + filtram por status do borderô
 
-### Mudanças detalhadas
-
-**1. Reestruturar abas do Hub**
-- Renomear aba "Lançamentos" → "Contas a Pagar" (filtro `tipo=PAGAR` fixo)
-- Mover KPIs de previstos/classificados/pendentes para dentro desta aba
-- Manter aba "Borderôs" como está
-
-**2. Simplificar ações por linha (Contas a Pagar)**
-- Cada linha mostra no máximo 2 ações visíveis + menu "..." para ações secundárias:
-  - **Sem classificação**: Botão primário "Classificar" (abre sheet lateral com select do plano de contas)
-  - **Classificado, sem pagamento**: Botão "Preparar Pgto" (abre sheet de PIX/boleto/TED)
-  - **Pronto para lote**: Checkbox para seleção de borderô
-  - **Ações secundárias** (menu ...): Baixa Manual, Cancelar, Reabrir
-- **Remover** o botão "Autorizar" individual — autorização é exclusiva do fluxo de borderô
-
-**3. Eliminar lixo**
-- Remover arrays `NATUREZAS` e `CATEGORIAS` hardcoded (linhas 90-102)
-- No dialog "Novo Lançamento", substituir selects de natureza/categoria por select único do `dre_plano_contas` (igual ao dialog de edição)
-- Remover a página `FinanceiroClassificacaoPage.tsx` inteira
-- Remover rota `/financeiro/classificacao` do `App.tsx`
-- Remover item "Classificação" do sidebar
-
-**4. Componentizar**
-- Extrair a tabela de Contas a Pagar para `src/components/financeiro-hub/ContasPagarTable.tsx`
-- Extrair o dialog de novo lançamento para `src/components/financeiro-hub/NovoLancamentoDialog.tsx`
-- Manter componentes existentes (`BorderoGuidedActions`, `PrepararPagamentoSheet`, `WorkflowStepper`)
-
-**5. Sidebar limpo**
-```text
-Hub Financeiro
-├── Visão Geral
-│   └── Overview Financeiro
-├── Hub Financeiro
-│   └── Contas a Pagar          ← (era "Lançamentos")
-│   └── Conciliação Cartões
-│   └── Carteira Recebíveis
-│   └── Links de Pagamento
-├── Análises
-│   └── ...
-```
-
-**6. Padronização visual**
-- Todas as descrições, nomes de conta e fornecedores em UPPERCASE
-- WorkflowStepper responsivo (empilhar em mobile)
-- Ações com ícones consistentes + tooltips
+**C. Filtro de status na tabela**
+- Adicionar estado `statusFilter` no Hub
+- `ContasPagarTable` recebe e aplica o filtro
+- Badges nos steps indicam quantos itens precisam de ação
 
 ### Arquivos
 
-| Arquivo | Ação |
+| Arquivo | Alteração |
 |---|---|
-| `src/pages/FinanceiroHubPage.tsx` | Refatorar: 3 abas, remover NATUREZAS/CATEGORIAS, simplificar ações, usar plano de contas no "Novo Lançamento" |
-| `src/components/financeiro-hub/ContasPagarTable.tsx` | **Novo** — tabela extraída com ações contextuais |
-| `src/components/financeiro-hub/NovoLancamentoDialog.tsx` | **Novo** — dialog extraído usando `dre_plano_contas` |
-| `src/pages/FinanceiroClassificacaoPage.tsx` | **Deletar** |
-| `src/App.tsx` | Remover rota `/financeiro/classificacao` |
-| `src/components/layout/AppSidebar.tsx` | Remover "Classificação", renomear "Lançamentos" → "Contas a Pagar" |
-| `src/components/financeiro-hub/WorkflowStepper.tsx` | Tornar responsivo (flex-wrap em mobile) |
+| `src/components/financeiro-hub/WorkflowStepper.tsx` | Adicionar `onStepClick` prop, steps como buttons clicáveis |
+| `src/pages/FinanceiroHubPage.tsx` | Corrigir `getActiveStep()`, adicionar `statusFilter`, conectar clique do stepper à navegação de abas + filtro |
+| `src/components/financeiro-hub/ContasPagarTable.tsx` | Receber e aplicar `statusFilter` opcional |
 
 ### O que NÃO muda
-- Lógica de backend (edge functions)
-- Tabela `lancamentos_financeiros` / `borderos`
-- Fluxo de borderô (aprovar → enviar → confirmar)
-- Componentes `PrepararPagamentoSheet` e `BorderoGuidedActions`
+- Componentes `PrepararPagamentoSheet`, `BorderoGuidedActions`, `NovoLancamentoDialog`
+- Backend / edge functions
+- Estrutura de abas (Contas a Pagar / Borderôs / Contas a Receber)
+
