@@ -55,6 +55,7 @@ interface ContasPagarTableProps {
   isLoading: boolean;
   selectedIds: Set<string>;
   isAdmin: boolean;
+  stepFilter?: number | null;
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
   onClassificar: (l: Lancamento) => void;
