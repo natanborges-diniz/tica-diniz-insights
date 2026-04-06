@@ -168,6 +168,19 @@ export default function FinanceiroHubPage() {
     },
   });
 
+  const { data: planoContas = [] } = useQuery<{ id: string; conta_numero: string; conta_descricao: string; grupo_dre: string; categoria: string; ativo: boolean }[]>({
+    queryKey: ["dre-plano-contas-ativas"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("dre_plano_contas")
+        .select("id, conta_numero, conta_descricao, grupo_dre, categoria, ativo")
+        .eq("ativo", true)
+        .order("conta_descricao", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const { data: borderos = [], isLoading: borderosLoading } = useQuery<Bordero[]>({
     queryKey: ["borderos", codEmpresa],
     queryFn: () => invokeAction("listar_borderos", { cod_empresa: codEmpresa }),
@@ -785,37 +798,46 @@ export default function FinanceiroHubPage() {
               </div>
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
                 <p className="text-xs text-muted-foreground">
-                  O <strong>nome da conta</strong> identifica o lançamento (ex: Aluguel, Salário, ROYALTIES).
-                  A natureza e categoria determinam o agrupamento no DRE. Parcelas do ERP recebem classificação automática.
+                  Selecione a <strong>conta</strong> que identifica este lançamento. A natureza e categoria do DRE serão preenchidas automaticamente.
+                  Para criar novas contas, acesse <strong>Admin → Plano de Contas DRE</strong>.
                 </p>
               </div>
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <Label>Nome da Conta *</Label>
-                  <Input
+                  <Label>Conta *</Label>
+                  <Select
                     value={editSubcategoria}
-                    onChange={(e) => setEditSubcategoria(e.target.value)}
-                    placeholder="Ex: Aluguel, Salário, ROYALTIES..."
-                  />
+                    onValueChange={(val) => {
+                      setEditSubcategoria(val);
+                      const conta = planoContas.find(c => c.conta_descricao === val);
+                      if (conta) {
+                        setEditNatureza(conta.grupo_dre);
+                        setEditCategoria(conta.categoria);
+                      }
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Selecione a conta" /></SelectTrigger>
+                    <SelectContent>
+                      {planoContas.map(c => (
+                        <SelectItem key={c.id} value={c.conta_descricao}>
+                          {c.conta_descricao.toUpperCase()} <span className="text-muted-foreground ml-1">({c.conta_numero})</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Natureza (DRE)</Label>
-                    <Select value={editNatureza} onValueChange={setEditNatureza}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>
-                        {NATUREZAS.map(n => <SelectItem key={n} value={n}>{n.replace(/_/g, " ")}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <div className="text-sm px-3 py-2 border rounded-md bg-muted/30 text-muted-foreground">
+                      {editNatureza ? editNatureza.replace(/_/g, " ") : "—"}
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Categoria</Label>
-                    <Select value={editCategoria} onValueChange={setEditCategoria}>
-                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>
-                        {CATEGORIAS.map(c => <SelectItem key={c} value={c}>{c.replace(/_/g, " ")}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <div className="text-sm px-3 py-2 border rounded-md bg-muted/30 text-muted-foreground">
+                      {editCategoria ? editCategoria.replace(/_/g, " ") : "—"}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1145,7 +1167,7 @@ export default function FinanceiroHubPage() {
                                 return contaNome ? (
                                   <Tooltip>
                                     <TooltipTrigger>
-                                      <span className="font-medium">{contaNome}</span>
+                                      <span className="font-medium uppercase">{contaNome.toUpperCase()}</span>
                                     </TooltipTrigger>
                                     <TooltipContent>
                                       {l.natureza?.replace(/_/g, " ") || "—"} › {l.categoria?.replace(/_/g, " ") || "—"}
