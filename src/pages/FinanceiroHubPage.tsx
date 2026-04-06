@@ -140,6 +140,7 @@ export default function FinanceiroHubPage() {
   // Edit dialog state
   const [editNatureza, setEditNatureza] = useState("");
   const [editCategoria, setEditCategoria] = useState("");
+  const [editSubcategoria, setEditSubcategoria] = useState("");
 
   const invokeAction = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
