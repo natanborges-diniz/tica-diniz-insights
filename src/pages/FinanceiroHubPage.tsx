@@ -753,6 +753,7 @@ export default function FinanceiroHubPage() {
               onReabrir={(id) => reabrirMutation.mutate(id)}
               isCancelando={cancelarMutation.isPending}
               isReabrindo={reabrirMutation.isPending}
+              stepFilter={selectedStep}
             />
           </TabsContent>
 
