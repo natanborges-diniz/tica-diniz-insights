@@ -237,6 +237,13 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao cancelar"),
   });
 
+  const removerDoBorderoMutation = useMutation({
+    mutationFn: ({ bordero_id, lancamento_ids }: { bordero_id: string; lancamento_ids: string[] }) =>
+      invokeAction("remover_do_bordero", { bordero_id, lancamento_ids }),
+    onSuccess: () => { toast.success("Lançamento removido do borderô"); invalidateAll(); },
+    onError: (e: Error) => toast.error(e.message || "Erro ao remover do borderô"),
+  });
+
   const prepararPagamentoMutation = useMutation({
     mutationFn: async ({ id, dadosExtras }: { id: string; dadosExtras: Record<string, unknown> }) => {
       return invokeAction("editar", { id, dados_extras: dadosExtras });

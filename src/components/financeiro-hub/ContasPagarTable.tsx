@@ -63,8 +63,10 @@ interface ContasPagarTableProps {
   onBaixaManual: (l: Lancamento) => void;
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
+  onRemoverDoBordero?: (lancamento: Lancamento) => void;
   isCancelando: boolean;
   isReabrindo: boolean;
+  isRemovendoDoBordero?: boolean;
 }
 
 const fmtCurrency = (v: number) =>
