@@ -1140,18 +1140,21 @@ export default function FinanceiroHubPage() {
                             <TableCell className="text-sm">{format(new Date(l.data_vencimento), "dd/MM/yy")}</TableCell>
                             <TableCell className="text-sm text-right font-medium">{fmtCurrency(l.valor)}</TableCell>
                             <TableCell className="text-xs">
-                              {l.subcategoria ? (
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    <span className="font-medium">{l.subcategoria}</span>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    {l.natureza?.replace(/_/g, " ") || "—"} › {l.categoria?.replace(/_/g, " ") || "—"}
-                                  </TooltipContent>
-                                </Tooltip>
-                              ) : (
-                                <span className="text-muted-foreground">{l.descricao?.substring(0, 20) || "—"}</span>
-                              )}
+                              {(() => {
+                                const contaNome = l.subcategoria || (l.dados_extras?.conta_descricao as string) || null;
+                                return contaNome ? (
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <span className="font-medium">{contaNome}</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      {l.natureza?.replace(/_/g, " ") || "—"} › {l.categoria?.replace(/_/g, " ") || "—"}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : (
+                                  <span className="text-muted-foreground">{l.categoria?.replace(/_/g, " ") || "—"}</span>
+                                );
+                              })()}
                             </TableCell>
                             <TableCell><Badge variant={sc.variant}>{sc.label}</Badge></TableCell>
                             <TableCell>{getDdaBadge(l)}</TableCell>
