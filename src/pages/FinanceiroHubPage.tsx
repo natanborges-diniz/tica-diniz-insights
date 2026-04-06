@@ -350,6 +350,7 @@ export default function FinanceiroHubPage() {
     setEditLanc(l);
     setEditNatureza(l.natureza || "");
     setEditCategoria(l.categoria || "");
+    setEditSubcategoria(l.subcategoria || "");
   };
 
   const openBaixaManual = (l: Lancamento) => {
