@@ -311,16 +311,21 @@ export default function FinanceiroHubPage() {
 
   // Workflow step counts
   const countPrevistos = lancamentos.filter(l => l.status === "PREVISTO").length;
+  const classificadosSemPgto = lancamentos.filter(l => l.status === "PREVISTO" && !!l.subcategoria && !hasPaymentData(l)).length;
   const countComPagamento = lancamentos.filter(l => l.status === "PREVISTO" && hasPaymentData(l)).length;
   const countBorderoMontagem = borderos.filter(b => b.status === "MONTAGEM").length;
   const countBorderoAprovado = borderos.filter(b => b.status === "APROVADO").length;
   const countBorderoEnviado = borderos.filter(b => b.status === "ENVIADO").length;
 
+  // Active step = first step with pending items (priority-based)
+  const [selectedStep, setSelectedStep] = useState<number | null>(null);
   const getActiveStep = () => {
-    if (countBorderoEnviado > 0) return 5;
-    if (countBorderoAprovado > 0) return 4;
-    if (countBorderoMontagem > 0) return 3;
-    if (countComPagamento > 0) return 2;
+    if (naoClassificados > 0) return 2;
+    if (classificadosSemPgto > 0) return 3;
+    if (countComPagamento > 0) return 4;
+    if (countBorderoMontagem > 0) return 4;
+    if (countBorderoAprovado > 0) return 5;
+    if (countBorderoEnviado > 0) return 6;
     return 1;
   };
   const activeStep = getActiveStep();
@@ -328,6 +333,19 @@ export default function FinanceiroHubPage() {
     if (step < activeStep) return "completed";
     if (step === activeStep) return "active";
     return "pending";
+  };
+
+  const handleStepClick = (stepNumber: number) => {
+    setSelectedStep(stepNumber);
+    if (stepNumber <= 3) {
+      setActiveTab("contas-pagar");
+      // Apply status filter based on step
+      if (stepNumber === 1) setFiltroStatus("todos");
+      else if (stepNumber === 2) setFiltroStatus("PREVISTO"); // show unclassified
+      else if (stepNumber === 3) setFiltroStatus("PREVISTO"); // show classified without payment
+    } else {
+      setActiveTab("borderos");
+    }
   };
 
   return (
@@ -358,12 +376,14 @@ export default function FinanceiroHubPage() {
         <WorkflowStepper
           steps={[
             { number: 1, title: "Cadastrar", description: "Importe do ERP ou crie manualmente", status: stepStatus(1), count: countPrevistos },
-            { number: 2, title: "Classificar", description: "Defina a conta do plano de contas", status: stepStatus(1), count: naoClassificados },
-            { number: 3, title: "Preparar Pgto", description: "PIX, boleto ou TED", status: stepStatus(2), count: countComPagamento },
-            { number: 4, title: "Montar Borderô", description: "Agrupe em lote para aprovação", status: stepStatus(3), count: countBorderoMontagem },
-            { number: 5, title: "Aprovar e Enviar", description: "Admin transmite ao BTG", status: stepStatus(4), count: countBorderoAprovado },
-            { number: 6, title: "Aguardar Banco", description: "Baixa confirmada pelo retorno", status: stepStatus(5), count: countBorderoEnviado },
+            { number: 2, title: "Classificar", description: "Defina a conta do plano de contas", status: stepStatus(2), count: naoClassificados },
+            { number: 3, title: "Preparar Pgto", description: "PIX, boleto ou TED", status: stepStatus(3), count: classificadosSemPgto },
+            { number: 4, title: "Montar Borderô", description: "Agrupe em lote para aprovação", status: stepStatus(4), count: countComPagamento + countBorderoMontagem },
+            { number: 5, title: "Aprovar e Enviar", description: "Admin transmite ao BTG", status: stepStatus(5), count: countBorderoAprovado },
+            { number: 6, title: "Aguardar Banco", description: "Baixa confirmada pelo retorno", status: stepStatus(6), count: countBorderoEnviado },
           ]}
+          onStepClick={handleStepClick}
+          activeStepNumber={selectedStep ?? undefined}
         />
 
         {/* Novo Lançamento Dialog */}
@@ -733,6 +753,7 @@ export default function FinanceiroHubPage() {
               onReabrir={(id) => reabrirMutation.mutate(id)}
               isCancelando={cancelarMutation.isPending}
               isReabrindo={reabrirMutation.isPending}
+              stepFilter={selectedStep}
             />
           </TabsContent>
 

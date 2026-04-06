@@ -55,6 +55,7 @@ interface ContasPagarTableProps {
   isLoading: boolean;
   selectedIds: Set<string>;
   isAdmin: boolean;
+  stepFilter?: number | null;
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
   onClassificar: (l: Lancamento) => void;
@@ -88,11 +89,19 @@ const getDdaBadge = (l: Lancamento) => {
 };
 
 export function ContasPagarTable({
-  lancamentos, isLoading, selectedIds, isAdmin,
+  lancamentos: rawLancamentos, isLoading, selectedIds, isAdmin, stepFilter,
   onToggleSelect, onToggleSelectAll,
   onClassificar, onPrepararPagamento, onBaixaManual,
   onCancelar, onReabrir, isCancelando, isReabrindo,
 }: ContasPagarTableProps) {
+  // Apply step-based filtering
+  const lancamentos = stepFilter ? rawLancamentos.filter(l => {
+    if (stepFilter === 1) return true; // show all
+    if (stepFilter === 2) return l.status === "PREVISTO" && !l.subcategoria; // unclassified
+    if (stepFilter === 3) return l.status === "PREVISTO" && !!l.subcategoria && !hasPaymentData(l); // classified, no payment
+    return true;
+  }) : rawLancamentos;
+
   const previstosPagar = lancamentos.filter(l => l.tipo === "PAGAR" && l.status === "PREVISTO");
 
   return (
