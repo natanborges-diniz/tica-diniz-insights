@@ -19,7 +19,8 @@ export function WorkflowStepper({ steps }: WorkflowStepperProps) {
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
         Fluxo de Pagamento — Passo a Passo
       </p>
-      <div className="flex items-start gap-0">
+      {/* Desktop: horizontal | Mobile: vertical stack */}
+      <div className="hidden sm:flex items-start gap-0">
         {steps.map((step, i) => (
           <div key={step.number} className="flex items-start flex-1 min-w-0">
             <div className="flex flex-col items-center text-center flex-1 min-w-0">
@@ -71,6 +72,38 @@ export function WorkflowStepper({ steps }: WorkflowStepperProps) {
                 )}
               />
             )}
+          </div>
+        ))}
+      </div>
+
+      {/* Mobile: vertical layout */}
+      <div className="flex sm:hidden flex-col gap-3">
+        {steps.map((step, i) => (
+          <div key={step.number} className="flex items-start gap-3">
+            <div
+              className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0",
+                step.status === "completed" && "bg-primary text-primary-foreground",
+                step.status === "active" && "bg-primary/15 text-primary ring-2 ring-primary",
+                step.status === "pending" && "bg-muted text-muted-foreground",
+              )}
+            >
+              {step.status === "completed" ? <CheckCircle2 className="h-4 w-4" /> : step.number}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className={cn("text-xs font-semibold", step.status === "active" ? "text-primary" : "text-foreground")}>
+                {step.title}
+                {step.count !== undefined && step.count > 0 && (
+                  <span className={cn(
+                    "ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                    step.status === "active" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+                  )}>
+                    {step.count}
+                  </span>
+                )}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{step.description}</p>
+            </div>
           </div>
         ))}
       </div>

@@ -31,7 +31,7 @@ import FinanceiroHubPage from "./pages/FinanceiroHubPage";
 import ConciliacaoCartoesPage from "./pages/ConciliacaoCartoesPage";
 import PaymentLinksPage from "./pages/PaymentLinksPage";
 import CarteiraRecebiveisPage from "./pages/CarteiraRecebiveisPage";
-import FinanceiroClassificacaoPage from "./pages/FinanceiroClassificacaoPage";
+
 import FinanceiroOverviewPage from "./pages/FinanceiroOverviewPage";
 import InteligenciaVendasDashboard from "./pages/InteligenciaVendasDashboard";
 import MetasConfigDashboard from "./pages/MetasConfigDashboard";
@@ -103,7 +103,7 @@ const App = () => (
                   <Route path="/financeiro/cartoes" element={<ConciliacaoCartoesPage />} />
                   <Route path="/financeiro/links-pagamento" element={<PaymentLinksPage />} />
                   <Route path="/financeiro/recebiveis" element={<CarteiraRecebiveisPage />} />
-                  <Route path="/financeiro/classificacao" element={<FinanceiroClassificacaoPage />} />
+                  <Route path="/financeiro/classificacao" element={<Navigate to="/financeiro/hub" replace />} />
                   <Route path="/financeiro/dre" element={<FinanceiroDreDashboard />} />
                   <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaDashboard />} />
                   <Route path="/financeiro/banking/extrato" element={<BankingExtratoDashboard />} />

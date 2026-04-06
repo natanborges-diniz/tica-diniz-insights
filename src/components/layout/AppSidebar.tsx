@@ -2,8 +2,8 @@ import { useLocation } from "react-router-dom";
 import { 
   TrendingUp, BarChart3, Layers, Wallet,
   Package, ClipboardList, FileText, ArrowLeftRight,
-  Target, Users, Brain, Eye, RefreshCw, Activity, Truck, FlaskConical,
-  AlertTriangle, Landmark, CreditCard, Receipt, FileSearch, Shield, Link2
+  Target, Users, Brain, RefreshCw, Activity, Truck, FlaskConical,
+  Landmark, CreditCard, Receipt, FileSearch, Shield, Link2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
@@ -83,8 +83,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
     {
       label: "Hub Financeiro",
       items: [
-        { title: "Lançamentos", url: "/financeiro/hub", icon: Landmark },
-        { title: "Classificação", url: "/financeiro/classificacao", icon: ClipboardList },
+        { title: "Contas a Pagar", url: "/financeiro/hub", icon: Landmark },
         { title: "Conciliação Cartões", url: "/financeiro/cartoes", icon: CreditCard },
         { title: "Carteira Recebíveis", url: "/financeiro/recebiveis", icon: Wallet },
         { title: "Links de Pagamento", url: "/financeiro/links-pagamento", icon: Link2 },
