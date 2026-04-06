@@ -460,6 +460,7 @@ export default function FinanceiroHubPage() {
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead>Pgto</TableHead>
                   <TableHead>Status</TableHead>
+                  {borderoDetalhe?.bordero?.status === "MONTAGEM" && <TableHead className="w-[80px]"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -483,6 +484,22 @@ export default function FinanceiroHubPage() {
                           {STATUS_CONFIG[l.status]?.label || l.status}
                         </Badge>
                       </TableCell>
+                      {borderoDetalhe?.bordero?.status === "MONTAGEM" && (
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs text-destructive hover:text-destructive"
+                            disabled={removerDoBorderoMutation.isPending}
+                            onClick={() => removerDoBorderoMutation.mutate({
+                              bordero_id: borderoDetalhe.bordero.id,
+                              lancamento_ids: [l.id],
+                            })}
+                          >
+                            <XCircle className="h-3.5 w-3.5 mr-1" /> Remover
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
