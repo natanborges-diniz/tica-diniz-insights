@@ -758,8 +758,12 @@ export default function FinanceiroHubPage() {
               onBaixaManual={openBaixaManual}
               onCancelar={(id) => cancelarMutation.mutate(id)}
               onReabrir={(id) => reabrirMutation.mutate(id)}
+              onRemoverDoBordero={(l) => {
+                if (l.bordero_id) removerDoBorderoMutation.mutate({ bordero_id: l.bordero_id, lancamento_ids: [l.id] });
+              }}
               isCancelando={cancelarMutation.isPending}
               isReabrindo={reabrirMutation.isPending}
+              isRemovendoDoBordero={removerDoBorderoMutation.isPending}
               stepFilter={selectedStep}
             />
           </TabsContent>

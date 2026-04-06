@@ -249,7 +249,7 @@ export function ContasPagarTable({
                                     key={a.label}
                                     onClick={a.onClick}
                                     className={a.destructive ? "text-destructive" : ""}
-                                    disabled={a.destructive ? isCancelando : a.label === "Reabrir" ? isReabrindo : false}
+                                    disabled={a.destructive ? (a.label === "Remover do Borderô" ? isRemovendoDoBordero : isCancelando) : a.label === "Reabrir" ? isReabrindo : false}
                                   >
                                     <Icon className="h-3.5 w-3.5 mr-2" /> {a.label}
                                   </DropdownMenuItem>
