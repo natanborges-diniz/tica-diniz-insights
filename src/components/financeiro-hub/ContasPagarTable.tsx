@@ -194,7 +194,7 @@ export function ContasPagarTable({
                 if (l.status === "BAIXADO" && isAdmin) {
                   secondaryActions.push({ label: "Reabrir", icon: RotateCcw, onClick: () => onReabrir(l.id) });
                 }
-                if (l.bordero_id && l.status === "BORDERO" && onRemoverDoBordero) {
+                if (l.bordero_id && ["BORDERO", "AUTORIZADO"].includes(l.status) && onRemoverDoBordero) {
                   secondaryActions.push({ label: "Remover do Borderô", icon: Unlink, onClick: () => onRemoverDoBordero(l), destructive: true });
                 }
 
