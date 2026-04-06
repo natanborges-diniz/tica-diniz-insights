@@ -766,8 +766,8 @@ export default function FinanceiroHubPage() {
             <>
               <Button variant="outline" onClick={() => setEditLanc(null)}>Cancelar</Button>
               <Button
-                onClick={() => editLanc && editNaturezaMutation.mutate({ id: editLanc.id, natureza: editNatureza, categoria: editCategoria })}
-                disabled={editNaturezaMutation.isPending || !editNatureza}
+                onClick={() => editLanc && editNaturezaMutation.mutate({ id: editLanc.id, natureza: editNatureza, categoria: editCategoria, subcategoria: editSubcategoria })}
+                disabled={editNaturezaMutation.isPending || !editSubcategoria}
               >
                 Salvar Classificação
               </Button>
