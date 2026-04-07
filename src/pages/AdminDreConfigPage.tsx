@@ -13,10 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { BaseDialog } from "@/components/system/BaseDialog";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Settings2, Plus, Pencil, Trash2 } from "lucide-react";
+import { Settings2, Plus, Pencil, Trash2, ChevronsUpDown, Check } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ChevronsUpDown, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PlanoContas {
@@ -25,97 +24,68 @@ interface PlanoContas {
   conta_descricao: string;
   grupo_dre: string;
   categoria: string;
+  sinal: string;
   ativo: boolean;
 }
 
-// Valores-semente para garantir opções iniciais mesmo sem dados no banco
 const SEED_GRUPOS = [
   "RECEITA_BRUTA", "DEDUCOES", "CUSTO_MERCADORIA",
-  "DESPESAS_OPERACIONAIS", "OUTRAS_DESPESAS", "INVESTIMENTOS",
+  "DESPESAS_OPERACIONAIS", "RESULTADO_FINANCEIRO",
+  "OUTRAS_RECEITAS_DESPESAS", "INVESTIMENTOS",
 ];
+
 const SEED_CATEGORIAS: Record<string, string[]> = {
-  RECEITA_BRUTA: ["VENDAS", "OUTRAS_RECEITAS"],
-  DEDUCOES: ["IMPOSTOS", "COMISSOES", "TAXAS"],
+  RECEITA_BRUTA: ["VENDAS"],
+  DEDUCOES: ["IMPOSTOS", "COMISSOES", "TAXAS", "DEVOLUCOES"],
   CUSTO_MERCADORIA: ["FORNECEDORES_PRODUTO"],
-  DESPESAS_OPERACIONAIS: ["PESSOAL", "OCUPACAO", "COMUNICACAO", "MARKETING", "ADMINISTRATIVO", "SERVICOS", "MANUTENCAO", "FINANCEIRO_OPERACIONAL", "SEGURANCA", "DEVOLUCOES"],
-  OUTRAS_DESPESAS: ["FINANCEIRO", "PRO_LABORE", "DEVOLUCOES"],
-  INVESTIMENTOS: ["INVESTIMENTOS"],
+  DESPESAS_OPERACIONAIS: ["PESSOAL", "OCUPACAO", "COMUNICACAO", "MARKETING", "ADMINISTRATIVO", "SERVICOS", "MANUTENCAO", "FRANQUIA"],
+  RESULTADO_FINANCEIRO: ["FINANCEIRO"],
+  OUTRAS_RECEITAS_DESPESAS: ["NAO_OPERACIONAL"],
+  INVESTIMENTOS: ["CAPEX"],
 };
 
-/** Combobox criável — permite selecionar existente ou digitar novo */
+const SINAL_PADRAO: Record<string, string> = {
+  RECEITA_BRUTA: "+",
+  DEDUCOES: "-",
+  CUSTO_MERCADORIA: "-",
+  DESPESAS_OPERACIONAIS: "-",
+  RESULTADO_FINANCEIRO: "-",
+  OUTRAS_RECEITAS_DESPESAS: "-",
+  INVESTIMENTOS: "-",
+};
+
 function CreatableCombobox({
-  value,
-  onChange,
-  options,
-  placeholder = "Selecione ou digite...",
-  disabled = false,
+  value, onChange, options, placeholder = "Selecione ou digite...", disabled = false,
 }: {
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-  placeholder?: string;
-  disabled?: boolean;
+  value: string; onChange: (v: string) => void; options: string[]; placeholder?: string; disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-
-  const filtered = options.filter((o) =>
-    o.toLowerCase().includes(search.toLowerCase())
-  );
-  const showCreate =
-    search.trim() !== "" &&
-    !options.some((o) => o.toLowerCase() === search.trim().toLowerCase());
+  const filtered = options.filter((o) => o.toLowerCase().includes(search.toLowerCase()));
+  const showCreate = search.trim() !== "" && !options.some((o) => o.toLowerCase() === search.trim().toLowerCase());
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          disabled={disabled}
-          className="w-full justify-between font-normal text-sm h-9"
-        >
+        <Button variant="outline" role="combobox" aria-expanded={open} disabled={disabled} className="w-full justify-between font-normal text-sm h-9">
           {value ? value.replace(/_/g, " ") : <span className="text-muted-foreground">{placeholder}</span>}
           <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[260px] p-0" align="start">
         <Command shouldFilter={false}>
-          <CommandInput
-            placeholder="Buscar ou criar..."
-            value={search}
-            onValueChange={setSearch}
-          />
+          <CommandInput placeholder="Buscar ou criar..." value={search} onValueChange={setSearch} />
           <CommandList>
-            <CommandEmpty>
-              {search.trim() ? "Nenhum resultado" : "Digite para buscar"}
-            </CommandEmpty>
+            <CommandEmpty>{search.trim() ? "Nenhum resultado" : "Digite para buscar"}</CommandEmpty>
             <CommandGroup>
               {filtered.map((opt) => (
-                <CommandItem
-                  key={opt}
-                  value={opt}
-                  onSelect={() => {
-                    onChange(opt);
-                    setOpen(false);
-                    setSearch("");
-                  }}
-                >
+                <CommandItem key={opt} value={opt} onSelect={() => { onChange(opt); setOpen(false); setSearch(""); }}>
                   <Check className={cn("mr-2 h-3.5 w-3.5", value === opt ? "opacity-100" : "opacity-0")} />
                   {opt.replace(/_/g, " ")}
                 </CommandItem>
               ))}
               {showCreate && (
-                <CommandItem
-                  value={`__create__${search.trim()}`}
-                  onSelect={() => {
-                    const newVal = search.trim().toUpperCase().replace(/\s+/g, "_");
-                    onChange(newVal);
-                    setOpen(false);
-                    setSearch("");
-                  }}
-                >
+                <CommandItem value={`__create__${search.trim()}`} onSelect={() => { onChange(search.trim().toUpperCase().replace(/\s+/g, "_")); setOpen(false); setSearch(""); }}>
                   <Plus className="mr-2 h-3.5 w-3.5 text-primary" />
                   <span className="text-primary">Criar "{search.trim().toUpperCase().replace(/\s+/g, "_")}"</span>
                 </CommandItem>
@@ -136,11 +106,11 @@ export default function AdminDreConfigPage() {
   const [editItem, setEditItem] = useState<PlanoContas | null>(null);
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
 
-  // Form
   const [formContaNumero, setFormContaNumero] = useState("");
   const [formContaDescricao, setFormContaDescricao] = useState("");
   const [formGrupoDre, setFormGrupoDre] = useState("");
   const [formCategoria, setFormCategoria] = useState("");
+  const [formSinal, setFormSinal] = useState("-");
 
   const { data: contas = [], isLoading } = useQuery<PlanoContas[]>({
     queryKey: ["dre-plano-contas"],
@@ -163,6 +133,7 @@ export default function AdminDreConfigPage() {
         conta_descricao: formContaDescricao.trim().toUpperCase(),
         grupo_dre: formGrupoDre,
         categoria: formCategoria,
+        sinal: formSinal,
       };
       if (editItem) {
         const { error } = await supabase.from("dre_plano_contas").update(record).eq("id", editItem.id);
@@ -185,9 +156,7 @@ export default function AdminDreConfigPage() {
       const { error } = await supabase.from("dre_plano_contas").update({ ativo }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dre-plano-contas"] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dre-plano-contas"] }),
   });
 
   const deleteMutation = useMutation({
@@ -195,10 +164,7 @@ export default function AdminDreConfigPage() {
       const { error } = await supabase.from("dre_plano_contas").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      toast.success("Conta removida");
-      queryClient.invalidateQueries({ queryKey: ["dre-plano-contas"] });
-    },
+    onSuccess: () => { toast.success("Conta removida"); queryClient.invalidateQueries({ queryKey: ["dre-plano-contas"] }); },
     onError: (e: Error) => toast.error(e.message || "Erro ao remover"),
   });
 
@@ -208,6 +174,7 @@ export default function AdminDreConfigPage() {
     setFormContaDescricao(item.conta_descricao);
     setFormGrupoDre(item.grupo_dre);
     setFormCategoria(item.categoria);
+    setFormSinal(item.sinal || "-");
     setDialogOpen(true);
   };
 
@@ -218,20 +185,23 @@ export default function AdminDreConfigPage() {
     setFormContaDescricao("");
     setFormGrupoDre("");
     setFormCategoria("");
+    setFormSinal("-");
   };
 
-  // Derivar grupos e categorias dinamicamente do banco + sementes
+  const handleGrupoChange = (v: string) => {
+    setFormGrupoDre(v);
+    setFormCategoria("");
+    setFormSinal(SINAL_PADRAO[v] || "-");
+  };
+
   const gruposDisponiveis = useMemo(() => {
     const fromDb = contas.map((c) => c.grupo_dre);
-    const all = [...new Set([...SEED_GRUPOS, ...fromDb])];
-    return all.sort();
+    return [...new Set([...SEED_GRUPOS, ...fromDb])].sort();
   }, [contas]);
 
   const categoriasDisponiveis = useMemo(() => {
     if (!formGrupoDre) return [];
-    const fromDb = contas
-      .filter((c) => c.grupo_dre === formGrupoDre)
-      .map((c) => c.categoria);
+    const fromDb = contas.filter((c) => c.grupo_dre === formGrupoDre).map((c) => c.categoria);
     const seeds = SEED_CATEGORIAS[formGrupoDre] || [];
     return [...new Set([...seeds, ...fromDb])].sort();
   }, [contas, formGrupoDre]);
@@ -242,13 +212,11 @@ export default function AdminDreConfigPage() {
         title="Plano de Contas DRE"
         subtitle="Parametrização da classificação automática de lançamentos importados do ERP"
         icon={<Settings2 className="h-5 w-5" />}
-        actions={
-          podeEditar ? (
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Nova Conta
-            </Button>
-          ) : undefined
-        }
+        actions={podeEditar ? (
+          <Button size="sm" onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" /> Nova Conta
+          </Button>
+        ) : undefined}
       />
 
       <BaseDialog
@@ -258,10 +226,7 @@ export default function AdminDreConfigPage() {
         footer={
           <>
             <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
-            <Button
-              onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending || !formContaNumero || !formContaDescricao || !formGrupoDre || !formCategoria}
-            >
+            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !formContaNumero || !formContaDescricao || !formGrupoDre || !formCategoria}>
               {editItem ? "Salvar" : "Cadastrar"}
             </Button>
           </>
@@ -284,25 +249,24 @@ export default function AdminDreConfigPage() {
               <Input value={formContaDescricao} onChange={e => setFormContaDescricao(e.target.value)} placeholder="Ex: SALARIO" />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <Label>Grupo DRE *</Label>
-              <CreatableCombobox
-                value={formGrupoDre}
-                onChange={(v) => { setFormGrupoDre(v); setFormCategoria(""); }}
-                options={gruposDisponiveis}
-                placeholder="Selecione ou crie..."
-              />
+              <CreatableCombobox value={formGrupoDre} onChange={handleGrupoChange} options={gruposDisponiveis} placeholder="Selecione ou crie..." />
             </div>
             <div className="space-y-1">
               <Label>Categoria *</Label>
-              <CreatableCombobox
-                value={formCategoria}
-                onChange={setFormCategoria}
-                options={categoriasDisponiveis}
-                placeholder="Selecione ou crie..."
-                disabled={!formGrupoDre}
-              />
+              <CreatableCombobox value={formCategoria} onChange={setFormCategoria} options={categoriasDisponiveis} placeholder="Selecione ou crie..." disabled={!formGrupoDre} />
+            </div>
+            <div className="space-y-1">
+              <Label>Sinal</Label>
+              <Select value={formSinal} onValueChange={setFormSinal}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="+">+ Receita</SelectItem>
+                  <SelectItem value="-">− Despesa</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
@@ -335,15 +299,16 @@ export default function AdminDreConfigPage() {
                   <TableHead>Descrição</TableHead>
                   <TableHead className="w-[180px]">Grupo DRE</TableHead>
                   <TableHead className="w-[180px]">Categoria</TableHead>
-                   <TableHead className="w-[70px]">Ativo</TableHead>
-                   {podeEditar && <TableHead className="w-[100px] text-right">Ações</TableHead>}
+                  <TableHead className="w-[60px] text-center">Sinal</TableHead>
+                  <TableHead className="w-[70px]">Ativo</TableHead>
+                  {podeEditar && <TableHead className="w-[100px] text-right">Ações</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
                 ) : contasFiltradas.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma conta encontrada.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhuma conta encontrada.</TableCell></TableRow>
                 ) : contasFiltradas.map(c => (
                   <TableRow key={c.id} className={!c.ativo ? "opacity-50" : undefined}>
                     <TableCell className="font-mono text-sm">{c.conta_numero}</TableCell>
@@ -354,25 +319,22 @@ export default function AdminDreConfigPage() {
                     <TableCell>
                       <Badge variant="secondary" className="text-[10px]">{c.categoria.replace(/_/g, " ")}</Badge>
                     </TableCell>
-                     <TableCell>
-                       <Switch
-                         checked={c.ativo}
-                         disabled={!podeEditar}
-                         onCheckedChange={(checked) => toggleMutation.mutate({ id: c.id, ativo: checked })}
-                       />
-                     </TableCell>
-                     {podeEditar && (
-                       <TableCell className="text-right">
-                         <div className="flex justify-end gap-1">
-                           <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>
-                             <Pencil className="h-3.5 w-3.5" />
-                           </Button>
-                           <Button size="sm" variant="ghost" onClick={() => deleteMutation.mutate(c.id)} disabled={deleteMutation.isPending}>
-                             <Trash2 className="h-3.5 w-3.5" />
-                           </Button>
-                         </div>
-                       </TableCell>
-                     )}
+                    <TableCell className="text-center">
+                      <Badge variant={c.sinal === "+" ? "default" : "destructive"} className="text-xs px-1.5 py-0">
+                        {c.sinal === "+" ? "+" : "−"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Switch checked={c.ativo} disabled={!podeEditar} onCheckedChange={(checked) => toggleMutation.mutate({ id: c.id, ativo: checked })} />
+                    </TableCell>
+                    {podeEditar && (
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => openEdit(c)}><Pencil className="h-3.5 w-3.5" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => deleteMutation.mutate(c.id)} disabled={deleteMutation.isPending}><Trash2 className="h-3.5 w-3.5" /></Button>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
