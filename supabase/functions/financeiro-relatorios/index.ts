@@ -74,9 +74,11 @@ async function gerarDre(body: DreParams) {
   // Map lancamentos to DRE groups based on tipo + categoria
   const linhas = (data || []).map((l) => {
     const grupo = classificarGrupoDre(l.tipo, l.categoria, l.natureza);
-    const competencia = l.data_pagamento
-      ? l.data_pagamento.substring(0, 7) // YYYY-MM
-      : "SEM_DATA";
+    const competencia = l.data_emissao
+      ? l.data_emissao.substring(0, 7) // YYYY-MM (competência)
+      : l.data_pagamento
+        ? l.data_pagamento.substring(0, 7)
+        : "SEM_DATA";
 
     return {
       COMPETENCIA: competencia,

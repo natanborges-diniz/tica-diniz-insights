@@ -1022,6 +1022,50 @@ async function classificar(body: Record<string, unknown>, _userId: string) {
   return json(data);
 }
 
+// ═══════════════════════════════════════════════════════════
+// CLASSIFICAR EM LOTE
+// ═══════════════════════════════════════════════════════════
+
+async function classificarLote(body: Record<string, unknown>, _userId: string) {
+  const { ids, natureza, categoria, subcategoria } = body;
+  if (!Array.isArray(ids) || ids.length === 0) throw new Error("ids obrigatório (array)");
+  if (!subcategoria) throw new Error("subcategoria obrigatório");
+
+  const { data, error } = await supabase
+    .from("lancamentos_financeiros")
+    .update({
+      natureza: natureza || null,
+      categoria: categoria || null,
+      subcategoria: subcategoria,
+      requer_validacao: false,
+      status: "CLASSIFICADO",
+    })
+    .in("id", ids as string[])
+    .in("status", ["PREVISTO"])
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  return json({ ok: true, classificados: (data || []).length });
+}
+
+// ═══════════════════════════════════════════════════════════
+// CANCELAR EM LOTE
+// ═══════════════════════════════════════════════════════════
+
+async function cancelarLote(body: Record<string, unknown>) {
+  const { ids } = body;
+  if (!Array.isArray(ids) || ids.length === 0) throw new Error("ids obrigatório (array)");
+
+  const { data, error } = await supabase
+    .from("lancamentos_financeiros")
+    .update({ status: "CANCELADO" })
+    .in("id", ids as string[])
+    .in("status", ["PREVISTO"])
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  return json({ ok: true, cancelados: (data || []).length });
+
 async function listarPendentesValidacao(body: Record<string, unknown>) {
   const { cod_empresa, limit: lim } = body;
 
