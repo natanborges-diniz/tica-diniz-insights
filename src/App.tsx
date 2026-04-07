@@ -94,6 +94,7 @@ const App = () => (
                   <Route path="/os/pedido-zeiss" element={<PedidoZeissPage />} />
                   <Route path="/os/tracking-zeiss" element={<ZeissTrackingPage />} />
                   <Route path="/os/pedido-haytek" element={<PedidoHaytekPage />} />
+                  <Route path="/os/tracking-haytek" element={<HaytekTrackingPage />} />
                 </Route>
 
                 {/* Financeiro */}
