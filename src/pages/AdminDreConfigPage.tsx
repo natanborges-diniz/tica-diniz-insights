@@ -230,8 +230,8 @@ export default function AdminDreConfigPage() {
                   <TableHead>Descrição</TableHead>
                   <TableHead className="w-[180px]">Grupo DRE</TableHead>
                   <TableHead className="w-[180px]">Categoria</TableHead>
-                  <TableHead className="w-[70px]">Ativo</TableHead>
-                  <TableHead className="w-[100px] text-right">Ações</TableHead>
+                   <TableHead className="w-[70px]">Ativo</TableHead>
+                   {podeEditar && <TableHead className="w-[100px] text-right">Ações</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
