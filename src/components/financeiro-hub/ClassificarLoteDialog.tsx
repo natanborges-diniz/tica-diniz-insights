@@ -58,7 +58,7 @@ export function ClassificarLoteDialog({
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={handleConfirm} disabled={isPending || !subcategoria}>
-            <CheckCircle2 className="h-4 w-4 mr-1" /> Classificar {selectedCount}
+            <CheckCircle2 className="h-4 w-4 mr-1" /> Validar {selectedCount}
           </Button>
         </>
       }
