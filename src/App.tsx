@@ -109,6 +109,7 @@ const App = () => (
                   <Route path="/financeiro/classificacao" element={<Navigate to="/financeiro/hub" replace />} />
                   <Route path="/financeiro/dre" element={<FinanceiroDreDashboard />} />
                   <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaDashboard />} />
+                  <Route path="/financeiro/plano-contas" element={<AdminDreConfigPage />} />
                   <Route path="/financeiro/banking/extrato" element={<BankingExtratoDashboard />} />
                   <Route path="/financeiro/banking/pagamentos" element={<BankingPagamentosDashboard />} />
                   <Route path="/financeiro/banking/cobrancas" element={<BankingCobrancasDashboard />} />
