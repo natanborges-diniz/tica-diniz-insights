@@ -734,7 +734,7 @@ export default function FinanceiroHubPage() {
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
@@ -743,13 +743,21 @@ export default function FinanceiroHubPage() {
             </CardHeader>
             <CardContent><p className="text-2xl font-bold">{fmtCurrency(totalPagar)}</p></CardContent>
           </Card>
+          <Card className="border-primary/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-primary" /> Agenda Oficial
+              </CardTitle>
+            </CardHeader>
+            <CardContent><p className="text-2xl font-bold text-primary">{fmtCurrency(totalAgenda)}</p></CardContent>
+          </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" /> Não Classificados
+                <AlertTriangle className="h-4 w-4" /> Rascunhos
               </CardTitle>
             </CardHeader>
-            <CardContent><p className="text-2xl font-bold">{naoClassificados}</p></CardContent>
+            <CardContent><p className="text-2xl font-bold">{countRascunhos}</p></CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
