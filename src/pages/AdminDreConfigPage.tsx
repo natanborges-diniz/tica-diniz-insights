@@ -139,9 +139,11 @@ export default function AdminDreConfigPage() {
         subtitle="Parametrização da classificação automática de lançamentos importados do ERP"
         icon={<Settings2 className="h-5 w-5" />}
         actions={
-          <Button size="sm" onClick={() => setDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Nova Conta
-          </Button>
+          podeEditar ? (
+            <Button size="sm" onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Nova Conta
+            </Button>
+          ) : undefined
         }
       />
 
