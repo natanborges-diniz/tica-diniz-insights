@@ -60,7 +60,7 @@ export default function FinanceiroOverviewPage() {
     { label: "DRE Gerencial", url: "/financeiro/dre", icon: FileText, desc: "Demonstrativo de resultado" },
     { label: "Fluxo de Caixa", url: "/financeiro/fluxo-caixa", icon: ArrowLeftRight, desc: "Projeções e realizado" },
     { label: "Cartões", url: "/financeiro/cartoes", icon: CreditCard, desc: "Conciliação de recebíveis" },
-    { label: "Classificação", url: "/financeiro/classificacao", icon: Tags, desc: `${resumo.qtdPendentesValidacao} pendente(s)` },
+    { label: "Validação", url: "/financeiro/hub", icon: Tags, desc: `${resumo.qtdPendentesValidacao} pendente(s)` },
   ];
 
   return (
