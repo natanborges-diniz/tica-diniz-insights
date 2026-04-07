@@ -27,7 +27,7 @@ import { PrepararPagamentoSheet } from "@/components/financeiro-hub/PrepararPaga
 import { BorderoGuidedActions } from "@/components/financeiro-hub/BorderoGuidedActions";
 import { ContasPagarTable } from "@/components/financeiro-hub/ContasPagarTable";
 import { NovoLancamentoDialog } from "@/components/financeiro-hub/NovoLancamentoDialog";
-import { AgendaOficialTab } from "@/components/financeiro-hub/AgendaOficialTab";
+
 import { ClassificarLoteDialog } from "@/components/financeiro-hub/ClassificarLoteDialog";
 
 interface Lancamento {
@@ -412,7 +412,7 @@ export default function FinanceiroHubPage() {
         <WorkflowStepper
           steps={[
             { number: 1, title: "Cadastrar", description: "Importe do ERP ou crie manualmente", status: stepStatus(1), count: countPrevistos },
-            { number: 2, title: "Classificar", description: "Defina a conta do plano de contas", status: stepStatus(2), count: naoClassificados },
+            { number: 2, title: "Validar", description: "Confirme e classifique a conta DRE", status: stepStatus(2), count: naoClassificados },
             { number: 3, title: "Preparar Pgto", description: "PIX, boleto ou TED", status: stepStatus(3), count: classificadosSemPgto },
             { number: 4, title: "Montar Borderô", description: "Agrupe em lote para aprovação", status: stepStatus(4), count: countComPagamento + countBorderoMontagem },
             { number: 5, title: "Aprovar e Enviar", description: "Admin transmite ao BTG", status: stepStatus(5), count: countBorderoAprovado },
@@ -746,7 +746,7 @@ export default function FinanceiroHubPage() {
           <Card className="border-primary/20">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-primary" /> Agenda Oficial
+                <CheckCircle2 className="h-4 w-4 text-primary" /> Total Validado
               </CardTitle>
             </CardHeader>
             <CardContent><p className="text-2xl font-bold text-primary">{fmtCurrency(totalAgenda)}</p></CardContent>
@@ -754,7 +754,7 @@ export default function FinanceiroHubPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" /> Rascunhos
+                <AlertTriangle className="h-4 w-4" /> Pendentes
               </CardTitle>
             </CardHeader>
             <CardContent><p className="text-2xl font-bold">{countRascunhos}</p></CardContent>
@@ -789,10 +789,6 @@ export default function FinanceiroHubPage() {
         <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedIds(new Set()); }}>
           <TabsList>
             <TabsTrigger value="contas-pagar">Contas a Pagar</TabsTrigger>
-            <TabsTrigger value="agenda">
-              Agenda
-              {totalAgenda > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5">{fmtCurrency(totalAgenda)}</Badge>}
-            </TabsTrigger>
             <TabsTrigger value="borderos">
               Borderôs
               {borderosAbertos > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5">{borderosAbertos}</Badge>}
@@ -899,23 +895,6 @@ export default function FinanceiroHubPage() {
             </Card>
           </TabsContent>
 
-          {/* Agenda Oficial */}
-          <TabsContent value="agenda">
-            <AgendaOficialTab
-              lancamentos={lancamentos}
-              isLoading={isLoading}
-              selectedIds={selectedIds}
-              onToggleSelect={toggleSelect}
-              onToggleSelectAll={(ids) => {
-                const next = new Set(selectedIds);
-                const allSelected = ids.every(id => next.has(id));
-                if (allSelected) { ids.forEach(id => next.delete(id)); }
-                else { ids.forEach(id => next.add(id)); }
-                setSelectedIds(next);
-              }}
-              onPrepararPagamento={(l) => setPrepPaymentLanc(l as Lancamento)}
-            />
-          </TabsContent>
 
           <TabsContent value="contas-receber">
             <div className="text-center py-12 text-muted-foreground">
@@ -946,7 +925,7 @@ export default function FinanceiroHubPage() {
             </span>
             <div className="flex items-center gap-2">
               <Button size="sm" variant="default" onClick={() => setClassificarLoteOpen(true)}>
-                <CheckCircle2 className="h-4 w-4 mr-1" /> Classificar
+                <CheckCircle2 className="h-4 w-4 mr-1" /> Validar
               </Button>
               <Button size="sm" variant="outline" onClick={() => setBorderoDialogOpen(true)}>
                 <Package className="h-4 w-4 mr-1" /> Criar Borderô

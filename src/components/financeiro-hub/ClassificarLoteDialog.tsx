@@ -53,12 +53,12 @@ export function ClassificarLoteDialog({
     <BaseDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Classificar em Lote"
+      title="Validar em Lote"
       footer={
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={handleConfirm} disabled={isPending || !subcategoria}>
-            <CheckCircle2 className="h-4 w-4 mr-1" /> Classificar {selectedCount}
+            <CheckCircle2 className="h-4 w-4 mr-1" /> Validar {selectedCount}
           </Button>
         </>
       }
@@ -70,7 +70,7 @@ export function ClassificarLoteDialog({
         </div>
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
           <p className="text-xs text-amber-800">
-            A classificação move os lançamentos de <strong>PREVISTO</strong> para <strong>CLASSIFICADO</strong>,
+            A validação move os lançamentos de <strong>PREVISTO</strong> para <strong>VALIDADO</strong>,
             oficializando-os na agenda de contas a pagar.
           </p>
         </div>
