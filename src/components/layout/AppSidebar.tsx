@@ -99,6 +99,12 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       ],
     },
     {
+      label: "Configurações",
+      items: [
+        { title: "Plano de Contas", url: "/financeiro/plano-contas", icon: Settings2 },
+      ],
+    },
+    {
       label: "Banking BTG",
       items: [
         { title: "Pagamentos", url: "/financeiro/banking/pagamentos", icon: CreditCard },
