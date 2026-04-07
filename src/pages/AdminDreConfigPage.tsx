@@ -321,11 +321,6 @@ export default function AdminDreConfigPage() {
         </div>
         <Badge variant="secondary">{contasFiltradas.length} contas</Badge>
       </div>
-            </SelectContent>
-          </Select>
-        </div>
-        <Badge variant="secondary">{contasFiltradas.length} contas</Badge>
-      </div>
 
       <Card>
         <CardHeader>
