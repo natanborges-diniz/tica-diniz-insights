@@ -121,17 +121,20 @@ const App = () => (
                   <Route path="/config/metas" element={<MetasConfigDashboard />} />
                 </Route>
 
-                {/* Admin */}
-                <Route path="/admin/usuarios" element={<AdminUsuariosPage />} />
-                <Route path="/admin/sync" element={<AdminSyncPage />} />
-                <Route path="/admin/health" element={<AdminHealthPage />} />
-                <Route path="/admin/pedidos" element={<AdminPedidosAuditoriaPage />} />
-                <Route path="/admin/hoya-config" element={<AdminHoyaConfigPage />} />
-                <Route path="/admin/haytek-config" element={<AdminHaytekConfigPage />} />
-                <Route path="/admin/fornecedores" element={<AdminFornecedoresPage />} />
-                <Route path="/admin/btg-validacao" element={<AdminBtgValidacaoPage />} />
-                <Route path="/admin/adquirentes" element={<AdminAdquirentesPage />} />
-                <Route path="/admin/dre-config" element={<AdminDreConfigPage />} />
+                {/* Admin (protegido por role admin) */}
+                <Route element={<AdminGuard />}>
+                  <Route path="/admin/usuarios" element={<AdminUsuariosPage />} />
+                  <Route path="/admin/sync" element={<AdminSyncPage />} />
+                  <Route path="/admin/health" element={<AdminHealthPage />} />
+                  <Route path="/admin/pedidos" element={<AdminPedidosAuditoriaPage />} />
+                  <Route path="/admin/hoya-config" element={<AdminHoyaConfigPage />} />
+                  <Route path="/admin/haytek-config" element={<AdminHaytekConfigPage />} />
+                  <Route path="/admin/fornecedores" element={<AdminFornecedoresPage />} />
+                  <Route path="/admin/btg-validacao" element={<AdminBtgValidacaoPage />} />
+                  <Route path="/admin/adquirentes" element={<AdminAdquirentesPage />} />
+                </Route>
+                {/* Redirect legacy route */}
+                <Route path="/admin/dre-config" element={<Navigate to="/financeiro/plano-contas" replace />} />
 
                 {/* Dev playground — system design */}
                 <Route path="/dev/playground" element={<SystemPlayground />} />
