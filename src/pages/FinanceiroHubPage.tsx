@@ -271,6 +271,28 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao classificar"),
   });
 
+  const classificarLoteMutation = useMutation({
+    mutationFn: async ({ ids, natureza, categoria, subcategoria }: { ids: string[]; natureza: string; categoria: string; subcategoria: string }) => {
+      return invokeAction("classificar_lote", { ids, natureza, categoria, subcategoria });
+    },
+    onSuccess: (data: { classificados?: number }) => {
+      toast.success(`${data?.classificados || 0} lançamentos classificados`);
+      invalidateAll(); setSelectedIds(new Set()); setClassificarLoteOpen(false);
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro ao classificar em lote"),
+  });
+
+  const cancelarLoteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      return invokeAction("cancelar_lote", { ids });
+    },
+    onSuccess: (data: { cancelados?: number }) => {
+      toast.success(`${data?.cancelados || 0} lançamentos cancelados`);
+      invalidateAll(); setSelectedIds(new Set());
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro ao cancelar em lote"),
+  });
+
   const baixaManualMutation = useMutation({
     mutationFn: async ({ id, valor_pago, data_pagamento }: { id: string; valor_pago?: number; data_pagamento?: string }) => {
       return invokeAction("baixar", { id, valor_pago, data_pagamento });
