@@ -357,7 +357,7 @@ async function criarBordero(body: Record<string, unknown>, userId: string) {
       .from("lancamentos_financeiros")
       .update({ bordero_id: bordero.id, status: "BORDERO" })
       .in("id", ids)
-      .eq("status", "PREVISTO")
+      .in("status", ["PREVISTO", "CLASSIFICADO"])
       .eq("tipo", "PAGAR");
 
     if (uErr) throw new Error(uErr.message);
