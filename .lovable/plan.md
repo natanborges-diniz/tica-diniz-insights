@@ -1,57 +1,89 @@
 
 
-## Plano: Segmentar Acesso Admin + Mover DRE Config para Financeiro
+## Plano: Padronização do Plano de Contas DRE
 
-### Problemas
+### Diagnóstico Atual
 
-1. **DRE Config não aparece no sidebar** — A rota `/admin/dre-config` existe mas não está listada no menu do módulo `config` (sidebar).
-2. **Rotas admin sem proteção** — Todas as rotas `/admin/*` estão abertas a qualquer usuário autenticado, sem ModuleGuard.
-3. **Responsável financeiro precisa configurar plano de contas** — mas DRE Config está em "admin", inacessível sem ser admin.
+**82 contas cadastradas** com os seguintes problemas identificados:
 
-### Solução: Mover DRE Config para dentro do módulo Financeiro
+| Problema | Exemplos |
+|---|---|
+| **Duplicidades** | IRPF (3.1.11 e 3.1.3), DEDETIZACAO (3.10.2 e 3.10.10), Telefone/Internet (3.3.5 duplica 3.3.1+3.3.2), Licenças software/ERP (3.3.6 duplica 3.3.3), Contribuição Sindical (3.4.16 duplica 3.1.12) |
+| **Nomenclatura inconsistente** | Mix de CAIXA ALTA e Title Case ("Telefone/Internet", "Licenças de software/ERP", "Serviços de Montagem e Laboratório") |
+| **Classificação indevida** | TRANSFERENCIA SAIDA (3.7.18) como ADMINISTRATIVO — não é despesa operacional. JUROS PAGOS (3.6.2) em FINANCEIRO_OPERACIONAL deveria ir para RESULTADO_FINANCEIRO. MANUTENÇÃO VEÍCULOS (3.7.13) em ADMINISTRATIVO deveria ir para MANUTENCAO |
+| **Empresa no Simples** | ICMS (3.1.2), IRPJ (3.1.4), CSLL (3.1.5), PIS/COFINS (3.1.6) separados — deveriam ser consolidados sob SIMPLES NACIONAL apenas |
+| **Grupos faltantes** | RECEITA_BRUTA (0 contas), RESULTADO_FINANCEIRO (0 contas), OUTRAS_RECEITAS_DESPESAS (0 contas) |
+| **Coluna `sinal` inexistente** | O sinal é derivado em código (financeiroDreService.ts L39-59) mas não está na tabela para visibilidade do usuário |
 
-Em vez de segmentar o admin em sub-módulos (complexo), a abordagem mais simples é:
+### O Que Será Feito
 
-1. **Mover "Plano de Contas" para o sidebar do Financeiro** — sob a seção "Hub Financeiro" ou uma nova seção "Configurações". Rota: `/financeiro/plano-contas` (redirect do antigo `/admin/dre-config`).
-2. **Proteger com permissão de módulo** — quem tem acesso `edita` ou `total` ao módulo `financeiro` pode editar o plano de contas. Consulta = somente leitura.
-3. **Proteger rotas admin restantes** — Envolver as rotas `/admin/*` com verificação de role `admin` (as que são genuinamente administrativas: usuários, sync, health, fornecedores, BTG, adquirentes).
+#### 1. Migração de banco — Adicionar coluna `sinal`
 
-### Detalhamento Técnico
+```sql
+ALTER TABLE dre_plano_contas ADD COLUMN sinal text NOT NULL DEFAULT '-';
+-- Atualizar sinais corretos
+UPDATE dre_plano_contas SET sinal = '+' WHERE grupo_dre IN ('RECEITA_BRUTA', 'OUTRAS_RECEITAS');
+UPDATE dre_plano_contas SET sinal = '-' WHERE grupo_dre NOT IN ('RECEITA_BRUTA', 'OUTRAS_RECEITAS');
+```
 
-#### Arquivo: `src/components/layout/AppSidebar.tsx`
+#### 2. Migração de dados — Limpeza via SQL
 
-- Adicionar item no módulo `financeiro`, nova seção "Configurações":
-  - `{ title: "Plano de Contas", url: "/financeiro/plano-contas", icon: Settings2 }`
-- Remover "DRE Config" do menu `config` (se estivesse — na verdade nem está, confirma o problema)
+Executar em uma única migration:
 
-#### Arquivo: `src/App.tsx`
+- **Remover duplicatas**: Desativar 3.1.11 (IRPF duplicado), 3.10.10 (DEDETIZACAO duplicado), 3.3.5, 3.3.6, 3.4.16
+- **Padronizar nomenclatura**: UPDATE todas as descrições para CAIXA ALTA sem abreviações
+- **Reclassificar**:
+  - TRANSFERENCIA SAIDA (3.7.18) → desativar (não é DRE)
+  - JUROS PAGOS (3.6.2) → grupo RESULTADO_FINANCEIRO, categoria FINANCEIRO
+  - TARIFAS BANCARIAS (3.6.1) → grupo RESULTADO_FINANCEIRO, categoria FINANCEIRO
+  - MANUTENÇÃO VEÍCULOS (3.7.13) → categoria MANUTENCAO
+  - Impostos separados (ICMS, IRPJ, CSLL, PIS/COFINS) → desativar (Simples Nacional)
+- **Criar contas faltantes**:
+  - 1.1 VENDAS MERCADORIAS (RECEITA_BRUTA / VENDAS / +)
+  - 1.2 VENDAS SERVICOS (RECEITA_BRUTA / VENDAS / +)
+  - 4.1 RECEITAS FINANCEIRAS (RESULTADO_FINANCEIRO / FINANCEIRO / +)
+  - 4.2 DESPESAS FINANCEIRAS (RESULTADO_FINANCEIRO / FINANCEIRO / -)
+  - 4.3 JUROS PAGOS (RESULTADO_FINANCEIRO / FINANCEIRO / -)
+  - 6.1 RECEITAS NAO OPERACIONAIS (OUTRAS_RECEITAS_DESPESAS / NAO_OPERACIONAL / +)
+  - 6.2 DESPESAS NAO OPERACIONAIS (OUTRAS_RECEITAS_DESPESAS / NAO_OPERACIONAL / -)
+  - 2.4 DEVOLUCOES (DEDUCOES / DEVOLUCOES / -)
 
-- Mover rota DRE Config para dentro do bloco `<ModuleGuard module="financeiro">`:
-  - `<Route path="/financeiro/plano-contas" element={<AdminDreConfigPage />} />`
-- Adicionar redirect: `/admin/dre-config` → `/financeiro/plano-contas`
-- Proteger rotas `/admin/*` com um guard de admin (novo componente `AdminGuard` que verifica `isAdmin` do AuthContext)
+#### 3. UI — Exibir coluna `sinal` na tabela e formulário
 
-#### Novo: `src/components/auth/AdminGuard.tsx`
+- Adicionar coluna "Sinal" na tabela de contas (badge verde "+" ou vermelho "−")
+- No formulário de criação/edição, auto-preencher o sinal com base no grupo DRE selecionado (editável como override)
+- Atualizar `SEED_GRUPOS` e `SEED_CATEGORIAS` para refletir os novos grupos
 
-- Componente simples: verifica `isAdmin` do `useAuth()`, se não → `NoPermissionState`, se sim → `<Outlet />`
-- Envolver todas as rotas `/admin/*` com este guard
+#### 4. DRE Service — Usar `sinal` do banco
 
-#### Arquivo: `src/pages/AdminDreConfigPage.tsx`
+- Em `financeiroDreService.ts`, consultar o campo `sinal` da tabela `dre_plano_contas` em vez de usar o hardcoded `GRUPOS_SINAL_NEGATIVO`
 
-- Adicionar verificação de `canEdit("financeiro")` para habilitar/desabilitar ações de escrita (criar, editar, excluir contas)
-- Usuários com `consulta` veem a tabela mas sem botões de ação
+### Grupos Finais Padronizados
+
+```text
+RECEITA_BRUTA          (+)  VENDAS
+DEDUCOES               (-)  IMPOSTOS, COMISSOES, TAXAS, DEVOLUCOES
+CUSTO_MERCADORIA       (-)  FORNECEDORES_PRODUTO
+DESPESAS_OPERACIONAIS  (-)  PESSOAL, OCUPACAO, COMUNICACAO, MARKETING,
+                            MANUTENCAO, ADMINISTRATIVO, SERVICOS, FRANQUIA
+RESULTADO_FINANCEIRO   (-)  FINANCEIRO
+OUTRAS_RECEITAS_DESPESAS(±) NAO_OPERACIONAL
+INVESTIMENTOS          (-)  CAPEX
+```
 
 ### Arquivos a Alterar
 
 | Arquivo | Mudança |
 |---|---|
-| `src/components/layout/AppSidebar.tsx` | Adicionar "Plano de Contas" no sidebar financeiro |
-| `src/App.tsx` | Mover rota, adicionar redirect, envolver admin com AdminGuard |
-| `src/components/auth/AdminGuard.tsx` | Criar (verifica isAdmin) |
-| `src/pages/AdminDreConfigPage.tsx` | Condicionar botões de escrita à permissão financeiro |
+| Migration SQL | Adicionar coluna `sinal`, limpar duplicatas, reclassificar, inserir contas faltantes |
+| `src/pages/AdminDreConfigPage.tsx` | Coluna sinal na tabela, auto-preenchimento no form, SEED atualizados |
+| `src/services/financeiroDreService.ts` | Usar sinal do banco em vez de constante hardcoded |
 
-### O que NÃO muda
-- Tabela `dre_plano_contas` (sem mudança no banco)
-- Edge functions
-- Fluxo de classificação/validação no Hub Financeiro
+### Contas Recomendadas (Sugestão Extra)
+
+Contas que deveriam existir para análise gerencial completa:
+- **CUSTO LABORATORIO PROPRIO** (CMV) — se há lab interno
+- **FRETE FORNECEDORES** (CMV) — custo logístico de produto
+- **DEPRECIACAO** (Despesas Operacionais) — para DRE completa
+- **PRO LABORE** (Despesas Operacionais / Pessoal) — retirada dos sócios
 
