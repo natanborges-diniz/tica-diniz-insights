@@ -220,7 +220,21 @@ export default function AdminDreConfigPage() {
     setFormCategoria("");
   };
 
-  const categoriasDisponiveis = formGrupoDre ? (CATEGORIAS_MAP[formGrupoDre] || []) : [];
+  // Derivar grupos e categorias dinamicamente do banco + sementes
+  const gruposDisponiveis = useMemo(() => {
+    const fromDb = contas.map((c) => c.grupo_dre);
+    const all = [...new Set([...SEED_GRUPOS, ...fromDb])];
+    return all.sort();
+  }, [contas]);
+
+  const categoriasDisponiveis = useMemo(() => {
+    if (!formGrupoDre) return [];
+    const fromDb = contas
+      .filter((c) => c.grupo_dre === formGrupoDre)
+      .map((c) => c.categoria);
+    const seeds = SEED_CATEGORIAS[formGrupoDre] || [];
+    return [...new Set([...seeds, ...fromDb])].sort();
+  }, [contas, formGrupoDre]);
 
   return (
     <div className="space-y-6">
@@ -273,21 +287,22 @@ export default function AdminDreConfigPage() {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Grupo DRE *</Label>
-              <Select value={formGrupoDre} onValueChange={(v) => { setFormGrupoDre(v); setFormCategoria(""); }}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {GRUPOS_DRE.map(g => <SelectItem key={g} value={g}>{g.replace(/_/g, " ")}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <CreatableCombobox
+                value={formGrupoDre}
+                onChange={(v) => { setFormGrupoDre(v); setFormCategoria(""); }}
+                options={gruposDisponiveis}
+                placeholder="Selecione ou crie..."
+              />
             </div>
             <div className="space-y-1">
               <Label>Categoria *</Label>
-              <Select value={formCategoria} onValueChange={setFormCategoria}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {categoriasDisponiveis.map(c => <SelectItem key={c} value={c}>{c.replace(/_/g, " ")}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <CreatableCombobox
+                value={formCategoria}
+                onChange={setFormCategoria}
+                options={categoriasDisponiveis}
+                placeholder="Selecione ou crie..."
+                disabled={!formGrupoDre}
+              />
             </div>
           </div>
         </div>
@@ -300,7 +315,12 @@ export default function AdminDreConfigPage() {
             <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos os grupos</SelectItem>
-              {GRUPOS_DRE.map(g => <SelectItem key={g} value={g}>{g.replace(/_/g, " ")}</SelectItem>)}
+              {gruposDisponiveis.map(g => <SelectItem key={g} value={g}>{g.replace(/_/g, " ")}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <Badge variant="secondary">{contasFiltradas.length} contas</Badge>
+      </div>
             </SelectContent>
           </Select>
         </div>
