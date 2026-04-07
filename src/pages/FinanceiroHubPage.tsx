@@ -27,7 +27,7 @@ import { PrepararPagamentoSheet } from "@/components/financeiro-hub/PrepararPaga
 import { BorderoGuidedActions } from "@/components/financeiro-hub/BorderoGuidedActions";
 import { ContasPagarTable } from "@/components/financeiro-hub/ContasPagarTable";
 import { NovoLancamentoDialog } from "@/components/financeiro-hub/NovoLancamentoDialog";
-import { AgendaOficialTab } from "@/components/financeiro-hub/AgendaOficialTab";
+
 import { ClassificarLoteDialog } from "@/components/financeiro-hub/ClassificarLoteDialog";
 
 interface Lancamento {
