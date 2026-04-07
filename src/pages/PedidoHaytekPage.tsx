@@ -311,12 +311,20 @@ const PedidoHaytekPage: React.FC = () => {
     });
   }, [osData, produtos]);
 
-  // ── Detect progressive ──
+  // ── Detect progressive + stock (pronta) ──
   const isProgressivo = useMemo(() => {
     if (!produtoSelecionado) return false;
     const full = `${produtoSelecionado.design || ""} ${produtoSelecionado.nome_comercial || ""}`.toUpperCase();
     return full.includes("PROGRESS") || full.includes("MULTIFOCAL");
   }, [produtoSelecionado]);
+
+  const isStockLens = useMemo(() => {
+    if (!produtoSelecionado) return false;
+    return produtoSelecionado.product_id.startsWith("SS");
+  }, [produtoSelecionado]);
+
+  // Stock lenses don't need DNP/Altura
+  const needsDnpAltura = !isStockLens;
 
   // ── Select candidate ──
   const handleSelectCandidate = useCallback(async (candidate: HaytekMatchCandidate) => {
