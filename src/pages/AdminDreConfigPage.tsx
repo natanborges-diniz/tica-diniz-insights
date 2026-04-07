@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
@@ -14,6 +14,10 @@ import { BaseDialog } from "@/components/system/BaseDialog";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Settings2, Plus, Pencil, Trash2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { ChevronsUpDown, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface PlanoContas {
   id: string;
@@ -24,12 +28,12 @@ interface PlanoContas {
   ativo: boolean;
 }
 
-const GRUPOS_DRE = [
+// Valores-semente para garantir opções iniciais mesmo sem dados no banco
+const SEED_GRUPOS = [
   "RECEITA_BRUTA", "DEDUCOES", "CUSTO_MERCADORIA",
   "DESPESAS_OPERACIONAIS", "OUTRAS_DESPESAS", "INVESTIMENTOS",
 ];
-
-const CATEGORIAS_MAP: Record<string, string[]> = {
+const SEED_CATEGORIAS: Record<string, string[]> = {
   RECEITA_BRUTA: ["VENDAS", "OUTRAS_RECEITAS"],
   DEDUCOES: ["IMPOSTOS", "COMISSOES", "TAXAS"],
   CUSTO_MERCADORIA: ["FORNECEDORES_PRODUTO"],
@@ -37,6 +41,92 @@ const CATEGORIAS_MAP: Record<string, string[]> = {
   OUTRAS_DESPESAS: ["FINANCEIRO", "PRO_LABORE", "DEVOLUCOES"],
   INVESTIMENTOS: ["INVESTIMENTOS"],
 };
+
+/** Combobox criável — permite selecionar existente ou digitar novo */
+function CreatableCombobox({
+  value,
+  onChange,
+  options,
+  placeholder = "Selecione ou digite...",
+  disabled = false,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const filtered = options.filter((o) =>
+    o.toLowerCase().includes(search.toLowerCase())
+  );
+  const showCreate =
+    search.trim() !== "" &&
+    !options.some((o) => o.toLowerCase() === search.trim().toLowerCase());
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="w-full justify-between font-normal text-sm h-9"
+        >
+          {value ? value.replace(/_/g, " ") : <span className="text-muted-foreground">{placeholder}</span>}
+          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[260px] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="Buscar ou criar..."
+            value={search}
+            onValueChange={setSearch}
+          />
+          <CommandList>
+            <CommandEmpty>
+              {search.trim() ? "Nenhum resultado" : "Digite para buscar"}
+            </CommandEmpty>
+            <CommandGroup>
+              {filtered.map((opt) => (
+                <CommandItem
+                  key={opt}
+                  value={opt}
+                  onSelect={() => {
+                    onChange(opt);
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                >
+                  <Check className={cn("mr-2 h-3.5 w-3.5", value === opt ? "opacity-100" : "opacity-0")} />
+                  {opt.replace(/_/g, " ")}
+                </CommandItem>
+              ))}
+              {showCreate && (
+                <CommandItem
+                  value={`__create__${search.trim()}`}
+                  onSelect={() => {
+                    const newVal = search.trim().toUpperCase().replace(/\s+/g, "_");
+                    onChange(newVal);
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                >
+                  <Plus className="mr-2 h-3.5 w-3.5 text-primary" />
+                  <span className="text-primary">Criar "{search.trim().toUpperCase().replace(/\s+/g, "_")}"</span>
+                </CommandItem>
+              )}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function AdminDreConfigPage() {
   const queryClient = useQueryClient();
@@ -130,7 +220,21 @@ export default function AdminDreConfigPage() {
     setFormCategoria("");
   };
 
-  const categoriasDisponiveis = formGrupoDre ? (CATEGORIAS_MAP[formGrupoDre] || []) : [];
+  // Derivar grupos e categorias dinamicamente do banco + sementes
+  const gruposDisponiveis = useMemo(() => {
+    const fromDb = contas.map((c) => c.grupo_dre);
+    const all = [...new Set([...SEED_GRUPOS, ...fromDb])];
+    return all.sort();
+  }, [contas]);
+
+  const categoriasDisponiveis = useMemo(() => {
+    if (!formGrupoDre) return [];
+    const fromDb = contas
+      .filter((c) => c.grupo_dre === formGrupoDre)
+      .map((c) => c.categoria);
+    const seeds = SEED_CATEGORIAS[formGrupoDre] || [];
+    return [...new Set([...seeds, ...fromDb])].sort();
+  }, [contas, formGrupoDre]);
 
   return (
     <div className="space-y-6">
@@ -183,21 +287,22 @@ export default function AdminDreConfigPage() {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Grupo DRE *</Label>
-              <Select value={formGrupoDre} onValueChange={(v) => { setFormGrupoDre(v); setFormCategoria(""); }}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {GRUPOS_DRE.map(g => <SelectItem key={g} value={g}>{g.replace(/_/g, " ")}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <CreatableCombobox
+                value={formGrupoDre}
+                onChange={(v) => { setFormGrupoDre(v); setFormCategoria(""); }}
+                options={gruposDisponiveis}
+                placeholder="Selecione ou crie..."
+              />
             </div>
             <div className="space-y-1">
               <Label>Categoria *</Label>
-              <Select value={formCategoria} onValueChange={setFormCategoria}>
-                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {categoriasDisponiveis.map(c => <SelectItem key={c} value={c}>{c.replace(/_/g, " ")}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <CreatableCombobox
+                value={formCategoria}
+                onChange={setFormCategoria}
+                options={categoriasDisponiveis}
+                placeholder="Selecione ou crie..."
+                disabled={!formGrupoDre}
+              />
             </div>
           </div>
         </div>
@@ -210,7 +315,7 @@ export default function AdminDreConfigPage() {
             <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos os grupos</SelectItem>
-              {GRUPOS_DRE.map(g => <SelectItem key={g} value={g}>{g.replace(/_/g, " ")}</SelectItem>)}
+              {gruposDisponiveis.map(g => <SelectItem key={g} value={g}>{g.replace(/_/g, " ")}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
