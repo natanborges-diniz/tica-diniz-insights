@@ -382,7 +382,7 @@ async function adicionarAoBordero(body: Record<string, unknown>) {
     .from("lancamentos_financeiros")
     .update({ bordero_id: String(bordero_id), status: "BORDERO" })
     .in("id", ids)
-    .eq("status", "PREVISTO")
+    .in("status", ["PREVISTO", "CLASSIFICADO"])
     .eq("tipo", "PAGAR");
 
   if (error) throw new Error(error.message);
