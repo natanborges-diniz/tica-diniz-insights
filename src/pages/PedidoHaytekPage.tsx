@@ -153,6 +153,7 @@ const PedidoHaytekPage: React.FC = () => {
   const [tentativasEnvio, setTentativasEnvio] = useState<string[]>([]);
   const [erroEnvioDetalhado, setErroEnvioDetalhado] = useState<string | null>(null);
   const [haytekStoreId, setHaytekStoreId] = useState<string>("");
+  const [storeName, setStoreName] = useState<string>("");
 
   function parsePositiveInt(value: string): number | null {
     const parsed = parseInt(value, 10);
