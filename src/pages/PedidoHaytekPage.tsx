@@ -568,9 +568,15 @@ const PedidoHaytekPage: React.FC = () => {
             <Package className="h-5 w-5 text-primary" />
             Pedido Haytek (Dmax)
           </h1>
-          <p className="text-sm text-muted-foreground">
-            OS {osNumero} — {paciente} — {storeName || `Empresa ${codEmpresa}`}
-          </p>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>OS</span>
+            <Input
+              className="h-6 w-24 text-sm font-mono px-1 py-0 inline-flex"
+              value={osNumero}
+              onChange={(e) => setOsNumero(e.target.value)}
+            />
+            <span>— {paciente} — {storeName || `Empresa ${codEmpresa}`}</span>
+          </div>
         </div>
         {autoLabel && (
           <Badge variant="outline" className={cn("flex items-center gap-1 text-xs border", autoLabel.color)}>
