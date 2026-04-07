@@ -925,7 +925,7 @@ export default function FinanceiroHubPage() {
             </span>
             <div className="flex items-center gap-2">
               <Button size="sm" variant="default" onClick={() => setClassificarLoteOpen(true)}>
-                <CheckCircle2 className="h-4 w-4 mr-1" /> Classificar
+                <CheckCircle2 className="h-4 w-4 mr-1" /> Validar
               </Button>
               <Button size="sm" variant="outline" onClick={() => setBorderoDialogOpen(true)}>
                 <Package className="h-4 w-4 mr-1" /> Criar Borderô
