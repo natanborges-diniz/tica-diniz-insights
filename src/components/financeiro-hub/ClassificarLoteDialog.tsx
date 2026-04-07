@@ -53,7 +53,7 @@ export function ClassificarLoteDialog({
     <BaseDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Classificar em Lote"
+      title="Validar em Lote"
       footer={
         <>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
