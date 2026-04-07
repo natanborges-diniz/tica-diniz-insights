@@ -40,6 +40,8 @@ const CATEGORIAS_MAP: Record<string, string[]> = {
 
 export default function AdminDreConfigPage() {
   const queryClient = useQueryClient();
+  const { canEdit } = useModulePermissions();
+  const podeEditar = canEdit("financeiro");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editItem, setEditItem] = useState<PlanoContas | null>(null);
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
