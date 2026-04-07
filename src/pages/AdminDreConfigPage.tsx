@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,8 @@ const CATEGORIAS_MAP: Record<string, string[]> = {
 
 export default function AdminDreConfigPage() {
   const queryClient = useQueryClient();
+  const { canEdit } = useModulePermissions();
+  const podeEditar = canEdit("financeiro");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editItem, setEditItem] = useState<PlanoContas | null>(null);
   const [filtroGrupo, setFiltroGrupo] = useState("todos");
@@ -136,9 +139,11 @@ export default function AdminDreConfigPage() {
         subtitle="Parametrização da classificação automática de lançamentos importados do ERP"
         icon={<Settings2 className="h-5 w-5" />}
         actions={
-          <Button size="sm" onClick={() => setDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Nova Conta
-          </Button>
+          podeEditar ? (
+            <Button size="sm" onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Nova Conta
+            </Button>
+          ) : undefined
         }
       />
 
@@ -225,8 +230,8 @@ export default function AdminDreConfigPage() {
                   <TableHead>Descrição</TableHead>
                   <TableHead className="w-[180px]">Grupo DRE</TableHead>
                   <TableHead className="w-[180px]">Categoria</TableHead>
-                  <TableHead className="w-[70px]">Ativo</TableHead>
-                  <TableHead className="w-[100px] text-right">Ações</TableHead>
+                   <TableHead className="w-[70px]">Ativo</TableHead>
+                   {podeEditar && <TableHead className="w-[100px] text-right">Ações</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -244,22 +249,25 @@ export default function AdminDreConfigPage() {
                     <TableCell>
                       <Badge variant="secondary" className="text-[10px]">{c.categoria.replace(/_/g, " ")}</Badge>
                     </TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={c.ativo}
-                        onCheckedChange={(checked) => toggleMutation.mutate({ id: c.id, ativo: checked })}
-                      />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => deleteMutation.mutate(c.id)} disabled={deleteMutation.isPending}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                     <TableCell>
+                       <Switch
+                         checked={c.ativo}
+                         disabled={!podeEditar}
+                         onCheckedChange={(checked) => toggleMutation.mutate({ id: c.id, ativo: checked })}
+                       />
+                     </TableCell>
+                     {podeEditar && (
+                       <TableCell className="text-right">
+                         <div className="flex justify-end gap-1">
+                           <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>
+                             <Pencil className="h-3.5 w-3.5" />
+                           </Button>
+                           <Button size="sm" variant="ghost" onClick={() => deleteMutation.mutate(c.id)} disabled={deleteMutation.isPending}>
+                             <Trash2 className="h-3.5 w-3.5" />
+                           </Button>
+                         </div>
+                       </TableCell>
+                     )}
                   </TableRow>
                 ))}
               </TableBody>

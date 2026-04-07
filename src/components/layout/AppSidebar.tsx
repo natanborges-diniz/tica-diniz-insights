@@ -3,7 +3,7 @@ import {
   TrendingUp, BarChart3, Layers, Wallet,
   Package, ClipboardList, FileText, ArrowLeftRight,
   Target, Users, Brain, RefreshCw, Activity, Truck, FlaskConical,
-  Landmark, CreditCard, Receipt, FileSearch, Shield, Link2
+  Landmark, CreditCard, Receipt, FileSearch, Shield, Link2, Settings2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
@@ -96,6 +96,12 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
         { title: "Parcelas ERP", url: "/financeiro", icon: Wallet },
         { title: "DRE", url: "/financeiro/dre", icon: FileText },
         { title: "Fluxo de Caixa", url: "/financeiro/fluxo-caixa", icon: ArrowLeftRight },
+      ],
+    },
+    {
+      label: "Configurações",
+      items: [
+        { title: "Plano de Contas", url: "/financeiro/plano-contas", icon: Settings2 },
       ],
     },
     {
