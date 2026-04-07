@@ -111,6 +111,7 @@ export default function FinanceiroHubPage() {
   const [baixaValorPago, setBaixaValorPago] = useState("");
   const [baixaDataPgto, setBaixaDataPgto] = useState("");
   const [formBorderoDesc, setFormBorderoDesc] = useState("");
+  const [classificarLoteOpen, setClassificarLoteOpen] = useState(false);
 
   // Edit classification state
   const [editNatureza, setEditNatureza] = useState("");
