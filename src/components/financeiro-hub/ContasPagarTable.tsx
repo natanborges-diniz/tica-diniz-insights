@@ -104,7 +104,7 @@ export function ContasPagarTable({
     return true;
   }) : rawLancamentos;
 
-  const previstosPagar = lancamentos.filter(l => l.tipo === "PAGAR" && l.status === "PREVISTO");
+  const previstosPagar = lancamentos.filter(l => l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status));
 
   return (
     <Card>
