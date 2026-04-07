@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarCheck, TrendingDown } from "lucide-react";
+import { CalendarCheck, TrendingDown, CreditCard } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface Lancamento {
@@ -16,6 +18,7 @@ interface Lancamento {
   pessoa_nome: string | null;
   valor: number;
   data_vencimento: string;
+  dados_extras?: Record<string, unknown> | null;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -31,12 +34,26 @@ const fmtCurrency = (v: number) =>
 interface AgendaOficialTabProps {
   lancamentos: Lancamento[];
   isLoading: boolean;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onToggleSelectAll: (ids: string[]) => void;
+  onPrepararPagamento: (lancamento: Lancamento) => void;
 }
 
-export function AgendaOficialTab({ lancamentos, isLoading }: AgendaOficialTabProps) {
+export function AgendaOficialTab({
+  lancamentos,
+  isLoading,
+  selectedIds,
+  onToggleSelect,
+  onToggleSelectAll,
+  onPrepararPagamento,
+}: AgendaOficialTabProps) {
   // Only show CLASSIFICADO+ (exclude PREVISTO, CANCELADO, BAIXADO)
   const agendaStatuses = ["CLASSIFICADO", "BORDERO", "AUTORIZADO", "PROCESSANDO"];
   const filtered = lancamentos.filter(l => agendaStatuses.includes(l.status));
+
+  // Selectable = only CLASSIFICADO
+  const selectableIds = useMemo(() => filtered.filter(l => l.status === "CLASSIFICADO").map(l => l.id), [filtered]);
 
   // Group by month of vencimento
   const grouped = useMemo(() => {
@@ -64,6 +81,8 @@ export function AgendaOficialTab({ lancamentos, isLoading }: AgendaOficialTabPro
       return monthKey;
     }
   };
+
+  const allSelectableSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
 
   return (
     <div className="space-y-4">
@@ -107,6 +126,7 @@ export function AgendaOficialTab({ lancamentos, isLoading }: AgendaOficialTabPro
       ) : (
         grouped.map(([monthKey, items]) => {
           const monthTotal = items.reduce((s, l) => s + l.valor, 0);
+          const monthSelectableIds = items.filter(l => l.status === "CLASSIFICADO").map(l => l.id);
           return (
             <Card key={monthKey}>
               <CardHeader className="pb-2">
@@ -119,23 +139,55 @@ export function AgendaOficialTab({ lancamentos, isLoading }: AgendaOficialTabPro
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-[40px] pl-4">
+                        {monthSelectableIds.length > 0 && (
+                          <Checkbox
+                            checked={monthSelectableIds.every(id => selectedIds.has(id))}
+                            onCheckedChange={() => onToggleSelectAll(monthSelectableIds)}
+                          />
+                        )}
+                      </TableHead>
                       <TableHead>Conta</TableHead>
                       <TableHead>Fornecedor</TableHead>
                       <TableHead className="w-[95px]">Vencimento</TableHead>
                       <TableHead className="w-[110px] text-right">Valor</TableHead>
                       <TableHead className="w-[100px]">Status</TableHead>
+                      <TableHead className="w-[110px]">Ação</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {items.map(l => {
                       const sc = STATUS_CONFIG[l.status] || { label: l.status, variant: "outline" as const };
+                      const isSelectable = l.status === "CLASSIFICADO";
                       return (
                         <TableRow key={l.id}>
+                          <TableCell className="pl-4">
+                            {isSelectable ? (
+                              <Checkbox
+                                checked={selectedIds.has(l.id)}
+                                onCheckedChange={() => onToggleSelect(l.id)}
+                              />
+                            ) : (
+                              <span className="w-4" />
+                            )}
+                          </TableCell>
                           <TableCell className="text-sm font-medium">{(l.subcategoria || l.descricao).toUpperCase()}</TableCell>
                           <TableCell className="text-sm">{l.pessoa_nome?.toUpperCase() || "—"}</TableCell>
                           <TableCell className="text-sm">{format(new Date(l.data_vencimento), "dd/MM/yy")}</TableCell>
                           <TableCell className="text-sm text-right font-medium">{fmtCurrency(l.valor)}</TableCell>
                           <TableCell><Badge variant={sc.variant}>{sc.label}</Badge></TableCell>
+                          <TableCell>
+                            {isSelectable && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-xs"
+                                onClick={() => onPrepararPagamento(l)}
+                              >
+                                <CreditCard className="h-3.5 w-3.5 mr-1" /> Preparar
+                              </Button>
+                            )}
+                          </TableCell>
                         </TableRow>
                       );
                     })}
