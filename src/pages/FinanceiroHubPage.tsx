@@ -317,16 +317,17 @@ export default function FinanceiroHubPage() {
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-  // Selection
-  const previstosPagar = lancamentos.filter(l => l.tipo === "PAGAR" && l.status === "PREVISTO");
+  // Selection — can select PREVISTO and CLASSIFICADO
+  const selectablePagar = lancamentos.filter(l => l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status));
+  const previstosPagar = selectablePagar; // alias for backward compat
   const toggleSelect = (id: string) => {
     const next = new Set(selectedIds);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) next.delete(id); else next.add(id);
     setSelectedIds(next);
   };
   const toggleSelectAll = () => {
-    if (selectedIds.size === previstosPagar.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(previstosPagar.map(l => l.id)));
+    if (selectedIds.size === selectablePagar.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(selectablePagar.map(l => l.id)));
   };
 
   const hasPaymentData = (l: Lancamento) => {
@@ -334,12 +335,15 @@ export default function FinanceiroHubPage() {
     return !!(d.btg_payment_type || d.linha_digitavel || d.pix_key);
   };
 
-  // KPIs
+  // KPIs — separate rascunho vs validado
+  const totalAgenda = lancamentos.filter(l => !["CANCELADO", "BAIXADO", "PREVISTO"].includes(l.status)).reduce((s, l) => s + l.valor, 0);
+  const countRascunhos = lancamentos.filter(l => l.status === "PREVISTO").length;
   const totalPagar = lancamentos.filter(l => !["CANCELADO", "BAIXADO"].includes(l.status)).reduce((s, l) => s + l.valor, 0);
   const pendentesValidacao = lancamentos.filter(l => l.requer_validacao).length;
   const vencidos = lancamentos.filter(l => l.status === "PREVISTO" && new Date(l.data_vencimento) < new Date()).length;
   const borderosAbertos = borderos.filter(b => ["MONTAGEM", "APROVADO"].includes(b.status)).length;
   const naoClassificados = lancamentos.filter(l => l.status === "PREVISTO" && !l.subcategoria).length;
+  const selectedTotal = lancamentos.filter(l => selectedIds.has(l.id)).reduce((s, l) => s + l.valor, 0);
 
   // Workflow step counts
   const countPrevistos = lancamentos.filter(l => l.status === "PREVISTO").length;
