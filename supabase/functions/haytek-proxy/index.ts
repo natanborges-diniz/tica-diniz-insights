@@ -258,6 +258,125 @@ serve(async (req) => {
         });
       }
 
+      // ── Atualizar Tracking ──
+      case "atualizar-tracking": {
+        const orderId = params.orderId;
+        const pedidoFornecedorId = params.pedidoFornecedorId;
+        const codEmpresa = Number(params.codEmpresa);
+
+        if (!orderId) {
+          return new Response(JSON.stringify({ error: "orderId obrigatório" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/${orderId}`;
+        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "atualizar-tracking", haytekConfig.apiKey);
+        const data = await resp.json();
+
+        if (resp.status >= 400) {
+          return new Response(JSON.stringify({ error: data.message || `HTTP ${resp.status}`, code: HAYTEK_ERROR_CODES.API_ERROR, correlationId }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const newStatus = data.status || data.orderStatus || "Desconhecido";
+
+        // Find pedido_fornecedor
+        let pfId = pedidoFornecedorId;
+        if (!pfId) {
+          const { data: pfRec } = await sbService
+            .from("pedidos_fornecedor")
+            .select("id")
+            .eq("numero_pedido", String(orderId))
+            .eq("fornecedor", "HAYTEK")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          pfId = pfRec?.id;
+        }
+
+        if (!pfId) {
+          return new Response(JSON.stringify({ tracking: data, saved: false, reason: "pedido_fornecedor não encontrado" }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Check for status change
+        const { data: lastEntry } = await sbService
+          .from("pedido_status_history")
+          .select("status")
+          .eq("pedido_fornecedor_id", pfId)
+          .order("checked_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const statusChanged = !lastEntry || lastEntry.status !== newStatus;
+
+        if (statusChanged) {
+          await sbService.from("pedido_status_history").insert({
+            pedido_fornecedor_id: pfId,
+            status: newStatus,
+          });
+          await sbService.from("pedidos_fornecedor").update({ status: newStatus }).eq("id", pfId);
+
+          // Alert on negative statuses
+          const negativePatterns = ["cancel", "erro", "recusad", "reject"];
+          const isNeg = negativePatterns.some(p => newStatus.toLowerCase().includes(p));
+          if (isNeg && codEmpresa) {
+            await sbService.from("pedido_alertas").upsert({
+              pedido_fornecedor_id: pfId,
+              cod_empresa: codEmpresa,
+              status_detectado: newStatus,
+              acknowledged: false,
+            }, { onConflict: "pedido_fornecedor_id" });
+          }
+        }
+
+        const { data: timeline } = await sbService
+          .from("pedido_status_history")
+          .select("*")
+          .eq("pedido_fornecedor_id", pfId)
+          .order("checked_at", { ascending: true });
+
+        return new Response(JSON.stringify({ tracking: data, timeline: timeline || [], statusChanged, saved: true }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
+
+      // ── Histórico de Pedidos ──
+      case "historico-pedidos": {
+        let query = sbService.from("pedidos_fornecedor")
+          .select("*")
+          .eq("fornecedor", "HAYTEK")
+          .order("created_at", { ascending: false })
+          .limit(params.limit || 50);
+
+        if (params.codEmpresa && params.codEmpresa !== "ALL") {
+          query = query.eq("cod_empresa", Number(params.codEmpresa));
+        }
+
+        const { data: pedidos, error: dbErr } = await query;
+        if (dbErr) throw new Error(dbErr.message);
+
+        return new Response(JSON.stringify(pedidos || []), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // ── Timeline ──
+      case "timeline-pedido": {
+        const { data: tlData } = await sbService
+          .from("pedido_status_history")
+          .select("*")
+          .eq("pedido_fornecedor_id", params.pedidoFornecedorId)
+          .order("checked_at", { ascending: true });
+
+        return new Response(JSON.stringify(tlData || []), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Ação desconhecida: ${action}` }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },

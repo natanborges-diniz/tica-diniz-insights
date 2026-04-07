@@ -177,6 +177,59 @@ export async function consultarPedidoHaytek(
   });
 }
 
+// ── Types for tracking ──
+
+export interface PedidoFornecedorRecord {
+  id: string;
+  cod_os: number;
+  cod_empresa: number;
+  fornecedor: string;
+  numero_pedido: string | null;
+  status: string | null;
+  payload: unknown;
+  response: unknown;
+  created_at: string;
+  updated_at: string;
+  hoya_environment: string | null;
+  idempotency_key: string | null;
+  requested_by: string | null;
+}
+
+export interface StatusHistoryEntry {
+  id: string;
+  pedido_fornecedor_id: string;
+  status: string;
+  status_producao: string | null;
+  rastreio: string | null;
+  observacao: string | null;
+  checked_at: string;
+}
+
+// ── Histórico de Pedidos ──
+export async function listarHistoricoPedidosHaytek(
+  codEmpresa?: number | string,
+  limit = 50
+): Promise<PedidoFornecedorRecord[]> {
+  return callHaytekProxy<PedidoFornecedorRecord[]>("historico-pedidos", {
+    codEmpresa: codEmpresa || "ALL",
+    limit,
+  });
+}
+
+// ── Timeline ──
+export async function listarTimelinePedidoHaytek(pedidoFornecedorId: string): Promise<StatusHistoryEntry[]> {
+  return callHaytekProxy<StatusHistoryEntry[]>("timeline-pedido", { pedidoFornecedorId });
+}
+
+// ── Atualizar Tracking ──
+export async function atualizarTrackingHaytek(
+  orderId: string,
+  codEmpresa: number,
+  pedidoFornecedorId?: string
+): Promise<{ tracking: HaytekOrderTracking; timeline: StatusHistoryEntry[]; statusChanged: boolean; saved: boolean }> {
+  return callHaytekProxy("atualizar-tracking", { orderId, codEmpresa, pedidoFornecedorId });
+}
+
 // ── Listar Produtos do Catálogo (local DB) ──
 export async function listarProdutosHaytek(): Promise<HaytekProduto[]> {
   const { data, error } = await supabase
