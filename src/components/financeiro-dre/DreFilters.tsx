@@ -9,9 +9,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useUserEmpresas } from "@/hooks/useUserEmpresas";
 import { DreFilters as DreFiltersType } from "@/hooks/useFinanceiroDre";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, TrendingUp } from "lucide-react";
 
 interface Props {
   filters: DreFiltersType;
@@ -23,6 +24,28 @@ export function DreFilters({ filters, onChange }: Props) {
 
   return (
     <div className="flex flex-wrap gap-4 items-end">
+      {/* Modo */}
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">Visão</Label>
+        <ToggleGroup
+          type="single"
+          value={filters.modo}
+          onValueChange={(val) => {
+            if (val) onChange({ modo: val as "realizado" | "projetado" });
+          }}
+          className="border rounded-md"
+        >
+          <ToggleGroupItem value="realizado" aria-label="Realizado" className="gap-1.5 text-xs px-3">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Realizado
+          </ToggleGroupItem>
+          <ToggleGroupItem value="projetado" aria-label="Projetado" className="gap-1.5 text-xs px-3">
+            <TrendingUp className="h-3.5 w-3.5" />
+            Projetado
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+
       {/* Empresa */}
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Empresa</Label>

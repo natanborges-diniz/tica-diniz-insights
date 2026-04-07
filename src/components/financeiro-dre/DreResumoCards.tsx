@@ -6,6 +6,8 @@ import { DreResumo } from "@/services/financeiroDreService";
 
 interface Props {
   resumo: DreResumo;
+  resumoRealizado?: DreResumo;
+  modo?: "realizado" | "projetado";
 }
 
 function formatCurrency(value: number): string {
@@ -15,37 +17,44 @@ function formatCurrency(value: number): string {
   });
 }
 
-export function DreResumoCards({ resumo }: Props) {
+export function DreResumoCards({ resumo, resumoRealizado, modo = "realizado" }: Props) {
+  const isProjetado = modo === "projetado" && resumoRealizado;
+
   const cards = [
     {
       title: "Receita Líquida",
       value: resumo.receitaLiquida,
+      realizadoValue: resumoRealizado?.receitaLiquida,
       icon: DollarSign,
       color: "text-blue-500",
     },
     {
       title: "CMV",
       value: resumo.custoMercadoria,
+      realizadoValue: resumoRealizado?.custoMercadoria,
       icon: Package,
       color: "text-orange-500",
     },
     {
       title: "Lucro Bruto",
       value: resumo.lucroBruto,
+      realizadoValue: resumoRealizado?.lucroBruto,
       icon: TrendingUp,
-      color: resumo.lucroBruto >= 0 ? "text-green-500" : "text-red-500",
+      color: resumo.lucroBruto >= 0 ? "text-green-500" : "text-destructive",
     },
     {
       title: "Despesas Operacionais",
       value: resumo.despesasOperacionais,
+      realizadoValue: resumoRealizado?.despesasOperacionais,
       icon: TrendingDown,
-      color: "text-red-500",
+      color: "text-destructive",
     },
     {
       title: "Resultado Líquido",
       value: resumo.resultadoLiquido,
+      realizadoValue: resumoRealizado?.resultadoLiquido,
       icon: Wallet,
-      color: resumo.resultadoLiquido >= 0 ? "text-green-500" : "text-red-500",
+      color: resumo.resultadoLiquido >= 0 ? "text-green-500" : "text-destructive",
     },
   ];
 
@@ -58,9 +67,14 @@ export function DreResumoCards({ resumo }: Props) {
             <card.icon className={`h-4 w-4 ${card.color}`} />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${card.value < 0 ? "text-red-500" : ""}`}>
+            <div className={`text-2xl font-bold ${card.value < 0 ? "text-destructive" : ""}`}>
               {formatCurrency(card.value)}
             </div>
+            {isProjetado && card.realizadoValue !== undefined && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {formatCurrency(card.realizadoValue)} realizado
+              </p>
+            )}
           </CardContent>
         </Card>
       ))}

@@ -40,26 +40,32 @@ function json(data: unknown, status = 200) {
 
 // ═══════════════════════════════════════════════════════════
 // DRE - Demonstrativo de Resultado do Exercício
-// Fonte: lancamentos_financeiros com status BAIXADO
+// Fonte: lancamentos_financeiros
+// modo=realizado → apenas BAIXADO (default)
+// modo=projetado → BAIXADO + CLASSIFICADO/BORDERO/AUTORIZADO/PROCESSANDO
 // ═══════════════════════════════════════════════════════════
 
 interface DreParams {
   cod_empresa?: number | null;
   data_inicio: string;
   data_fim: string;
+  modo?: "realizado" | "projetado";
 }
 
 async function gerarDre(body: DreParams) {
-  const { cod_empresa, data_inicio, data_fim } = body;
+  const { cod_empresa, data_inicio, data_fim, modo = "realizado" } = body;
   if (!data_inicio || !data_fim) {
     return json({ error: "data_inicio e data_fim obrigatórios" }, 400);
   }
 
-  // Query BAIXADO entries within the date range — DRE uses COMPETÊNCIA (data_emissao)
+  const statusList = modo === "projetado"
+    ? ["BAIXADO", "CLASSIFICADO", "BORDERO", "AUTORIZADO", "PROCESSANDO"]
+    : ["BAIXADO"];
+
   let query = supabase
     .from("lancamentos_financeiros")
-    .select("id, cod_empresa, tipo, categoria, subcategoria, natureza, valor, valor_pago, data_pagamento, data_vencimento, data_emissao, descricao, pessoa_nome")
-    .eq("status", "BAIXADO")
+    .select("id, cod_empresa, tipo, categoria, subcategoria, natureza, valor, valor_pago, data_pagamento, data_vencimento, data_emissao, descricao, pessoa_nome, status")
+    .in("status", statusList)
     .gte("data_emissao", data_inicio)
     .lte("data_emissao", data_fim)
     .order("data_emissao", { ascending: true });
@@ -71,23 +77,25 @@ async function gerarDre(body: DreParams) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
 
-  // Map lancamentos to DRE groups based on tipo + categoria
   const linhas = (data || []).map((l) => {
     const grupo = classificarGrupoDre(l.tipo, l.categoria, l.natureza);
     const competencia = l.data_emissao
-      ? l.data_emissao.substring(0, 7) // YYYY-MM (competência)
+      ? l.data_emissao.substring(0, 7)
       : l.data_pagamento
         ? l.data_pagamento.substring(0, 7)
         : "SEM_DATA";
+
+    const isBaixado = l.status === "BAIXADO";
 
     return {
       COMPETENCIA: competencia,
       COD_EMPRESA: l.cod_empresa,
       CONTACLA_CODIGO: l.id,
       CONTACLA_DESCRICAO: l.descricao,
-      VALOR_TOTAL: l.valor_pago ?? l.valor,
+      VALOR_TOTAL: isBaixado ? (l.valor_pago ?? l.valor) : l.valor,
       GRUPO: grupo,
       SUBGRUPO: l.subcategoria || l.categoria || null,
+      REALIZADO: isBaixado,
     };
   });
 
@@ -96,17 +104,11 @@ async function gerarDre(body: DreParams) {
 
 /**
  * Classifica um lançamento em grupo DRE baseado no tipo e categoria.
- * 
- * Convenção:
- * - RECEBER → RECEITA_BRUTA (default) ou OUTRAS_RECEITAS
- * - PAGAR → CUSTO_MERCADORIA, DESPESAS_OPERACIONAIS, DEDUCOES, ou OUTRAS_DESPESAS
- * - Categorias especiais mapeiam para grupos específicos
  */
 function classificarGrupoDre(tipo: string, categoria: string | null, natureza: string | null): string {
   const nat = (natureza || "").toUpperCase();
   const cat = (categoria || "").toUpperCase();
 
-  // If natureza is already set from dre_plano_contas, use it directly
   if (nat === "RECEITA_BRUTA") return "RECEITA_BRUTA";
   if (nat === "DEDUCOES") return "DEDUCOES";
   if (nat === "CUSTO_MERCADORIA") return "CUSTO_MERCADORIA";
@@ -114,13 +116,11 @@ function classificarGrupoDre(tipo: string, categoria: string | null, natureza: s
   if (nat === "OUTRAS_DESPESAS") return "OUTRAS_DESPESAS";
   if (nat === "INVESTIMENTOS") return "INVESTIMENTOS";
 
-  // Legacy/fallback mappings
   if (cat === "TAXA_ADQUIRENTE" || cat === "TAXA" || cat === "TAXAS") return "DEDUCOES";
   if (cat === "IMPOSTO" || cat === "IMPOSTOS" || cat === "TRIBUTO" || cat.includes("IMPOSTO")) return "DEDUCOES";
   if (cat === "COMISSOES") return "DEDUCOES";
   if (cat === "CMV" || cat === "FORNECEDORES_PRODUTO" || cat.includes("CUSTO")) return "CUSTO_MERCADORIA";
 
-  // Category-based grouping for operational expenses
   const opCategories = ["PESSOAL", "OCUPACAO", "COMUNICACAO", "MARKETING", "ADMINISTRATIVO",
     "SERVICOS", "MANUTENCAO", "FINANCEIRO_OPERACIONAL", "SEGURANCA", "DEVOLUCOES"];
   if (opCategories.includes(cat)) return "DESPESAS_OPERACIONAIS";
@@ -128,7 +128,6 @@ function classificarGrupoDre(tipo: string, categoria: string | null, natureza: s
   if (cat === "FINANCEIRO" || cat === "PRO_LABORE") return "OUTRAS_DESPESAS";
   if (cat === "INVESTIMENTOS") return "INVESTIMENTOS";
 
-  // Type-based fallback
   if (tipo === "RECEBER") {
     if (cat === "OUTRAS_RECEITAS" || cat === "FINANCEIRA") return "OUTRAS_RECEITAS";
     return "RECEITA_BRUTA";
@@ -144,14 +143,13 @@ function classificarGrupoDre(tipo: string, categoria: string | null, natureza: s
 
 // ═══════════════════════════════════════════════════════════
 // FLUXO DE CAIXA
-// Fonte: lancamentos_financeiros (BAIXADO = realizado, PREVISTO/AUTORIZADO = projetado)
 // ═══════════════════════════════════════════════════════════
 
 interface FluxoParams {
   cod_empresa?: number | null;
   data_inicio: string;
   data_fim: string;
-  apenas_baixado?: boolean; // true = só realizado, false = inclui projetado
+  apenas_baixado?: boolean;
 }
 
 async function gerarFluxoCaixa(body: FluxoParams) {
@@ -179,11 +177,10 @@ async function gerarFluxoCaixa(body: FluxoParams) {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
 
-  // Map to a fluxo-friendly format
   const linhas = (data || []).map((l) => ({
     id: l.id,
     cod_empresa: l.cod_empresa,
-    tipo: l.tipo, // RECEBER or PAGAR
+    tipo: l.tipo,
     valor: l.status === "BAIXADO" ? (l.valor_pago ?? l.valor) : l.valor,
     data_referencia: l.status === "BAIXADO" ? (l.data_pagamento ?? l.data_vencimento) : l.data_vencimento,
     status: l.status,
