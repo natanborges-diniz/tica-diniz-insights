@@ -789,6 +789,10 @@ export default function FinanceiroHubPage() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="contas-pagar">Contas a Pagar</TabsTrigger>
+            <TabsTrigger value="agenda">
+              Agenda
+              {totalAgenda > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5">{fmtCurrency(totalAgenda)}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="borderos">
               Borderôs
               {borderosAbertos > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5">{borderosAbertos}</Badge>}
