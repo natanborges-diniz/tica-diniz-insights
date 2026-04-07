@@ -1065,6 +1065,7 @@ async function cancelarLote(body: Record<string, unknown>) {
 
   if (error) throw new Error(error.message);
   return json({ ok: true, cancelados: (data || []).length });
+}
 
 async function listarPendentesValidacao(body: Record<string, unknown>) {
   const { cod_empresa, limit: lim } = body;
