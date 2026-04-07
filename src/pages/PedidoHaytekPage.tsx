@@ -285,12 +285,13 @@ const PedidoHaytekPage: React.FC = () => {
     if (!codEmpresa) return;
     supabase
       .from("haytek_empresa_config" as never)
-      .select("store_id")
+      .select("store_id, alias")
       .eq("cod_empresa", codEmpresa)
       .eq("ativo", true)
       .maybeSingle()
       .then(({ data }) => {
         if ((data as any)?.store_id) setHaytekStoreId((data as any).store_id);
+        if ((data as any)?.alias) setStoreName((data as any).alias);
       });
   }, [codEmpresa]);
 
