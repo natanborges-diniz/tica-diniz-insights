@@ -70,7 +70,7 @@ export function ClassificarLoteDialog({
         </div>
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
           <p className="text-xs text-amber-800">
-            A classificação move os lançamentos de <strong>PREVISTO</strong> para <strong>CLASSIFICADO</strong>,
+            A validação move os lançamentos de <strong>PREVISTO</strong> para <strong>VALIDADO</strong>,
             oficializando-os na agenda de contas a pagar.
           </p>
         </div>
