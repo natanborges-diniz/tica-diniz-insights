@@ -60,7 +60,7 @@ export default function FinanceiroOverviewPage() {
     { label: "DRE Gerencial", url: "/financeiro/dre", icon: FileText, desc: "Demonstrativo de resultado" },
     { label: "Fluxo de Caixa", url: "/financeiro/fluxo-caixa", icon: ArrowLeftRight, desc: "Projeções e realizado" },
     { label: "Cartões", url: "/financeiro/cartoes", icon: CreditCard, desc: "Conciliação de recebíveis" },
-    { label: "Classificação", url: "/financeiro/classificacao", icon: Tags, desc: `${resumo.qtdPendentesValidacao} pendente(s)` },
+    { label: "Validação", url: "/financeiro/hub", icon: Tags, desc: `${resumo.qtdPendentesValidacao} pendente(s)` },
   ];
 
   return (
@@ -135,12 +135,12 @@ export default function FinanceiroOverviewPage() {
           </Card>
         )}
         {resumo.qtdPendentesValidacao > 0 && (
-          <Card className="border-warning/30 bg-warning/5 cursor-pointer hover:bg-warning/10 transition-colors" onClick={() => navigate("/financeiro/classificacao")}>
+          <Card className="border-warning/30 bg-warning/5 cursor-pointer hover:bg-warning/10 transition-colors" onClick={() => navigate("/financeiro/hub")}>
             <CardContent className="flex items-center gap-3 p-4">
               <Tags className="h-5 w-5 text-warning shrink-0" />
               <div>
                 <p className="text-sm font-medium text-warning">{resumo.qtdPendentesValidacao} pendente(s)</p>
-                <p className="text-xs text-muted-foreground">Aguardando classificação</p>
+                <p className="text-xs text-muted-foreground">Aguardando validação</p>
               </div>
             </CardContent>
           </Card>
