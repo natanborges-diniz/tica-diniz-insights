@@ -18,6 +18,7 @@ export default function FinanceiroDreDashboard() {
     setFilters,
     data,
     resumo,
+    resumoRealizado,
     dadosPorCompetencia,
     loading,
     error,
