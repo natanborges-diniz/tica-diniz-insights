@@ -20,6 +20,7 @@ import HoyaTrackingPage from "./pages/HoyaTrackingPage";
 import PedidoZeissPage from "./pages/PedidoZeissPage";
 import PedidoHaytekPage from "./pages/PedidoHaytekPage";
 import ZeissTrackingPage from "./pages/ZeissTrackingPage";
+import HaytekTrackingPage from "./pages/HaytekTrackingPage";
 import FinanceiroDashboard from "./pages/FinanceiroDashboard";
 import FinanceiroDreDashboard from "./pages/FinanceiroDreDashboard";
 import FluxoCaixaDashboard from "./pages/FluxoCaixaDashboard";
@@ -93,6 +94,7 @@ const App = () => (
                   <Route path="/os/pedido-zeiss" element={<PedidoZeissPage />} />
                   <Route path="/os/tracking-zeiss" element={<ZeissTrackingPage />} />
                   <Route path="/os/pedido-haytek" element={<PedidoHaytekPage />} />
+                  <Route path="/os/tracking-haytek" element={<HaytekTrackingPage />} />
                 </Route>
 
                 {/* Financeiro */}
