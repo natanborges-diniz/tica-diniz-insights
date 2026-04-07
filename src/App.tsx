@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import ModuleGuard from "@/components/auth/ModuleGuard";
+import AdminGuard from "@/components/auth/AdminGuard";
 import LoginPage from "@/components/auth/LoginPage";
 import { AppLayout } from "@/components/layout/AppLayout";
 import HomePage from "./pages/HomePage";
