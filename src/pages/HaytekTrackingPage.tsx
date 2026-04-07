@@ -161,15 +161,43 @@ const HaytekTrackingPage: React.FC = () => {
     }
   };
 
+  // Live API data per pedido
+  const [liveApiData, setLiveApiData] = useState<Record<string, HaytekOrderTracking | null>>({});
+  const [liveApiLoading, setLiveApiLoading] = useState<Record<string, boolean>>({});
+  const [liveApiError, setLiveApiError] = useState<Record<string, string | null>>({});
+
   const handleExpand = async (pedidoId: string) => {
     if (expandedId === pedidoId) { setExpandedId(null); return; }
     setExpandedId(pedidoId);
     setLoadingTimeline(true);
+
+    const pedido = pedidos.find(p => p.id === pedidoId);
+
+    // Load timeline
     try {
       const tl = await listarTimelinePedidoHaytek(pedidoId);
       setTimeline(tl);
     } catch { setTimeline([]); }
     setLoadingTimeline(false);
+
+    // Live API consultation
+    if (pedido?.numero_pedido) {
+      setLiveApiLoading(prev => ({ ...prev, [pedidoId]: true }));
+      setLiveApiError(prev => ({ ...prev, [pedidoId]: null }));
+      try {
+        const apiData = await consultarPedidoHaytek(pedido.numero_pedido, pedido.cod_empresa);
+        if ((apiData as any)?.error) {
+          setLiveApiError(prev => ({ ...prev, [pedidoId]: (apiData as any).error }));
+          setLiveApiData(prev => ({ ...prev, [pedidoId]: null }));
+        } else {
+          setLiveApiData(prev => ({ ...prev, [pedidoId]: apiData }));
+        }
+      } catch (err: any) {
+        setLiveApiError(prev => ({ ...prev, [pedidoId]: err?.message || "Erro ao consultar API" }));
+      } finally {
+        setLiveApiLoading(prev => ({ ...prev, [pedidoId]: false }));
+      }
+    }
   };
 
   return (
@@ -403,15 +431,125 @@ const HaytekTrackingPage: React.FC = () => {
 
                     <Separator />
 
-                    {/* Payload summary */}
+                    {/* Structured payload */}
                     <div>
                       <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">Dados do Pedido</p>
-                      {pedido.payload ? (
-                        <pre className="text-[10px] bg-background rounded p-2 border overflow-x-auto max-h-40 whitespace-pre-wrap">
-                          {JSON.stringify(pedido.payload, null, 2)}
-                        </pre>
-                      ) : (
+                      {pedido.payload ? (() => {
+                        const pl = pedido.payload as any;
+                        const prod = pl?.products || pl?.pedido?.products || {};
+                        const right = prod?.right || {};
+                        const left = prod?.left || {};
+                        const frame = prod?.frame || {};
+                        return (
+                          <div className="space-y-3 text-xs">
+                            {/* Produto + Paciente */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              <div><span className="text-muted-foreground">Produto:</span> <span className="font-mono font-medium">{prod.productId || "—"}</span></div>
+                              <div><span className="text-muted-foreground">Tratamento:</span> <span className="font-medium">{prod.treatment || "—"}</span></div>
+                              <div><span className="text-muted-foreground">Paciente:</span> <span className="font-medium">{pl.patientName || pl.pedido?.patientName || "—"}</span></div>
+                              <div><span className="text-muted-foreground">OS:</span> <span className="font-mono">{pl.osId || pl.pedido?.osId || "—"}</span></div>
+                            </div>
+
+                            {/* Prescrição OD/OE */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {[{ label: "OD", eye: right }, { label: "OE", eye: left }].map(({ label, eye }) => (
+                                <div key={label} className="rounded border p-2 bg-background">
+                                  <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">{label}</p>
+                                  <div className="grid grid-cols-3 gap-x-3 gap-y-1 text-[11px]">
+                                    <div>ESF: <span className="font-mono">{eye.spherical || "—"}</span></div>
+                                    <div>CIL: <span className="font-mono">{eye.cylindrical || "—"}</span></div>
+                                    <div>EIX: <span className="font-mono">{eye.axis || "—"}</span></div>
+                                    <div>AD: <span className="font-mono">{eye.addition || "—"}</span></div>
+                                    <div>DNP: <span className="font-mono">{eye.ndp || "—"}</span></div>
+                                    <div>ALT: <span className="font-mono">{eye.height || "—"}</span></div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Armação */}
+                            {(frame.code || frame.bridge) && (
+                              <div className="rounded border p-2 bg-background">
+                                <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Armação</p>
+                                <div className="grid grid-cols-3 sm:grid-cols-6 gap-x-3 gap-y-1 text-[11px]">
+                                  <div>Tipo: <span className="font-medium">{frame.code || "—"}</span></div>
+                                  <div>Material: <span className="font-medium">{frame.material || "—"}</span></div>
+                                  <div>Formato: <span className="font-mono">{frame.modelImage || "—"}</span></div>
+                                  <div>Ponte: <span className="font-mono">{frame.bridge || "—"}</span></div>
+                                  <div>Altura: <span className="font-mono">{frame.height || "—"}</span></div>
+                                  <div>Largura: <span className="font-mono">{frame.width || "—"}</span></div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Corredor + Coloração */}
+                            {(prod.corridor || prod.coloring) && (
+                              <div className="flex gap-4 text-[11px]">
+                                {prod.corridor && <div><span className="text-muted-foreground">Corredor:</span> {prod.corridor}mm</div>}
+                                {prod.coloring && <div><span className="text-muted-foreground">Coloração:</span> {prod.coloring.color} {prod.coloring.intensityCode}</div>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })() : (
                         <p className="text-xs text-muted-foreground">Payload não disponível.</p>
+                      )}
+                    </div>
+
+                    {/* Resposta da API */}
+                    {pedido.response && (
+                      <>
+                        <Separator />
+                        <div>
+                          <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">Resposta da API</p>
+                          <div className="text-xs space-y-1">
+                            {(pedido.response as any)?.orderId && (
+                              <div><span className="text-muted-foreground">Order ID:</span> <span className="font-mono font-medium">{(pedido.response as any).orderId}</span></div>
+                            )}
+                            {(pedido.response as any)?.status && (
+                              <div><span className="text-muted-foreground">Status:</span> {(pedido.response as any).status}</div>
+                            )}
+                            {(pedido.response as any)?.error && (
+                              <div className="text-destructive"><span className="text-muted-foreground">Erro:</span> {(pedido.response as any).error}</div>
+                            )}
+                            {(pedido.response as any)?.message && (
+                              <div><span className="text-muted-foreground">Mensagem:</span> {(pedido.response as any).message}</div>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Live API status */}
+                    <Separator />
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
+                        Status ao Vivo (API Haytek)
+                        {liveApiLoading[pedido.id] && <Loader2 className="h-3 w-3 animate-spin" />}
+                      </p>
+                      {liveApiLoading[pedido.id] && (
+                        <p className="text-xs text-muted-foreground">Consultando API Haytek...</p>
+                      )}
+                      {liveApiError[pedido.id] && (
+                        <div className="rounded border border-destructive/30 bg-destructive/10 text-destructive p-2 text-xs">
+                          {liveApiError[pedido.id]}
+                        </div>
+                      )}
+                      {liveApiData[pedido.id] && !liveApiLoading[pedido.id] && (
+                        <div className="rounded border p-2 bg-background text-xs space-y-1">
+                          {liveApiData[pedido.id]!.status && (
+                            <div><span className="text-muted-foreground">Status:</span> <Badge variant="outline" className={statusBadge(liveApiData[pedido.id]!.status as string).color + " text-[10px] ml-1"}>{String(liveApiData[pedido.id]!.status)}</Badge></div>
+                          )}
+                          {liveApiData[pedido.id]!.orderId && (
+                            <div><span className="text-muted-foreground">Order ID:</span> <span className="font-mono">{String(liveApiData[pedido.id]!.orderId)}</span></div>
+                          )}
+                          {Array.isArray(liveApiData[pedido.id]!.deliveries) && (liveApiData[pedido.id]!.deliveries as any[]).length > 0 && (
+                            <div><span className="text-muted-foreground">Entregas:</span> {(liveApiData[pedido.id]!.deliveries as any[]).length} registro(s)</div>
+                          )}
+                        </div>
+                      )}
+                      {!liveApiLoading[pedido.id] && !liveApiError[pedido.id] && !liveApiData[pedido.id] && !pedido.numero_pedido && (
+                        <p className="text-xs text-muted-foreground">Sem número de pedido para consultar.</p>
                       )}
                     </div>
                   </div>
