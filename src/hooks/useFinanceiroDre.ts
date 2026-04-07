@@ -9,6 +9,7 @@ export interface DreFilters {
   empresa: EmpresaParam;
   dataIni: string;
   dataFim: string;
+  modo: "realizado" | "projetado";
 }
 
 function formatLocalDate(date: Date): string {
@@ -27,6 +28,7 @@ function getDefaultFilters(defaultEmpresa: EmpresaParam): DreFilters {
     empresa: defaultEmpresa || '',
     dataIni: formatLocalDate(primeiroDiaMes),
     dataFim: formatLocalDate(ultimoDiaMes),
+    modo: 'realizado',
   };
 }
 
@@ -63,6 +65,7 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
         empresa: filters.empresa,
         dataInicio: filters.dataIni,
         dataFim: filters.dataFim,
+        modo: filters.modo,
       });
       setData(linhas);
     } catch (err) {
@@ -71,7 +74,7 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
     } finally {
       setLoading(false);
     }
-  }, [filters.dataIni, filters.dataFim, filters.empresa]);
+  }, [filters.dataIni, filters.dataFim, filters.empresa, filters.modo]);
 
   useEffect(() => {
     if (filters.empresa !== null) {
@@ -80,6 +83,11 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
   }, [fetchData, filters.empresa]);
 
   const resumo = useMemo<DreResumo>(() => calcularResumoDre(data), [data]);
+
+  const resumoRealizado = useMemo<DreResumo>(() => {
+    if (filters.modo === 'realizado') return resumo;
+    return calcularResumoDre(data.filter(l => l.realizado));
+  }, [data, filters.modo, resumo]);
 
   const dadosPorCompetencia = useMemo<DreCompetenciaData[]>(() => {
     const competenciaMap = new Map<string, DreLinha[]>();
@@ -114,6 +122,7 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
     setFilters,
     data,
     resumo,
+    resumoRealizado,
     dadosPorCompetencia,
     loading,
     error,

@@ -15,6 +15,7 @@ interface DreLinhaRaw {
   VALOR_TOTAL?: number;
   GRUPO?: string;
   SUBGRUPO?: string;
+  REALIZADO?: boolean;
 }
 
 export interface DreLinha {
@@ -27,12 +28,14 @@ export interface DreLinha {
   valorTotal: number;
   grupo: string;
   subgrupo: string | null;
+  realizado: boolean;
 }
 
 export interface GetDreParams {
   empresa: number | string | null;
   dataInicio: string;
   dataFim: string;
+  modo?: "realizado" | "projetado";
 }
 
 // ============================================
@@ -54,7 +57,6 @@ async function getSinaisMap(): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   if (data) {
     for (const row of data) {
-      // Use first occurrence per group (most common sinal)
       if (!map.has(row.grupo_dre)) {
         map.set(row.grupo_dre, row.sinal);
       }
@@ -66,10 +68,6 @@ async function getSinaisMap(): Promise<Map<string, string>> {
   return map;
 }
 
-/**
- * Normaliza o sinal do valor conforme sinal definido no banco.
- * Se sinal = '-', valor deve ser negativo. Se '+', positivo.
- */
 function normalizarSinalDre(valor: number, grupo: string, sinais: Map<string, string>): number {
   const sinal = sinais.get(grupo);
   if (sinal === '-') return valor > 0 ? -valor : valor;
@@ -90,6 +88,7 @@ function mapDreLinhaRaw(r: DreLinhaRaw, sinais: Map<string, string>): DreLinha {
     valorTotal: normalizarSinalDre(valorBruto, grupo, sinais),
     grupo,
     subgrupo: r.SUBGRUPO ?? null,
+    realizado: r.REALIZADO ?? true,
   };
 }
 
@@ -103,6 +102,7 @@ export async function getFinanceiroDre(params: GetDreParams): Promise<DreLinha[]
         cod_empresa: codEmpresa,
         data_inicio: params.dataInicio,
         data_fim: params.dataFim,
+        modo: params.modo || 'realizado',
       },
     }),
     getSinaisMap(),
