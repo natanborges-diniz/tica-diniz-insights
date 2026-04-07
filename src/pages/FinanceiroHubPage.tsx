@@ -895,23 +895,6 @@ export default function FinanceiroHubPage() {
             </Card>
           </TabsContent>
 
-          {/* Agenda Oficial */}
-          <TabsContent value="agenda">
-            <AgendaOficialTab
-              lancamentos={lancamentos}
-              isLoading={isLoading}
-              selectedIds={selectedIds}
-              onToggleSelect={toggleSelect}
-              onToggleSelectAll={(ids) => {
-                const next = new Set(selectedIds);
-                const allSelected = ids.every(id => next.has(id));
-                if (allSelected) { ids.forEach(id => next.delete(id)); }
-                else { ids.forEach(id => next.add(id)); }
-                setSelectedIds(next);
-              }}
-              onPrepararPagamento={(l) => setPrepPaymentLanc(l as Lancamento)}
-            />
-          </TabsContent>
 
           <TabsContent value="contas-receber">
             <div className="text-center py-12 text-muted-foreground">
