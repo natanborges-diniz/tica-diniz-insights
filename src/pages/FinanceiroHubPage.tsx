@@ -786,7 +786,7 @@ export default function FinanceiroHubPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedIds(new Set()); }}>
           <TabsList>
             <TabsTrigger value="contas-pagar">Contas a Pagar</TabsTrigger>
             <TabsTrigger value="agenda">
