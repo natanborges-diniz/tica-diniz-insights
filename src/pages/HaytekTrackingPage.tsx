@@ -161,15 +161,43 @@ const HaytekTrackingPage: React.FC = () => {
     }
   };
 
+  // Live API data per pedido
+  const [liveApiData, setLiveApiData] = useState<Record<string, HaytekOrderTracking | null>>({});
+  const [liveApiLoading, setLiveApiLoading] = useState<Record<string, boolean>>({});
+  const [liveApiError, setLiveApiError] = useState<Record<string, string | null>>({});
+
   const handleExpand = async (pedidoId: string) => {
     if (expandedId === pedidoId) { setExpandedId(null); return; }
     setExpandedId(pedidoId);
     setLoadingTimeline(true);
+
+    const pedido = pedidos.find(p => p.id === pedidoId);
+
+    // Load timeline
     try {
       const tl = await listarTimelinePedidoHaytek(pedidoId);
       setTimeline(tl);
     } catch { setTimeline([]); }
     setLoadingTimeline(false);
+
+    // Live API consultation
+    if (pedido?.numero_pedido) {
+      setLiveApiLoading(prev => ({ ...prev, [pedidoId]: true }));
+      setLiveApiError(prev => ({ ...prev, [pedidoId]: null }));
+      try {
+        const apiData = await consultarPedidoHaytek(pedido.numero_pedido, pedido.cod_empresa);
+        if ((apiData as any)?.error) {
+          setLiveApiError(prev => ({ ...prev, [pedidoId]: (apiData as any).error }));
+          setLiveApiData(prev => ({ ...prev, [pedidoId]: null }));
+        } else {
+          setLiveApiData(prev => ({ ...prev, [pedidoId]: apiData }));
+        }
+      } catch (err: any) {
+        setLiveApiError(prev => ({ ...prev, [pedidoId]: err?.message || "Erro ao consultar API" }));
+      } finally {
+        setLiveApiLoading(prev => ({ ...prev, [pedidoId]: false }));
+      }
+    }
   };
 
   return (
