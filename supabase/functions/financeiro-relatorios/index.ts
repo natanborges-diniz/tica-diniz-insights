@@ -55,14 +55,14 @@ async function gerarDre(body: DreParams) {
     return json({ error: "data_inicio e data_fim obrigatórios" }, 400);
   }
 
-  // Query BAIXADO entries within the date range
+  // Query BAIXADO entries within the date range — DRE uses COMPETÊNCIA (data_emissao)
   let query = supabase
     .from("lancamentos_financeiros")
-    .select("id, cod_empresa, tipo, categoria, subcategoria, natureza, valor, valor_pago, data_pagamento, data_vencimento, descricao, pessoa_nome")
+    .select("id, cod_empresa, tipo, categoria, subcategoria, natureza, valor, valor_pago, data_pagamento, data_vencimento, data_emissao, descricao, pessoa_nome")
     .eq("status", "BAIXADO")
-    .gte("data_pagamento", data_inicio)
-    .lte("data_pagamento", data_fim)
-    .order("data_pagamento", { ascending: true });
+    .gte("data_emissao", data_inicio)
+    .lte("data_emissao", data_fim)
+    .order("data_emissao", { ascending: true });
 
   if (cod_empresa) {
     query = query.eq("cod_empresa", cod_empresa);
@@ -74,9 +74,11 @@ async function gerarDre(body: DreParams) {
   // Map lancamentos to DRE groups based on tipo + categoria
   const linhas = (data || []).map((l) => {
     const grupo = classificarGrupoDre(l.tipo, l.categoria, l.natureza);
-    const competencia = l.data_pagamento
-      ? l.data_pagamento.substring(0, 7) // YYYY-MM
-      : "SEM_DATA";
+    const competencia = l.data_emissao
+      ? l.data_emissao.substring(0, 7) // YYYY-MM (competência)
+      : l.data_pagamento
+        ? l.data_pagamento.substring(0, 7)
+        : "SEM_DATA";
 
     return {
       COMPETENCIA: competencia,

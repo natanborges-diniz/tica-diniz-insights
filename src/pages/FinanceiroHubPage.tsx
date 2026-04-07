@@ -27,6 +27,8 @@ import { PrepararPagamentoSheet } from "@/components/financeiro-hub/PrepararPaga
 import { BorderoGuidedActions } from "@/components/financeiro-hub/BorderoGuidedActions";
 import { ContasPagarTable } from "@/components/financeiro-hub/ContasPagarTable";
 import { NovoLancamentoDialog } from "@/components/financeiro-hub/NovoLancamentoDialog";
+import { AgendaOficialTab } from "@/components/financeiro-hub/AgendaOficialTab";
+import { ClassificarLoteDialog } from "@/components/financeiro-hub/ClassificarLoteDialog";
 
 interface Lancamento {
   id: string;
@@ -109,6 +111,7 @@ export default function FinanceiroHubPage() {
   const [baixaValorPago, setBaixaValorPago] = useState("");
   const [baixaDataPgto, setBaixaDataPgto] = useState("");
   const [formBorderoDesc, setFormBorderoDesc] = useState("");
+  const [classificarLoteOpen, setClassificarLoteOpen] = useState(false);
 
   // Edit classification state
   const [editNatureza, setEditNatureza] = useState("");
@@ -268,6 +271,28 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao classificar"),
   });
 
+  const classificarLoteMutation = useMutation({
+    mutationFn: async ({ ids, natureza, categoria, subcategoria }: { ids: string[]; natureza: string; categoria: string; subcategoria: string }) => {
+      return invokeAction("classificar_lote", { ids, natureza, categoria, subcategoria });
+    },
+    onSuccess: (data: { classificados?: number }) => {
+      toast.success(`${data?.classificados || 0} lançamentos classificados`);
+      invalidateAll(); setSelectedIds(new Set()); setClassificarLoteOpen(false);
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro ao classificar em lote"),
+  });
+
+  const cancelarLoteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      return invokeAction("cancelar_lote", { ids });
+    },
+    onSuccess: (data: { cancelados?: number }) => {
+      toast.success(`${data?.cancelados || 0} lançamentos cancelados`);
+      invalidateAll(); setSelectedIds(new Set());
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro ao cancelar em lote"),
+  });
+
   const baixaManualMutation = useMutation({
     mutationFn: async ({ id, valor_pago, data_pagamento }: { id: string; valor_pago?: number; data_pagamento?: string }) => {
       return invokeAction("baixar", { id, valor_pago, data_pagamento });
@@ -292,16 +317,17 @@ export default function FinanceiroHubPage() {
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-  // Selection
-  const previstosPagar = lancamentos.filter(l => l.tipo === "PAGAR" && l.status === "PREVISTO");
+  // Selection — can select PREVISTO and CLASSIFICADO
+  const selectablePagar = lancamentos.filter(l => l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status));
+  const previstosPagar = selectablePagar; // alias for backward compat
   const toggleSelect = (id: string) => {
     const next = new Set(selectedIds);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) next.delete(id); else next.add(id);
     setSelectedIds(next);
   };
   const toggleSelectAll = () => {
-    if (selectedIds.size === previstosPagar.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(previstosPagar.map(l => l.id)));
+    if (selectedIds.size === selectablePagar.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(selectablePagar.map(l => l.id)));
   };
 
   const hasPaymentData = (l: Lancamento) => {
@@ -309,12 +335,15 @@ export default function FinanceiroHubPage() {
     return !!(d.btg_payment_type || d.linha_digitavel || d.pix_key);
   };
 
-  // KPIs
+  // KPIs — separate rascunho vs validado
+  const totalAgenda = lancamentos.filter(l => !["CANCELADO", "BAIXADO", "PREVISTO"].includes(l.status)).reduce((s, l) => s + l.valor, 0);
+  const countRascunhos = lancamentos.filter(l => l.status === "PREVISTO").length;
   const totalPagar = lancamentos.filter(l => !["CANCELADO", "BAIXADO"].includes(l.status)).reduce((s, l) => s + l.valor, 0);
   const pendentesValidacao = lancamentos.filter(l => l.requer_validacao).length;
   const vencidos = lancamentos.filter(l => l.status === "PREVISTO" && new Date(l.data_vencimento) < new Date()).length;
   const borderosAbertos = borderos.filter(b => ["MONTAGEM", "APROVADO"].includes(b.status)).length;
   const naoClassificados = lancamentos.filter(l => l.status === "PREVISTO" && !l.subcategoria).length;
+  const selectedTotal = lancamentos.filter(l => selectedIds.has(l.id)).reduce((s, l) => s + l.valor, 0);
 
   // Workflow step counts
   const countPrevistos = lancamentos.filter(l => l.status === "PREVISTO").length;
@@ -705,7 +734,7 @@ export default function FinanceiroHubPage() {
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
@@ -714,13 +743,21 @@ export default function FinanceiroHubPage() {
             </CardHeader>
             <CardContent><p className="text-2xl font-bold">{fmtCurrency(totalPagar)}</p></CardContent>
           </Card>
+          <Card className="border-primary/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-primary" /> Agenda Oficial
+              </CardTitle>
+            </CardHeader>
+            <CardContent><p className="text-2xl font-bold text-primary">{fmtCurrency(totalAgenda)}</p></CardContent>
+          </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" /> Não Classificados
+                <AlertTriangle className="h-4 w-4" /> Rascunhos
               </CardTitle>
             </CardHeader>
-            <CardContent><p className="text-2xl font-bold">{naoClassificados}</p></CardContent>
+            <CardContent><p className="text-2xl font-bold">{countRascunhos}</p></CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
@@ -752,6 +789,10 @@ export default function FinanceiroHubPage() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="contas-pagar">Contas a Pagar</TabsTrigger>
+            <TabsTrigger value="agenda">
+              Agenda
+              {totalAgenda > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5">{fmtCurrency(totalAgenda)}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="borderos">
               Borderôs
               {borderosAbertos > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5">{borderosAbertos}</Badge>}
@@ -858,6 +899,11 @@ export default function FinanceiroHubPage() {
             </Card>
           </TabsContent>
 
+          {/* Agenda Oficial */}
+          <TabsContent value="agenda">
+            <AgendaOficialTab lancamentos={lancamentos} isLoading={isLoading} />
+          </TabsContent>
+
           <TabsContent value="contas-receber">
             <div className="text-center py-12 text-muted-foreground">
               <ArrowDownCircle className="h-8 w-8 mx-auto mb-2 opacity-30" />
@@ -865,6 +911,49 @@ export default function FinanceiroHubPage() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Classificar em Lote Dialog */}
+        <ClassificarLoteDialog
+          open={classificarLoteOpen}
+          onOpenChange={setClassificarLoteOpen}
+          planoContas={planoContas}
+          selectedCount={selectedIds.size}
+          selectedTotal={selectedTotal}
+          onConfirm={(natureza, categoria, subcategoria) => {
+            classificarLoteMutation.mutate({ ids: Array.from(selectedIds), natureza, categoria, subcategoria });
+          }}
+          isPending={classificarLoteMutation.isPending}
+        />
+
+        {/* Floating action bar */}
+        {selectedIds.size > 0 && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-lg border bg-background/95 backdrop-blur-sm shadow-lg px-5 py-3 animate-in slide-in-from-bottom-2 duration-200">
+            <span className="text-sm text-muted-foreground font-medium">
+              {selectedIds.size} selecionado(s) — {fmtCurrency(selectedTotal)}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="default" onClick={() => setClassificarLoteOpen(true)}>
+                <CheckCircle2 className="h-4 w-4 mr-1" /> Classificar
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setBorderoDialogOpen(true)}>
+                <Package className="h-4 w-4 mr-1" /> Criar Borderô
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  if (confirm(`Cancelar ${selectedIds.size} lançamento(s)?`)) {
+                    cancelarLoteMutation.mutate(Array.from(selectedIds));
+                  }
+                }}
+                disabled={cancelarLoteMutation.isPending}
+              >
+                <XCircle className="h-4 w-4 mr-1" /> Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </TooltipProvider>
   );

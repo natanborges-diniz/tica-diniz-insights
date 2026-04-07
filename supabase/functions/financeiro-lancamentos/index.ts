@@ -40,6 +40,10 @@ Deno.serve(async (req) => {
         return await importarErpAuto(body, auth.userId);
       case "classificar":
         return await classificar(body, auth.userId);
+      case "classificar_lote":
+        return await classificarLote(body, auth.userId);
+      case "cancelar_lote":
+        return await cancelarLote(body);
       case "listar_pendentes_validacao":
         return await listarPendentesValidacao(body);
       case "resumo_financeiro":
@@ -353,7 +357,7 @@ async function criarBordero(body: Record<string, unknown>, userId: string) {
       .from("lancamentos_financeiros")
       .update({ bordero_id: bordero.id, status: "BORDERO" })
       .in("id", ids)
-      .eq("status", "PREVISTO")
+      .in("status", ["PREVISTO", "CLASSIFICADO"])
       .eq("tipo", "PAGAR");
 
     if (uErr) throw new Error(uErr.message);
@@ -378,7 +382,7 @@ async function adicionarAoBordero(body: Record<string, unknown>) {
     .from("lancamentos_financeiros")
     .update({ bordero_id: String(bordero_id), status: "BORDERO" })
     .in("id", ids)
-    .eq("status", "PREVISTO")
+    .in("status", ["PREVISTO", "CLASSIFICADO"])
     .eq("tipo", "PAGAR");
 
   if (error) throw new Error(error.message);
@@ -1016,6 +1020,51 @@ async function classificar(body: Record<string, unknown>, _userId: string) {
 
   if (updErr) throw new Error(updErr.message);
   return json(data);
+}
+
+// ═══════════════════════════════════════════════════════════
+// CLASSIFICAR EM LOTE
+// ═══════════════════════════════════════════════════════════
+
+async function classificarLote(body: Record<string, unknown>, _userId: string) {
+  const { ids, natureza, categoria, subcategoria } = body;
+  if (!Array.isArray(ids) || ids.length === 0) throw new Error("ids obrigatório (array)");
+  if (!subcategoria) throw new Error("subcategoria obrigatório");
+
+  const { data, error } = await supabase
+    .from("lancamentos_financeiros")
+    .update({
+      natureza: natureza || null,
+      categoria: categoria || null,
+      subcategoria: subcategoria,
+      requer_validacao: false,
+      status: "CLASSIFICADO",
+    })
+    .in("id", ids as string[])
+    .in("status", ["PREVISTO"])
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  return json({ ok: true, classificados: (data || []).length });
+}
+
+// ═══════════════════════════════════════════════════════════
+// CANCELAR EM LOTE
+// ═══════════════════════════════════════════════════════════
+
+async function cancelarLote(body: Record<string, unknown>) {
+  const { ids } = body;
+  if (!Array.isArray(ids) || ids.length === 0) throw new Error("ids obrigatório (array)");
+
+  const { data, error } = await supabase
+    .from("lancamentos_financeiros")
+    .update({ status: "CANCELADO" })
+    .in("id", ids as string[])
+    .in("status", ["PREVISTO"])
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  return json({ ok: true, cancelados: (data || []).length });
 }
 
 async function listarPendentesValidacao(body: Record<string, unknown>) {

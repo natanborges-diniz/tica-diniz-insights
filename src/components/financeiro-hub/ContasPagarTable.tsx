@@ -104,7 +104,7 @@ export function ContasPagarTable({
     return true;
   }) : rawLancamentos;
 
-  const previstosPagar = lancamentos.filter(l => l.tipo === "PAGAR" && l.status === "PREVISTO");
+  const previstosPagar = lancamentos.filter(l => l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status));
 
   return (
     <Card>
@@ -140,7 +140,7 @@ export function ContasPagarTable({
               ) : lancamentos.map(l => {
                 const sc = STATUS_CONFIG[l.status] || { label: l.status, variant: "outline" as const };
                 const isVencido = l.status === "PREVISTO" && new Date(l.data_vencimento) < new Date();
-                const canSelect = l.tipo === "PAGAR" && l.status === "PREVISTO";
+                const canSelect = l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status);
                 const hasPay = hasPaymentData(l);
                 const contaNome = l.subcategoria || (l.dados_extras?.conta_descricao as string) || null;
                 const isClassificado = !!contaNome;
