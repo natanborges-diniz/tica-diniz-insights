@@ -82,7 +82,7 @@ export function AgendaOficialTab({
     }
   };
 
-  const allSelectableSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
+  const _allSelectableSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
 
   return (
     <div className="space-y-4">
