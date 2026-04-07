@@ -412,7 +412,7 @@ export default function FinanceiroHubPage() {
         <WorkflowStepper
           steps={[
             { number: 1, title: "Cadastrar", description: "Importe do ERP ou crie manualmente", status: stepStatus(1), count: countPrevistos },
-            { number: 2, title: "Classificar", description: "Defina a conta do plano de contas", status: stepStatus(2), count: naoClassificados },
+            { number: 2, title: "Validar", description: "Confirme e classifique a conta DRE", status: stepStatus(2), count: naoClassificados },
             { number: 3, title: "Preparar Pgto", description: "PIX, boleto ou TED", status: stepStatus(3), count: classificadosSemPgto },
             { number: 4, title: "Montar Borderô", description: "Agrupe em lote para aprovação", status: stepStatus(4), count: countComPagamento + countBorderoMontagem },
             { number: 5, title: "Aprovar e Enviar", description: "Admin transmite ao BTG", status: stepStatus(5), count: countBorderoAprovado },
