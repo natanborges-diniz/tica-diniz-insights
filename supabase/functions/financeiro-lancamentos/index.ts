@@ -40,6 +40,10 @@ Deno.serve(async (req) => {
         return await importarErpAuto(body, auth.userId);
       case "classificar":
         return await classificar(body, auth.userId);
+      case "classificar_lote":
+        return await classificarLote(body, auth.userId);
+      case "cancelar_lote":
+        return await cancelarLote(body);
       case "listar_pendentes_validacao":
         return await listarPendentesValidacao(body);
       case "resumo_financeiro":
