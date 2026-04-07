@@ -4,7 +4,8 @@ import { format } from "date-fns";
 import {
   Landmark, Plus, CheckCircle2, XCircle,
   ArrowDownCircle, ArrowUpCircle, AlertTriangle,
-  Package, FileCheck, Download, Eye,
+  Package, FileCheck, Download, Eye, Tag, Ban,
+  CalendarCheck,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -27,6 +28,8 @@ import { PrepararPagamentoSheet } from "@/components/financeiro-hub/PrepararPaga
 import { BorderoGuidedActions } from "@/components/financeiro-hub/BorderoGuidedActions";
 import { ContasPagarTable } from "@/components/financeiro-hub/ContasPagarTable";
 import { NovoLancamentoDialog } from "@/components/financeiro-hub/NovoLancamentoDialog";
+import { AgendaOficialTab } from "@/components/financeiro-hub/AgendaOficialTab";
+import { ClassificarLoteDialog } from "@/components/financeiro-hub/ClassificarLoteDialog";
 
 interface Lancamento {
   id: string;
