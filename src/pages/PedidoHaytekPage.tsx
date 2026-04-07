@@ -568,7 +568,7 @@ const PedidoHaytekPage: React.FC = () => {
             Pedido Haytek (Dmax)
           </h1>
           <p className="text-sm text-muted-foreground">
-            OS {osNumero} — {paciente} — Empresa {codEmpresa}
+            OS {osNumero} — {paciente} — {storeName || `Empresa ${codEmpresa}`}
           </p>
         </div>
         {autoLabel && (

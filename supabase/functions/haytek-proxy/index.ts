@@ -141,6 +141,9 @@ serve(async (req) => {
 
         const pedidoPayload = params.pedido || {};
         pedidoPayload.storeId = store.storeId;
+        if (store.alias) {
+          pedidoPayload.storeName = store.alias;
+        }
         if (store.addressId) {
           pedidoPayload.addressId = store.addressId;
         }
