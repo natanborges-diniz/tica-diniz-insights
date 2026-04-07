@@ -531,6 +531,7 @@ export type Database = {
           created_at: string
           grupo_dre: string
           id: string
+          sinal: string
           updated_at: string
         }
         Insert: {
@@ -541,6 +542,7 @@ export type Database = {
           created_at?: string
           grupo_dre: string
           id?: string
+          sinal?: string
           updated_at?: string
         }
         Update: {
@@ -551,6 +553,7 @@ export type Database = {
           created_at?: string
           grupo_dre?: string
           id?: string
+          sinal?: string
           updated_at?: string
         }
         Relationships: []
