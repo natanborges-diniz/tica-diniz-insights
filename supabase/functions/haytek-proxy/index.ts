@@ -56,18 +56,19 @@ async function loadHaytekConfig(sb: ReturnType<typeof createClient>): Promise<Ha
 interface HaytekStoreConfig {
   storeId: string;
   addressId: string | null;
+  alias: string | null;
 }
 
 async function loadStoreConfig(sb: ReturnType<typeof createClient>, codEmpresa: number): Promise<HaytekStoreConfig | null> {
   const { data } = await sb
     .from("haytek_empresa_config")
-    .select("store_id, address_id")
+    .select("store_id, address_id, alias")
     .eq("cod_empresa", codEmpresa)
     .eq("ativo", true)
     .maybeSingle();
 
   if (data?.store_id) {
-    return { storeId: data.store_id, addressId: data.address_id || null };
+    return { storeId: data.store_id, addressId: data.address_id || null, alias: data.alias || null };
   }
   return null;
 }
@@ -140,6 +141,9 @@ serve(async (req) => {
 
         const pedidoPayload = params.pedido || {};
         pedidoPayload.storeId = store.storeId;
+        if (store.alias) {
+          pedidoPayload.storeName = store.alias;
+        }
         if (store.addressId) {
           pedidoPayload.addressId = store.addressId;
         }

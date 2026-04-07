@@ -153,6 +153,7 @@ const PedidoHaytekPage: React.FC = () => {
   const [tentativasEnvio, setTentativasEnvio] = useState<string[]>([]);
   const [erroEnvioDetalhado, setErroEnvioDetalhado] = useState<string | null>(null);
   const [haytekStoreId, setHaytekStoreId] = useState<string>("");
+  const [storeName, setStoreName] = useState<string>("");
 
   function parsePositiveInt(value: string): number | null {
     const parsed = parseInt(value, 10);
@@ -285,12 +286,13 @@ const PedidoHaytekPage: React.FC = () => {
     if (!codEmpresa) return;
     supabase
       .from("haytek_empresa_config" as never)
-      .select("store_id")
+      .select("store_id, alias")
       .eq("cod_empresa", codEmpresa)
       .eq("ativo", true)
       .maybeSingle()
       .then(({ data }) => {
         if ((data as any)?.store_id) setHaytekStoreId((data as any).store_id);
+        if ((data as any)?.alias) setStoreName((data as any).alias);
       });
   }, [codEmpresa]);
 
@@ -356,7 +358,7 @@ const PedidoHaytekPage: React.FC = () => {
       const eye: Record<string, unknown> = {};
       eye.spherical = formatDioptria(presc.esferico);
       eye.cylindrical = formatDioptria(presc.cilindrico);
-      if (presc.eixo) eye.axis = presc.eixo;
+      eye.axis = presc.eixo || "0";
       // Always send addition — API requires it even for single vision (send "0.00")
       eye.addition = formatDioptria(presc.adicao || "0.00");
       const ndp = formatMeasurement(presc.dnp);
@@ -567,7 +569,7 @@ const PedidoHaytekPage: React.FC = () => {
             Pedido Haytek (Dmax)
           </h1>
           <p className="text-sm text-muted-foreground">
-            OS {osNumero} — {paciente} — Empresa {codEmpresa}
+            OS {osNumero} — {paciente} — {storeName || `Empresa ${codEmpresa}`}
           </p>
         </div>
         {autoLabel && (
