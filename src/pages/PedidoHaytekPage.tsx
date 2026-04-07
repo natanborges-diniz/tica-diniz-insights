@@ -810,13 +810,13 @@ const PedidoHaytekPage: React.FC = () => {
           <CardContent>
             <div className="grid grid-cols-3 gap-2">
               {[
-                { label: "Esférico", field: "esferico" },
-                { label: "Cilíndrico", field: "cilindrico" },
-                { label: "Eixo", field: "eixo" },
-                { label: "Adição", field: "adicao" },
-                { label: "DNP", field: "dnp" },
-                { label: "Altura", field: "altura" },
-              ].map(({ label, field }) => (
+                { label: "Esférico", field: "esferico", show: true },
+                { label: "Cilíndrico", field: "cilindrico", show: true },
+                { label: "Eixo", field: "eixo", show: true },
+                { label: "Adição", field: "adicao", show: true },
+                { label: "DNP", field: "dnp", show: needsDnpAltura },
+                { label: "Altura", field: "altura", show: needsDnpAltura },
+              ].filter(f => f.show).map(({ label, field }) => (
                 <div key={field} className="space-y-1">
                   <Label className="text-[10px] uppercase text-muted-foreground">{label}</Label>
                   <Input
