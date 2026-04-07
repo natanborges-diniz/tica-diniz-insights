@@ -60,9 +60,9 @@ export default function FinanceiroDreDashboard() {
           </Alert>
         )}
 
-        <DreResumoCards resumo={resumo} />
+        <DreResumoCards resumo={resumo} resumoRealizado={resumoRealizado} modo={filters.modo} />
         <DreCompetenciaChart data={dadosPorCompetencia} />
-        <DreTable data={data} />
+        <DreTable data={data} modo={filters.modo} />
     </div>
   );
 }
