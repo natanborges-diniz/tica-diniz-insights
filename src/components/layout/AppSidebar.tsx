@@ -88,20 +88,15 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
         { title: "Conciliação Cartões", url: "/financeiro/cartoes", icon: CreditCard },
         { title: "Carteira Recebíveis", url: "/financeiro/recebiveis", icon: Wallet },
         { title: "Links de Pagamento", url: "/financeiro/links-pagamento", icon: Link2 },
+        { title: "Plano de Contas", url: "/financeiro/plano-contas", icon: Settings2 },
       ],
     },
     {
       label: "Análises",
       items: [
-        { title: "Parcelas ERP", url: "/financeiro", icon: Wallet },
+        { title: "Parcelas ERP", url: "/financeiro/parcelas", icon: Wallet },
         { title: "DRE", url: "/financeiro/dre", icon: FileText },
         { title: "Fluxo de Caixa", url: "/financeiro/fluxo-caixa", icon: ArrowLeftRight },
-      ],
-    },
-    {
-      label: "Configurações",
-      items: [
-        { title: "Plano de Contas", url: "/financeiro/plano-contas", icon: Settings2 },
       ],
     },
     {
