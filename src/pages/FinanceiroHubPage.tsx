@@ -746,7 +746,7 @@ export default function FinanceiroHubPage() {
           <Card className="border-primary/20">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-primary" /> Agenda Oficial
+                <CheckCircle2 className="h-4 w-4 text-primary" /> Total Validado
               </CardTitle>
             </CardHeader>
             <CardContent><p className="text-2xl font-bold text-primary">{fmtCurrency(totalAgenda)}</p></CardContent>
@@ -754,7 +754,7 @@ export default function FinanceiroHubPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" /> Rascunhos
+                <AlertTriangle className="h-4 w-4" /> Pendentes
               </CardTitle>
             </CardHeader>
             <CardContent><p className="text-2xl font-bold">{countRascunhos}</p></CardContent>
