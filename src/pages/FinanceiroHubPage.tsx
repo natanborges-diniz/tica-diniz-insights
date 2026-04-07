@@ -899,6 +899,11 @@ export default function FinanceiroHubPage() {
             </Card>
           </TabsContent>
 
+          {/* Agenda Oficial */}
+          <TabsContent value="agenda">
+            <AgendaOficialTab lancamentos={lancamentos} isLoading={isLoading} />
+          </TabsContent>
+
           <TabsContent value="contas-receber">
             <div className="text-center py-12 text-muted-foreground">
               <ArrowDownCircle className="h-8 w-8 mx-auto mb-2 opacity-30" />
@@ -906,6 +911,49 @@ export default function FinanceiroHubPage() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Classificar em Lote Dialog */}
+        <ClassificarLoteDialog
+          open={classificarLoteOpen}
+          onOpenChange={setClassificarLoteOpen}
+          planoContas={planoContas}
+          selectedCount={selectedIds.size}
+          selectedTotal={selectedTotal}
+          onConfirm={(natureza, categoria, subcategoria) => {
+            classificarLoteMutation.mutate({ ids: Array.from(selectedIds), natureza, categoria, subcategoria });
+          }}
+          isPending={classificarLoteMutation.isPending}
+        />
+
+        {/* Floating action bar */}
+        {selectedIds.size > 0 && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-lg border bg-background/95 backdrop-blur-sm shadow-lg px-5 py-3 animate-in slide-in-from-bottom-2 duration-200">
+            <span className="text-sm text-muted-foreground font-medium">
+              {selectedIds.size} selecionado(s) — {fmtCurrency(selectedTotal)}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="default" onClick={() => setClassificarLoteOpen(true)}>
+                <CheckCircle2 className="h-4 w-4 mr-1" /> Classificar
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setBorderoDialogOpen(true)}>
+                <Package className="h-4 w-4 mr-1" /> Criar Borderô
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  if (confirm(`Cancelar ${selectedIds.size} lançamento(s)?`)) {
+                    cancelarLoteMutation.mutate(Array.from(selectedIds));
+                  }
+                }}
+                disabled={cancelarLoteMutation.isPending}
+              >
+                <XCircle className="h-4 w-4 mr-1" /> Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </TooltipProvider>
   );
