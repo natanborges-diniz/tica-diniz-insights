@@ -151,12 +151,12 @@ export default function HomePage() {
               role="button"
               tabIndex={0}
               aria-label={`Abrir módulo ${mod.label}`}
-              className="cursor-pointer hover:shadow-card-hover hover:border-primary/30 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              onClick={() => navigate(mod.path)}
+              className={`cursor-pointer hover:shadow-card-hover hover:border-primary/30 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${mod.path === "__cross_login__" && crossLogging ? "opacity-60 pointer-events-none" : ""}`}
+              onClick={() => handleModuleClick(mod.path)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  navigate(mod.path);
+                  handleModuleClick(mod.path);
                 }
               }}
             >
