@@ -68,6 +68,7 @@ export default function HomePage() {
   const bridgeStatus = useBridgeStatus();
   const { hasAccess, isLoading: permLoading } = useModulePermissions();
   const [retrying, setRetrying] = useState(false);
+  const [crossLogging, setCrossLogging] = useState(false);
 
   const handleRetry = useCallback(async () => {
     setRetrying(true);
@@ -79,6 +80,40 @@ export default function HomePage() {
       setRetrying(false);
     }
   }, [bridgeStatus]);
+
+  const handleCrossLogin = useCallback(async () => {
+    setCrossLogging(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) {
+        toast.error("Sessão expirada. Faça login novamente.");
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("cross-login", {
+        body: { email: profile?.email },
+      });
+      if (error || !data?.url) {
+        toast.error("Não foi possível acessar o módulo de Comunicação.");
+        console.error("[cross-login]", error, data);
+        return;
+      }
+      window.open(data.url, "_blank");
+    } catch (err) {
+      console.error("[cross-login]", err);
+      toast.error("Erro ao conectar ao módulo de Comunicação.");
+    } finally {
+      setCrossLogging(false);
+    }
+  }, [profile?.email]);
+
+  const handleModuleClick = useCallback((path: string) => {
+    if (path === "__cross_login__") {
+      handleCrossLogin();
+    } else {
+      navigate(path);
+    }
+  }, [navigate, handleCrossLogin]);
 
   const firstName = profile?.nome?.split(" ")[0] ?? profile?.email?.split("@")[0] ?? "Usuário";
 
