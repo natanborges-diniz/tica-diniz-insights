@@ -54,6 +54,13 @@ const modules = [
     icon: Settings,
     path: "/config/metas",
   },
+  {
+    key: "comunicacao",
+    label: "Comunicação",
+    description: "CRM, atendimento e comunicação interna",
+    icon: MessageSquare,
+    path: "__cross_login__",
+  },
 ] as const;
 
 export default function HomePage() {

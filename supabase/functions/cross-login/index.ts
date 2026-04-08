@@ -9,7 +9,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { userId, email } = await authGuard(req, { requiredRole: "authenticated" });
+    const { email } = await authGuard(req, { requiredRole: "authenticated" });
 
     if (!email) {
       return new Response(
