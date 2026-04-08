@@ -131,6 +131,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       ],
     },
   ],
+  comunicacao: [],
 };
 
 export function AppSidebar({ activeModule }: AppSidebarProps) {

@@ -5,7 +5,7 @@ import type { ModuleKey } from "@/components/layout/AppLayout";
 
 export type AccessLevel = "nenhum" | "consulta" | "edita" | "total";
 
-const ALL_MODULES: ModuleKey[] = ["vendas", "estoque", "monitor", "financeiro", "ia", "config"];
+const ALL_MODULES: ModuleKey[] = ["vendas", "estoque", "monitor", "financeiro", "ia", "config", "comunicacao"];
 
 const LEVEL_HIERARCHY: Record<AccessLevel, number> = {
   nenhum: 0,

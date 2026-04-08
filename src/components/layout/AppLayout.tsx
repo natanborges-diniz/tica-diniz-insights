@@ -4,7 +4,7 @@ import { TopNavigation } from "./TopNavigation";
 import { AppSidebar } from "./AppSidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
-export type ModuleKey = "vendas" | "estoque" | "monitor" | "financeiro" | "ia" | "config";
+export type ModuleKey = "vendas" | "estoque" | "monitor" | "financeiro" | "ia" | "config" | "comunicacao";
 
 export const moduleFromPath = (pathname: string): ModuleKey => {
   if (pathname.startsWith("/vendas") || pathname.startsWith("/ranking")) return "vendas";

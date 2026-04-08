@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain, Loader2 } from "lucide-react";
+import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain, Loader2, MessageSquare } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { BridgeStatusBanner } from "@/components/ui/bridge-status-banner";
@@ -8,6 +8,7 @@ import { useBridgeStatus } from "@/hooks/useBridgeStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
+import { toast } from "sonner";
 
 const modules = [
   {
@@ -52,6 +53,13 @@ const modules = [
     icon: Settings,
     path: "/config/metas",
   },
+  {
+    key: "comunicacao",
+    label: "Comunicação",
+    description: "CRM, atendimento e comunicação interna",
+    icon: MessageSquare,
+    path: "__cross_login__",
+  },
 ] as const;
 
 export default function HomePage() {
@@ -60,6 +68,7 @@ export default function HomePage() {
   const bridgeStatus = useBridgeStatus();
   const { hasAccess, isLoading: permLoading } = useModulePermissions();
   const [retrying, setRetrying] = useState(false);
+  const [crossLogging, setCrossLogging] = useState(false);
 
   const handleRetry = useCallback(async () => {
     setRetrying(true);
@@ -71,6 +80,40 @@ export default function HomePage() {
       setRetrying(false);
     }
   }, [bridgeStatus]);
+
+  const handleCrossLogin = useCallback(async () => {
+    setCrossLogging(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) {
+        toast.error("Sessão expirada. Faça login novamente.");
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("cross-login", {
+        body: { email: profile?.email },
+      });
+      if (error || !data?.url) {
+        toast.error("Não foi possível acessar o módulo de Comunicação.");
+        console.error("[cross-login]", error, data);
+        return;
+      }
+      window.open(data.url, "_blank");
+    } catch (err) {
+      console.error("[cross-login]", err);
+      toast.error("Erro ao conectar ao módulo de Comunicação.");
+    } finally {
+      setCrossLogging(false);
+    }
+  }, [profile?.email]);
+
+  const handleModuleClick = useCallback((path: string) => {
+    if (path === "__cross_login__") {
+      handleCrossLogin();
+    } else {
+      navigate(path);
+    }
+  }, [navigate, handleCrossLogin]);
 
   const firstName = profile?.nome?.split(" ")[0] ?? profile?.email?.split("@")[0] ?? "Usuário";
 
@@ -108,12 +151,12 @@ export default function HomePage() {
               role="button"
               tabIndex={0}
               aria-label={`Abrir módulo ${mod.label}`}
-              className="cursor-pointer hover:shadow-card-hover hover:border-primary/30 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              onClick={() => navigate(mod.path)}
+              className={`cursor-pointer hover:shadow-card-hover hover:border-primary/30 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${mod.path === "__cross_login__" && crossLogging ? "opacity-60 pointer-events-none" : ""}`}
+              onClick={() => handleModuleClick(mod.path)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  navigate(mod.path);
+                  handleModuleClick(mod.path);
                 }
               }}
             >
