@@ -8,6 +8,8 @@ import { useBridgeStatus } from "@/hooks/useBridgeStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
+import { toast } from "sonner";
+import { ModuleHeader } from "@/components/system/ModuleHeader";
 
 const modules = [
   {
