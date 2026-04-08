@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain, Loader2 } from "lucide-react";
+import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain, Loader2, MessageSquare } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { BridgeStatusBanner } from "@/components/ui/bridge-status-banner";
