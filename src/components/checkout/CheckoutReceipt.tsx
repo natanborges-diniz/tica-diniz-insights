@@ -166,6 +166,14 @@ export default function CheckoutReceipt({ receipt, linkData, fmtCurrency }: Prop
             {receipt.installments > 0 && <Row label="Parcelas" value={`${receipt.installments}x`} />}
           </div>
 
+          {/* Aviso de retirada em loja */}
+          <div className="my-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 flex gap-2 items-start">
+            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+            <p className="text-[10px] leading-relaxed text-amber-800">
+              <span className="font-bold">Retirada em loja:</span> Para retirada da mercadoria, é obrigatória a apresentação do <strong>cartão físico</strong> utilizado nesta transação, acompanhado de um <strong>documento de identificação</strong> com foto do titular do cartão.
+            </p>
+          </div>
+
           {/* Rodapé — VIA DO CLIENTE */}
           <DashedDivider />
           <div className="pt-3 pb-1 text-center space-y-1">
