@@ -117,6 +117,14 @@ export default function CheckoutPage() {
               <p className="text-xs text-slate-400">{linkData.descricao}</p>
               <p className="text-lg font-bold text-slate-700">{fmtCurrency(linkData.valor)}</p>
             </div>
+            {linkData.status === "PAGO" && (
+              <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 flex gap-2 items-start text-left">
+                <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                <p className="text-[10px] leading-relaxed text-amber-800">
+                  <span className="font-bold">Retirada em loja:</span> Para retirada da mercadoria, é obrigatória a apresentação do <strong>cartão físico</strong> utilizado nesta transação, acompanhado de um <strong>documento de identificação</strong> com foto do titular do cartão.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
