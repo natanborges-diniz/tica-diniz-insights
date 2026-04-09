@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { CheckCircle2, Receipt, Download, Home } from "lucide-react";
+import { CheckCircle2, Receipt, Download, Home, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { exportToImage } from "@/utils/exportVisual";
 import { toast } from "sonner";
