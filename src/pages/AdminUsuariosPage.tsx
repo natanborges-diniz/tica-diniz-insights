@@ -54,6 +54,7 @@ const ALL_MODULES: { key: ModuleKey; label: string; desc: string }[] = [
   { key: "financeiro", label: "Financeiro", desc: "DRE, fluxo de caixa e parcelas" },
   { key: "ia", label: "Central IA", desc: "Análises inteligentes" },
   { key: "config", label: "Config", desc: "Metas e configurações" },
+  { key: "comunicacao", label: "Comunicação", desc: "CRM e comunicação (acesso externo)" },
 ];
 
 function SectionHeader({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
