@@ -83,7 +83,7 @@ const App = () => (
                 {/* Estoque */}
                 <Route element={<ModuleGuard module="estoque" />}>
                   <Route path="/estoque" element={<VisaoEstoquePage />} />
-                  <Route path="/estoque/acoes" element={<OQueFazerPage />} />
+                  <Route path="/estoque/acoes" element={<Navigate to="/estoque/otb" replace />} />
                   <Route path="/estoque/otb" element={<AnaliseOTBPage />} />
                 </Route>
 
