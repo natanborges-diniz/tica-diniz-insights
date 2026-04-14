@@ -70,6 +70,45 @@ export interface ItemEstoque {
   isDeadStock: boolean;
 }
 
+// Decisão por marca para Plano de Compra
+export type DecisaoMarca = 'REPOR_REFERENCIA' | 'RENOVAR_COLECAO' | 'AVALIAR_DESCONTINUACAO';
+
+export interface ResumoMarca {
+  marca: string;
+  categoria: string;
+  pecasEstoque: number;
+  valorEstoque: number;
+  qtdVendidos6m: number;
+  totalVendido6m: number;
+  otbTotal: number;
+  mediaDiasEmEstoque: number;
+  temCurvaA: boolean;
+  decisao: DecisaoMarca;
+  skus: ItemEstoque[];
+}
+
+// Mix ideal por categoria e marca
+export interface MixComparativo {
+  chave: string; // categoria ou marca
+  percentualIdeal: number; // baseado em vendas 6m
+  percentualAtual: number; // baseado em estoque atual
+  gap: number; // ideal - atual (positivo = subrepresentada)
+}
+
+// Faixa de estoque doente
+export type FaixaDoente = 'PROMOCAO_20' | 'LIQUIDACAO_30' | 'LIQUIDACAO_50' | 'DESCARTE' | 'REVISAO_URGENTE';
+
+export interface GrupoEstoqueDoente {
+  faixa: FaixaDoente;
+  label: string;
+  desconto: string;
+  cor: string; // tailwind class
+  pecas: number;
+  valorCusto: number;
+  marcas: string[];
+  itens: ItemEstoque[];
+}
+
 export interface MetricasEstoque {
   // Métricas de estoque físico (do /estoque/completo)
   totalPecas: number;
