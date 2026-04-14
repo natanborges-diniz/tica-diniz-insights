@@ -733,7 +733,8 @@ export function useEstoqueUnificado() {
       });
   }, [itensProcessados]);
 
-
+  // Marcas sem fornecedor
+  const marcasSemFornecedor = useMemo(() => {
     const marcaContagem = new Map<string, number>();
     
     itensProcessados.forEach(item => {
