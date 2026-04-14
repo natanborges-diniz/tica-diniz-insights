@@ -851,6 +851,12 @@ export function useEstoqueUnificado() {
     listaAcoes,
     marcasSemFornecedor,
     
+    // Plano de Compra
+    mixIdealCategoria,
+    mixIdealMarca,
+    resumoPorMarca,
+    estoqueDoenteAgrupado,
+    
     // Ações
     carregarDados,
   };
