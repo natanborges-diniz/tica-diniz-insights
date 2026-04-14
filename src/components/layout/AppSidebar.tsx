@@ -59,8 +59,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       label: "Gestão de Estoque",
       items: [
         { title: "Visão Estoque", url: "/estoque", icon: Package },
-        { title: "O que Fazer?", url: "/estoque/acoes", icon: ClipboardList },
-        { title: "Análise OTB", url: "/estoque/otb", icon: Layers },
+        { title: "Plano de Compra", url: "/estoque/otb", icon: Layers },
       ],
     },
   ],
