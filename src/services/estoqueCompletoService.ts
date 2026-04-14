@@ -72,7 +72,7 @@ export interface GetEstoqueCompletoParams {
 export async function getEstoqueCompleto(
   params: GetEstoqueCompletoParams
 ): Promise<EstoqueCompleto[]> {
-  const options: ApiGetOptions = params.bypassCache ? { cache: false } : {};
+  const options: ApiGetOptions = { timeoutMs: 60000, ...(params.bypassCache ? { cache: false } : {}) };
   
   const raw = await apiGet<EstoqueCompletoRaw>('/estoque/completo', {
     empresa: formatEmpresaParam(params.empresa),

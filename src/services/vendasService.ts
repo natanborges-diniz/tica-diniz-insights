@@ -297,7 +297,7 @@ export interface GetAnaliseSkuParams {
 export async function getAnaliseSku(
   params: GetAnaliseSkuParams
 ): Promise<AnaliseSku[]> {
-  const options: ApiGetOptions = params.bypassCache ? { cache: false } : {};
+  const options: ApiGetOptions = { timeoutMs: 60000, ...(params.bypassCache ? { cache: false } : {}) };
   
   const raw = await apiGet<AnaliseSkuRaw>('/vendas/analise-sku', {
     empresa: formatEmpresaParam(params.empresa),
