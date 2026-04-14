@@ -1,5 +1,6 @@
 import { corsHeaders } from "../_shared/authGuard.ts";
 import { authGuard } from "../_shared/authGuard.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const CF_FUNCTIONS_URL = "https://kvggebtnqmxydtwaumqz.supabase.co/functions/v1";
 
@@ -9,7 +10,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email } = await authGuard(req, { requiredRole: "authenticated" });
+    const { userId, email } = await authGuard(req, { requiredRole: "authenticated" });
 
     if (!email) {
       return new Response(
@@ -17,6 +18,17 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("nome")
+      .eq("id", userId)
+      .single();
 
     const serviceSecret = Deno.env.get("INTERNAL_SERVICE_SECRET");
     if (!serviceSecret) {
@@ -33,7 +45,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
         "X-Service-Key": serviceSecret,
       },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, nome: profile?.nome || undefined }),
     });
 
     if (!cfResponse.ok) {
