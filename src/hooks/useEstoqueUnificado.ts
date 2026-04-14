@@ -568,8 +568,172 @@ export function useEstoqueUnificado() {
     return ['TODAS', ...Array.from(set).sort()];
   }, [itensProcessados]);
 
-  // Marcas sem fornecedor
-  const marcasSemFornecedor = useMemo(() => {
+  // ============================================
+  // MIX IDEAL (vendas 6m vs estoque atual)
+  // ============================================
+  const mixIdealCategoria = useMemo((): MixComparativo[] => {
+    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0);
+    const totalEstoque = comEstoque.reduce((acc, i) => acc + i.estoqueAtual, 0);
+    const totalVendas = itensProcessados.reduce((acc, i) => acc + i.qtdVendidos, 0);
+    
+    if (totalEstoque === 0 && totalVendas === 0) return [];
+
+    const categorias: Array<'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS'> = ['ARMACOES', 'LENTES', 'ACESSORIOS', 'OUTROS'];
+    
+    return categorias.map(cat => {
+      const vendasCat = itensProcessados.filter(i => i.categoria === cat).reduce((acc, i) => acc + i.qtdVendidos, 0);
+      const estoqueCat = comEstoque.filter(i => i.categoria === cat).reduce((acc, i) => acc + i.estoqueAtual, 0);
+      
+      const percentualIdeal = totalVendas > 0 ? (vendasCat / totalVendas) * 100 : 0;
+      const percentualAtual = totalEstoque > 0 ? (estoqueCat / totalEstoque) * 100 : 0;
+      
+      return {
+        chave: cat,
+        percentualIdeal,
+        percentualAtual,
+        gap: percentualIdeal - percentualAtual,
+      };
+    }).filter(m => m.percentualIdeal > 0 || m.percentualAtual > 0);
+  }, [itensProcessados]);
+
+  const mixIdealMarca = useMemo((): MixComparativo[] => {
+    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0);
+    const totalEstoque = comEstoque.reduce((acc, i) => acc + i.estoqueAtual, 0);
+    const totalVendas = itensProcessados.reduce((acc, i) => acc + i.qtdVendidos, 0);
+    
+    if (totalEstoque === 0 && totalVendas === 0) return [];
+
+    const marcasSet = new Set(itensProcessados.map(i => i.marca).filter(Boolean));
+    
+    return Array.from(marcasSet).map(marca => {
+      const vendasMarca = itensProcessados.filter(i => i.marca === marca).reduce((acc, i) => acc + i.qtdVendidos, 0);
+      const estoqueMarca = comEstoque.filter(i => i.marca === marca).reduce((acc, i) => acc + i.estoqueAtual, 0);
+      
+      const percentualIdeal = totalVendas > 0 ? (vendasMarca / totalVendas) * 100 : 0;
+      const percentualAtual = totalEstoque > 0 ? (estoqueMarca / totalEstoque) * 100 : 0;
+      
+      return {
+        chave: marca,
+        percentualIdeal,
+        percentualAtual,
+        gap: percentualIdeal - percentualAtual,
+      };
+    })
+    .filter(m => m.percentualIdeal > 0 || m.percentualAtual > 0)
+    .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+  }, [itensProcessados]);
+
+  // ============================================
+  // RESUMO POR MARCA (decisão REPOR/RENOVAR/DESCONTINUAR)
+  // ============================================
+  const resumoPorMarca = useMemo((): ResumoMarca[] => {
+    if (itensProcessados.length === 0) return [];
+
+    const porMarca = new Map<string, ItemEstoque[]>();
+    itensProcessados.forEach(item => {
+      const key = item.marca || 'SEM MARCA';
+      if (!porMarca.has(key)) porMarca.set(key, []);
+      porMarca.get(key)!.push(item);
+    });
+
+    return Array.from(porMarca.entries()).map(([marca, skus]) => {
+      const comEstoque = skus.filter(s => s.estoqueAtual > 0);
+      const pecasEstoque = comEstoque.reduce((acc, s) => acc + s.estoqueAtual, 0);
+      const valorEstoque = comEstoque.reduce((acc, s) => acc + s.valorEstoqueCusto, 0);
+      const qtdVendidos6m = skus.reduce((acc, s) => acc + s.qtdVendidos, 0);
+      const totalVendido6m = skus.reduce((acc, s) => acc + s.totalVendido, 0);
+      const otbTotal = skus.reduce((acc, s) => acc + s.otb, 0);
+      const temCurvaA = skus.some(s => s.curvaABC === 'A');
+      
+      // Média de dias em estoque dos SKUs que venderam
+      const vendidos = skus.filter(s => s.qtdVendidos > 0);
+      const mediaDiasEmEstoque = vendidos.length > 0
+        ? vendidos.reduce((acc, s) => acc + s.diasEmEstoque, 0) / vendidos.length
+        : 999;
+
+      // Decisão
+      let decisao: DecisaoMarca;
+      const soTemCurvaC = skus.every(s => s.curvaABC === 'C');
+      const todosDeadStock = comEstoque.length > 0 && comEstoque.every(s => s.isDeadStock);
+
+      if (soTemCurvaC && (todosDeadStock || qtdVendidos6m === 0)) {
+        decisao = 'AVALIAR_DESCONTINUACAO';
+      } else if (temCurvaA || mediaDiasEmEstoque < 90) {
+        decisao = 'REPOR_REFERENCIA';
+      } else {
+        decisao = 'RENOVAR_COLECAO';
+      }
+
+      const categoria = skus[0]?.categoria || 'OUTROS';
+
+      return { marca, categoria, pecasEstoque, valorEstoque, qtdVendidos6m, totalVendido6m, otbTotal, mediaDiasEmEstoque, temCurvaA, decisao, skus };
+    }).sort((a, b) => {
+      // Prioridade: REPOR > RENOVAR > DESCONTINUAR
+      const ordem: Record<DecisaoMarca, number> = { REPOR_REFERENCIA: 0, RENOVAR_COLECAO: 1, AVALIAR_DESCONTINUACAO: 2 };
+      return ordem[a.decisao] - ordem[b.decisao] || b.totalVendido6m - a.totalVendido6m;
+    });
+  }, [itensProcessados]);
+
+  // ============================================
+  // ESTOQUE DOENTE (agrupado por faixa de ação)
+  // ============================================
+  const estoqueDoenteAgrupado = useMemo((): GrupoEstoqueDoente[] => {
+    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0 && i.diasEmEstoque >= 180);
+    
+    if (comEstoque.length === 0) return [];
+
+    const classificar = (dias: number): FaixaDoente => {
+      if (dias >= 720) return 'DESCARTE';
+      if (dias >= 360) return 'LIQUIDACAO_50';
+      if (dias >= 270) return 'LIQUIDACAO_30';
+      if (dias >= 180) return 'PROMOCAO_20';
+      return 'PROMOCAO_20';
+    };
+
+    const faixasConfig: Record<FaixaDoente, { label: string; desconto: string; cor: string }> = {
+      PROMOCAO_20: { label: 'Promoção 20%', desconto: '20%', cor: 'text-yellow-600' },
+      LIQUIDACAO_30: { label: 'Liquidação 30%', desconto: '30%', cor: 'text-orange-600' },
+      LIQUIDACAO_50: { label: 'Liquidação 50%', desconto: '50%', cor: 'text-destructive' },
+      DESCARTE: { label: 'Descarte / Doação', desconto: '100%', cor: 'text-destructive' },
+      REVISAO_URGENTE: { label: 'Revisão Urgente', desconto: '-', cor: 'text-destructive' },
+    };
+
+    const grupos = new Map<FaixaDoente, ItemEstoque[]>();
+    comEstoque.forEach(item => {
+      const faixa = classificar(item.diasEmEstoque);
+      if (!grupos.has(faixa)) grupos.set(faixa, []);
+      grupos.get(faixa)!.push(item);
+    });
+
+    // Add items with no sales record at all as REVISAO_URGENTE
+    const semMovimento = itensProcessados.filter(i => i.estoqueAtual > 0 && i.qtdVendidos === 0 && i.diasEmEstoque === 0);
+    if (semMovimento.length > 0) {
+      if (!grupos.has('REVISAO_URGENTE')) grupos.set('REVISAO_URGENTE', []);
+      grupos.get('REVISAO_URGENTE')!.push(...semMovimento);
+    }
+
+    const ordemFaixas: FaixaDoente[] = ['PROMOCAO_20', 'LIQUIDACAO_30', 'LIQUIDACAO_50', 'DESCARTE', 'REVISAO_URGENTE'];
+
+    return ordemFaixas
+      .filter(f => grupos.has(f))
+      .map(faixa => {
+        const itens = grupos.get(faixa)!;
+        const config = faixasConfig[faixa];
+        const marcasSet = new Set(itens.map(i => i.marca).filter(Boolean));
+        return {
+          faixa,
+          label: config.label,
+          desconto: config.desconto,
+          cor: config.cor,
+          pecas: itens.reduce((acc, i) => acc + i.estoqueAtual, 0),
+          valorCusto: itens.reduce((acc, i) => acc + i.valorEstoqueCusto, 0),
+          marcas: Array.from(marcasSet).sort(),
+          itens,
+        };
+      });
+  }, [itensProcessados]);
+
+
     const marcaContagem = new Map<string, number>();
     
     itensProcessados.forEach(item => {
