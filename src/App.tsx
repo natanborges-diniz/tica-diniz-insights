@@ -12,7 +12,6 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import HomePage from "./pages/HomePage";
 import SalesDashboard from "./pages/SalesDashboard";
 import VisaoEstoquePage from "./pages/estoque/VisaoEstoquePage";
-import OQueFazerPage from "./pages/estoque/OQueFazerPage";
 import AnaliseOTBPage from "./pages/estoque/AnaliseOTBPage";
 import SalesFamilyDashboard from "./pages/SalesFamilyDashboard";
 import OsDashboard from "./pages/OsDashboard";
