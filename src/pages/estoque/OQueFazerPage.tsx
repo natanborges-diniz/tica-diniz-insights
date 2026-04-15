@@ -135,25 +135,8 @@ export default function OQueFazerPage() {
               </Select>
             </div>
 
-            <div className="flex gap-2">
-              <div>
-                <label className="text-sm font-medium mb-2 block">Data Início</label>
-                <Input
-                  type="date"
-                  value={filters.dataInicio}
-                  onChange={(e) => setFilters(prev => ({ ...prev, dataInicio: e.target.value }))}
-                  className="w-[140px]"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-2 block">Data Fim</label>
-                <Input
-                  type="date"
-                  value={filters.dataFim}
-                  onChange={(e) => setFilters(prev => ({ ...prev, dataFim: e.target.value }))}
-                  className="w-[140px]"
-                />
-              </div>
+            <div className="text-sm text-muted-foreground self-center">
+              Período de vendas: últimos 180 dias
             </div>
 
             <Button 
