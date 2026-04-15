@@ -12,7 +12,7 @@ import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
 import { getAnaliseSku, AnaliseSku } from "@/services/vendasService";
 import { getEstoqueCompleto, EstoqueCompleto, calcularMetricasEstoqueCompleto } from "@/services/estoqueCompletoService";
-import { categorizarProduto } from "@/utils/categorizarProduto";
+import { categorizarProduto, subcategorizarProduto, type SubcategoriaProduto } from "@/utils/categorizarProduto";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -22,18 +22,15 @@ import { supabase } from "@/integrations/supabase/client";
 
 export interface EstoqueFilters {
   empresa: EmpresaParam;
-  dataInicio: string;
-  dataFim: string;
   categoria: 'TODOS' | 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS';
   curvaABC: 'A' | 'B' | 'C' | null;
   fornecedor: string;
   marca: string;
-  acao: string; // TODAS, LIQUIDAR, COMPRAR, COMPRAR URGENTE, MANTER
+  acao: string;
   busca: string;
 }
 
 export interface ItemEstoque {
-  // Dados do SKU
   codSku: number;
   codigoBarra: string;
   descricao: string;
@@ -41,24 +38,21 @@ export interface ItemEstoque {
   fornecedor: string;
   tipo: string;
   categoria: 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS';
+  subcategoria: SubcategoriaProduto;
   
-  // Estoque (do /estoque/completo)
   estoqueAtual: number;
   estoqueMinimo: number;
   valorEstoqueCusto: number;
   
-  // Vendas (do /vendas/analise-sku)
   qtdVendidos: number;
   totalVendido: number;
-  diasEmEstoque: number; // dias desde a entrada do produto
+  diasEmEstoque: number;
   vendaDiaria: number;
   
-  // Custos
   precoCusto: number;
   precoVenda: number;
   margemBruta: number;
   
-  // OTB
   otb: number;
   otbValor: number;
   curvaABC: 'A' | 'B' | 'C';
@@ -66,12 +60,36 @@ export interface ItemEstoque {
   acaoSugerida: string;
   giroEstoque: number;
   
-  // Dead stock
   isDeadStock: boolean;
 }
 
 // Decisão por marca para Plano de Compra
 export type DecisaoMarca = 'REPOR_REFERENCIA' | 'RENOVAR_COLECAO' | 'AVALIAR_DESCONTINUACAO';
+
+// Faixa de estoque doente
+export type FaixaDoente = 'PROMOCAO_20' | 'LIQUIDACAO_30' | 'LIQUIDACAO_50' | 'DESCARTE' | 'REVISAO_URGENTE';
+
+// SKU específico a repor
+export interface SkuARepor {
+  codSku: number;
+  codigoBarra: string;
+  descricao: string;
+  qtdVendidos: number;
+  estoqueAtual: number;
+  qtdAComprar: number;
+  curvaABC: 'A' | 'B' | 'C';
+}
+
+// Item doente de uma marca
+export interface ItemDoenteMarca {
+  codSku: number;
+  descricao: string;
+  estoqueAtual: number;
+  valorCusto: number;
+  diasEmEstoque: number;
+  faixa: FaixaDoente;
+  desconto: string;
+}
 
 export interface ResumoMarca {
   marca: string;
@@ -84,25 +102,32 @@ export interface ResumoMarca {
   mediaDiasEmEstoque: number;
   temCurvaA: boolean;
   decisao: DecisaoMarca;
+  // Bloco 1 — Repor referências (SKUs específicos curva A/B com giro rápido)
+  skusARepor: SkuARepor[];
+  // Bloco 2 — Novos modelos (qtd de peças de coleção nova)
+  pecasARenovar: number;
+  // Bloco 3 — Estoque doente desta marca
+  itensDoentes: ItemDoenteMarca[];
+  totalDoenteValor: number;
+  totalDoentePecas: number;
+  // Todos os SKUs da marca (para export/detalhe)
   skus: ItemEstoque[];
 }
 
-// Mix ideal por categoria e marca
+// Mix ideal por subcategoria
 export interface MixComparativo {
-  chave: string; // categoria ou marca
-  percentualIdeal: number; // baseado em vendas 6m
-  percentualAtual: number; // baseado em estoque atual
-  gap: number; // ideal - atual (positivo = subrepresentada)
+  chave: string;
+  percentualIdeal: number;
+  percentualAtual: number;
+  gap: number;
 }
 
-// Faixa de estoque doente
-export type FaixaDoente = 'PROMOCAO_20' | 'LIQUIDACAO_30' | 'LIQUIDACAO_50' | 'DESCARTE' | 'REVISAO_URGENTE';
-
+// Estoque doente global (mantido para compatibilidade)
 export interface GrupoEstoqueDoente {
   faixa: FaixaDoente;
   label: string;
   desconto: string;
-  cor: string; // tailwind class
+  cor: string;
   pecas: number;
   valorCusto: number;
   marcas: string[];
@@ -110,28 +135,20 @@ export interface GrupoEstoqueDoente {
 }
 
 export interface MetricasEstoque {
-  // Métricas de estoque físico (do /estoque/completo)
   totalPecas: number;
   totalSkusComEstoque: number;
   valorTotalCusto: number;
-  
-  // Dead stock
   deadStockPecas: number;
   deadStockValor: number;
   deadStockPercentual: number;
-  
-  // Métricas gerais
   totalSkus: number;
   fornecedoresDistintos: number;
   marcasDistintas: number;
-  
-  // Por ação
   pecasLiquidar: number;
   pecasManter: number;
   pecasComprar: number;
-  
-  // OTB (do /vendas/analise-sku)
   totalVendido: number;
+  totalVendido6mPecas: number;
   totalOtb: number;
   totalOtbValor: number;
   skusComprarUrgente: number;
@@ -153,13 +170,8 @@ interface MapeamentoFornecedor {
   fornecedor: string;
 }
 
-// ============================================
-// FUNÇÕES AUXILIARES
-// ============================================
-
-// Importado de @/utils/categorizarProduto — fonte única de verdade
-
-// Ação sugerida agora vem calculada do backend baseada em dias_estoque
+// Período fixo: 180 dias
+const DIAS_PERIODO = 180;
 
 // ============================================
 // HOOK PRINCIPAL
@@ -169,15 +181,13 @@ export function useEstoqueUnificado() {
   const { empresas, isLoading: loadingEmpresas } = useUserEmpresas();
   const { defaultEmpresa } = useDefaultEmpresa();
   
-  // Período padrão: últimos 180 dias
+  // Período fixo: últimos 180 dias (não exposto para o usuário)
   const hoje = new Date();
   const dataFim = hoje.toISOString().split('T')[0];
-  const dataInicio = new Date(hoje.getTime() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const dataInicio = new Date(hoje.getTime() - DIAS_PERIODO * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
   const [filters, setFilters] = useState<EstoqueFilters>({
-    empresa: null, // Será preenchido pelo useEffect abaixo
-    dataInicio,
-    dataFim,
+    empresa: null,
     categoria: 'TODOS',
     curvaABC: null,
     fornecedor: 'TODOS',
@@ -186,7 +196,6 @@ export function useEstoqueUnificado() {
     busca: '',
   });
 
-  // Preencher empresa do profile quando disponível
   useEffect(() => {
     if (defaultEmpresa && !filters.empresa) {
       setFilters(prev => ({ ...prev, empresa: defaultEmpresa }));
@@ -196,171 +205,104 @@ export function useEstoqueUnificado() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Dados de ambos endpoints
   const [dadosEstoqueCompleto, setDadosEstoqueCompleto] = useState<EstoqueCompleto[]>([]);
   const [dadosVendasSku, setDadosVendasSku] = useState<AnaliseSku[]>([]);
   
   const [mapeamentoFornecedor, setMapeamentoFornecedor] = useState<Map<string, string>>(new Map());
   const [configMinimos, setConfigMinimos] = useState<EstoqueMinimoConfig[]>([]);
 
-  // Carregar mapeamentos marca→fornecedor do Supabase
   useEffect(() => {
     const carregarMapeamentos = async () => {
       try {
         const { data, error } = await supabase
           .from('fornecedor_marca')
           .select('marca, fornecedor');
-        
         if (error) throw error;
-        
         if (data && data.length > 0) {
           const mapa = new Map<string, string>();
           data.forEach((m: MapeamentoFornecedor) => {
             mapa.set(m.marca.toUpperCase(), m.fornecedor);
           });
           setMapeamentoFornecedor(mapa);
-          console.log('[useEstoqueUnificado] Mapeamentos carregados:', mapa.size);
         }
       } catch (err) {
         console.error('[useEstoqueUnificado] Erro ao carregar mapeamentos:', err);
       }
     };
-    
     carregarMapeamentos();
   }, []);
 
-  // Carregar configurações de mínimo por loja
   useEffect(() => {
     const carregarMinimos = async () => {
       try {
         const { data, error } = await supabase
           .from('estoque_minimo_loja')
           .select('cod_empresa, categoria, curva_abc, quantidade_minima');
-        
         if (error) throw error;
-        if (data) {
-          setConfigMinimos(data);
-          console.log('[useEstoqueUnificado] Mínimos por loja carregados:', data.length);
-        }
+        if (data) setConfigMinimos(data);
       } catch (err) {
         console.error('[useEstoqueUnificado] Erro ao carregar mínimos:', err);
       }
     };
-    
     carregarMinimos();
   }, []);
 
-  // Dias do período
-  const diasPeriodo = useMemo(() => {
-    const inicio = new Date(filters.dataInicio);
-    const fim = new Date(filters.dataFim);
-    return Math.ceil((fim.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  }, [filters.dataInicio, filters.dataFim]);
-
   // Mescla dados de ambos endpoints por cod_sku
   const itensProcessados = useMemo((): ItemEstoque[] => {
-    // Se não tem dados de estoque completo, retorna vazio
-    if (!dadosEstoqueCompleto || dadosEstoqueCompleto.length === 0) {
-      console.log('[useEstoqueUnificado] Nenhum dado de estoque completo disponível');
-      return [];
-    }
+    if (!dadosEstoqueCompleto || dadosEstoqueCompleto.length === 0) return [];
 
-    console.log('[useEstoqueUnificado] Processando dados:');
-    console.log('  - Estoque completo:', dadosEstoqueCompleto.length, 'SKUs');
-    console.log('  - Vendas SKU:', dadosVendasSku.length, 'SKUs');
-    
-    // DEBUG: Log dos tipos únicos para diagnóstico de categorização
-    const tiposUnicos = [...new Set(dadosEstoqueCompleto.map(item => item.tipo))];
-    console.log('[useEstoqueUnificado] TIPOS ÚNICOS DO ESTOQUE:', tiposUnicos);
-    
-    // Contar quantos itens têm cada tipo
-    const contagemTipos: Record<string, number> = {};
-    dadosEstoqueCompleto.forEach(item => {
-      const tipo = item.tipo || 'NULL/VAZIO';
-      contagemTipos[tipo] = (contagemTipos[tipo] || 0) + 1;
-    });
-    console.log('[useEstoqueUnificado] CONTAGEM POR TIPO:', contagemTipos);
-    
-    // Criar mapa de vendas por cod_sku para lookup rápido
     const vendasMap = new Map<number, AnaliseSku>();
-    dadosVendasSku.forEach(sku => {
-      vendasMap.set(sku.codSku, sku);
-    });
+    dadosVendasSku.forEach(sku => vendasMap.set(sku.codSku, sku));
     
-    // Calcular curva ABC baseado em vendas (usa dadosVendasSku)
+    // Curva ABC
     const totalVendasGeral = dadosVendasSku.reduce((acc, sku) => acc + sku.totalVendido, 0);
     const ordenadosPorVenda = [...dadosVendasSku].sort((a, b) => b.totalVendido - a.totalVendido);
-    
     let acumulado = 0;
     const curvaMap = new Map<number, 'A' | 'B' | 'C'>();
-    
     ordenadosPorVenda.forEach(sku => {
       acumulado += sku.totalVendido;
       const percentual = totalVendasGeral > 0 ? (acumulado / totalVendasGeral) * 100 : 0;
-      
       if (percentual <= 80) curvaMap.set(sku.codSku, 'A');
       else if (percentual <= 95) curvaMap.set(sku.codSku, 'B');
       else curvaMap.set(sku.codSku, 'C');
     });
 
-    // Processar cada item do estoque completo
     return dadosEstoqueCompleto.map(estoqueItem => {
-      // Buscar dados de vendas correspondentes
       const vendas = vendasMap.get(estoqueItem.codSku);
-      
       const categoria = categorizarProduto(estoqueItem.tipo);
-      // Curva ABC: do mapa de vendas ou 'C' se não tiver vendas (sem giro)
+      const subcategoria = subcategorizarProduto(estoqueItem.tipo);
       const curvaABC = curvaMap.get(estoqueItem.codSku) || 'C';
       
-      // Métricas de vendas (do endpoint de vendas ou zero se não vendeu)
       const qtdVendidos = vendas?.qtdProdutos ?? 0;
       const totalVendido = vendas?.totalVendido ?? 0;
-      const vendaDiaria = diasPeriodo > 0 ? qtdVendidos / diasPeriodo : 0;
+      const vendaDiaria = DIAS_PERIODO > 0 ? qtdVendidos / DIAS_PERIODO : 0;
       const giroEstoque = vendas?.giroEstoque ?? 0;
       const margemBruta = vendas?.margemBruta ?? 0;
       
-      // Buscar mínimo configurado
       let estoqueMinimo = 0;
       if (filters.empresa !== null && filters.empresa !== 'ALL') {
         const codEmpresa = typeof filters.empresa === 'number' ? filters.empresa : parseInt(String(filters.empresa));
-        
-        const configEspecifica = configMinimos.find(c => 
-          c.cod_empresa === codEmpresa && 
-          c.categoria === categoria && 
-          c.curva_abc === curvaABC
-        );
-        
-        const configGenerica = configMinimos.find(c => 
-          c.cod_empresa === codEmpresa && 
-          c.categoria === 'TODOS' && 
-          c.curva_abc === curvaABC
-        );
-        
+        const configEspecifica = configMinimos.find(c => c.cod_empresa === codEmpresa && c.categoria === categoria && c.curva_abc === curvaABC);
+        const configGenerica = configMinimos.find(c => c.cod_empresa === codEmpresa && c.categoria === 'TODOS' && c.curva_abc === curvaABC);
         estoqueMinimo = configEspecifica?.quantidade_minima || configGenerica?.quantidade_minima || 0;
       }
       
-      // OTB = Mínimo - Estoque Atual
       const otb = Math.max(0, Math.ceil(estoqueMinimo - estoqueItem.quantidadeEstoque));
       const otbValor = otb * estoqueItem.precoCusto;
       
-      // Classificação baseada em estoque vs mínimo
       let classificacao: ItemEstoque['classificacao'];
-      
       if (estoqueMinimo > 0) {
         const percentualDoMinimo = (estoqueItem.quantidadeEstoque / estoqueMinimo) * 100;
-        
         if (percentualDoMinimo < 30) classificacao = 'COMPRAR_URGENTE';
         else if (percentualDoMinimo < 100) classificacao = 'COMPRAR';
         else if (percentualDoMinimo > 200) classificacao = 'EXCESSO';
         else classificacao = 'ESTOQUE_OK';
       } else {
-        // Sem mínimo configurado: usa lógica baseada em vendas
         if (qtdVendidos > 0 && estoqueItem.quantidadeEstoque === 0) classificacao = 'COMPRAR_URGENTE';
         else if (estoqueItem.isDeadStock) classificacao = 'EXCESSO';
         else classificacao = 'ESTOQUE_OK';
       }
       
-      // Fornecedor com fallback para mapeamento
       let fornecedorFinal = estoqueItem.fornecedor;
       if (!fornecedorFinal || fornecedorFinal === 'SEM FORNECEDOR' || fornecedorFinal === 'N/D') {
         const marcaUpper = (estoqueItem.marca || '').toUpperCase();
@@ -368,7 +310,7 @@ export function useEstoqueUnificado() {
         if (fornecedorMapeado) fornecedorFinal = fornecedorMapeado;
       }
 
-      const item: ItemEstoque = {
+      return {
         codSku: estoqueItem.codSku,
         codigoBarra: estoqueItem.codigoBarra,
         descricao: estoqueItem.descricao,
@@ -376,86 +318,49 @@ export function useEstoqueUnificado() {
         fornecedor: fornecedorFinal,
         tipo: estoqueItem.tipo,
         categoria,
-        
-        // Estoque do /estoque/completo
+        subcategoria,
         estoqueAtual: estoqueItem.quantidadeEstoque,
         estoqueMinimo,
         valorEstoqueCusto: estoqueItem.valorEstoqueCusto,
-        
-        // Vendas do /vendas/analise-sku
         qtdVendidos,
         totalVendido,
         diasEmEstoque: estoqueItem.diasEmEstoque,
         vendaDiaria,
-        
-        // Custos
         precoCusto: estoqueItem.precoCusto,
         precoVenda: estoqueItem.precoVenda,
         margemBruta,
-        
-        // OTB
         otb,
         otbValor,
         curvaABC,
         classificacao,
-        // Ação sugerida vem diretamente do backend (baseada em dias_estoque)
         acaoSugerida: estoqueItem.acaoSugerida,
         giroEstoque,
-        
-        // Dead stock
         isDeadStock: estoqueItem.isDeadStock,
       };
-      
-      return item;
     });
-  }, [dadosEstoqueCompleto, dadosVendasSku, diasPeriodo, filters.empresa, mapeamentoFornecedor, configMinimos]);
+  }, [dadosEstoqueCompleto, dadosVendasSku, filters.empresa, mapeamentoFornecedor, configMinimos]);
 
-  // Contagem por categoria (dados brutos)
+  // Contagem por categoria
   const contagemPorCategoria = useMemo(() => {
-    if (!itensProcessados || itensProcessados.length === 0) return { armacoes: 0, lentes: 0, acessorios: 0, outros: 0 };
-    
+    if (!itensProcessados.length) return { armacoes: 0, lentes: 0, acessorios: 0, outros: 0 };
     let armacoes = 0, lentes = 0, acessorios = 0, outros = 0;
-    
     itensProcessados.forEach(item => {
       if (item.categoria === 'ARMACOES') armacoes++;
       else if (item.categoria === 'LENTES') lentes++;
       else if (item.categoria === 'ACESSORIOS') acessorios++;
       else outros++;
     });
-    
     return { armacoes, lentes, acessorios, outros };
   }, [itensProcessados]);
 
-  // Itens filtrados (aplica TODOS os filtros)
+  // Itens filtrados
   const itensFiltrados = useMemo(() => {
     let resultado = itensProcessados;
-    
-    // Filtro por categoria
-    if (filters.categoria !== 'TODOS') {
-      resultado = resultado.filter(item => item.categoria === filters.categoria);
-    }
-    
-    // Filtro por curva ABC
-    if (filters.curvaABC) {
-      resultado = resultado.filter(item => item.curvaABC === filters.curvaABC);
-    }
-    
-    // Filtro por fornecedor
-    if (filters.fornecedor !== 'TODOS') {
-      resultado = resultado.filter(item => item.fornecedor === filters.fornecedor);
-    }
-    
-    // Filtro por marca
-    if (filters.marca !== 'TODAS') {
-      resultado = resultado.filter(item => item.marca === filters.marca);
-    }
-    
-    // Filtro por ação sugerida
-    if (filters.acao !== 'TODAS') {
-      resultado = resultado.filter(item => item.acaoSugerida === filters.acao);
-    }
-    
-    // Busca textual
+    if (filters.categoria !== 'TODOS') resultado = resultado.filter(item => item.categoria === filters.categoria);
+    if (filters.curvaABC) resultado = resultado.filter(item => item.curvaABC === filters.curvaABC);
+    if (filters.fornecedor !== 'TODOS') resultado = resultado.filter(item => item.fornecedor === filters.fornecedor);
+    if (filters.marca !== 'TODAS') resultado = resultado.filter(item => item.marca === filters.marca);
+    if (filters.acao !== 'TODAS') resultado = resultado.filter(item => item.acaoSugerida === filters.acao);
     if (filters.busca.trim()) {
       const termo = filters.busca.toLowerCase();
       resultado = resultado.filter(item =>
@@ -465,61 +370,33 @@ export function useEstoqueUnificado() {
         String(item.codSku).includes(termo)
       );
     }
-    
     return resultado;
   }, [itensProcessados, filters]);
 
-  // Itens com estoque > 0 (para aba Visão Estoque)
-  const itensComEstoque = useMemo(() => {
-    return itensFiltrados.filter(item => item.estoqueAtual > 0);
-  }, [itensFiltrados]);
+  const itensComEstoque = useMemo(() => itensFiltrados.filter(item => item.estoqueAtual > 0), [itensFiltrados]);
 
   // Métricas consolidadas
   const metricas = useMemo((): MetricasEstoque => {
-    // Métricas de estoque físico direto do endpoint completo
-    const metricasEstoque = calcularMetricasEstoqueCompleto(
-      dadosEstoqueCompleto.filter(item => {
-        // Aplica filtro de categoria se selecionado
-        if (filters.categoria !== 'TODOS') {
-          const cat = categorizarProduto(item.tipo);
-          return cat === filters.categoria;
-        }
-        return true;
-      })
-    );
-    
-    // Para estoque físico filtrado: apenas itens com estoque > 0
     const comEstoque = itensFiltrados.filter(item => item.estoqueAtual > 0);
     const totalPecas = comEstoque.reduce((acc, i) => acc + i.estoqueAtual, 0);
     const totalSkusComEstoque = comEstoque.length;
     const valorTotalCusto = comEstoque.reduce((acc, i) => acc + i.valorEstoqueCusto, 0);
     
-    // Dead stock
     const deadStock = comEstoque.filter(i => i.isDeadStock);
     const deadStockPecas = deadStock.reduce((acc, i) => acc + i.estoqueAtual, 0);
     const deadStockValor = deadStock.reduce((acc, i) => acc + i.valorEstoqueCusto, 0);
     const deadStockPercentual = totalPecas > 0 ? (deadStockPecas / totalPecas) * 100 : 0;
     
-    // Métricas gerais
     const totalSkus = itensFiltrados.length;
     const fornecedoresDistintos = new Set(comEstoque.map(i => i.fornecedor)).size;
     const marcasDistintas = new Set(comEstoque.map(i => i.marca)).size;
     
-    // Por ação sugerida (LIQUIDA, não LIQUIDAR)
-    const pecasLiquidar = comEstoque
-      .filter(i => i.acaoSugerida.toUpperCase().includes('LIQUIDA'))
-      .reduce((acc, i) => acc + i.estoqueAtual, 0);
+    const pecasLiquidar = comEstoque.filter(i => i.acaoSugerida.toUpperCase().includes('LIQUIDA')).reduce((acc, i) => acc + i.estoqueAtual, 0);
+    const pecasManter = comEstoque.filter(i => i.acaoSugerida.includes('MANTER')).reduce((acc, i) => acc + i.estoqueAtual, 0);
+    const pecasComprar = comEstoque.filter(i => i.acaoSugerida.includes('COMPRAR')).reduce((acc, i) => acc + i.estoqueAtual, 0);
     
-    const pecasManter = comEstoque
-      .filter(i => i.acaoSugerida.includes('MANTER'))
-      .reduce((acc, i) => acc + i.estoqueAtual, 0);
-    
-    const pecasComprar = comEstoque
-      .filter(i => i.acaoSugerida.includes('COMPRAR'))
-      .reduce((acc, i) => acc + i.estoqueAtual, 0);
-    
-    // OTB (usa todos os itens para calcular necessidade de compra)
     const totalVendido = itensFiltrados.reduce((acc, i) => acc + i.totalVendido, 0);
+    const totalVendido6mPecas = itensFiltrados.reduce((acc, i) => acc + i.qtdVendidos, 0);
     const totalOtb = itensFiltrados.reduce((acc, i) => acc + i.otb, 0);
     const totalOtbValor = itensFiltrados.reduce((acc, i) => acc + i.otbValor, 0);
     const skusComprarUrgente = itensFiltrados.filter(i => i.classificacao === 'COMPRAR_URGENTE').length;
@@ -528,28 +405,15 @@ export function useEstoqueUnificado() {
     const skusExcesso = itensFiltrados.filter(i => i.classificacao === 'EXCESSO').length;
     
     return {
-      totalPecas,
-      totalSkusComEstoque,
-      valorTotalCusto,
-      deadStockPecas,
-      deadStockValor,
-      deadStockPercentual,
-      totalSkus,
-      fornecedoresDistintos,
-      marcasDistintas,
-      pecasLiquidar,
-      pecasManter,
-      pecasComprar,
-      totalVendido,
-      totalOtb,
-      totalOtbValor,
-      skusComprarUrgente,
-      skusComprar,
-      skusEstoqueOk,
-      skusExcesso,
-      diasPeriodo,
+      totalPecas, totalSkusComEstoque, valorTotalCusto,
+      deadStockPecas, deadStockValor, deadStockPercentual,
+      totalSkus, fornecedoresDistintos, marcasDistintas,
+      pecasLiquidar, pecasManter, pecasComprar,
+      totalVendido, totalVendido6mPecas, totalOtb, totalOtbValor,
+      skusComprarUrgente, skusComprar, skusEstoqueOk, skusExcesso,
+      diasPeriodo: DIAS_PERIODO,
     };
-  }, [itensFiltrados, dadosEstoqueCompleto, filters.categoria, diasPeriodo]);
+  }, [itensFiltrados]);
 
   // Listas para filtros
   const listaFornecedores = useMemo(() => {
@@ -562,37 +426,35 @@ export function useEstoqueUnificado() {
     return ['TODAS', ...Array.from(set).sort()];
   }, [itensProcessados]);
 
-  // Lista de ações para filtro
   const listaAcoes = useMemo(() => {
     const set = new Set(itensProcessados.map(i => i.acaoSugerida).filter(Boolean));
     return ['TODAS', ...Array.from(set).sort()];
   }, [itensProcessados]);
 
   // ============================================
-  // MIX IDEAL (vendas 6m vs estoque atual)
+  // MIX IDEAL POR SUBCATEGORIA (AR RX / Solar / Lentes / Acessórios)
   // ============================================
   const mixIdealCategoria = useMemo((): MixComparativo[] => {
     const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0);
     const totalEstoque = comEstoque.reduce((acc, i) => acc + i.estoqueAtual, 0);
     const totalVendas = itensProcessados.reduce((acc, i) => acc + i.qtdVendidos, 0);
-    
     if (totalEstoque === 0 && totalVendas === 0) return [];
 
-    const categorias: Array<'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS'> = ['ARMACOES', 'LENTES', 'ACESSORIOS', 'OUTROS'];
-    
-    return categorias.map(cat => {
-      const vendasCat = itensProcessados.filter(i => i.categoria === cat).reduce((acc, i) => acc + i.qtdVendidos, 0);
-      const estoqueCat = comEstoque.filter(i => i.categoria === cat).reduce((acc, i) => acc + i.estoqueAtual, 0);
-      
-      const percentualIdeal = totalVendas > 0 ? (vendasCat / totalVendas) * 100 : 0;
-      const percentualAtual = totalEstoque > 0 ? (estoqueCat / totalEstoque) * 100 : 0;
-      
-      return {
-        chave: cat,
-        percentualIdeal,
-        percentualAtual,
-        gap: percentualIdeal - percentualAtual,
-      };
+    const subcats: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'ACESSORIOS', 'OUTROS'];
+    const labels: Record<SubcategoriaProduto, string> = {
+      AR_RX: 'Armações RX',
+      AR_SOLAR: 'Solar / OC',
+      LENTES: 'Lentes',
+      ACESSORIOS: 'Acessórios',
+      OUTROS: 'Outros',
+    };
+
+    return subcats.map(sub => {
+      const vendasSub = itensProcessados.filter(i => i.subcategoria === sub).reduce((acc, i) => acc + i.qtdVendidos, 0);
+      const estoqueSub = comEstoque.filter(i => i.subcategoria === sub).reduce((acc, i) => acc + i.estoqueAtual, 0);
+      const percentualIdeal = totalVendas > 0 ? (vendasSub / totalVendas) * 100 : 0;
+      const percentualAtual = totalEstoque > 0 ? (estoqueSub / totalEstoque) * 100 : 0;
+      return { chave: labels[sub], percentualIdeal, percentualAtual, gap: percentualIdeal - percentualAtual };
     }).filter(m => m.percentualIdeal > 0 || m.percentualAtual > 0);
   }, [itensProcessados]);
 
@@ -600,32 +462,31 @@ export function useEstoqueUnificado() {
     const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0);
     const totalEstoque = comEstoque.reduce((acc, i) => acc + i.estoqueAtual, 0);
     const totalVendas = itensProcessados.reduce((acc, i) => acc + i.qtdVendidos, 0);
-    
     if (totalEstoque === 0 && totalVendas === 0) return [];
 
     const marcasSet = new Set(itensProcessados.map(i => i.marca).filter(Boolean));
-    
     return Array.from(marcasSet).map(marca => {
       const vendasMarca = itensProcessados.filter(i => i.marca === marca).reduce((acc, i) => acc + i.qtdVendidos, 0);
       const estoqueMarca = comEstoque.filter(i => i.marca === marca).reduce((acc, i) => acc + i.estoqueAtual, 0);
-      
       const percentualIdeal = totalVendas > 0 ? (vendasMarca / totalVendas) * 100 : 0;
       const percentualAtual = totalEstoque > 0 ? (estoqueMarca / totalEstoque) * 100 : 0;
-      
-      return {
-        chave: marca,
-        percentualIdeal,
-        percentualAtual,
-        gap: percentualIdeal - percentualAtual,
-      };
+      return { chave: marca, percentualIdeal, percentualAtual, gap: percentualIdeal - percentualAtual };
     })
     .filter(m => m.percentualIdeal > 0 || m.percentualAtual > 0)
     .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
   }, [itensProcessados]);
 
   // ============================================
-  // RESUMO POR MARCA (decisão REPOR/RENOVAR/DESCONTINUAR)
+  // RESUMO POR MARCA — com blocos acionáveis
   // ============================================
+
+  const classificarFaixaDoente = (dias: number): { faixa: FaixaDoente; desconto: string } => {
+    if (dias >= 720) return { faixa: 'DESCARTE', desconto: '100%' };
+    if (dias >= 360) return { faixa: 'LIQUIDACAO_50', desconto: '50%' };
+    if (dias >= 270) return { faixa: 'LIQUIDACAO_30', desconto: '30%' };
+    return { faixa: 'PROMOCAO_20', desconto: '20%' };
+  };
+
   const resumoPorMarca = useMemo((): ResumoMarca[] => {
     if (itensProcessados.length === 0) return [];
 
@@ -645,7 +506,6 @@ export function useEstoqueUnificado() {
       const otbTotal = skus.reduce((acc, s) => acc + s.otb, 0);
       const temCurvaA = skus.some(s => s.curvaABC === 'A');
       
-      // Média de dias em estoque dos SKUs que venderam
       const vendidos = skus.filter(s => s.qtdVendidos > 0);
       const mediaDiasEmEstoque = vendidos.length > 0
         ? vendidos.reduce((acc, s) => acc + s.diasEmEstoque, 0) / vendidos.length
@@ -664,31 +524,71 @@ export function useEstoqueUnificado() {
         decisao = 'RENOVAR_COLECAO';
       }
 
+      // Bloco 1 — SKUs a repor (Curva A/B com giro rápido, venderam nos últimos 6m)
+      const skusARepor: SkuARepor[] = skus
+        .filter(s => s.qtdVendidos > 0 && (s.curvaABC === 'A' || s.curvaABC === 'B') && s.diasEmEstoque < 90)
+        .map(s => {
+          // Qtd a comprar: projeção de vendas para ~90 dias menos estoque atual
+          const projecao90d = Math.ceil(s.vendaDiaria * 90);
+          const qtdAComprar = Math.max(0, projecao90d - s.estoqueAtual);
+          return {
+            codSku: s.codSku,
+            codigoBarra: s.codigoBarra,
+            descricao: s.descricao,
+            qtdVendidos: s.qtdVendidos,
+            estoqueAtual: s.estoqueAtual,
+            qtdAComprar,
+            curvaABC: s.curvaABC,
+          };
+        })
+        .filter(s => s.qtdAComprar > 0)
+        .sort((a, b) => b.qtdVendidos - a.qtdVendidos);
+
+      // Bloco 2 — Peças a renovar (gap de compra menos SKUs a repor)
+      const totalReporPecas = skusARepor.reduce((acc, s) => acc + s.qtdAComprar, 0);
+      const gapTotal = Math.max(0, qtdVendidos6m - pecasEstoque);
+      const pecasARenovar = Math.max(0, gapTotal - totalReporPecas);
+
+      // Bloco 3 — Estoque doente desta marca
+      const itensDoentes: ItemDoenteMarca[] = comEstoque
+        .filter(s => s.diasEmEstoque >= 180)
+        .map(s => {
+          const { faixa, desconto } = classificarFaixaDoente(s.diasEmEstoque);
+          return {
+            codSku: s.codSku,
+            descricao: s.descricao,
+            estoqueAtual: s.estoqueAtual,
+            valorCusto: s.valorEstoqueCusto,
+            diasEmEstoque: s.diasEmEstoque,
+            faixa,
+            desconto,
+          };
+        })
+        .sort((a, b) => b.diasEmEstoque - a.diasEmEstoque);
+      
+      const totalDoentePecas = itensDoentes.reduce((acc, i) => acc + i.estoqueAtual, 0);
+      const totalDoenteValor = itensDoentes.reduce((acc, i) => acc + i.valorCusto, 0);
+
       const categoria = skus[0]?.categoria || 'OUTROS';
 
-      return { marca, categoria, pecasEstoque, valorEstoque, qtdVendidos6m, totalVendido6m, otbTotal, mediaDiasEmEstoque, temCurvaA, decisao, skus };
+      return {
+        marca, categoria, pecasEstoque, valorEstoque,
+        qtdVendidos6m, totalVendido6m, otbTotal,
+        mediaDiasEmEstoque, temCurvaA, decisao,
+        skusARepor, pecasARenovar,
+        itensDoentes, totalDoenteValor, totalDoentePecas,
+        skus,
+      };
     }).sort((a, b) => {
-      // Prioridade: REPOR > RENOVAR > DESCONTINUAR
       const ordem: Record<DecisaoMarca, number> = { REPOR_REFERENCIA: 0, RENOVAR_COLECAO: 1, AVALIAR_DESCONTINUACAO: 2 };
       return ordem[a.decisao] - ordem[b.decisao] || b.totalVendido6m - a.totalVendido6m;
     });
   }, [itensProcessados]);
 
-  // ============================================
-  // ESTOQUE DOENTE (agrupado por faixa de ação)
-  // ============================================
+  // Estoque doente global (mantido para compatibilidade com Visão Estoque)
   const estoqueDoenteAgrupado = useMemo((): GrupoEstoqueDoente[] => {
     const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0 && i.diasEmEstoque >= 180);
-    
     if (comEstoque.length === 0) return [];
-
-    const classificar = (dias: number): FaixaDoente => {
-      if (dias >= 720) return 'DESCARTE';
-      if (dias >= 360) return 'LIQUIDACAO_50';
-      if (dias >= 270) return 'LIQUIDACAO_30';
-      if (dias >= 180) return 'PROMOCAO_20';
-      return 'PROMOCAO_20';
-    };
 
     const faixasConfig: Record<FaixaDoente, { label: string; desconto: string; cor: string }> = {
       PROMOCAO_20: { label: 'Promoção 20%', desconto: '20%', cor: 'text-yellow-600' },
@@ -700,12 +600,11 @@ export function useEstoqueUnificado() {
 
     const grupos = new Map<FaixaDoente, ItemEstoque[]>();
     comEstoque.forEach(item => {
-      const faixa = classificar(item.diasEmEstoque);
+      const { faixa } = classificarFaixaDoente(item.diasEmEstoque);
       if (!grupos.has(faixa)) grupos.set(faixa, []);
       grupos.get(faixa)!.push(item);
     });
 
-    // Add items with no sales record at all as REVISAO_URGENTE
     const semMovimento = itensProcessados.filter(i => i.estoqueAtual > 0 && i.qtdVendidos === 0 && i.diasEmEstoque === 0);
     if (semMovimento.length > 0) {
       if (!grupos.has('REVISAO_URGENTE')) grupos.set('REVISAO_URGENTE', []);
@@ -713,7 +612,6 @@ export function useEstoqueUnificado() {
     }
 
     const ordemFaixas: FaixaDoente[] = ['PROMOCAO_20', 'LIQUIDACAO_30', 'LIQUIDACAO_50', 'DESCARTE', 'REVISAO_URGENTE'];
-
     return ordemFaixas
       .filter(f => grupos.has(f))
       .map(faixa => {
@@ -721,10 +619,7 @@ export function useEstoqueUnificado() {
         const config = faixasConfig[faixa];
         const marcasSet = new Set(itens.map(i => i.marca).filter(Boolean));
         return {
-          faixa,
-          label: config.label,
-          desconto: config.desconto,
-          cor: config.cor,
+          faixa, label: config.label, desconto: config.desconto, cor: config.cor,
           pecas: itens.reduce((acc, i) => acc + i.estoqueAtual, 0),
           valorCusto: itens.reduce((acc, i) => acc + i.valorEstoqueCusto, 0),
           marcas: Array.from(marcasSet).sort(),
@@ -736,27 +631,21 @@ export function useEstoqueUnificado() {
   // Marcas sem fornecedor
   const marcasSemFornecedor = useMemo(() => {
     const marcaContagem = new Map<string, number>();
-    
     itensProcessados.forEach(item => {
       if (!item.fornecedor || item.fornecedor === 'SEM FORNECEDOR' || item.fornecedor === 'N/D') {
         const marca = item.marca || 'SEM MARCA';
         marcaContagem.set(marca, (marcaContagem.get(marca) || 0) + 1);
       }
     });
-    
     return Array.from(marcaContagem.entries())
       .map(([marca, qtdSkus]) => ({ marca, qtdSkus }))
       .sort((a, b) => b.qtdSkus - a.qtdSkus);
   }, [itensProcessados]);
 
-  // Carregar dados de AMBOS endpoints
+  // Carregar dados
   const carregarDados = useCallback(async () => {
     if (filters.empresa === null) {
-      toast({
-        title: "Selecione uma empresa",
-        description: "Escolha uma empresa para carregar os dados de estoque",
-        variant: "destructive",
-      });
+      toast({ title: "Selecione uma empresa", description: "Escolha uma empresa para carregar os dados de estoque", variant: "destructive" });
       return;
     }
     
@@ -764,31 +653,11 @@ export function useEstoqueUnificado() {
     setError(null);
     
     try {
-      console.log('[useEstoqueUnificado] Carregando dados de ambos endpoints...', {
-        empresa: filters.empresa,
-        dataInicio: filters.dataInicio,
-        dataFim: filters.dataFim,
-      });
-      
-      // Busca PARALELA de ambos endpoints
       const [estoqueCompleto, vendasSku] = await Promise.all([
-        // 1. Estoque completo: inventário físico total
-        getEstoqueCompleto({
-          empresa: filters.empresa,
-        }),
-        // 2. Vendas por SKU: métricas de giro e vendas
-        getAnaliseSku({
-          empresa: filters.empresa,
-          dataInicio: filters.dataInicio,
-          dataFim: filters.dataFim,
-        }),
+        getEstoqueCompleto({ empresa: filters.empresa }),
+        getAnaliseSku({ empresa: filters.empresa, dataInicio, dataFim }),
       ]);
       
-      console.log('[useEstoqueUnificado] Dados carregados:');
-      console.log('  - Estoque completo:', estoqueCompleto.length, 'SKUs');
-      console.log('  - Vendas por SKU:', vendasSku.length, 'SKUs');
-      
-      // Contar totais
       const totalPecasEstoque = estoqueCompleto.reduce((acc, d) => acc + d.quantidadeEstoque, 0);
       const pecasDeadStock = estoqueCompleto.filter(d => d.isDeadStock).reduce((acc, d) => acc + d.quantidadeEstoque, 0);
       
@@ -801,63 +670,25 @@ export function useEstoqueUnificado() {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao carregar dados';
-      console.error('[useEstoqueUnificado] Erro:', message);
       setError(message);
-      
-      toast({
-        title: "Erro ao carregar",
-        description: message,
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao carregar", description: message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [filters.empresa, filters.dataInicio, filters.dataFim]);
+  }, [filters.empresa, dataInicio, dataFim]);
 
-  // Para compatibilidade com código existente
   const dadosBrutos = dadosVendasSku;
 
   return {
-    // Empresas
-    empresas,
-    loadingEmpresas,
-    
-    // Filtros
-    filters,
-    setFilters,
-    
-    // Estado
-    loading,
-    error,
-    
-    // Dados brutos
-    dadosBrutos,
-    dadosEstoqueCompleto,
-    dadosVendasSku,
-    
-    // Dados processados
-    itensProcessados,
-    itensFiltrados,
-    itensComEstoque,
-    
-    // Métricas
-    metricas,
-    contagemPorCategoria,
-    diasPeriodo,
-    
-    // Listas para filtros
-    listaFornecedores,
-    listaMarcas,
-    listaAcoes,
-    marcasSemFornecedor,
-    
-    // Plano de Compra
-    mixIdealCategoria,
-    mixIdealMarca,
-    resumoPorMarca,
-    estoqueDoenteAgrupado,
-    
-    // Ações
+    empresas, loadingEmpresas,
+    filters, setFilters,
+    loading, error,
+    dadosBrutos, dadosEstoqueCompleto, dadosVendasSku,
+    itensProcessados, itensFiltrados, itensComEstoque,
+    metricas, contagemPorCategoria, diasPeriodo: DIAS_PERIODO,
+    listaFornecedores, listaMarcas, listaAcoes, marcasSemFornecedor,
+    mixIdealCategoria, mixIdealMarca,
+    resumoPorMarca, estoqueDoenteAgrupado,
     carregarDados,
   };
 }
