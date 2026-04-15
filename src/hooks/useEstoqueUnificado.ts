@@ -11,7 +11,7 @@ import { useUserEmpresas } from "./useUserEmpresas";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
 import { getAnaliseSku, AnaliseSku } from "@/services/vendasService";
-import { getEstoqueCompleto, EstoqueCompleto, calcularMetricasEstoqueCompleto } from "@/services/estoqueCompletoService";
+import { getEstoqueCompleto, EstoqueCompleto } from "@/services/estoqueCompletoService";
 import { categorizarProduto, subcategorizarProduto, type SubcategoriaProduto } from "@/utils/categorizarProduto";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
