@@ -1504,6 +1504,90 @@ app.get('/api/v1/os/hub-receitas', async (req, res) => {
 });
 
 // ============================================
+// Consulta pública de status da OS por CPF ou número da OS
+// Usado pelo chatbot Connect & Flow via Edge Function `os-status-public`
+// ============================================
+app.get('/api/v1/os/consulta-status', async (req, res) => {
+  try {
+    const start = Date.now();
+    const { cpf, os: osParam } = req.query;
+
+    if (!cpf && !osParam) {
+      return error(res, 'VALIDATION_ERROR', 'Informe cpf ou os', 400);
+    }
+
+    let whereClause;
+    let limit;
+    if (osParam) {
+      const numOs = parseInt(osParam);
+      if (isNaN(numOs)) return error(res, 'VALIDATION_ERROR', 'os inválido', 400);
+      whereClause = `os.NUMERO = ${numOs} OR os.COD_ORDEMSERVICO = ${numOs}`;
+      limit = 1;
+    } else {
+      const cpfDigits = String(cpf).replace(/\D/g, '');
+      if (cpfDigits.length < 6) return error(res, 'VALIDATION_ERROR', 'cpf inválido', 400);
+      whereClause = `cli.IDENTIFICADOR = '${cpfDigits}' AND os.DATAEMISSAO >= DATEADD(-180 DAY TO CURRENT_DATE)`;
+      limit = 5;
+    }
+
+    const sql = `
+      SELECT FIRST ${limit}
+        os.COD_ORDEMSERVICO AS COD_OS,
+        os.NUMERO AS NUMERO_OS,
+        emp.NOMEFANTASIA AS EMPRESA,
+        cli.NOME AS CLIENTE,
+        COALESCE(ose.DESCRICAO, '') AS ETAPA,
+        CASE
+          WHEN os.DATAPREVISAO IS NULL THEN 'SEM_DATA'
+          WHEN os.DATAHORASAIDA IS NOT NULL THEN 'ENTREGUE'
+          WHEN os.DATAPREVISAO < CURRENT_DATE THEN 'ATRASADA'
+          WHEN os.DATAPREVISAO = CURRENT_DATE THEN 'HOJE'
+          ELSE 'NO_PRAZO'
+        END AS STATUS_ATRASO,
+        CASE
+          WHEN os.DATAPREVISAO IS NULL OR os.DATAHORASAIDA IS NOT NULL THEN 0
+          ELSE DATEDIFF(DAY, os.DATAPREVISAO, CURRENT_DATE)
+        END AS ATRASO_DIAS,
+        os.DATAEMISSAO,
+        os.DATAPREVISAO,
+        os.DATAHORASAIDA,
+        usu.NOME AS VENDEDOR
+      FROM ORDEMSERVICO os
+      JOIN EMPRESA e ON e.COD_EMPRESA = os.COD_EMPRESA
+      JOIN PESSOA emp ON emp.COD_PESSOA = e.COD_EMPRESA
+      LEFT JOIN PESSOA cli ON cli.COD_PESSOA = os.COD_CLIENTE
+      LEFT JOIN PESSOA usu ON usu.COD_PESSOA = os.COD_USUARIO
+      LEFT JOIN ORDEMSERVICOETAPA ose ON ose.COD_ORDEMSERVICOETAPA = os.COD_ORDEMSERVICOETAPA
+      WHERE (${whereClause})
+        AND e.COD_EMPRESA NOT IN (${EMPRESAS_EXCLUIDAS.join(',')})
+      ORDER BY os.DATAEMISSAO DESC
+    `;
+
+    console.log('[API] GET /api/v1/os/consulta-status', { cpf: cpf ? '***' : null, os: osParam || null });
+    const rows = await executeQuery(sql);
+
+    const normalized = rows.map(row => ({
+      os: String(row.NUMERO_OS || row.COD_OS),
+      cod_os: row.COD_OS,
+      etapa: (row.ETAPA || '').trim() || 'EM ABERTO',
+      statusAtraso: row.STATUS_ATRASO,
+      atrasoDias: row.ATRASO_DIAS || 0,
+      dataPrevisao: row.DATAPREVISAO,
+      dataEmissao: row.DATAEMISSAO,
+      dataSaida: row.DATAHORASAIDA,
+      empresa: (row.EMPRESA || '').trim(),
+      cliente: (row.CLIENTE || '').trim(),
+      vendedor: (row.VENDEDOR || '').trim(),
+    }));
+
+    return success(res, normalized, { elapsed_ms: Date.now() - start, endpoint: '/api/v1/os/consulta-status' });
+  } catch (err) {
+    const classified = classifyError(err);
+    return error(res, classified.code, classified.message, classified.statusCode, { original: err.message });
+  }
+});
+
+// ============================================
 // Debug: Schema discovery — lista colunas de uma tabela Firebird
 // ============================================
 app.get('/api/debug/schema', async (req, res) => {
