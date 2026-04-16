@@ -47,7 +47,8 @@ export function usePedidoAlertas(fornecedor?: string) {
       .order("created_at", { ascending: false });
 
     if (fornecedor) {
-      query = query.eq("pedidos_fornecedor.fornecedor" as any, fornecedor);
+      // @ts-ignore — PostgREST nested filter syntax
+      query = query.eq("pedidos_fornecedor.fornecedor", fornecedor);
     }
 
     const { data, error } = await query;
