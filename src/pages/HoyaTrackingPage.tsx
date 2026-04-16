@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { useUserEmpresas } from "@/hooks/useUserEmpresas";
 import { usePedidoAlertas } from "@/hooks/usePedidoAlertas";
+import { PendingAlertsCard } from "@/components/tracking/PendingAlertsCard";
 import {
   PedidoFornecedorRecord,
   HoyaPedidoTracking,
@@ -97,7 +98,7 @@ const HoyaTrackingPage: React.FC = () => {
   const [consultaAvulsaXmlLoading, setConsultaAvulsaXmlLoading] = useState<"xml" | "danfe" | null>(null);
 
   // Alertas de status negativo
-  const { alertas, acknowledgeAlerta } = usePedidoAlertas();
+  const { alertas, acknowledgeAlerta } = usePedidoAlertas("HOYA");
   const alertasByPedidoFornecedorId = useMemo(() => {
     const map = new Map<string, string>();
     alertas.forEach(a => map.set(a.pedido_fornecedor_id, a.id));
@@ -334,6 +335,9 @@ const HoyaTrackingPage: React.FC = () => {
             <RefreshCw className="h-4 w-4" /> Atualizar Lista
           </Button>
         </div>
+
+        {/* Pending alerts */}
+        <PendingAlertsCard alertas={alertas} onAcknowledge={acknowledgeAlerta} />
 
         {/* Filters + unified search */}
         <div className="flex flex-wrap gap-3 items-end">
