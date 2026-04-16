@@ -92,3 +92,7 @@ verify_jwt = false
 
 [functions.haytek-proxy]
 verify_jwt = false
+
+[functions.os-status-public]
+verify_jwt = false
+
