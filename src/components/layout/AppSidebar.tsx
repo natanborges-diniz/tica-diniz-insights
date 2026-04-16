@@ -138,7 +138,14 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const sections = moduleMenus[activeModule] || [];
-  const { unacknowledgedCount } = usePedidoAlertas();
+  const { countByFornecedor } = usePedidoAlertas();
+
+  const getBadgeCount = (url: string): number => {
+    if (url === "/os/tracking") return countByFornecedor["HOYA"] || 0;
+    if (url === "/os/tracking-zeiss") return countByFornecedor["ZEISS"] || 0;
+    if (url === "/os/tracking-haytek") return countByFornecedor["HAYTEK"] || 0;
+    return 0;
+  };
 
   // Hide sidebar entirely for modules with no menu items
   if (sections.length === 0 || sections.every(s => s.items.length === 0)) {
@@ -189,10 +196,10 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
                           >
                             <item.icon className="h-4 w-4 shrink-0" />
                             {!collapsed && <span className="truncate">{item.title}</span>}
-                            {/* Notification badge for Tracking Hoya */}
-                            {item.url === "/os/tracking" && unacknowledgedCount > 0 && (
+                            {/* Notification badge for tracking pages */}
+                            {getBadgeCount(item.url) > 0 && (
                               <span className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center h-5 min-w-[20px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold animate-pulse">
-                                {unacknowledgedCount > 9 ? "9+" : unacknowledgedCount}
+                                {getBadgeCount(item.url) > 9 ? "9+" : getBadgeCount(item.url)}
                               </span>
                             )}
                           </NavLink>

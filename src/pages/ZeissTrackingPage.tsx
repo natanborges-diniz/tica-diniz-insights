@@ -15,6 +15,8 @@ import {
   consultarPedidoZeiss,
 } from "@/services/zeissService";
 import { toast } from "@/hooks/use-toast";
+import { usePedidoAlertas } from "@/hooks/usePedidoAlertas";
+import { PendingAlertsCard } from "@/components/tracking/PendingAlertsCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +81,9 @@ const ZeissTrackingPage: React.FC = () => {
   const [timeline, setTimeline] = useState<StatusHistoryEntry[]>([]);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
+
+  // Alertas de status negativo
+  const { alertas, acknowledgeAlerta } = usePedidoAlertas("ZEISS");
 
   // Consulta avulsa
   const [consultaAvulsaLoading, setConsultaAvulsaLoading] = useState(false);
@@ -203,6 +208,9 @@ const ZeissTrackingPage: React.FC = () => {
             <RefreshCw className="h-4 w-4" /> Atualizar
           </Button>
         </div>
+
+        {/* Pending alerts */}
+        <PendingAlertsCard alertas={alertas} onAcknowledge={acknowledgeAlerta} />
 
         {/* Filters + unified search */}
         <div className="flex flex-wrap gap-3 items-end">
