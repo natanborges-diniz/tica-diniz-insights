@@ -1,47 +1,99 @@
 
 
-## Plano: Alertas pendentes visíveis e "Ciente" acessível para todos os fornecedores
+## Resumo
 
-### Problemas
+Sim, é totalmente viável. Hoje o sistema já consulta a "última etapa" da OS via Firebird Bridge (`/os/monitor-ultima-etapa`), mas esse endpoint exige **período + empresa** (retorna a lista do dashboard). Para o chatbot, precisamos de uma consulta pontual por **CPF ou número da OS**, retornando a etapa atual de forma rápida e segura.
 
-1. **Hoya**: O botão "Ciente" só aparece dentro do card do pedido (linha 582). Se o pedido não aparece na lista (filtro, paginação, lista vazia), não há como reconhecer o alerta
-2. **Zeiss e Haytek**: O backend já gera alertas na tabela `pedido_alertas` (zeiss-proxy e haytek-proxy fazem `upsert`), mas as páginas de tracking não consomem o hook `usePedidoAlertas` — sem banner, sem botão "Ciente"
-3. **Sidebar**: O badge só aparece no "Tracking Hoya" (`item.url === "/os/tracking"`), ignorando alertas de Zeiss e Haytek
+A solução é criar uma **Edge Function pública para serviços** (`os-status-public`) aqui no Lens, autenticada via `X-Service-Key` (mesmo padrão já usado entre Lens e Connect & Flow), que o Connect & Flow chama durante o atendimento.
 
-### Solução
-
-| # | Arquivo | Mudança |
-|---|---|---|
-| 1 | `src/hooks/usePedidoAlertas.ts` | Enriquecer a query com join em `pedidos_fornecedor` para trazer `numero_pedido`, `cod_os` e `fornecedor`. Adicionar filtro opcional por fornecedor. Exportar tipo atualizado |
-| 2 | `src/pages/HoyaTrackingPage.tsx` | Adicionar seção "Alertas Pendentes" acima da lista de pedidos com botão "Ciente" direto — visível sempre que houver alertas Hoya não reconhecidos. Manter banner inline existente |
-| 3 | `src/pages/ZeissTrackingPage.tsx` | Importar `usePedidoAlertas`, adicionar mesma seção de alertas pendentes com botão "Ciente" e banner inline nos cards expandidos |
-| 4 | `src/pages/HaytekTrackingPage.tsx` | Idem Zeiss |
-| 5 | `src/components/layout/AppSidebar.tsx` | Mostrar badge em cada tracking page separadamente: contar alertas por fornecedor. Tracking Hoya mostra count Hoya, Zeiss mostra count Zeiss, Haytek mostra count Haytek |
-
-### Detalhes do hook atualizado
-
-```typescript
-// usePedidoAlertas(fornecedor?: string)
-// Query: select("*, pedidos_fornecedor!inner(numero_pedido, cod_os, fornecedor)")
-// Se fornecedor passado, filtra .eq("pedidos_fornecedor.fornecedor", fornecedor)
-// Retorna { alertas, countByFornecedor: { HOYA: 1, ZEISS: 1 }, ... }
-```
-
-### Seção visual de alertas (igual nos 3 trackings)
+## Arquitetura
 
 ```text
-┌─ ⚠️ 2 ALERTAS PENDENTES ──────────────────────────┐
-│ Pedido #12345 · OS 8899 · Cancelado · 14/04  [Ciente] │
-│ Pedido #12346 · OS 9001 · Erro      · 13/04  [Ciente] │
-└────────────────────────────────────────────────────────┘
+Cliente no chat
+   │  "Qual o status do meu óculos? CPF 123..."
+   ▼
+Connect & Flow (atendimento)
+   │  POST /functions/v1/os-status-public
+   │  Header: X-Service-Key: <INTERNAL_SERVICE_SECRET>
+   │  Body: { cpf?: "...", os?: "..." }
+   ▼
+Lens — Edge Function `os-status-public`
+   │  1. Valida X-Service-Key
+   │  2. Normaliza CPF (só dígitos) ou OS
+   │  3. Chama Firebird Bridge: /os/consulta-status?cpf=... ou ?os=...
+   ▼
+Firebird Bridge (novo endpoint enxuto)
+   │  Query direta por CPF ou número da OS, todas as empresas
+   ▼
+Resposta: { os, etapa, statusAtraso, dataPrevisao, empresa, cliente }
 ```
 
-### Sidebar com badges por fornecedor
+## O que será criado/alterado
 
-No `AppSidebar`, ao invés de um único `unacknowledgedCount`, usar `countByFornecedor` do hook para mostrar o badge correto em cada URL:
-- `/os/tracking` → count HOYA
-- `/os/tracking-zeiss` → count ZEISS  
-- `/os/tracking-haytek` → count HAYTEK
+| # | Onde | Mudança |
+|---|------|---------|
+| 1 | **Firebird Bridge** (`firebird-bridge/index.js`) | Novo endpoint `GET /api/v1/os/consulta-status?cpf=...` ou `?os=...`. Reusa a mesma lógica de "última etapa" do monitor, mas filtrando por CPF (busca em todas as OSs ativas dos últimos 180 dias do cliente, retorna a mais recente) ou número de OS (match exato). Sem filtro de empresa — varre todas |
+| 2 | **Lens — nova Edge Function** `supabase/functions/os-status-public/index.ts` | Endpoint público para serviços. Valida `X-Service-Key` contra `INTERNAL_SERVICE_SECRET`. Aceita `{ cpf?, os? }`. Chama o Bridge. Retorna payload limpo e amigável para o chatbot |
+| 3 | **Lens — `supabase/config.toml`** | Adicionar bloco para a função com `verify_jwt = false` (autenticação é via X-Service-Key) |
+| 4 | **Connect & Flow** (projeto separado) | No fluxo de atendimento, quando o cliente pedir status, coletar CPF ou OS e chamar `https://zmsfntqgxsstnbpzdled.supabase.co/functions/v1/os-status-public` com header `X-Service-Key`. Renderizar a resposta no chat |
 
-5 arquivos, mudanças focadas e consistentes entre os 3 fornecedores.
+## Contrato da Edge Function `os-status-public`
+
+**Request:**
+```json
+POST /functions/v1/os-status-public
+Headers: X-Service-Key: <secret compartilhado>
+Body: { "cpf": "12345678900" }   // ou { "os": "98765" }
+```
+
+**Response sucesso (200):**
+```json
+{
+  "encontrado": true,
+  "resultados": [
+    {
+      "os": "98765",
+      "etapa": "MONTAGEM",
+      "statusAtraso": "NO_PRAZO",
+      "atrasoDias": 0,
+      "dataPrevisao": "2026-04-22",
+      "dataEmissao": "2026-04-10",
+      "empresa": "PRIMITIVA I",
+      "cliente": "JOÃO DA SILVA",
+      "vendedor": "MARIA"
+    }
+  ]
+}
+```
+
+**Response não encontrado (200):**
+```json
+{ "encontrado": false, "mensagem": "Nenhuma OS encontrada para este CPF/OS." }
+```
+
+**Response erro (401/500):**
+```json
+{ "error": "X-Service-Key inválido" }
+```
+
+## Regras de busca
+
+- **Por CPF:** retorna até 5 OSs mais recentes (últimos 180 dias) do cliente, ordenadas por data de emissão desc. Útil quando o cliente tem mais de uma OS aberta
+- **Por OS:** retorna 1 resultado exato (match no número da OS)
+- **CPF:** normalizar removendo pontos, traços e espaços antes da query
+- **Sem dado sensível:** não expor telefone, valor total, endereço — só o necessário para informar status
+
+## Segurança
+
+- `X-Service-Key` validado contra `INTERNAL_SERVICE_SECRET` (já existe no Lens, mesma chave usada em payment-links e cross-login)
+- `verify_jwt = false` na função (não precisa de usuário autenticado, é serviço-a-serviço)
+- Rate limit implícito pelo throttle do Firebird Bridge
+- O Connect & Flow guarda o secret server-side, **nunca exposto ao navegador do cliente**
+
+## Próximos passos após aprovação
+
+1. Implementar endpoint no Firebird Bridge (você precisará deployar a bridge)
+2. Implementar Edge Function `os-status-public` no Lens (deploy automático)
+3. Testar via curl com `X-Service-Key`
+4. No projeto Connect & Flow, integrar a chamada no fluxo de atendimento
 
