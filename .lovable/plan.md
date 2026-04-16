@@ -1,75 +1,47 @@
 
 
-## Plano: Redesenhar o Plano de Compra — Visão objetiva e sem duplicação
+## Plano: Alertas pendentes visíveis e "Ciente" acessível para todos os fornecedores
 
-### Problemas identificados pelo usuário
+### Problemas
 
-1. **Datas de início/fim confusas** — Estoque é sempre atual. As datas só servem para o período de vendas (6 meses), mas aparecem como se controlassem o estoque
-2. **Dados duplicados** — "Peças" aparece na tabela de marcas, nos pilares, no estoque doente — tudo repetido
-3. **Mix Ideal não separa AR de OC** — Armações RX e Óculos Solar (SOL/OC) são agrupados juntos como "Armações"
-4. **Tabela de marcas não é acionável** — Mostra 50 marcas, "Repor Referências" e "Renovar Coleção" são labels genéricos sem dizer O QUE comprar
-5. **Estoque Doente é outra duplicata** — É a mesma visão do estoque atual com filtro de dias
-6. **Falta total de peças vendidas em 6 meses** — KPI básico ausente
+1. **Hoya**: O botão "Ciente" só aparece dentro do card do pedido (linha 582). Se o pedido não aparece na lista (filtro, paginação, lista vazia), não há como reconhecer o alerta
+2. **Zeiss e Haytek**: O backend já gera alertas na tabela `pedido_alertas` (zeiss-proxy e haytek-proxy fazem `upsert`), mas as páginas de tracking não consomem o hook `usePedidoAlertas` — sem banner, sem botão "Ciente"
+3. **Sidebar**: O badge só aparece no "Tracking Hoya" (`item.url === "/os/tracking"`), ignorando alertas de Zeiss e Haytek
 
-### Nova estrutura da página (sem duplicação)
-
-```text
-PLANO DE COMPRA
-├── KPIs (4 cards únicos, sem repetição)
-│   ├── Peças vendidas (6m)
-│   ├── Peças em estoque
-│   ├── Gap de compra (total OTB)
-│   └── Capital em risco (doente)
-│
-├── Mix Ideal (com AR, OC/SOL, LG, AC separados)
-│
-└── Relatório por Marca (tabela única e completa)
-    ├── Marca | Vendas 6m | Estoque | Gap | Peças a comprar
-    ├── Dentro: REPOR (refs específicas) | RENOVAR (qtd de novos modelos)
-    └── DESCARTAR (peças doentes com ação)
-```
-
-### Alterações técnicas
+### Solução
 
 | # | Arquivo | Mudança |
 |---|---|---|
-| 1 | `src/utils/categorizarProduto.ts` | Adicionar subcategoria `SOLAR` separada de `ARMACOES`. Novo tipo: `SubcategoriaProduto = 'AR_RX' \| 'AR_SOLAR' \| 'LENTES' \| 'ACESSORIOS' \| 'OUTROS'`. Função `subcategorizarProduto()` que detecta SOL/OC no tipo ERP |
-| 2 | `src/hooks/useEstoqueUnificado.ts` | (a) Remover campos `dataInicio`/`dataFim` dos filtros expostos — fixar internamente em 180 dias. (b) Adicionar `subcategoria` ao `ItemEstoque`. (c) Reformular `resumoPorMarca` para incluir: `pecasARepor` (lista de refs específicas Curva A/B com giro rápido), `pecasARenovar` (contagem de peças para novos modelos), `pecasDoentes` (com faixa de desconto). (d) Remover `estoqueDoenteAgrupado` separado — integrar dentro do resumo por marca. (e) Adicionar KPI `totalVendido6mPecas` |
-| 3 | `src/pages/estoque/AnaliseOTBPage.tsx` | Redesenho completo: (a) Remover seletor de datas (período fixo 180 dias, só escolhe empresa). (b) 4 KPI cards limpos no topo. (c) Mix Ideal com AR RX / OC Solar / Lentes / Acessórios. (d) Tabela única por marca com colunas: Marca, Vendas 6m, Estoque, Gap, Decisão. Ao expandir a marca: seção "Repor estas referências" (lista de SKUs específicos a recomprar) + "Escolher X novos modelos" (quantidade de peças que precisam ser de coleção nova) + "Estoque doente" (itens parados desta marca com ação sugerida). (e) Remover PilaresResumo, MixIdealSection, AcoesCompraSection, EstoqueDoenteSection como componentes separados |
+| 1 | `src/hooks/usePedidoAlertas.ts` | Enriquecer a query com join em `pedidos_fornecedor` para trazer `numero_pedido`, `cod_os` e `fornecedor`. Adicionar filtro opcional por fornecedor. Exportar tipo atualizado |
+| 2 | `src/pages/HoyaTrackingPage.tsx` | Adicionar seção "Alertas Pendentes" acima da lista de pedidos com botão "Ciente" direto — visível sempre que houver alertas Hoya não reconhecidos. Manter banner inline existente |
+| 3 | `src/pages/ZeissTrackingPage.tsx` | Importar `usePedidoAlertas`, adicionar mesma seção de alertas pendentes com botão "Ciente" e banner inline nos cards expandidos |
+| 4 | `src/pages/HaytekTrackingPage.tsx` | Idem Zeiss |
+| 5 | `src/components/layout/AppSidebar.tsx` | Mostrar badge em cada tracking page separadamente: contar alertas por fornecedor. Tracking Hoya mostra count Hoya, Zeiss mostra count Zeiss, Haytek mostra count Haytek |
 
-### Lógica por marca (dentro da expansão)
+### Detalhes do hook atualizado
 
-Para cada marca, o relatório mostra 3 blocos:
+```typescript
+// usePedidoAlertas(fornecedor?: string)
+// Query: select("*, pedidos_fornecedor!inner(numero_pedido, cod_os, fornecedor)")
+// Se fornecedor passado, filtra .eq("pedidos_fornecedor.fornecedor", fornecedor)
+// Retorna { alertas, countByFornecedor: { HOYA: 1, ZEISS: 1 }, ... }
+```
 
-**Bloco 1 — Repor referências** (verde)
-SKUs vendidos nos últimos 6m com giro < 90 dias ou Curva A/B. Lista com: Código, Descrição, Qtd vendida, Qtd em estoque, Qtd a comprar.
-
-**Bloco 2 — Novos modelos** (azul)
-"Comprar X peças de novos modelos/coleção" — quando a marca tem gap de compra mas as referências vendidas tinham giro lento (>= 90 dias). Mostra o número de peças a serem substituídas por novidades.
-
-**Bloco 3 — Estoque doente desta marca** (vermelho/laranja)
-Peças paradas >180 dias desta marca específica, com a ação sugerida (promoção 20%, liquidação 30%, etc.). Elimina a seção separada de "Estoque Doente" que duplicava dados.
-
-### Resultado visual
+### Seção visual de alertas (igual nos 3 trackings)
 
 ```text
-┌──────────────────────────────────────────────┐
-│  KPIs: 847 vendidas 6m │ 1.204 em estoque   │
-│        Gap: 156 pçs    │ R$ 12k doente       │
-├──────────────────────────────────────────────┤
-│  Mix: AR RX 45%→52% ▼ │ Solar 18%→12% ▲     │
-│       Lentes 30%→28%   │ Acess. 7%→8%        │
-├──────────────────────────────────────────────┤
-│  RAY-BAN    89 vendas │ 45 estoque │ +12 pçs │
-│  └─ Repor: RB5154 (3), RB7047 (2), ...      │
-│  └─ Doente: 4 pçs (Promoção 20%)            │
-│                                              │
-│  ARNETTE    8 vendas  │ 22 estoque │ +5 pçs  │
-│  └─ Renovar: Escolher 5 novos modelos        │
-│  └─ Doente: 14 pçs (Liquidação 30%)         │
-│                                              │
-│  MARCA X    0 vendas  │ 18 estoque │ 🔴      │
-│  └─ Descontinuar: 18 pçs para liquidação     │
-└──────────────────────────────────────────────┘
+┌─ ⚠️ 2 ALERTAS PENDENTES ──────────────────────────┐
+│ Pedido #12345 · OS 8899 · Cancelado · 14/04  [Ciente] │
+│ Pedido #12346 · OS 9001 · Erro      · 13/04  [Ciente] │
+└────────────────────────────────────────────────────────┘
 ```
+
+### Sidebar com badges por fornecedor
+
+No `AppSidebar`, ao invés de um único `unacknowledgedCount`, usar `countByFornecedor` do hook para mostrar o badge correto em cada URL:
+- `/os/tracking` → count HOYA
+- `/os/tracking-zeiss` → count ZEISS  
+- `/os/tracking-haytek` → count HAYTEK
+
+5 arquivos, mudanças focadas e consistentes entre os 3 fornecedores.
 
