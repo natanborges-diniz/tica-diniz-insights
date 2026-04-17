@@ -1,6 +1,7 @@
 
-User says backend deployed the new endpoint. Time to test end-to-end.
+User chose Option B: Edge Function enriches the response. No backend changes needed beyond what's already deployed. I'll update `os-status-public/index.ts` to:
+1. TRIM all string fields (defensive — handles Firebird CHAR padding)
+2. Add `etapaAmigavel` via dictionary lookup
+3. Add `mensagem` ready-to-display for the chatbot
 
-Plan: simple testing plan using supabase--curl_edge_functions to hit os-status-public, plus directly hitting the bridge to confirm. Need user to give a test OS or CPF, or I can try without — but better to ask for a real value.
-
-Actually the user just asked "quer testar?" — yes. Best to ask for a test value (OS or CPF) so I don't fire blind. Concise.
+Keep it concise.
