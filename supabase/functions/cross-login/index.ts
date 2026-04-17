@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
         "X-Service-Key": serviceSecret,
       },
-      body: JSON.stringify({ email, nome: profile?.nome || undefined }),
+      body: JSON.stringify({ email, nome: profile?.nome || undefined, departamento }),
     });
 
     if (!cfResponse.ok) {
