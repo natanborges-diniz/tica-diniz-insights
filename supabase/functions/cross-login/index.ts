@@ -30,6 +30,9 @@ Deno.serve(async (req) => {
       .eq("id", userId)
       .single();
 
+    const { data: userData } = await supabase.auth.admin.getUserById(userId);
+    const departamento = (userData?.user?.user_metadata as any)?.departamento || undefined;
+
     const serviceSecret = Deno.env.get("INTERNAL_SERVICE_SECRET");
     if (!serviceSecret) {
       console.error("[cross-login] INTERNAL_SERVICE_SECRET não configurado");
