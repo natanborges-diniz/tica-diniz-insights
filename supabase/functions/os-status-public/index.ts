@@ -1,6 +1,36 @@
 // supabase/functions/os-status-public/index.ts
 // Endpoint serviço-a-serviço para consulta de status de OS (chatbot Connect & Flow)
 // Auth: header X-Service-Key === INTERNAL_SERVICE_SECRET
+//
+// CONTRATO DE RESPOSTA (v2):
+// {
+//   encontrado: boolean,
+//   resultados?: [{
+//     os: string,
+//     cliente: string,
+//     empresa: string,
+//     vendedor: string,
+//
+//     // PUBLICO: campos seguros para exibir ao cliente final.
+//     // O chatbot (Connect & Flow) deve compor a mensagem a partir daqui.
+//     publico: {
+//       etapa: string,             // texto neutro humanizado, sem dramatizar
+//       pronto: boolean,           // true => na loja ou entregue (roteiro de retirada)
+//       entregue: boolean,         // true => já foi retirado pelo cliente
+//       previsaoEntrega: string    // DD/MM/YYYY ou "—"
+//     },
+//
+//     // INTERNO: contexto operacional. NÃO repassar literalmente ao cliente.
+//     // Use para acionar operador, registrar no CRM, escalar atendimento.
+//     interno: {
+//       etapaErp: string,          // texto bruto do ERP
+//       statusAtraso: string,      // NO_PRAZO | ATRASO_LEVE | ATRASO_GRAVE | ENTREGUE
+//       atrasoDias: number,
+//       dataEmissao: string|null,  // DD/MM/YYYY
+//       dataSaida: string|null     // DD/MM/YYYY
+//     }
+//   }]
+// }
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -27,19 +57,35 @@ interface ConsultaResultadoBruto {
   vendedor: string;
 }
 
-interface ConsultaResultado extends ConsultaResultadoBruto {
-  etapaAmigavel: string;
-  mensagem: string;
+interface ConsultaResultado {
+  os: string;
+  cliente: string;
+  empresa: string;
+  vendedor: string;
+  publico: {
+    etapa: string;
+    pronto: boolean;
+    entregue: boolean;
+    previsaoEntrega: string;
+  };
+  interno: {
+    etapaErp: string;
+    statusAtraso: string;
+    atrasoDias: number;
+    dataEmissao: string | null;
+    dataSaida: string | null;
+  };
 }
 
-// Mapa de etapa do ERP → texto amigável para o cliente final
+// Mapa de etapa do ERP → texto neutro para o cliente final.
+// Sem alarmismo, sem instruções, sem CTA. O chatbot decide o roteiro.
 const ETAPA_AMIGAVEL: Record<string, string> = {
   "ordem de serviço emitida": "Pedido registrado",
   "ordem de serviço enviada ao laboratório": "Enviado ao laboratório",
   "ordem de serviço no laboratório": "Em produção no laboratório",
   "ordem de serviço enviada à loja": "A caminho da loja",
-  "ordem de serviço na loja": "Pronto para retirada na loja",
-  "ordem de serviço entregue": "Entregue ao cliente",
+  "ordem de serviço na loja": "Disponível na loja",
+  "ordem de serviço entregue": "Entregue",
 };
 
 function trimStr(v: unknown): string {
@@ -53,52 +99,50 @@ function humanizarEtapa(etapa: string): string {
 
 function formatarDataBR(iso: string | null): string {
   if (!iso) return "—";
-  // aceita "YYYY-MM-DD" ou ISO completo
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return iso;
   return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
-function montarMensagem(r: ConsultaResultadoBruto, etapaAmigavel: string): string {
-  const status = r.statusAtraso.toUpperCase();
-  const numero = r.os;
-  const previsao = formatarDataBR(r.dataPrevisao);
-  const empresa = r.empresa || "loja";
+function formatarDataBROrNull(iso: string | null): string | null {
+  if (!iso) return null;
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return iso;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
 
-  if (status === "ENTREGUE" || /entregue/i.test(r.etapa)) {
-    return `Sua OS ${numero} foi entregue. Obrigado pela preferência!`;
-  }
+function isProntoParaRetirada(etapaErp: string, statusAtraso: string): boolean {
+  const e = etapaErp.toLowerCase();
+  return e.includes("na loja") || e.includes("entregue") || statusAtraso.toUpperCase() === "ENTREGUE";
+}
 
-  if (status === "NO_PRAZO") {
-    return `Sua OS ${numero} está: ${etapaAmigavel}. Previsão de entrega: ${previsao}.`;
-  }
-
-  if (status.startsWith("ATRASO")) {
-    const dias = r.atrasoDias || 0;
-    const plural = dias === 1 ? "dia" : "dias";
-    return `Sua OS ${numero} está: ${etapaAmigavel}. Atenção: ${dias} ${plural} de atraso (previsão original: ${previsao}). Recomendamos contato com a loja ${empresa}.`;
-  }
-
-  // fallback
-  return `Sua OS ${numero} está: ${etapaAmigavel}. Previsão: ${previsao}.`;
+function isEntregue(etapaErp: string, statusAtraso: string): boolean {
+  return /entregue/i.test(etapaErp) || statusAtraso.toUpperCase() === "ENTREGUE";
 }
 
 function normalizarResultado(raw: ConsultaResultadoBruto): ConsultaResultado {
-  const limpo: ConsultaResultadoBruto = {
+  const etapaErp = trimStr(raw.etapa);
+  const statusAtraso = trimStr(raw.statusAtraso);
+
+  return {
     os: trimStr(raw.os),
-    etapa: trimStr(raw.etapa),
-    statusAtraso: trimStr(raw.statusAtraso),
-    atrasoDias: Number(raw.atrasoDias) || 0,
-    dataPrevisao: raw.dataPrevisao ? trimStr(raw.dataPrevisao) : null,
-    dataEmissao: raw.dataEmissao ? trimStr(raw.dataEmissao) : null,
-    dataSaida: raw.dataSaida ? trimStr(raw.dataSaida) : null,
-    empresa: trimStr(raw.empresa),
     cliente: trimStr(raw.cliente),
+    empresa: trimStr(raw.empresa),
     vendedor: trimStr(raw.vendedor),
+    publico: {
+      etapa: humanizarEtapa(etapaErp),
+      pronto: isProntoParaRetirada(etapaErp, statusAtraso),
+      entregue: isEntregue(etapaErp, statusAtraso),
+      previsaoEntrega: formatarDataBR(raw.dataPrevisao ? trimStr(raw.dataPrevisao) : null),
+    },
+    interno: {
+      etapaErp,
+      statusAtraso,
+      atrasoDias: Number(raw.atrasoDias) || 0,
+      dataEmissao: formatarDataBROrNull(raw.dataEmissao ? trimStr(raw.dataEmissao) : null),
+      dataSaida: formatarDataBROrNull(raw.dataSaida ? trimStr(raw.dataSaida) : null),
+    },
   };
-  const etapaAmigavel = humanizarEtapa(limpo.etapa);
-  const mensagem = montarMensagem(limpo, etapaAmigavel);
-  return { ...limpo, etapaAmigavel, mensagem };
 }
 
 serve(async (req) => {
@@ -164,7 +208,6 @@ serve(async (req) => {
     if (data.length === 0) {
       return json({
         encontrado: false,
-        mensagem: "Nenhuma OS encontrada para este CPF/OS.",
       });
     }
 
