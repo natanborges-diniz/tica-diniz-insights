@@ -14,7 +14,7 @@ const BRIDGE_URL =
   Deno.env.get("FIREBIRD_BRIDGE_URL") ||
   "https://firebird-bridge-production.up.railway.app";
 
-interface ConsultaResultado {
+interface ConsultaResultadoBruto {
   os: string;
   etapa: string;
   statusAtraso: string;
@@ -25,6 +25,80 @@ interface ConsultaResultado {
   empresa: string;
   cliente: string;
   vendedor: string;
+}
+
+interface ConsultaResultado extends ConsultaResultadoBruto {
+  etapaAmigavel: string;
+  mensagem: string;
+}
+
+// Mapa de etapa do ERP → texto amigável para o cliente final
+const ETAPA_AMIGAVEL: Record<string, string> = {
+  "ordem de serviço emitida": "Pedido registrado",
+  "ordem de serviço enviada ao laboratório": "Enviado ao laboratório",
+  "ordem de serviço no laboratório": "Em produção no laboratório",
+  "ordem de serviço enviada à loja": "A caminho da loja",
+  "ordem de serviço na loja": "Pronto para retirada na loja",
+  "ordem de serviço entregue": "Entregue ao cliente",
+};
+
+function trimStr(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+function humanizarEtapa(etapa: string): string {
+  const key = etapa.toLowerCase().trim();
+  return ETAPA_AMIGAVEL[key] || etapa || "Em processamento";
+}
+
+function formatarDataBR(iso: string | null): string {
+  if (!iso) return "—";
+  // aceita "YYYY-MM-DD" ou ISO completo
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return iso;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+function montarMensagem(r: ConsultaResultadoBruto, etapaAmigavel: string): string {
+  const status = r.statusAtraso.toUpperCase();
+  const numero = r.os;
+  const previsao = formatarDataBR(r.dataPrevisao);
+  const empresa = r.empresa || "loja";
+
+  if (status === "ENTREGUE" || /entregue/i.test(r.etapa)) {
+    return `Sua OS ${numero} foi entregue. Obrigado pela preferência!`;
+  }
+
+  if (status === "NO_PRAZO") {
+    return `Sua OS ${numero} está: ${etapaAmigavel}. Previsão de entrega: ${previsao}.`;
+  }
+
+  if (status.startsWith("ATRASO")) {
+    const dias = r.atrasoDias || 0;
+    const plural = dias === 1 ? "dia" : "dias";
+    return `Sua OS ${numero} está: ${etapaAmigavel}. Atenção: ${dias} ${plural} de atraso (previsão original: ${previsao}). Recomendamos contato com a loja ${empresa}.`;
+  }
+
+  // fallback
+  return `Sua OS ${numero} está: ${etapaAmigavel}. Previsão: ${previsao}.`;
+}
+
+function normalizarResultado(raw: ConsultaResultadoBruto): ConsultaResultado {
+  const limpo: ConsultaResultadoBruto = {
+    os: trimStr(raw.os),
+    etapa: trimStr(raw.etapa),
+    statusAtraso: trimStr(raw.statusAtraso),
+    atrasoDias: Number(raw.atrasoDias) || 0,
+    dataPrevisao: raw.dataPrevisao ? trimStr(raw.dataPrevisao) : null,
+    dataEmissao: raw.dataEmissao ? trimStr(raw.dataEmissao) : null,
+    dataSaida: raw.dataSaida ? trimStr(raw.dataSaida) : null,
+    empresa: trimStr(raw.empresa),
+    cliente: trimStr(raw.cliente),
+    vendedor: trimStr(raw.vendedor),
+  };
+  const etapaAmigavel = humanizarEtapa(limpo.etapa);
+  const mensagem = montarMensagem(limpo, etapaAmigavel);
+  return { ...limpo, etapaAmigavel, mensagem };
 }
 
 serve(async (req) => {
@@ -85,7 +159,7 @@ serve(async (req) => {
       );
     }
 
-    const data: ConsultaResultado[] = envelope?.data ?? [];
+    const data: ConsultaResultadoBruto[] = envelope?.data ?? [];
 
     if (data.length === 0) {
       return json({
@@ -94,7 +168,9 @@ serve(async (req) => {
       });
     }
 
-    return json({ encontrado: true, resultados: data });
+    const resultados = data.map(normalizarResultado);
+
+    return json({ encontrado: true, resultados });
   } catch (err) {
     console.error("[os-status-public] erro:", err);
     return json({ error: err instanceof Error ? err.message : "Erro desconhecido" }, 500);
