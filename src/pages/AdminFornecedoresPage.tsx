@@ -1202,11 +1202,12 @@ function EmpresasTable({
 // ─────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────
-const FORNECEDORES = ["HOYA", "ZEISS", "HAYTEK"] as const;
+const FORNECEDORES = ["HOYA", "ZEISS", "HAYTEK", "OPTVIEW"] as const;
 const FORNECEDOR_LABELS: Record<string, string> = {
   HOYA: "Hoya",
   ZEISS: "Zeiss",
   HAYTEK: "Haytek (Dmax)",
+  OPTVIEW: "OptView",
 };
 
 export default function AdminFornecedoresPage() {
@@ -1313,7 +1314,13 @@ export default function AdminFornecedoresPage() {
                       <CredenciaisSection config={cfg} onSaved={fetchConfigs} fornecedor={fornecedor} />
                     </TabsContent>
                     <TabsContent value="empresas" className="mt-4">
-                      {fornecedor === "ZEISS" ? <ZeissEmpresasSection /> : fornecedor === "HAYTEK" ? <HaytekEmpresasSection /> : <EmpresasSection />}
+                      {fornecedor === "ZEISS"
+                        ? <ZeissEmpresasSection />
+                        : fornecedor === "HAYTEK"
+                          ? <HaytekEmpresasSection />
+                          : fornecedor === "OPTVIEW"
+                            ? <OptviewEmpresasSection />
+                            : <EmpresasSection />}
                     </TabsContent>
                   </Tabs>
                 </div>
