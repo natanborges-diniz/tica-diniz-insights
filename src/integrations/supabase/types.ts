@@ -1212,6 +1212,177 @@ export type Database = {
         }
         Relationships: []
       }
+      optview_empresa_config: {
+        Row: {
+          alias: string | null
+          ativo: boolean
+          cnpj: string | null
+          cod_empresa: number
+          codigo_cadastral_optview: string | null
+          created_at: string
+          id: string
+          login_restrito: string | null
+          login_site: string | null
+          senha_site: string | null
+          updated_at: string
+        }
+        Insert: {
+          alias?: string | null
+          ativo?: boolean
+          cnpj?: string | null
+          cod_empresa: number
+          codigo_cadastral_optview?: string | null
+          created_at?: string
+          id?: string
+          login_restrito?: string | null
+          login_site?: string | null
+          senha_site?: string | null
+          updated_at?: string
+        }
+        Update: {
+          alias?: string | null
+          ativo?: boolean
+          cnpj?: string | null
+          cod_empresa?: number
+          codigo_cadastral_optview?: string | null
+          created_at?: string
+          id?: string
+          login_restrito?: string | null
+          login_site?: string | null
+          senha_site?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      optview_modelos_aro: {
+        Row: {
+          ativo: boolean
+          codigo_modelo_aro: string
+          created_at: string
+          id: string
+          nome_modelo_aro: string
+          observacao: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          codigo_modelo_aro: string
+          created_at?: string
+          id?: string
+          nome_modelo_aro: string
+          observacao?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          codigo_modelo_aro?: string
+          created_at?: string
+          id?: string
+          nome_modelo_aro?: string
+          observacao?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      optview_produtos: {
+        Row: {
+          ativo: boolean
+          codigo_produto: string
+          created_at: string
+          desenho: string | null
+          id: string
+          material: string | null
+          nome_produto: string
+          observacao: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          codigo_produto: string
+          created_at?: string
+          desenho?: string | null
+          id?: string
+          material?: string | null
+          nome_produto: string
+          observacao?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          codigo_produto?: string
+          created_at?: string
+          desenho?: string | null
+          id?: string
+          material?: string | null
+          nome_produto?: string
+          observacao?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      optview_servicos: {
+        Row: {
+          ativo: boolean
+          categoria_servico: string | null
+          codigo_servico: string
+          created_at: string
+          id: string
+          nome_servico: string
+          observacao: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          categoria_servico?: string | null
+          codigo_servico: string
+          created_at?: string
+          id?: string
+          nome_servico: string
+          observacao?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          categoria_servico?: string | null
+          codigo_servico?: string
+          created_at?: string
+          id?: string
+          nome_servico?: string
+          observacao?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      optview_tipos_armacao: {
+        Row: {
+          ativo: boolean
+          codigo_tipo_armacao: string
+          created_at: string
+          id: string
+          nome_tipo_armacao: string
+          observacao: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          codigo_tipo_armacao: string
+          created_at?: string
+          id?: string
+          nome_tipo_armacao: string
+          observacao?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          codigo_tipo_armacao?: string
+          created_at?: string
+          id?: string
+          nome_tipo_armacao?: string
+          observacao?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       os_hub_receitas: {
         Row: {
           atraso_dias: number | null
