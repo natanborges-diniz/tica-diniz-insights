@@ -652,6 +652,29 @@ interface HaytekEditingRow {
   alias: string;
 }
 
+interface OptviewEmpresaConfig {
+  id: string;
+  cod_empresa: number;
+  alias: string | null;
+  cnpj: string | null;
+  codigo_cadastral_optview: string | null;
+  login_site: string | null;
+  senha_site: string | null;
+  login_restrito: string | null;
+  ativo: boolean;
+  updated_at: string;
+}
+
+interface OptviewEditingRow {
+  alias: string;
+  cnpj: string;
+  codigo_cadastral_optview: string;
+  login_site: string;
+  senha_site: string;
+  login_restrito: string;
+  ativo: boolean;
+}
+
 function HaytekEmpresasSection() {
   const [configs, setConfigs] = useState<HaytekEmpresaConfig[]>([]);
   const [loading, setLoading] = useState(true);
@@ -809,6 +832,215 @@ function HaytekEmpresasSection() {
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+function OptviewEmpresasSection() {
+  const [configs, setConfigs] = useState<OptviewEmpresaConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Record<string, OptviewEditingRow>>({});
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("optview_empresa_config" as never)
+      .select("*")
+      .order("cod_empresa");
+
+    if (error) {
+      toast({ title: "Erro ao carregar", description: error.message, variant: "destructive" });
+    } else if (data) {
+      const rows = data as OptviewEmpresaConfig[];
+      setConfigs(rows);
+      const initial: Record<string, OptviewEditingRow> = {};
+      rows.forEach((r) => {
+        initial[r.id] = {
+          alias: r.alias || "",
+          cnpj: formatCnpjDisplay((r.cnpj || "").replace(/\D/g, "")),
+          codigo_cadastral_optview: r.codigo_cadastral_optview || "",
+          login_site: r.login_site || "",
+          senha_site: r.senha_site || "",
+          login_restrito: r.login_restrito || "",
+          ativo: r.ativo,
+        };
+      });
+      setEditing(initial);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleChange = (id: string, field: keyof OptviewEditingRow, value: string | boolean) => {
+    setEditing((prev) => {
+      const current = prev[id];
+      if (!current) return prev;
+
+      if (field === "cnpj" && typeof value === "string") {
+        return { ...prev, [id]: { ...current, cnpj: formatCnpj(value) } };
+      }
+
+      return { ...prev, [id]: { ...current, [field]: value } };
+    });
+  };
+
+  const handleSave = async (config: OptviewEmpresaConfig) => {
+    const row = editing[config.id];
+    if (!row) return;
+
+    setSaving(config.id);
+    const { error } = await supabase
+      .from("optview_empresa_config" as never)
+      .update({
+        alias: row.alias.trim() || null,
+        cnpj: row.cnpj.replace(/\D/g, "") || null,
+        codigo_cadastral_optview: row.codigo_cadastral_optview.trim() || null,
+        login_site: row.login_site.trim() || null,
+        senha_site: row.senha_site.trim() || null,
+        login_restrito: row.login_restrito.trim() || null,
+        ativo: row.ativo,
+      } as never)
+      .eq("id", config.id);
+
+    if (error) {
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Empresa ${config.cod_empresa} atualizada` });
+      fetchData();
+    }
+    setSaving(null);
+  };
+
+  const isChanged = (config: OptviewEmpresaConfig) => {
+    const row = editing[config.id];
+    if (!row) return false;
+    return (
+      row.alias !== (config.alias || "") ||
+      row.cnpj.replace(/\D/g, "") !== (config.cnpj || "").replace(/\D/g, "") ||
+      row.codigo_cadastral_optview !== (config.codigo_cadastral_optview || "") ||
+      row.login_site !== (config.login_site || "") ||
+      row.senha_site !== (config.senha_site || "") ||
+      row.login_restrito !== (config.login_restrito || "") ||
+      row.ativo !== config.ativo
+    );
+  };
+
+  const totalOk = configs.filter((config) => {
+    const row = editing[config.id];
+    return Boolean(row?.alias.trim() && row?.login_site.trim() && row?.senha_site.trim());
+  }).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card><CardContent className="pt-5">
+          <div className="text-2xl font-bold">{configs.length}</div>
+          <p className="text-xs text-muted-foreground mt-1">Lojas OptView</p>
+        </CardContent></Card>
+        <Card><CardContent className="pt-5">
+          <div className="text-2xl font-bold text-primary">{totalOk}</div>
+          <p className="text-xs text-muted-foreground mt-1">Configuradas</p>
+        </CardContent></Card>
+        <Card><CardContent className="pt-5">
+          <div className="text-2xl font-bold text-muted-foreground">{configs.length - totalOk}</div>
+          <p className="text-xs text-muted-foreground mt-1">Pendentes</p>
+        </CardContent></Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-primary" />
+            Empresas OptView
+          </CardTitle>
+          <CardDescription>
+            Configure login e senha por loja para que o pedido carregue automaticamente a credencial correta pelo código da empresa.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+            O alias deve seguir o padrão interno da loja para rastreabilidade do payload e auditoria operacional.
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-14">Cód.</TableHead>
+                  <TableHead className="min-w-[180px]">Alias</TableHead>
+                  <TableHead className="min-w-[150px]">Login</TableHead>
+                  <TableHead className="min-w-[160px]">Senha</TableHead>
+                  <TableHead className="min-w-[130px]">Login restrito</TableHead>
+                  <TableHead className="min-w-[150px]">Código cadastral</TableHead>
+                  <TableHead className="w-[150px]">CNPJ</TableHead>
+                  <TableHead className="w-24">Status</TableHead>
+                  <TableHead className="w-20">Ativo</TableHead>
+                  <TableHead className="w-20 text-right">Ação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {configs.map((config) => {
+                  const row = editing[config.id];
+                  if (!row) return null;
+                  const changed = isChanged(config);
+                  const isSaving = saving === config.id;
+                  const isConfigured = Boolean(row.alias.trim() && row.login_site.trim() && row.senha_site.trim());
+                  const showPassword = showPasswords[config.id] || false;
+
+                  return (
+                    <TableRow key={config.id} className={changed ? "bg-muted/50" : ""}>
+                      <TableCell className="font-mono font-bold text-muted-foreground text-sm">{config.cod_empresa}</TableCell>
+                      <TableCell>
+                        <Input className="h-8 text-sm" value={row.alias} onChange={(e) => handleChange(config.id, "alias", e.target.value)} placeholder="Nome da loja" />
+                      </TableCell>
+                      <TableCell>
+                        <Input className="h-8 text-sm font-mono" value={row.login_site} onChange={(e) => handleChange(config.id, "login_site", e.target.value)} placeholder="usuario@optview" />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Input className="h-8 text-sm font-mono" type={showPassword ? "text" : "password"} value={row.senha_site} onChange={(e) => handleChange(config.id, "senha_site", e.target.value)} placeholder="••••••••" />
+                          <Button type="button" variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => setShowPasswords((prev) => ({ ...prev, [config.id]: !showPassword }))}>
+                            {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Input className="h-8 text-sm font-mono" value={row.login_restrito} onChange={(e) => handleChange(config.id, "login_restrito", e.target.value)} placeholder="Opcional" />
+                      </TableCell>
+                      <TableCell>
+                        <Input className="h-8 text-sm font-mono" value={row.codigo_cadastral_optview} onChange={(e) => handleChange(config.id, "codigo_cadastral_optview", e.target.value)} placeholder="CD_CODIGOCADASTRAL" />
+                      </TableCell>
+                      <TableCell>
+                        <Input className="h-8 text-sm font-mono" value={row.cnpj} onChange={(e) => handleChange(config.id, "cnpj", e.target.value)} placeholder="00.000.000/0001-00" maxLength={18} />
+                      </TableCell>
+                      <TableCell>
+                        {isConfigured ? (
+                          <Badge variant="default" className="text-xs">Configurada</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">Pendente</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Switch checked={row.ativo} onCheckedChange={(checked) => handleChange(config.id, "ativo", checked)} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="sm" variant={changed ? "default" : "ghost"} className="h-8" onClick={() => handleSave(config)} disabled={!changed || isSaving}>
+                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
