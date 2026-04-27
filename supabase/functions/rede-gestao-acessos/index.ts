@@ -30,14 +30,14 @@ const corsHeaders = {
  * a REDE emite um par OAuth distinto do Gestão de Vendas (confirmado por e-mail oficial).
  */
 
-// OAuth token endpoint (Basic auth)
+// Base URLs por ambiente (confirmado em https://developer.userede.com.br/gestao-acessos)
+//   Sandbox:    https://rl7-sandbox-api.useredecloud.com.br
+//   Produção:   https://api.userede.com.br/redelabs
+// O mesmo base é usado para OAuth e para a API de Gestão de Acessos.
 const SANDBOX_OAUTH_BASE = "https://rl7-sandbox-api.useredecloud.com.br";
 const PRODUCTION_OAUTH_BASE = "https://api.userede.com.br/redelabs";
-
-// API Access Management endpoint base (NOTE: produção NÃO usa o prefixo /redelabs aqui;
-// caso contrário a rota cai no bucket de objetos estáticos da Akamai e devolve 405 XML)
 const SANDBOX_API_BASE = "https://rl7-sandbox-api.useredecloud.com.br";
-const PRODUCTION_API_BASE = "https://api.userede.com.br";
+const PRODUCTION_API_BASE = "https://api.userede.com.br/redelabs";
 
 type Action =
   | "solicitar_compartilhamento"
