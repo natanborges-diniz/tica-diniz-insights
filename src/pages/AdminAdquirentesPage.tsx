@@ -33,6 +33,13 @@ interface AdquirenteConfig {
   ativo: boolean;
   created_at: string;
   updated_at: string;
+  gv_optin_status?: string | null;
+  gv_optin_requested_at?: string | null;
+  gv_optin_reference?: string | null;
+  gv_approved_at?: string | null;
+  gv_last_healthcheck_at?: string | null;
+  gv_last_healthcheck_status?: string | null;
+  gv_last_healthcheck_message?: string | null;
 }
 
 interface EditForm {
@@ -47,6 +54,128 @@ interface EditForm {
 }
 
 const ADQUIRENTES = ["REDE", "CIELO", "STONE", "PAGSEGURO", "GETNET"];
+
+type OptinAction = "solicitar_optin" | "registrar_aceite" | "reset";
+
+function ActivationGVBlock({
+  config,
+  form,
+  onOptin,
+  onTestProd,
+  busy,
+}: {
+  config: AdquirenteConfig;
+  form: EditForm;
+  onOptin: (a: OptinAction) => void;
+  onTestProd: () => void;
+  busy: string | null;
+}) {
+  const status = config.gv_optin_status || "NAO_SOLICITADO";
+  const hasCreds = !!form.merchant_id_production && !!form.integration_key_production;
+  const hasPvMatriz = !!form.pv_matriz_production;
+  const isProd = form.ambiente === "production";
+  const optinRequested = !!config.gv_optin_requested_at;
+  const approved = status === "APROVADO" || !!config.gv_approved_at;
+  const healthOk = config.gv_last_healthcheck_status === "ATIVA";
+
+  const fmt = (iso?: string | null) =>
+    iso ? new Date(iso).toLocaleString("pt-BR") : "—";
+
+  const Step = ({ done, label, hint }: { done: boolean; label: string; hint?: string }) => (
+    <div className="flex items-start gap-2">
+      {done ? (
+        <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" />
+      ) : (
+        <AlertCircle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
+      )}
+      <div className="text-xs">
+        <div className={done ? "text-foreground" : "text-muted-foreground"}>{label}</div>
+        {hint && <div className="text-[10px] text-muted-foreground">{hint}</div>}
+      </div>
+    </div>
+  );
+
+  const statusBadge = approved
+    ? <Badge className="bg-success/15 text-success border-success/30 text-[10px]">APROVADO</Badge>
+    : status === "AGUARDANDO_ACEITE"
+      ? <Badge className="bg-warning/15 text-warning border-warning/30 text-[10px]">AGUARDANDO ACEITE</Badge>
+      : <Badge variant="secondary" className="text-[10px]">NÃO SOLICITADO</Badge>;
+
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">Ativação Gestão de Vendas (Produção)</span>
+          {statusBadge}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <Step done={hasCreds} label="Credenciais OAuth de produção cadastradas" />
+        <Step done={hasPvMatriz} label="PV Matriz de produção preenchido" />
+        <Step done={isProd} label="Ambiente ativo: PRODUÇÃO" hint={isProd ? undefined : "Alterne o toggle no topo"} />
+        <Step
+          done={optinRequested}
+          label="Opt-in solicitado"
+          hint={optinRequested ? `em ${fmt(config.gv_optin_requested_at)}` : "Dispare a solicitação"}
+        />
+        <Step
+          done={approved}
+          label="Aceite confirmado no portal da REDE"
+          hint={approved ? `em ${fmt(config.gv_approved_at)}` : "Aprove com perfil master no portal"}
+        />
+        <Step
+          done={healthOk}
+          label="Teste de conectividade aprovado"
+          hint={config.gv_last_healthcheck_at ? `último: ${fmt(config.gv_last_healthcheck_at)} — ${config.gv_last_healthcheck_status}` : "Execute o teste"}
+        />
+      </div>
+
+      {config.gv_last_healthcheck_message && !healthOk && (
+        <div className="text-[11px] text-destructive bg-destructive/10 p-2 rounded">
+          {config.gv_last_healthcheck_message}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-1.5 pt-1 border-t border-primary/10">
+        <Button
+          size="sm" variant="outline" className="text-xs"
+          disabled={!!busy || !hasCreds}
+          onClick={() => onOptin("solicitar_optin")}
+        >
+          {busy === `${config.id}-optin-solicitar_optin` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+          Solicitar Opt-in
+        </Button>
+        <Button
+          size="sm" variant="outline" className="text-xs"
+          disabled={!!busy || !optinRequested || approved}
+          onClick={() => onOptin("registrar_aceite")}
+        >
+          {busy === `${config.id}-optin-registrar_aceite` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+          Registrar Aceite
+        </Button>
+        <Button
+          size="sm" variant="outline" className="text-xs"
+          disabled={!!busy || !hasCreds || !hasPvMatriz}
+          onClick={onTestProd}
+        >
+          {busy === `${config.id}-gv-production` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
+          Validar Ativação
+        </Button>
+        {(optinRequested || approved) && (
+          <Button
+            size="sm" variant="ghost" className="text-xs text-muted-foreground"
+            disabled={!!busy}
+            onClick={() => onOptin("reset")}
+          >
+            Reiniciar
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function AdminAdquirentesPage() {
   const { isAdmin } = useAuth();
@@ -210,13 +339,62 @@ export default function AdminAdquirentesPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error) throw error;
+
+      // Persist healthcheck status (production only — sandbox é exploratório)
+      if (targetAmbiente === "production") {
+        await supabase
+          .from("adquirentes_config")
+          .update({
+            gv_last_healthcheck_at: new Date().toISOString(),
+            gv_last_healthcheck_status: data?.status || (data?.ok ? "ATIVA" : "ERRO"),
+            gv_last_healthcheck_message: data?.error || null,
+          } as any)
+          .eq("id", config.id);
+      }
+
       if (data?.ok) {
         toast.success(`Gestão de Vendas OK — ${data.ambiente}`);
+      } else if (data?.status === "AGUARDANDO_OPTIN") {
+        toast.warning("Aguardando aceite do Opt-in no portal da REDE");
+      } else if (data?.status === "CREDENCIAIS_INVALIDAS") {
+        toast.error("Credenciais inválidas para o PV consultado");
       } else {
         toast.error(`Falha GV: ${data?.error || "Erro desconhecido"}`);
       }
+      fetchConfigs();
     } catch (e) {
       toast.error(`Erro GV: ${(e as Error).message}`);
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const handleOptinAction = async (
+    config: AdquirenteConfig,
+    action: "solicitar_optin" | "registrar_aceite" | "reset",
+  ) => {
+    const testId = `${config.id}-optin-${action}`;
+    setTesting(testId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sessão expirada");
+
+      const { data, error } = await supabase.functions.invoke("rede-gestao-acessos", {
+        body: { action, cod_empresa: config.cod_empresa },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const labels: Record<string, string> = {
+        solicitar_optin: "Solicitação de Opt-in registrada",
+        registrar_aceite: "Aceite registrado — integração marcada como aprovada",
+        reset: "Status de Opt-in reiniciado",
+      };
+      toast.success(labels[action]);
+      fetchConfigs();
+    } catch (e) {
+      toast.error(`Erro Opt-in: ${(e as Error).message}`);
     } finally {
       setTesting(null);
     }
@@ -484,6 +662,16 @@ export default function AdminAdquirentesPage() {
                       <CredentialFields config={config} ambiente="production" form={form} />
                     </TabsContent>
                   </Tabs>
+
+                  {config.adquirente === "REDE" && (
+                    <ActivationGVBlock
+                      config={config}
+                      form={form}
+                      onOptin={(action) => handleOptinAction(config, action)}
+                      onTestProd={() => handleTestGV(config, "production")}
+                      busy={testing}
+                    />
+                  )}
 
                   {/* Actions */}
                   <div className="flex items-center justify-between pt-1 border-t">

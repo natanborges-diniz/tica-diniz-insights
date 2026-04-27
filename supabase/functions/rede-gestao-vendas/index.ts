@@ -56,6 +56,33 @@ async function getOAuthToken(baseUrl: string): Promise<string> {
   return token;
 }
 
+// Classifica erros operacionais comuns da REDE em produção
+function classifyApiError(status: number, text: string): { code: string; message: string } {
+  const lower = text.toLowerCase();
+  if (status === 401 || status === 403) {
+    if (lower.includes("opt") || lower.includes("consent") || lower.includes("authorization") || lower.includes("not shared") || lower.includes("compartilh")) {
+      return {
+        code: "GV_OPTIN_PENDING",
+        message: "Acesso aguardando aceite no portal da REDE (Opt-in não aprovado para o PV).",
+      };
+    }
+    return {
+      code: "GV_INVALID_CREDENTIALS",
+      message: "Credenciais inválidas ou sem permissão para o PV consultado.",
+    };
+  }
+  if (status === 404) {
+    return { code: "GV_PV_NOT_FOUND", message: "PV não encontrado ou sem vínculo com a credencial." };
+  }
+  if (status === 429) {
+    return { code: "GV_RATE_LIMITED", message: "Limite de requisições excedido na API REDE." };
+  }
+  return {
+    code: "GV_API_ERROR",
+    message: `Rede Gestão Vendas API ${status}: ${text.slice(0, 300)}`,
+  };
+}
+
 async function apiRequest(
   baseUrl: string,
   path: string,
@@ -83,7 +110,11 @@ async function apiRequest(
 
   if (!res.ok) {
     console.error(`[rede-gv] API ${res.status}:`, text.slice(0, 500));
-    throw new Error(`Rede Gestão Vendas API ${res.status}: ${text.slice(0, 300)}`);
+    const classified = classifyApiError(res.status, text);
+    const err = new Error(classified.message) as Error & { code?: string; status?: number };
+    err.code = classified.code;
+    err.status = res.status;
+    throw err;
   }
 
   return parsed;
@@ -91,6 +122,23 @@ async function apiRequest(
 
 function resolveBaseUrl(ambiente?: string): string {
   return ambiente === "production" ? PRODUCTION_BASE_URL : SANDBOX_BASE_URL;
+}
+
+// Em sandbox, a documentação manda omitir `subsidiaries`.
+// Em produção, só envia se foi passado explicitamente.
+function applySubsidiariesPolicy(
+  qp: Record<string, string>,
+  ambiente: string | undefined,
+  subsidiaries?: string,
+) {
+  const isSandbox = ambiente !== "production";
+  if (isSandbox) {
+    delete qp.subsidiaries;
+    return;
+  }
+  if (subsidiaries && subsidiaries.trim().length > 0) {
+    qp.subsidiaries = subsidiaries;
+  }
 }
 
 serve(async (req) => {
@@ -111,17 +159,16 @@ serve(async (req) => {
 
     switch (action) {
       case "consultar_vendas": {
-        // GET /merchant-statement/v1/sales
         if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
         if (!params.startDate) throw new Error("startDate é obrigatório (YYYY-MM-DD)");
         if (!params.endDate) throw new Error("endDate é obrigatório (YYYY-MM-DD)");
 
         const qp: Record<string, string> = {
           parentCompanyNumber: params.parentCompanyNumber,
-          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
           startDate: params.startDate,
           endDate: params.endDate,
         };
+        applySubsidiariesPolicy(qp, ambiente, params.subsidiaries);
         if (params.brands) qp.brands = params.brands;
         if (params.modalities) qp.modalities = params.modalities;
         if (params.status) qp.status = params.status;
@@ -133,7 +180,6 @@ serve(async (req) => {
       }
 
       case "consultar_vendas_diarias": {
-        // GET /merchant-statement/v1/sales/{nsu}/daily
         if (!params.nsu) throw new Error("nsu é obrigatório");
         if (!params.startDate) throw new Error("startDate é obrigatório");
         if (!params.endDate) throw new Error("endDate é obrigatório");
@@ -148,17 +194,16 @@ serve(async (req) => {
       }
 
       case "consultar_parcelas": {
-        // GET /merchant-statement/v1/sales/installments
         if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
         if (!params.startDate) throw new Error("startDate é obrigatório");
         if (!params.endDate) throw new Error("endDate é obrigatório");
 
         const qp: Record<string, string> = {
           parentCompanyNumber: params.parentCompanyNumber,
-          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
           startDate: params.startDate,
           endDate: params.endDate,
         };
+        applySubsidiariesPolicy(qp, ambiente, params.subsidiaries);
         if (params.size) qp.size = String(params.size);
         if (params.page) qp.page = String(params.page);
 
@@ -167,17 +212,16 @@ serve(async (req) => {
       }
 
       case "consultar_pagamentos": {
-        // GET /merchant-statement/v1/payments
         if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
         if (!params.startDate) throw new Error("startDate é obrigatório");
         if (!params.endDate) throw new Error("endDate é obrigatório");
 
         const qp: Record<string, string> = {
           parentCompanyNumber: params.parentCompanyNumber,
-          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
           startDate: params.startDate,
           endDate: params.endDate,
         };
+        applySubsidiariesPolicy(qp, ambiente, params.subsidiaries);
         if (params.brands) qp.brands = params.brands;
         if (params.status) qp.status = params.status;
         if (params.types) qp.types = params.types;
@@ -189,17 +233,16 @@ serve(async (req) => {
       }
 
       case "consultar_pagamentos_oc": {
-        // GET /merchant-statement/v1/payments/credit-orders
         if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
         if (!params.startDate) throw new Error("startDate é obrigatório");
         if (!params.endDate) throw new Error("endDate é obrigatório");
 
         const qp: Record<string, string> = {
           parentCompanyNumber: params.parentCompanyNumber,
-          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
           startDate: params.startDate,
           endDate: params.endDate,
         };
+        applySubsidiariesPolicy(qp, ambiente, params.subsidiaries);
         if (params.size) qp.size = String(params.size);
         if (params.page) qp.page = String(params.page);
 
@@ -208,17 +251,16 @@ serve(async (req) => {
       }
 
       case "consultar_debitos": {
-        // GET /merchant-statement/v1/charges
         if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
         if (!params.startDate) throw new Error("startDate é obrigatório");
         if (!params.endDate) throw new Error("endDate é obrigatório");
 
         const qp: Record<string, string> = {
           parentCompanyNumber: params.parentCompanyNumber,
-          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
           startDate: params.startDate,
           endDate: params.endDate,
         };
+        applySubsidiariesPolicy(qp, ambiente, params.subsidiaries);
         if (params.size) qp.size = String(params.size);
 
         result = await apiRequest(baseUrl, "/merchant-statement/v1/charges", token, qp);
@@ -226,28 +268,41 @@ serve(async (req) => {
       }
 
       case "consultar_tipos_ajuste": {
-        // GET /merchant-statement/v1/charges/adjustment-types
         result = await apiRequest(baseUrl, "/merchant-statement/v1/charges/adjustment-types", token);
         break;
       }
 
       case "health": {
         try {
-          // Test with sandbox PV numbers
           const testPv = params.parentCompanyNumber || "13381369";
           const today = new Date().toISOString().slice(0, 10);
           const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 
-          await apiRequest(baseUrl, "/merchant-statement/v1/sales", token, {
+          const qp: Record<string, string> = {
             parentCompanyNumber: testPv,
-            subsidiaries: testPv,
             startDate: weekAgo,
             endDate: today,
             size: "1",
-          });
-          result = { ok: true, ambiente: baseUrl.includes("sandbox") ? "sandbox" : "production" };
+          };
+          applySubsidiariesPolicy(qp, ambiente, params.subsidiaries);
+
+          await apiRequest(baseUrl, "/merchant-statement/v1/sales", token, qp);
+          result = {
+            ok: true,
+            status: "ATIVA",
+            ambiente: baseUrl.includes("sandbox") ? "sandbox" : "production",
+          };
         } catch (e) {
-          result = { ok: false, error: (e as Error).message };
+          const err = e as Error & { code?: string; status?: number };
+          result = {
+            ok: false,
+            status: err.code === "GV_OPTIN_PENDING" ? "AGUARDANDO_OPTIN" :
+                    err.code === "GV_INVALID_CREDENTIALS" ? "CREDENCIAIS_INVALIDAS" :
+                    "ERRO",
+            error: err.message,
+            error_code: err.code || "GV_API_ERROR",
+            http_status: err.status,
+          };
         }
         break;
       }
@@ -263,8 +318,9 @@ serve(async (req) => {
     });
   } catch (err) {
     console.error("[rede-gv] Error:", err);
+    const e = err as Error & { code?: string; status?: number };
     return new Response(
-      JSON.stringify({ error: (err as Error).message }),
+      JSON.stringify({ error: e.message, error_code: e.code || "GV_INTERNAL", http_status: e.status }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

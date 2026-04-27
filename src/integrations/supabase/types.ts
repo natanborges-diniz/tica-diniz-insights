@@ -21,6 +21,13 @@ export type Database = {
           ativo: boolean
           cod_empresa: number
           created_at: string
+          gv_approved_at: string | null
+          gv_last_healthcheck_at: string | null
+          gv_last_healthcheck_message: string | null
+          gv_last_healthcheck_status: string | null
+          gv_optin_reference: string | null
+          gv_optin_requested_at: string | null
+          gv_optin_status: string | null
           id: string
           integration_key_encrypted: string | null
           integration_key_production: string | null
@@ -36,6 +43,13 @@ export type Database = {
           ativo?: boolean
           cod_empresa: number
           created_at?: string
+          gv_approved_at?: string | null
+          gv_last_healthcheck_at?: string | null
+          gv_last_healthcheck_message?: string | null
+          gv_last_healthcheck_status?: string | null
+          gv_optin_reference?: string | null
+          gv_optin_requested_at?: string | null
+          gv_optin_status?: string | null
           id?: string
           integration_key_encrypted?: string | null
           integration_key_production?: string | null
@@ -51,6 +65,13 @@ export type Database = {
           ativo?: boolean
           cod_empresa?: number
           created_at?: string
+          gv_approved_at?: string | null
+          gv_last_healthcheck_at?: string | null
+          gv_last_healthcheck_message?: string | null
+          gv_last_healthcheck_status?: string | null
+          gv_optin_reference?: string | null
+          gv_optin_requested_at?: string | null
+          gv_optin_status?: string | null
           id?: string
           integration_key_encrypted?: string | null
           integration_key_production?: string | null
