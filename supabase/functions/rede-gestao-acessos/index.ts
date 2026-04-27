@@ -194,13 +194,6 @@ async function processSingle(
   const pvMatriz = pickPvMatriz(cfg, ambiente);
   const requestPv = pickMerchantId(cfg, ambiente);
 
-  if (!pvMatriz) {
-    return {
-      cod_empresa: cfg.cod_empresa,
-      ok: false,
-      error: `PV matriz (${ambiente}) não configurado`,
-    };
-  }
   if (!requestPv) {
     return {
       cod_empresa: cfg.cod_empresa,
@@ -213,11 +206,23 @@ async function processSingle(
   const apiBase = resolveApiBase(ambiente);
   const token = await getOAuthToken(oauthBase);
 
+  // requestType "I" (Individual): solicitamos acesso ao PV específico desta loja.
+  // requestCompanyNumber deve ser numérico (conforme schema oficial).
+  const requestCompanyNumber = Number(requestPv);
+  if (!Number.isFinite(requestCompanyNumber)) {
+    return {
+      cod_empresa: cfg.cod_empresa,
+      ok: false,
+      error: `Merchant ID inválido: ${requestPv}`,
+    };
+  }
+
   const payload: AccessRequestPayload = {
-    requestType: "STATEMENT",
-    requestCompanyNumber: requestPv,
-    parentCompanyNumber: pvMatriz,
+    requestType: "I",
+    requestCompanyNumber,
   };
+
+  console.log(`[rede-ga] PV matriz (referência interna): ${pvMatriz}`);
 
   const result = await postStatementAccessRequest(apiBase, token, payload);
 
