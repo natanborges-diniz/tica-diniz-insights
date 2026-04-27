@@ -33,6 +33,13 @@ interface AdquirenteConfig {
   ativo: boolean;
   created_at: string;
   updated_at: string;
+  gv_optin_status?: string | null;
+  gv_optin_requested_at?: string | null;
+  gv_optin_reference?: string | null;
+  gv_approved_at?: string | null;
+  gv_last_healthcheck_at?: string | null;
+  gv_last_healthcheck_status?: string | null;
+  gv_last_healthcheck_message?: string | null;
 }
 
 interface EditForm {
