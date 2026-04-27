@@ -55,6 +55,128 @@ interface EditForm {
 
 const ADQUIRENTES = ["REDE", "CIELO", "STONE", "PAGSEGURO", "GETNET"];
 
+type OptinAction = "solicitar_optin" | "registrar_aceite" | "reset";
+
+function ActivationGVBlock({
+  config,
+  form,
+  onOptin,
+  onTestProd,
+  busy,
+}: {
+  config: AdquirenteConfig;
+  form: EditForm;
+  onOptin: (a: OptinAction) => void;
+  onTestProd: () => void;
+  busy: string | null;
+}) {
+  const status = config.gv_optin_status || "NAO_SOLICITADO";
+  const hasCreds = !!form.merchant_id_production && !!form.integration_key_production;
+  const hasPvMatriz = !!form.pv_matriz_production;
+  const isProd = form.ambiente === "production";
+  const optinRequested = !!config.gv_optin_requested_at;
+  const approved = status === "APROVADO" || !!config.gv_approved_at;
+  const healthOk = config.gv_last_healthcheck_status === "ATIVA";
+
+  const fmt = (iso?: string | null) =>
+    iso ? new Date(iso).toLocaleString("pt-BR") : "—";
+
+  const Step = ({ done, label, hint }: { done: boolean; label: string; hint?: string }) => (
+    <div className="flex items-start gap-2">
+      {done ? (
+        <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" />
+      ) : (
+        <AlertCircle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
+      )}
+      <div className="text-xs">
+        <div className={done ? "text-foreground" : "text-muted-foreground"}>{label}</div>
+        {hint && <div className="text-[10px] text-muted-foreground">{hint}</div>}
+      </div>
+    </div>
+  );
+
+  const statusBadge = approved
+    ? <Badge className="bg-success/15 text-success border-success/30 text-[10px]">APROVADO</Badge>
+    : status === "AGUARDANDO_ACEITE"
+      ? <Badge className="bg-warning/15 text-warning border-warning/30 text-[10px]">AGUARDANDO ACEITE</Badge>
+      : <Badge variant="secondary" className="text-[10px]">NÃO SOLICITADO</Badge>;
+
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">Ativação Gestão de Vendas (Produção)</span>
+          {statusBadge}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <Step done={hasCreds} label="Credenciais OAuth de produção cadastradas" />
+        <Step done={hasPvMatriz} label="PV Matriz de produção preenchido" />
+        <Step done={isProd} label="Ambiente ativo: PRODUÇÃO" hint={isProd ? undefined : "Alterne o toggle no topo"} />
+        <Step
+          done={optinRequested}
+          label="Opt-in solicitado"
+          hint={optinRequested ? `em ${fmt(config.gv_optin_requested_at)}` : "Dispare a solicitação"}
+        />
+        <Step
+          done={approved}
+          label="Aceite confirmado no portal da REDE"
+          hint={approved ? `em ${fmt(config.gv_approved_at)}` : "Aprove com perfil master no portal"}
+        />
+        <Step
+          done={healthOk}
+          label="Teste de conectividade aprovado"
+          hint={config.gv_last_healthcheck_at ? `último: ${fmt(config.gv_last_healthcheck_at)} — ${config.gv_last_healthcheck_status}` : "Execute o teste"}
+        />
+      </div>
+
+      {config.gv_last_healthcheck_message && !healthOk && (
+        <div className="text-[11px] text-destructive bg-destructive/10 p-2 rounded">
+          {config.gv_last_healthcheck_message}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-1.5 pt-1 border-t border-primary/10">
+        <Button
+          size="sm" variant="outline" className="text-xs"
+          disabled={!!busy || !hasCreds}
+          onClick={() => onOptin("solicitar_optin")}
+        >
+          {busy === `${config.id}-optin-solicitar_optin` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+          Solicitar Opt-in
+        </Button>
+        <Button
+          size="sm" variant="outline" className="text-xs"
+          disabled={!!busy || !optinRequested || approved}
+          onClick={() => onOptin("registrar_aceite")}
+        >
+          {busy === `${config.id}-optin-registrar_aceite` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+          Registrar Aceite
+        </Button>
+        <Button
+          size="sm" variant="outline" className="text-xs"
+          disabled={!!busy || !hasCreds || !hasPvMatriz}
+          onClick={onTestProd}
+        >
+          {busy === `${config.id}-gv-production` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
+          Validar Ativação
+        </Button>
+        {(optinRequested || approved) && (
+          <Button
+            size="sm" variant="ghost" className="text-xs text-muted-foreground"
+            disabled={!!busy}
+            onClick={() => onOptin("reset")}
+          >
+            Reiniciar
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminAdquirentesPage() {
   const { isAdmin } = useAuth();
   const { empresas } = useEmpresas();
