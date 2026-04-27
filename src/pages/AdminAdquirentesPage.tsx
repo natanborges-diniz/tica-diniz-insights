@@ -446,7 +446,25 @@ export default function AdminAdquirentesPage() {
     }
   };
 
-  const updateForm = (id: string, field: string, value: string | boolean) => {
+  const handleSolicitarLote = async () => {
+    setTesting("lote-rede");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sessão expirada");
+      const { data, error } = await supabase.functions.invoke("rede-gestao-acessos", {
+        body: { action: "solicitar_compartilhamento_lote", ambiente: "production" },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Lote enviado: ${data.sucesso}/${data.total} PVs aceitos pela REDE. Aguardando aceite no portal por loja.`);
+      fetchConfigs();
+    } catch (e) {
+      toast.error(`Erro lote: ${(e as Error).message}`);
+    } finally {
+      setTesting(null);
+    }
+  };
     setEditForms(prev => ({
       ...prev,
       [id]: { ...prev[id], [field]: value },
