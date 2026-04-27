@@ -15,7 +15,9 @@ import { toast } from "sonner";
 import {
   Loader2, Save, Plus, Eye, EyeOff, CreditCard,
   CheckCircle2, AlertCircle, Trash2, Wifi, ShieldCheck, FlaskConical,
+  Send, Code,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Navigate } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
 
@@ -36,6 +38,9 @@ interface AdquirenteConfig {
   gv_optin_status?: string | null;
   gv_optin_requested_at?: string | null;
   gv_optin_reference?: string | null;
+  gv_optin_external_id?: string | null;
+  gv_optin_request_payload?: any;
+  gv_optin_response?: any;
   gv_approved_at?: string | null;
   gv_last_healthcheck_at?: string | null;
   gv_last_healthcheck_status?: string | null;
@@ -55,7 +60,7 @@ interface EditForm {
 
 const ADQUIRENTES = ["REDE", "CIELO", "STONE", "PAGSEGURO", "GETNET"];
 
-type OptinAction = "solicitar_optin" | "registrar_aceite" | "reset";
+type OptinAction = "solicitar_compartilhamento" | "registrar_aceite" | "reset";
 
 function ActivationGVBlock({
   config,
@@ -138,14 +143,38 @@ function ActivationGVBlock({
         </div>
       )}
 
+      {(config.gv_optin_external_id || config.gv_optin_response) && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground bg-muted/40 rounded p-2">
+          {config.gv_optin_external_id && (
+            <span>
+              Protocolo REDE: <span className="font-mono text-foreground">{config.gv_optin_external_id}</span>
+            </span>
+          )}
+          {config.gv_optin_response && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2">
+                  <Code className="h-3 w-3 mr-1" /> Ver response REDE
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-96 max-h-80 overflow-auto">
+                <pre className="text-[10px] font-mono whitespace-pre-wrap break-all">
+                  {JSON.stringify(config.gv_optin_response, null, 2)}
+                </pre>
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-1.5 pt-1 border-t border-primary/10">
         <Button
           size="sm" variant="outline" className="text-xs"
-          disabled={!!busy || !hasCreds}
-          onClick={() => onOptin("solicitar_optin")}
+          disabled={!!busy || !hasCreds || !hasPvMatriz}
+          onClick={() => onOptin("solicitar_compartilhamento")}
         >
-          {busy === `${config.id}-optin-solicitar_optin` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-          Solicitar Opt-in
+          {busy === `${config.id}-optin-solicitar_compartilhamento` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
+          {optinRequested ? "Reenviar Solicitação" : "Solicitar Compartilhamento"}
         </Button>
         <Button
           size="sm" variant="outline" className="text-xs"
@@ -153,7 +182,7 @@ function ActivationGVBlock({
           onClick={() => onOptin("registrar_aceite")}
         >
           {busy === `${config.id}-optin-registrar_aceite` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-          Registrar Aceite
+          Marcar como Aprovado
         </Button>
         <Button
           size="sm" variant="outline" className="text-xs"
@@ -371,7 +400,7 @@ export default function AdminAdquirentesPage() {
 
   const handleOptinAction = async (
     config: AdquirenteConfig,
-    action: "solicitar_optin" | "registrar_aceite" | "reset",
+    action: OptinAction,
   ) => {
     const testId = `${config.id}-optin-${action}`;
     setTesting(testId);
@@ -379,22 +408,59 @@ export default function AdminAdquirentesPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Sessão expirada");
 
+      const isProd = (editForms[config.id]?.ambiente || config.ambiente) === "production";
       const { data, error } = await supabase.functions.invoke("rede-gestao-acessos", {
-        body: { action, cod_empresa: config.cod_empresa },
+        body: {
+          action,
+          cod_empresa: config.cod_empresa,
+          ambiente: isProd ? "production" : "sandbox",
+        },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      const labels: Record<string, string> = {
-        solicitar_optin: "Solicitação de Opt-in registrada",
-        registrar_aceite: "Aceite registrado — integração marcada como aprovada",
-        reset: "Status de Opt-in reiniciado",
-      };
-      toast.success(labels[action]);
+      // Para a chamada real, exibe resultado estruturado
+      if (action === "solicitar_compartilhamento") {
+        const r = Array.isArray(data?.results) ? data.results[0] : null;
+        if (r?.ok) {
+          const protocolo = r.result?.request_id ? ` (protocolo ${r.result.request_id})` : "";
+          toast.success(`Solicitação enviada à REDE${protocolo}. Aguardando aceite no portal.`);
+        } else {
+          const err = r?.error || `HTTP ${r?.result?.status || "?"}`;
+          toast.error(`REDE recusou a solicitação: ${err}. Veja o response no detalhe.`);
+        }
+      } else {
+        const labels: Record<string, string> = {
+          registrar_aceite: "Aceite registrado — integração marcada como aprovada",
+          reset: "Status de Opt-in reiniciado",
+          solicitar_compartilhamento: "Solicitação processada",
+        };
+        toast.success(labels[action] || "Ação executada");
+      }
       fetchConfigs();
     } catch (e) {
       toast.error(`Erro Opt-in: ${(e as Error).message}`);
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const handleSolicitarLote = async () => {
+    setTesting("lote-rede");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sessão expirada");
+      const { data, error } = await supabase.functions.invoke("rede-gestao-acessos", {
+        body: { action: "solicitar_compartilhamento_lote", ambiente: "production" },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Lote enviado: ${data.sucesso}/${data.total} PVs aceitos pela REDE. Aguardando aceite no portal por loja.`);
+      fetchConfigs();
+    } catch (e) {
+      toast.error(`Erro lote: ${(e as Error).message}`);
     } finally {
       setTesting(null);
     }

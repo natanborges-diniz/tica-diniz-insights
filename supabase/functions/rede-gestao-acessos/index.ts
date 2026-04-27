@@ -9,26 +9,231 @@ const corsHeaders = {
 /**
  * Edge function para Gestão de Acessos REDE.
  *
- * Hoje a REDE não expõe um endpoint REST público para disparar o Opt-in:
- * o pedido nasce do sistema do parceiro e o aceite é feito manualmente
- * no portal da REDE pelo perfil master da loja.
+ * Conforme e-mail oficial da REDE (CNPJ matriz 12.107.885/0001-01), o fluxo
+ * para ler vendas via Gestão de Vendas exige:
+ *   1. Parceiro (nós) chamar a API de Gestão de Acessos para registrar
+ *      a solicitação de acesso aos extratos do PV (opt-in).
+ *   2. A loja dona do PV aceitar manualmente no portal da REDE
+ *      (Minha Rede → PV → Conciliação → Compartilhar).
+ *   3. Após o aceite, Gestão de Vendas devolve as transações.
  *
- * Esta função padroniza o ciclo operacional dentro do nosso admin:
- *   - solicitar_optin: marca a config como "AGUARDANDO_ACEITE" e registra a data
- *   - registrar_aceite: marca como "APROVADO" após confirmação manual
- *   - status: devolve o estado atual da ativação
+ * Documentação base: https://developer.userede.com.br/gestao-acessos
+ *
+ * Actions suportadas:
+ *   - solicitar_compartilhamento: dispara a chamada REST real à REDE para 1 PV
+ *   - solicitar_compartilhamento_lote: dispara para vários cod_empresa de uma vez
+ *   - registrar_aceite: marca como APROVADO após confirmação manual
  *   - reset: limpa o status (em caso de retrabalho)
+ *   - status: devolve o estado atual da ativação
  *
- * Quando a REDE publicar um endpoint REST oficial de Opt-in, basta
- * acrescentar a chamada HTTP dentro de "solicitar_optin".
+ * As credenciais são as MESMAS do Gestão de Vendas (REDE_GV_CLIENT_ID/SECRET) —
+ * a REDE emite um único cadastro OAuth que cobre as duas APIs (e-mail oficial).
  */
 
-type Action = "solicitar_optin" | "registrar_aceite" | "status" | "reset";
+const SANDBOX_BASE_URL = "https://rl7-sandbox-api.useredecloud.com.br";
+const PRODUCTION_BASE_URL = "https://api.userede.com.br/redelabs";
+
+type Action =
+  | "solicitar_compartilhamento"
+  | "solicitar_compartilhamento_lote"
+  | "registrar_aceite"
+  | "reset"
+  | "status";
 
 interface RequestBody {
   action: Action;
-  cod_empresa: number;
+  cod_empresa?: number;
+  cod_empresas?: number[];
+  ambiente?: "production" | "sandbox";
   reference?: string;
+}
+
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+async function getOAuthToken(baseUrl: string): Promise<string> {
+  if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
+    return cachedToken.token;
+  }
+
+  const clientId = Deno.env.get("REDE_GV_CLIENT_ID");
+  const clientSecret = Deno.env.get("REDE_GV_CLIENT_SECRET");
+
+  if (!clientId || !clientSecret) {
+    throw new Error("REDE_GV_CLIENT_ID ou REDE_GV_CLIENT_SECRET não configurados");
+  }
+
+  // Endpoint OAuth conforme PDF oficial:
+  // Sandbox:    https://rl7-sandbox-api.useredecloud.com.br/oauth/token
+  // Production: https://api.userede.com.br/redelabs/oauth/token
+  const tokenUrl = `${baseUrl}/oauth/token`;
+  console.log(`[rede-ga] Requesting OAuth token from ${tokenUrl}`);
+
+  const res = await fetch(tokenUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: "Basic " + btoa(`${clientId}:${clientSecret}`),
+    },
+    body: "grant_type=client_credentials",
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    console.error(`[rede-ga] Token error ${res.status}:`, text.slice(0, 500));
+    throw new Error(`Falha ao obter token OAuth: ${res.status} ${text.slice(0, 200)}`);
+  }
+
+  const data = JSON.parse(text);
+  cachedToken = {
+    token: data.access_token,
+    expiresAt: Date.now() + (data.expires_in || 1440) * 1000,
+  };
+  return cachedToken.token;
+}
+
+function resolveBaseUrl(ambiente?: string): string {
+  return ambiente === "production" ? PRODUCTION_BASE_URL : SANDBOX_BASE_URL;
+}
+
+interface AccessRequestPayload {
+  requestType: string;
+  requestCompanyNumber: string; // PV cujo acesso queremos
+  parentCompanyNumber: string;  // PV matriz do parceiro (nós)
+}
+
+interface AccessRequestResult {
+  ok: boolean;
+  status: number;
+  request_id?: string | null;
+  remote_status?: string | null;
+  payload: AccessRequestPayload;
+  response: unknown;
+}
+
+/**
+ * Faz POST real ao endpoint de solicitação de acesso.
+ * Endpoint conforme PDF oficial da REDE (Access Management).
+ *
+ * O response esperado contém um identificador da solicitação e status PENDING.
+ * Em caso de erro, devolvemos o response cru para diagnóstico.
+ */
+async function postStatementAccessRequest(
+  baseUrl: string,
+  token: string,
+  payload: AccessRequestPayload,
+): Promise<AccessRequestResult> {
+  const url = `${baseUrl}/access-management/v1/statement-access-requests`;
+  console.log(`[rede-ga] POST ${url}`, JSON.stringify(payload));
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await res.text();
+  let parsed: any;
+  try { parsed = JSON.parse(text); } catch { parsed = { raw: text }; }
+
+  console.log(`[rede-ga] Response ${res.status}:`, text.slice(0, 800));
+
+  return {
+    ok: res.ok,
+    status: res.status,
+    request_id:
+      parsed?.id ||
+      parsed?.requestId ||
+      parsed?.accessRequestId ||
+      parsed?.statementAccessRequestId ||
+      null,
+    remote_status: parsed?.status || parsed?.requestStatus || null,
+    payload,
+    response: parsed,
+  };
+}
+
+interface ConfigRow {
+  id: string;
+  cod_empresa: number;
+  ambiente: string;
+  merchant_id: string | null;
+  merchant_id_production: string | null;
+  pv_matriz: string | null;
+  pv_matriz_production: string | null;
+}
+
+function pickPvMatriz(cfg: ConfigRow, ambiente: string): string | null {
+  return ambiente === "production" ? cfg.pv_matriz_production : cfg.pv_matriz;
+}
+function pickMerchantId(cfg: ConfigRow, ambiente: string): string | null {
+  return ambiente === "production" ? cfg.merchant_id_production : cfg.merchant_id;
+}
+
+async function processSingle(
+  supabase: any,
+  cfg: ConfigRow,
+  ambiente: string,
+  reference: string | null,
+): Promise<{ cod_empresa: number; ok: boolean; result?: AccessRequestResult; error?: string }> {
+  const pvMatriz = pickPvMatriz(cfg, ambiente);
+  const requestPv = pickMerchantId(cfg, ambiente);
+
+  if (!pvMatriz) {
+    return {
+      cod_empresa: cfg.cod_empresa,
+      ok: false,
+      error: `PV matriz (${ambiente}) não configurado`,
+    };
+  }
+  if (!requestPv) {
+    return {
+      cod_empresa: cfg.cod_empresa,
+      ok: false,
+      error: `Merchant ID/PV (${ambiente}) não configurado`,
+    };
+  }
+
+  const baseUrl = resolveBaseUrl(ambiente);
+  const token = await getOAuthToken(baseUrl);
+
+  const payload: AccessRequestPayload = {
+    requestType: "STATEMENT",
+    requestCompanyNumber: requestPv,
+    parentCompanyNumber: pvMatriz,
+  };
+
+  const result = await postStatementAccessRequest(baseUrl, token, payload);
+
+  // Persiste sempre — sucesso ou falha — para auditoria
+  const updates: Record<string, unknown> = {
+    gv_optin_request_payload: payload,
+    gv_optin_response: result.response,
+    gv_optin_requested_at: new Date().toISOString(),
+    gv_optin_reference: reference,
+  };
+
+  if (result.ok) {
+    updates.gv_optin_status = "AGUARDANDO_ACEITE";
+    updates.gv_optin_external_id = result.request_id;
+    updates.gv_approved_at = null;
+  } else {
+    updates.gv_optin_status = "ERRO_SOLICITACAO";
+  }
+
+  const { error: upErr } = await supabase
+    .from("adquirentes_config")
+    .update(updates)
+    .eq("id", cfg.id);
+
+  if (upErr) {
+    console.error(`[rede-ga] Erro ao persistir cfg ${cfg.id}:`, upErr);
+  }
+
+  return { cod_empresa: cfg.cod_empresa, ok: result.ok, result };
 }
 
 serve(async (req) => {
@@ -38,83 +243,164 @@ serve(async (req) => {
 
   try {
     const body = (await req.json()) as RequestBody;
-    const { action, cod_empresa, reference } = body || ({} as RequestBody);
+    const { action, cod_empresa, cod_empresas, ambiente: ambReq, reference } = body || ({} as RequestBody);
 
     if (!action) throw new Error("action é obrigatório");
-    if (typeof cod_empresa !== "number") throw new Error("cod_empresa é obrigatório");
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { data: configRow, error: cfgErr } = await supabase
-      .from("adquirentes_config")
-      .select("*")
-      .eq("adquirente", "REDE")
-      .eq("cod_empresa", cod_empresa)
-      .maybeSingle();
+    // ---------- Status (leitura) ----------
+    if (action === "status") {
+      if (typeof cod_empresa !== "number") throw new Error("cod_empresa é obrigatório");
+      const { data, error } = await supabase
+        .from("adquirentes_config")
+        .select("*")
+        .eq("adquirente", "REDE")
+        .eq("cod_empresa", cod_empresa)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error(`Configuração REDE inexistente para empresa ${cod_empresa}`);
+      return new Response(
+        JSON.stringify({
+          cod_empresa,
+          optin_status: (data as any).gv_optin_status,
+          optin_requested_at: (data as any).gv_optin_requested_at,
+          optin_reference: (data as any).gv_optin_reference,
+          optin_external_id: (data as any).gv_optin_external_id,
+          optin_response: (data as any).gv_optin_response,
+          approved_at: (data as any).gv_approved_at,
+          last_healthcheck_at: (data as any).gv_last_healthcheck_at,
+          last_healthcheck_status: (data as any).gv_last_healthcheck_status,
+          last_healthcheck_message: (data as any).gv_last_healthcheck_message,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
-    if (cfgErr) throw new Error(`Erro ao buscar config: ${cfgErr.message}`);
-    if (!configRow) throw new Error(`Configuração REDE inexistente para empresa ${cod_empresa}`);
+    // ---------- Registrar aceite manual ----------
+    if (action === "registrar_aceite") {
+      if (typeof cod_empresa !== "number") throw new Error("cod_empresa é obrigatório");
+      const { data, error } = await supabase
+        .from("adquirentes_config")
+        .select("id")
+        .eq("adquirente", "REDE")
+        .eq("cod_empresa", cod_empresa)
+        .maybeSingle();
+      if (error || !data) throw new Error(`Configuração REDE inexistente para empresa ${cod_empresa}`);
 
-    let updates: Record<string, unknown> | null = null;
-
-    switch (action) {
-      case "solicitar_optin": {
-        updates = {
-          gv_optin_status: "AGUARDANDO_ACEITE",
-          gv_optin_requested_at: new Date().toISOString(),
-          gv_optin_reference: reference || null,
-          gv_approved_at: null,
-        };
-        break;
-      }
-      case "registrar_aceite": {
-        updates = {
+      await supabase
+        .from("adquirentes_config")
+        .update({
           gv_optin_status: "APROVADO",
           gv_approved_at: new Date().toISOString(),
-        };
-        break;
-      }
-      case "reset": {
-        updates = {
+        })
+        .eq("id", data.id);
+
+      return new Response(
+        JSON.stringify({ ok: true, cod_empresa, status: "APROVADO" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // ---------- Reset ----------
+    if (action === "reset") {
+      if (typeof cod_empresa !== "number") throw new Error("cod_empresa é obrigatório");
+      const { data, error } = await supabase
+        .from("adquirentes_config")
+        .select("id")
+        .eq("adquirente", "REDE")
+        .eq("cod_empresa", cod_empresa)
+        .maybeSingle();
+      if (error || !data) throw new Error(`Configuração REDE inexistente para empresa ${cod_empresa}`);
+
+      await supabase
+        .from("adquirentes_config")
+        .update({
           gv_optin_status: null,
           gv_optin_requested_at: null,
           gv_optin_reference: null,
+          gv_optin_external_id: null,
+          gv_optin_request_payload: null,
+          gv_optin_response: null,
           gv_approved_at: null,
-        };
-        break;
+        })
+        .eq("id", data.id);
+
+      return new Response(
+        JSON.stringify({ ok: true, cod_empresa, status: "RESET" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // ---------- Solicitação real (single ou lote) ----------
+    const ambiente = ambReq || "production";
+
+    let configs: ConfigRow[] = [];
+
+    if (action === "solicitar_compartilhamento") {
+      if (typeof cod_empresa !== "number") throw new Error("cod_empresa é obrigatório");
+      const { data, error } = await supabase
+        .from("adquirentes_config")
+        .select("id, cod_empresa, ambiente, merchant_id, merchant_id_production, pv_matriz, pv_matriz_production")
+        .eq("adquirente", "REDE")
+        .eq("cod_empresa", cod_empresa);
+      if (error) throw new Error(error.message);
+      configs = (data || []) as ConfigRow[];
+    } else if (action === "solicitar_compartilhamento_lote") {
+      let q = supabase
+        .from("adquirentes_config")
+        .select("id, cod_empresa, ambiente, merchant_id, merchant_id_production, pv_matriz, pv_matriz_production")
+        .eq("adquirente", "REDE")
+        .eq("ativo", true);
+
+      if (Array.isArray(cod_empresas) && cod_empresas.length > 0) {
+        q = q.in("cod_empresa", cod_empresas);
       }
-      case "status": {
-        return new Response(
-          JSON.stringify({
-            cod_empresa,
-            optin_status: (configRow as any).gv_optin_status,
-            optin_requested_at: (configRow as any).gv_optin_requested_at,
-            optin_reference: (configRow as any).gv_optin_reference,
-            approved_at: (configRow as any).gv_approved_at,
-            last_healthcheck_at: (configRow as any).gv_last_healthcheck_at,
-            last_healthcheck_status: (configRow as any).gv_last_healthcheck_status,
-            last_healthcheck_message: (configRow as any).gv_last_healthcheck_message,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      configs = (data || []) as ConfigRow[];
+
+      // Para lote em produção, filtra apenas as que têm credenciais de produção
+      if (ambiente === "production") {
+        configs = configs.filter(
+          (c) => c.merchant_id_production && c.pv_matriz_production,
         );
       }
-      default:
-        throw new Error(`action '${action}' não suportada`);
+    } else {
+      throw new Error(`action '${action}' não suportada`);
     }
 
-    if (updates) {
-      const { error: upErr } = await supabase
-        .from("adquirentes_config")
-        .update(updates)
-        .eq("id", configRow.id);
-      if (upErr) throw new Error(`Erro ao atualizar config: ${upErr.message}`);
+    if (configs.length === 0) {
+      throw new Error("Nenhuma configuração REDE elegível encontrada");
     }
 
+    const results = [];
+    for (const cfg of configs) {
+      try {
+        const r = await processSingle(supabase, cfg, ambiente, reference || null);
+        results.push(r);
+      } catch (e) {
+        results.push({
+          cod_empresa: cfg.cod_empresa,
+          ok: false,
+          error: (e as Error).message,
+        });
+      }
+    }
+
+    const okCount = results.filter((r) => r.ok).length;
     return new Response(
-      JSON.stringify({ ok: true, cod_empresa, applied: updates }),
+      JSON.stringify({
+        ok: okCount > 0,
+        ambiente,
+        total: results.length,
+        sucesso: okCount,
+        falha: results.length - okCount,
+        results,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
