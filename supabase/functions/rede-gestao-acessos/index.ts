@@ -105,9 +105,12 @@ function resolveApiBase(ambiente?: string): string {
 }
 
 interface AccessRequestPayload {
-  requestType: string;
-  requestCompanyNumber: string; // PV cujo acesso queremos
-  parentCompanyNumber: string;  // PV matriz do parceiro (nós)
+  // 'I' = Individual (apenas o PV informado)
+  // 'P' = Parcial (matriz + algumas filiais listadas em companyNumbers)
+  // 'T' = Total (matriz + todas as filiais)
+  requestType: "I" | "P" | "T";
+  requestCompanyNumber: number; // PV principal (matriz, filial ou autônomo)
+  companyNumbers?: number[];    // usado apenas quando requestType = 'P'
 }
 
 interface AccessRequestResult {
@@ -121,17 +124,17 @@ interface AccessRequestResult {
 
 /**
  * Faz POST real ao endpoint de solicitação de acesso.
- * Endpoint conforme PDF oficial da REDE (Access Management).
- *
- * O response esperado contém um identificador da solicitação e status PENDING.
- * Em caso de erro, devolvemos o response cru para diagnóstico.
+ * Endpoint oficial REDE Gestão de Acessos:
+ *   POST {base}/partner/v1/organizations/requests/features/merchant-statement
+ * Documentação: https://developer.userede.com.br/gestao-acessos
  */
 async function postStatementAccessRequest(
   baseUrl: string,
   token: string,
   payload: AccessRequestPayload,
 ): Promise<AccessRequestResult> {
-  const url = `${baseUrl}/access-management/v1/statement-access-requests`;
+  const url = `${baseUrl}/partner/v1/organizations/requests/features/merchant-statement`;
+  console.log(`[rede-ga] POST ${url}`, JSON.stringify(payload));
   console.log(`[rede-ga] POST ${url}`, JSON.stringify(payload));
 
   const res = await fetch(url, {
