@@ -400,7 +400,7 @@ export default function AdminAdquirentesPage() {
 
   const handleOptinAction = async (
     config: AdquirenteConfig,
-    action: "solicitar_optin" | "registrar_aceite" | "reset",
+    action: OptinAction,
   ) => {
     const testId = `${config.id}-optin-${action}`;
     setTesting(testId);
@@ -408,19 +408,36 @@ export default function AdminAdquirentesPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Sessão expirada");
 
+      const isProd = (editForms[config.id]?.ambiente || config.ambiente) === "production";
       const { data, error } = await supabase.functions.invoke("rede-gestao-acessos", {
-        body: { action, cod_empresa: config.cod_empresa },
+        body: {
+          action,
+          cod_empresa: config.cod_empresa,
+          ambiente: isProd ? "production" : "sandbox",
+        },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      const labels: Record<string, string> = {
-        solicitar_optin: "Solicitação de Opt-in registrada",
-        registrar_aceite: "Aceite registrado — integração marcada como aprovada",
-        reset: "Status de Opt-in reiniciado",
-      };
-      toast.success(labels[action]);
+      // Para a chamada real, exibe resultado estruturado
+      if (action === "solicitar_compartilhamento") {
+        const r = Array.isArray(data?.results) ? data.results[0] : null;
+        if (r?.ok) {
+          const protocolo = r.result?.request_id ? ` (protocolo ${r.result.request_id})` : "";
+          toast.success(`Solicitação enviada à REDE${protocolo}. Aguardando aceite no portal.`);
+        } else {
+          const err = r?.error || `HTTP ${r?.result?.status || "?"}`;
+          toast.error(`REDE recusou a solicitação: ${err}. Veja o response no detalhe.`);
+        }
+      } else {
+        const labels: Record<string, string> = {
+          registrar_aceite: "Aceite registrado — integração marcada como aprovada",
+          reset: "Status de Opt-in reiniciado",
+          solicitar_compartilhamento: "Solicitação processada",
+        };
+        toast.success(labels[action] || "Ação executada");
+      }
       fetchConfigs();
     } catch (e) {
       toast.error(`Erro Opt-in: ${(e as Error).message}`);
