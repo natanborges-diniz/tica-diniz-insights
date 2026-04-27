@@ -25,8 +25,11 @@ export type Database = {
           gv_last_healthcheck_at: string | null
           gv_last_healthcheck_message: string | null
           gv_last_healthcheck_status: string | null
+          gv_optin_external_id: string | null
           gv_optin_reference: string | null
+          gv_optin_request_payload: Json | null
           gv_optin_requested_at: string | null
+          gv_optin_response: Json | null
           gv_optin_status: string | null
           id: string
           integration_key_encrypted: string | null
@@ -47,8 +50,11 @@ export type Database = {
           gv_last_healthcheck_at?: string | null
           gv_last_healthcheck_message?: string | null
           gv_last_healthcheck_status?: string | null
+          gv_optin_external_id?: string | null
           gv_optin_reference?: string | null
+          gv_optin_request_payload?: Json | null
           gv_optin_requested_at?: string | null
+          gv_optin_response?: Json | null
           gv_optin_status?: string | null
           id?: string
           integration_key_encrypted?: string | null
@@ -69,8 +75,11 @@ export type Database = {
           gv_last_healthcheck_at?: string | null
           gv_last_healthcheck_message?: string | null
           gv_last_healthcheck_status?: string | null
+          gv_optin_external_id?: string | null
           gv_optin_reference?: string | null
+          gv_optin_request_payload?: Json | null
           gv_optin_requested_at?: string | null
+          gv_optin_response?: Json | null
           gv_optin_status?: string | null
           id?: string
           integration_key_encrypted?: string | null
