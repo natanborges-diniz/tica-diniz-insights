@@ -97,8 +97,11 @@ async function getOAuthToken(baseUrl: string): Promise<string> {
   return cachedToken.token;
 }
 
-function resolveBaseUrl(ambiente?: string): string {
-  return ambiente === "production" ? PRODUCTION_BASE_URL : SANDBOX_BASE_URL;
+function resolveOAuthBase(ambiente?: string): string {
+  return ambiente === "production" ? PRODUCTION_OAUTH_BASE : SANDBOX_OAUTH_BASE;
+}
+function resolveApiBase(ambiente?: string): string {
+  return ambiente === "production" ? PRODUCTION_API_BASE : SANDBOX_API_BASE;
 }
 
 interface AccessRequestPayload {
