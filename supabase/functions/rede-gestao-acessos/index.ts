@@ -26,8 +26,8 @@ const corsHeaders = {
  *   - reset: limpa o status (em caso de retrabalho)
  *   - status: devolve o estado atual da ativação
  *
- * As credenciais são as MESMAS do Gestão de Vendas (REDE_GV_CLIENT_ID/SECRET) —
- * a REDE emite um único cadastro OAuth que cobre as duas APIs (e-mail oficial).
+ * As credenciais são EXCLUSIVAS da API Gestão de Acessos (REDE_GA_CLIENT_ID/SECRET) —
+ * a REDE emite um par OAuth distinto do Gestão de Vendas (confirmado por e-mail oficial).
  */
 
 const SANDBOX_BASE_URL = "https://rl7-sandbox-api.useredecloud.com.br";
@@ -55,11 +55,11 @@ async function getOAuthToken(baseUrl: string): Promise<string> {
     return cachedToken.token;
   }
 
-  const clientId = Deno.env.get("REDE_GV_CLIENT_ID");
-  const clientSecret = Deno.env.get("REDE_GV_CLIENT_SECRET");
+  const clientId = Deno.env.get("REDE_GA_CLIENT_ID");
+  const clientSecret = Deno.env.get("REDE_GA_CLIENT_SECRET");
 
   if (!clientId || !clientSecret) {
-    throw new Error("REDE_GV_CLIENT_ID ou REDE_GV_CLIENT_SECRET não configurados");
+    throw new Error("REDE_GA_CLIENT_ID ou REDE_GA_CLIENT_SECRET não configurados");
   }
 
   // Endpoint OAuth conforme PDF oficial:
