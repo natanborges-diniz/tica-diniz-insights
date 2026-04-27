@@ -564,9 +564,24 @@ export default function AdminAdquirentesPage() {
         subtitle="Credenciais e ambientes para integração com maquininhas de cartão"
         icon={<CreditCard className="h-5 w-5" />}
         actions={
-          <Button size="sm" onClick={() => setShowAddForm(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Nova Adquirente
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSolicitarLote}
+              disabled={testing === "lote-rede"}
+            >
+              {testing === "lote-rede" ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4 mr-1" />
+              )}
+              Solicitar compartilhamento (lote REDE)
+            </Button>
+            <Button size="sm" onClick={() => setShowAddForm(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Nova Adquirente
+            </Button>
+          </div>
         }
       />
 
