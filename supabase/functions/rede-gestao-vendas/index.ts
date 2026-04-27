@@ -56,6 +56,33 @@ async function getOAuthToken(baseUrl: string): Promise<string> {
   return token;
 }
 
+// Classifica erros operacionais comuns da REDE em produção
+function classifyApiError(status: number, text: string): { code: string; message: string } {
+  const lower = text.toLowerCase();
+  if (status === 401 || status === 403) {
+    if (lower.includes("opt") || lower.includes("consent") || lower.includes("authorization") || lower.includes("not shared") || lower.includes("compartilh")) {
+      return {
+        code: "GV_OPTIN_PENDING",
+        message: "Acesso aguardando aceite no portal da REDE (Opt-in não aprovado para o PV).",
+      };
+    }
+    return {
+      code: "GV_INVALID_CREDENTIALS",
+      message: "Credenciais inválidas ou sem permissão para o PV consultado.",
+    };
+  }
+  if (status === 404) {
+    return { code: "GV_PV_NOT_FOUND", message: "PV não encontrado ou sem vínculo com a credencial." };
+  }
+  if (status === 429) {
+    return { code: "GV_RATE_LIMITED", message: "Limite de requisições excedido na API REDE." };
+  }
+  return {
+    code: "GV_API_ERROR",
+    message: `Rede Gestão Vendas API ${status}: ${text.slice(0, 300)}`,
+  };
+}
+
 async function apiRequest(
   baseUrl: string,
   path: string,
@@ -83,7 +110,11 @@ async function apiRequest(
 
   if (!res.ok) {
     console.error(`[rede-gv] API ${res.status}:`, text.slice(0, 500));
-    throw new Error(`Rede Gestão Vendas API ${res.status}: ${text.slice(0, 300)}`);
+    const classified = classifyApiError(res.status, text);
+    const err = new Error(classified.message) as Error & { code?: string; status?: number };
+    err.code = classified.code;
+    err.status = res.status;
+    throw err;
   }
 
   return parsed;
@@ -91,6 +122,23 @@ async function apiRequest(
 
 function resolveBaseUrl(ambiente?: string): string {
   return ambiente === "production" ? PRODUCTION_BASE_URL : SANDBOX_BASE_URL;
+}
+
+// Em sandbox, a documentação manda omitir `subsidiaries`.
+// Em produção, só envia se foi passado explicitamente.
+function applySubsidiariesPolicy(
+  qp: Record<string, string>,
+  ambiente: string | undefined,
+  subsidiaries?: string,
+) {
+  const isSandbox = ambiente !== "production";
+  if (isSandbox) {
+    delete qp.subsidiaries;
+    return;
+  }
+  if (subsidiaries && subsidiaries.trim().length > 0) {
+    qp.subsidiaries = subsidiaries;
+  }
 }
 
 serve(async (req) => {
