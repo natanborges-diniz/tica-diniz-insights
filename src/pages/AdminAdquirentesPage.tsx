@@ -541,6 +541,16 @@ export default function AdminAdquirentesPage() {
                     </TabsContent>
                   </Tabs>
 
+                  {config.adquirente === "REDE" && (
+                    <ActivationGVBlock
+                      config={config}
+                      form={form}
+                      onOptin={(action) => handleOptinAction(config, action)}
+                      onTestProd={() => handleTestGV(config, "production")}
+                      busy={testing}
+                    />
+                  )}
+
                   {/* Actions */}
                   <div className="flex items-center justify-between pt-1 border-t">
                     <div />
