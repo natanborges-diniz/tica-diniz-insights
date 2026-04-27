@@ -465,6 +465,8 @@ export default function AdminAdquirentesPage() {
       setTesting(null);
     }
   };
+
+  const updateForm = (id: string, field: string, value: string | boolean) => {
     setEditForms(prev => ({
       ...prev,
       [id]: { ...prev[id], [field]: value },
