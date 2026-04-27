@@ -30,8 +30,14 @@ const corsHeaders = {
  * a REDE emite um par OAuth distinto do Gestão de Vendas (confirmado por e-mail oficial).
  */
 
-const SANDBOX_BASE_URL = "https://rl7-sandbox-api.useredecloud.com.br";
-const PRODUCTION_BASE_URL = "https://api.userede.com.br/redelabs";
+// OAuth token endpoint (Basic auth)
+const SANDBOX_OAUTH_BASE = "https://rl7-sandbox-api.useredecloud.com.br";
+const PRODUCTION_OAUTH_BASE = "https://api.userede.com.br/redelabs";
+
+// API Access Management endpoint base (NOTE: produção NÃO usa o prefixo /redelabs aqui;
+// caso contrário a rota cai no bucket de objetos estáticos da Akamai e devolve 405 XML)
+const SANDBOX_API_BASE = "https://rl7-sandbox-api.useredecloud.com.br";
+const PRODUCTION_API_BASE = "https://api.userede.com.br";
 
 type Action =
   | "solicitar_compartilhamento"
@@ -91,8 +97,11 @@ async function getOAuthToken(baseUrl: string): Promise<string> {
   return cachedToken.token;
 }
 
-function resolveBaseUrl(ambiente?: string): string {
-  return ambiente === "production" ? PRODUCTION_BASE_URL : SANDBOX_BASE_URL;
+function resolveOAuthBase(ambiente?: string): string {
+  return ambiente === "production" ? PRODUCTION_OAUTH_BASE : SANDBOX_OAUTH_BASE;
+}
+function resolveApiBase(ambiente?: string): string {
+  return ambiente === "production" ? PRODUCTION_API_BASE : SANDBOX_API_BASE;
 }
 
 interface AccessRequestPayload {
@@ -197,8 +206,9 @@ async function processSingle(
     };
   }
 
-  const baseUrl = resolveBaseUrl(ambiente);
-  const token = await getOAuthToken(baseUrl);
+  const oauthBase = resolveOAuthBase(ambiente);
+  const apiBase = resolveApiBase(ambiente);
+  const token = await getOAuthToken(oauthBase);
 
   const payload: AccessRequestPayload = {
     requestType: "STATEMENT",
@@ -206,7 +216,7 @@ async function processSingle(
     parentCompanyNumber: pvMatriz,
   };
 
-  const result = await postStatementAccessRequest(baseUrl, token, payload);
+  const result = await postStatementAccessRequest(apiBase, token, payload);
 
   // Persiste sempre — sucesso ou falha — para auditoria
   const updates: Record<string, unknown> = {
