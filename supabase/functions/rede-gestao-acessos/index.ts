@@ -206,8 +206,9 @@ async function processSingle(
     };
   }
 
-  const baseUrl = resolveBaseUrl(ambiente);
-  const token = await getOAuthToken(baseUrl);
+  const oauthBase = resolveOAuthBase(ambiente);
+  const apiBase = resolveApiBase(ambiente);
+  const token = await getOAuthToken(oauthBase);
 
   const payload: AccessRequestPayload = {
     requestType: "STATEMENT",
@@ -215,7 +216,7 @@ async function processSingle(
     parentCompanyNumber: pvMatriz,
   };
 
-  const result = await postStatementAccessRequest(baseUrl, token, payload);
+  const result = await postStatementAccessRequest(apiBase, token, payload);
 
   // Persiste sempre — sucesso ou falha — para auditoria
   const updates: Record<string, unknown> = {
