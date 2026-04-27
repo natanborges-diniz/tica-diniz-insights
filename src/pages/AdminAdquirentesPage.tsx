@@ -217,13 +217,62 @@ export default function AdminAdquirentesPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error) throw error;
+
+      // Persist healthcheck status (production only — sandbox é exploratório)
+      if (targetAmbiente === "production") {
+        await supabase
+          .from("adquirentes_config")
+          .update({
+            gv_last_healthcheck_at: new Date().toISOString(),
+            gv_last_healthcheck_status: data?.status || (data?.ok ? "ATIVA" : "ERRO"),
+            gv_last_healthcheck_message: data?.error || null,
+          } as any)
+          .eq("id", config.id);
+      }
+
       if (data?.ok) {
         toast.success(`Gestão de Vendas OK — ${data.ambiente}`);
+      } else if (data?.status === "AGUARDANDO_OPTIN") {
+        toast.warning("Aguardando aceite do Opt-in no portal da REDE");
+      } else if (data?.status === "CREDENCIAIS_INVALIDAS") {
+        toast.error("Credenciais inválidas para o PV consultado");
       } else {
         toast.error(`Falha GV: ${data?.error || "Erro desconhecido"}`);
       }
+      fetchConfigs();
     } catch (e) {
       toast.error(`Erro GV: ${(e as Error).message}`);
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const handleOptinAction = async (
+    config: AdquirenteConfig,
+    action: "solicitar_optin" | "registrar_aceite" | "reset",
+  ) => {
+    const testId = `${config.id}-optin-${action}`;
+    setTesting(testId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sessão expirada");
+
+      const { data, error } = await supabase.functions.invoke("rede-gestao-acessos", {
+        body: { action, cod_empresa: config.cod_empresa },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const labels: Record<string, string> = {
+        solicitar_optin: "Solicitação de Opt-in registrada",
+        registrar_aceite: "Aceite registrado — integração marcada como aprovada",
+        reset: "Status de Opt-in reiniciado",
+      };
+      toast.success(labels[action]);
+      fetchConfigs();
+    } catch (e) {
+      toast.error(`Erro Opt-in: ${(e as Error).message}`);
     } finally {
       setTesting(null);
     }
