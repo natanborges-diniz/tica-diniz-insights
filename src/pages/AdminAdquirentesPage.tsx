@@ -15,7 +15,9 @@ import { toast } from "sonner";
 import {
   Loader2, Save, Plus, Eye, EyeOff, CreditCard,
   CheckCircle2, AlertCircle, Trash2, Wifi, ShieldCheck, FlaskConical,
+  Send, Code,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Navigate } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
 
