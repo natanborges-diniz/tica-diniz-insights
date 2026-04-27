@@ -112,7 +112,7 @@ interface AccessRequestPayload {
   // 'T' = Total (matriz + todas as filiais)
   requestType: "I" | "P" | "T";
   requestCompanyNumber: number; // PV principal (matriz, filial ou autônomo)
-  permissions: AccessPermission[]; // R(ead), W(rite), D(elete) — obrigatório
+  permissions: AccessPermission; // R(ead), W(rite) ou D(elete) — string única
   companyNumbers?: number[];    // usado apenas quando requestType = 'P'
 }
 
@@ -223,12 +223,12 @@ async function processSingle(
     };
   }
 
-  // requestType "T" (Total): acesso ao PV matriz e todas as filiais herdadas.
-  // permissions: ["R"] = Read (necessário para sincronizar extratos de vendas).
+  // requestType "I" (Individual) sobre o PV matriz: a Rede consolida via grupo.
+  // permissions: "R" = Read (string única, conforme mensagem oficial da Rede).
   const payload: AccessRequestPayload = {
-    requestType: "T",
+    requestType: "I",
     requestCompanyNumber,
-    permissions: ["R"],
+    permissions: "R",
   };
 
   console.log(`[rede-ga] Solicitando acesso TOTAL ao PV matriz ${requestPv} (cod_empresa=${cfg.cod_empresa})`);
