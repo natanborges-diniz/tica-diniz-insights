@@ -143,14 +143,38 @@ function ActivationGVBlock({
         </div>
       )}
 
+      {(config.gv_optin_external_id || config.gv_optin_response) && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground bg-muted/40 rounded p-2">
+          {config.gv_optin_external_id && (
+            <span>
+              Protocolo REDE: <span className="font-mono text-foreground">{config.gv_optin_external_id}</span>
+            </span>
+          )}
+          {config.gv_optin_response && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2">
+                  <Code className="h-3 w-3 mr-1" /> Ver response REDE
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-96 max-h-80 overflow-auto">
+                <pre className="text-[10px] font-mono whitespace-pre-wrap break-all">
+                  {JSON.stringify(config.gv_optin_response, null, 2)}
+                </pre>
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-1.5 pt-1 border-t border-primary/10">
         <Button
           size="sm" variant="outline" className="text-xs"
-          disabled={!!busy || !hasCreds}
-          onClick={() => onOptin("solicitar_optin")}
+          disabled={!!busy || !hasCreds || !hasPvMatriz}
+          onClick={() => onOptin("solicitar_compartilhamento")}
         >
-          {busy === `${config.id}-optin-solicitar_optin` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-          Solicitar Opt-in
+          {busy === `${config.id}-optin-solicitar_compartilhamento` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
+          {optinRequested ? "Reenviar Solicitação" : "Solicitar Compartilhamento"}
         </Button>
         <Button
           size="sm" variant="outline" className="text-xs"
@@ -158,7 +182,7 @@ function ActivationGVBlock({
           onClick={() => onOptin("registrar_aceite")}
         >
           {busy === `${config.id}-optin-registrar_aceite` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-          Registrar Aceite
+          Marcar como Aprovado
         </Button>
         <Button
           size="sm" variant="outline" className="text-xs"
