@@ -30,14 +30,14 @@ const corsHeaders = {
  * a REDE emite um par OAuth distinto do Gestão de Vendas (confirmado por e-mail oficial).
  */
 
-// OAuth token endpoint (Basic auth)
+// Base URLs por ambiente (confirmado em https://developer.userede.com.br/gestao-acessos)
+//   Sandbox:    https://rl7-sandbox-api.useredecloud.com.br
+//   Produção:   https://api.userede.com.br/redelabs
+// O mesmo base é usado para OAuth e para a API de Gestão de Acessos.
 const SANDBOX_OAUTH_BASE = "https://rl7-sandbox-api.useredecloud.com.br";
 const PRODUCTION_OAUTH_BASE = "https://api.userede.com.br/redelabs";
-
-// API Access Management endpoint base (NOTE: produção NÃO usa o prefixo /redelabs aqui;
-// caso contrário a rota cai no bucket de objetos estáticos da Akamai e devolve 405 XML)
 const SANDBOX_API_BASE = "https://rl7-sandbox-api.useredecloud.com.br";
-const PRODUCTION_API_BASE = "https://api.userede.com.br";
+const PRODUCTION_API_BASE = "https://api.userede.com.br/redelabs";
 
 type Action =
   | "solicitar_compartilhamento"
@@ -105,9 +105,12 @@ function resolveApiBase(ambiente?: string): string {
 }
 
 interface AccessRequestPayload {
-  requestType: string;
-  requestCompanyNumber: string; // PV cujo acesso queremos
-  parentCompanyNumber: string;  // PV matriz do parceiro (nós)
+  // 'I' = Individual (apenas o PV informado)
+  // 'P' = Parcial (matriz + algumas filiais listadas em companyNumbers)
+  // 'T' = Total (matriz + todas as filiais)
+  requestType: "I" | "P" | "T";
+  requestCompanyNumber: number; // PV principal (matriz, filial ou autônomo)
+  companyNumbers?: number[];    // usado apenas quando requestType = 'P'
 }
 
 interface AccessRequestResult {
@@ -121,17 +124,17 @@ interface AccessRequestResult {
 
 /**
  * Faz POST real ao endpoint de solicitação de acesso.
- * Endpoint conforme PDF oficial da REDE (Access Management).
- *
- * O response esperado contém um identificador da solicitação e status PENDING.
- * Em caso de erro, devolvemos o response cru para diagnóstico.
+ * Endpoint oficial REDE Gestão de Acessos:
+ *   POST {base}/partner/v1/organizations/requests/features/merchant-statement
+ * Documentação: https://developer.userede.com.br/gestao-acessos
  */
 async function postStatementAccessRequest(
   baseUrl: string,
   token: string,
   payload: AccessRequestPayload,
 ): Promise<AccessRequestResult> {
-  const url = `${baseUrl}/access-management/v1/statement-access-requests`;
+  const url = `${baseUrl}/partner/v1/organizations/requests/features/merchant-statement`;
+  console.log(`[rede-ga] POST ${url}`, JSON.stringify(payload));
   console.log(`[rede-ga] POST ${url}`, JSON.stringify(payload));
 
   const res = await fetch(url, {
@@ -191,13 +194,6 @@ async function processSingle(
   const pvMatriz = pickPvMatriz(cfg, ambiente);
   const requestPv = pickMerchantId(cfg, ambiente);
 
-  if (!pvMatriz) {
-    return {
-      cod_empresa: cfg.cod_empresa,
-      ok: false,
-      error: `PV matriz (${ambiente}) não configurado`,
-    };
-  }
   if (!requestPv) {
     return {
       cod_empresa: cfg.cod_empresa,
@@ -210,11 +206,23 @@ async function processSingle(
   const apiBase = resolveApiBase(ambiente);
   const token = await getOAuthToken(oauthBase);
 
+  // requestType "I" (Individual): solicitamos acesso ao PV específico desta loja.
+  // requestCompanyNumber deve ser numérico (conforme schema oficial).
+  const requestCompanyNumber = Number(requestPv);
+  if (!Number.isFinite(requestCompanyNumber)) {
+    return {
+      cod_empresa: cfg.cod_empresa,
+      ok: false,
+      error: `Merchant ID inválido: ${requestPv}`,
+    };
+  }
+
   const payload: AccessRequestPayload = {
-    requestType: "STATEMENT",
-    requestCompanyNumber: requestPv,
-    parentCompanyNumber: pvMatriz,
+    requestType: "I",
+    requestCompanyNumber,
   };
+
+  console.log(`[rede-ga] PV matriz (referência interna): ${pvMatriz}`);
 
   const result = await postStatementAccessRequest(apiBase, token, payload);
 
