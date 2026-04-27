@@ -159,17 +159,16 @@ serve(async (req) => {
 
     switch (action) {
       case "consultar_vendas": {
-        // GET /merchant-statement/v1/sales
         if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
         if (!params.startDate) throw new Error("startDate é obrigatório (YYYY-MM-DD)");
         if (!params.endDate) throw new Error("endDate é obrigatório (YYYY-MM-DD)");
 
         const qp: Record<string, string> = {
           parentCompanyNumber: params.parentCompanyNumber,
-          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
           startDate: params.startDate,
           endDate: params.endDate,
         };
+        applySubsidiariesPolicy(qp, ambiente, params.subsidiaries);
         if (params.brands) qp.brands = params.brands;
         if (params.modalities) qp.modalities = params.modalities;
         if (params.status) qp.status = params.status;
@@ -181,7 +180,6 @@ serve(async (req) => {
       }
 
       case "consultar_vendas_diarias": {
-        // GET /merchant-statement/v1/sales/{nsu}/daily
         if (!params.nsu) throw new Error("nsu é obrigatório");
         if (!params.startDate) throw new Error("startDate é obrigatório");
         if (!params.endDate) throw new Error("endDate é obrigatório");
@@ -196,17 +194,16 @@ serve(async (req) => {
       }
 
       case "consultar_parcelas": {
-        // GET /merchant-statement/v1/sales/installments
         if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
         if (!params.startDate) throw new Error("startDate é obrigatório");
         if (!params.endDate) throw new Error("endDate é obrigatório");
 
         const qp: Record<string, string> = {
           parentCompanyNumber: params.parentCompanyNumber,
-          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
           startDate: params.startDate,
           endDate: params.endDate,
         };
+        applySubsidiariesPolicy(qp, ambiente, params.subsidiaries);
         if (params.size) qp.size = String(params.size);
         if (params.page) qp.page = String(params.page);
 
@@ -215,17 +212,16 @@ serve(async (req) => {
       }
 
       case "consultar_pagamentos": {
-        // GET /merchant-statement/v1/payments
         if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
         if (!params.startDate) throw new Error("startDate é obrigatório");
         if (!params.endDate) throw new Error("endDate é obrigatório");
 
         const qp: Record<string, string> = {
           parentCompanyNumber: params.parentCompanyNumber,
-          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
           startDate: params.startDate,
           endDate: params.endDate,
         };
+        applySubsidiariesPolicy(qp, ambiente, params.subsidiaries);
         if (params.brands) qp.brands = params.brands;
         if (params.status) qp.status = params.status;
         if (params.types) qp.types = params.types;
@@ -237,17 +233,16 @@ serve(async (req) => {
       }
 
       case "consultar_pagamentos_oc": {
-        // GET /merchant-statement/v1/payments/credit-orders
         if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
         if (!params.startDate) throw new Error("startDate é obrigatório");
         if (!params.endDate) throw new Error("endDate é obrigatório");
 
         const qp: Record<string, string> = {
           parentCompanyNumber: params.parentCompanyNumber,
-          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
           startDate: params.startDate,
           endDate: params.endDate,
         };
+        applySubsidiariesPolicy(qp, ambiente, params.subsidiaries);
         if (params.size) qp.size = String(params.size);
         if (params.page) qp.page = String(params.page);
 
@@ -256,17 +251,16 @@ serve(async (req) => {
       }
 
       case "consultar_debitos": {
-        // GET /merchant-statement/v1/charges
         if (!params.parentCompanyNumber) throw new Error("parentCompanyNumber é obrigatório");
         if (!params.startDate) throw new Error("startDate é obrigatório");
         if (!params.endDate) throw new Error("endDate é obrigatório");
 
         const qp: Record<string, string> = {
           parentCompanyNumber: params.parentCompanyNumber,
-          subsidiaries: params.subsidiaries || params.parentCompanyNumber,
           startDate: params.startDate,
           endDate: params.endDate,
         };
+        applySubsidiariesPolicy(qp, ambiente, params.subsidiaries);
         if (params.size) qp.size = String(params.size);
 
         result = await apiRequest(baseUrl, "/merchant-statement/v1/charges", token, qp);
@@ -274,28 +268,41 @@ serve(async (req) => {
       }
 
       case "consultar_tipos_ajuste": {
-        // GET /merchant-statement/v1/charges/adjustment-types
         result = await apiRequest(baseUrl, "/merchant-statement/v1/charges/adjustment-types", token);
         break;
       }
 
       case "health": {
         try {
-          // Test with sandbox PV numbers
           const testPv = params.parentCompanyNumber || "13381369";
           const today = new Date().toISOString().slice(0, 10);
           const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 
-          await apiRequest(baseUrl, "/merchant-statement/v1/sales", token, {
+          const qp: Record<string, string> = {
             parentCompanyNumber: testPv,
-            subsidiaries: testPv,
             startDate: weekAgo,
             endDate: today,
             size: "1",
-          });
-          result = { ok: true, ambiente: baseUrl.includes("sandbox") ? "sandbox" : "production" };
+          };
+          applySubsidiariesPolicy(qp, ambiente, params.subsidiaries);
+
+          await apiRequest(baseUrl, "/merchant-statement/v1/sales", token, qp);
+          result = {
+            ok: true,
+            status: "ATIVA",
+            ambiente: baseUrl.includes("sandbox") ? "sandbox" : "production",
+          };
         } catch (e) {
-          result = { ok: false, error: (e as Error).message };
+          const err = e as Error & { code?: string; status?: number };
+          result = {
+            ok: false,
+            status: err.code === "GV_OPTIN_PENDING" ? "AGUARDANDO_OPTIN" :
+                    err.code === "GV_INVALID_CREDENTIALS" ? "CREDENCIAIS_INVALIDAS" :
+                    "ERRO",
+            error: err.message,
+            error_code: err.code || "GV_API_ERROR",
+            http_status: err.status,
+          };
         }
         break;
       }
@@ -311,8 +318,9 @@ serve(async (req) => {
     });
   } catch (err) {
     console.error("[rede-gv] Error:", err);
+    const e = err as Error & { code?: string; status?: number };
     return new Response(
-      JSON.stringify({ error: (err as Error).message }),
+      JSON.stringify({ error: e.message, error_code: e.code || "GV_INTERNAL", http_status: e.status }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
