@@ -38,6 +38,9 @@ interface AdquirenteConfig {
   gv_optin_status?: string | null;
   gv_optin_requested_at?: string | null;
   gv_optin_reference?: string | null;
+  gv_optin_external_id?: string | null;
+  gv_optin_request_payload?: any;
+  gv_optin_response?: any;
   gv_approved_at?: string | null;
   gv_last_healthcheck_at?: string | null;
   gv_last_healthcheck_status?: string | null;
