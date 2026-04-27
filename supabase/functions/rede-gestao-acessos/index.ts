@@ -104,12 +104,15 @@ function resolveApiBase(ambiente?: string): string {
   return ambiente === "production" ? PRODUCTION_API_BASE : SANDBOX_API_BASE;
 }
 
+type AccessPermission = "R" | "W" | "D";
+
 interface AccessRequestPayload {
   // 'I' = Individual (apenas o PV informado)
   // 'P' = Parcial (matriz + algumas filiais listadas em companyNumbers)
   // 'T' = Total (matriz + todas as filiais)
   requestType: "I" | "P" | "T";
   requestCompanyNumber: number; // PV principal (matriz, filial ou autônomo)
+  permissions: AccessPermission[]; // R(ead), W(rite), D(elete) — obrigatório
   companyNumbers?: number[];    // usado apenas quando requestType = 'P'
 }
 
@@ -192,13 +195,18 @@ async function processSingle(
   reference: string | null,
 ): Promise<{ cod_empresa: number; ok: boolean; result?: AccessRequestResult; error?: string }> {
   const pvMatriz = pickPvMatriz(cfg, ambiente);
-  const requestPv = pickMerchantId(cfg, ambiente);
+  const merchantId = pickMerchantId(cfg, ambiente);
+
+  // Para Gestão de Vendas Diniz, solicitamos acesso TOTAL via PV matriz
+  // (cobre matriz + todas as filiais com uma única chamada).
+  // Fallback: se não houver pv_matriz configurado, usa o merchant_id da própria loja.
+  const requestPv = pvMatriz || merchantId;
 
   if (!requestPv) {
     return {
       cod_empresa: cfg.cod_empresa,
       ok: false,
-      error: `Merchant ID/PV (${ambiente}) não configurado`,
+      error: `PV matriz/Merchant ID (${ambiente}) não configurado`,
     };
   }
 
@@ -206,23 +214,24 @@ async function processSingle(
   const apiBase = resolveApiBase(ambiente);
   const token = await getOAuthToken(oauthBase);
 
-  // requestType "I" (Individual): solicitamos acesso ao PV específico desta loja.
-  // requestCompanyNumber deve ser numérico (conforme schema oficial).
   const requestCompanyNumber = Number(requestPv);
   if (!Number.isFinite(requestCompanyNumber)) {
     return {
       cod_empresa: cfg.cod_empresa,
       ok: false,
-      error: `Merchant ID inválido: ${requestPv}`,
+      error: `PV inválido (não numérico): ${requestPv}`,
     };
   }
 
+  // requestType "T" (Total): acesso ao PV matriz e todas as filiais herdadas.
+  // permissions: ["R"] = Read (necessário para sincronizar extratos de vendas).
   const payload: AccessRequestPayload = {
-    requestType: "I",
+    requestType: "T",
     requestCompanyNumber,
+    permissions: ["R"],
   };
 
-  console.log(`[rede-ga] PV matriz (referência interna): ${pvMatriz}`);
+  console.log(`[rede-ga] Solicitando acesso TOTAL ao PV matriz ${requestPv} (cod_empresa=${cfg.cod_empresa})`);
 
   const result = await postStatementAccessRequest(apiBase, token, payload);
 
