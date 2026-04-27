@@ -55,11 +55,11 @@ async function getOAuthToken(baseUrl: string): Promise<string> {
     return cachedToken.token;
   }
 
-  const clientId = Deno.env.get("REDE_GV_CLIENT_ID");
-  const clientSecret = Deno.env.get("REDE_GV_CLIENT_SECRET");
+  const clientId = Deno.env.get("REDE_GA_CLIENT_ID");
+  const clientSecret = Deno.env.get("REDE_GA_CLIENT_SECRET");
 
   if (!clientId || !clientSecret) {
-    throw new Error("REDE_GV_CLIENT_ID ou REDE_GV_CLIENT_SECRET não configurados");
+    throw new Error("REDE_GA_CLIENT_ID ou REDE_GA_CLIENT_SECRET não configurados");
   }
 
   // Endpoint OAuth conforme PDF oficial:
