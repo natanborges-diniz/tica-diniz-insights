@@ -28,19 +28,64 @@ async function getOAuthToken(baseUrl: string): Promise<string> {
   const tokenUrl = `${baseUrl}/oauth2/token`;
   console.log(`[rede-gv] Requesting OAuth token from ${tokenUrl}`);
 
-  const res = await fetch(tokenUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: "Basic " + btoa(`${clientId}:${clientSecret}`),
-    },
-    body: "grant_type=client_credentials",
-  });
+  // Retry com backoff para absorver 5xx transitórios do gateway Akamai da REDE
+  const MAX_ATTEMPTS = 3;
+  const BACKOFF_MS = [0, 1500, 3500];
+  let lastStatus = 0;
+  let lastText = "";
 
-  const text = await res.text();
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (BACKOFF_MS[attempt] > 0) {
+      console.log(`[rede-gv] Retry ${attempt}/${MAX_ATTEMPTS - 1} after ${BACKOFF_MS[attempt]}ms (last status ${lastStatus})`);
+      await new Promise((r) => setTimeout(r, BACKOFF_MS[attempt]));
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(tokenUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: "Basic " + btoa(`${clientId}:${clientSecret}`),
+        },
+        body: "grant_type=client_credentials",
+      });
+    } catch (netErr) {
+      lastStatus = 0;
+      lastText = `network error: ${(netErr as Error).message}`;
+      console.error(`[rede-gv] Token network error attempt ${attempt + 1}:`, lastText);
+      continue;
+    }
+
+    const text = await res.text();
+    if (res.ok) {
+      const data = JSON.parse(text);
+      const token = data.access_token;
+      const expiresIn = data.expires_in || 3600;
+      cachedToken = { token, expiresAt: Date.now() + expiresIn * 1000 };
+      console.log(`[rede-gv] Token obtained on attempt ${attempt + 1}, expires in ${expiresIn}s`);
+      return token;
+    }
+
+    lastStatus = res.status;
+    lastText = text;
+    console.error(`[rede-gv] Token error ${res.status} attempt ${attempt + 1}:`, text.slice(0, 300));
+
+    // Só faz retry em 5xx ou 429. 4xx (credencial inválida) falha imediatamente.
+    if (res.status < 500 && res.status !== 429) {
+      break;
+    }
+  }
+
+  throw new Error(`Falha ao obter token OAuth: ${lastStatus} ${lastText.slice(0, 200)}`);
+}
+
+// Stub: o bloco abaixo (parse/cache) foi movido para dentro do loop acima.
+async function _unused_token_parse_block() {
+  const text = "";
+  const res = { ok: false } as Response;
   if (!res.ok) {
-    console.error(`[rede-gv] Token error ${res.status}:`, text.slice(0, 500));
-    throw new Error(`Falha ao obter token OAuth: ${res.status} ${text.slice(0, 200)}`);
+    throw new Error(`Falha ao obter token OAuth: ${text.slice(0, 200)}`);
   }
 
   const data = JSON.parse(text);
