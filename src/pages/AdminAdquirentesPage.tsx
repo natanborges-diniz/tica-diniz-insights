@@ -426,13 +426,18 @@ export default function AdminAdquirentesPage() {
 
       // Para a chamada real, exibe resultado estruturado
       if (action === "solicitar_compartilhamento") {
-        const r = Array.isArray(data?.results) ? data.results[0] : null;
-        if (r?.ok) {
-          const protocolo = r.result?.request_id ? ` (protocolo ${r.result.request_id})` : "";
-          toast.success(`Solicitação enviada à REDE${protocolo}. Aguardando aceite no portal.`);
-        } else {
-          const err = r?.error || `HTTP ${r?.result?.status || "?"}`;
-          toast.error(`REDE recusou a solicitação: ${err}. Veja o response no detalhe.`);
+        const okPvs = (data?.pv_results || []).filter((r: any) => r.ok);
+        const failPvs = (data?.pv_results || []).filter((r: any) => !r.ok);
+        if (okPvs.length > 0) {
+          const protocolos = okPvs.map((r: any) => r.request_id).filter(Boolean).join(", ");
+          toast.success(`${okPvs.length} PV(s) enviado(s) à REDE${protocolos ? ` (protocolos: ${protocolos})` : ""}. Aguardando aceite no portal.`);
+        }
+        if (failPvs.length > 0) {
+          const err = failPvs[0].error || `HTTP ${failPvs[0].status || "?"}`;
+          toast.error(`${failPvs.length} PV(s) recusado(s) pela REDE: ${err}`);
+        }
+        if ((data?.skipped?.length || 0) > 0) {
+          toast.warning(`${data.skipped.length} loja(s) sem PV Matriz cadastrado — pulada(s).`);
         }
       } else {
         const labels: Record<string, string> = {
