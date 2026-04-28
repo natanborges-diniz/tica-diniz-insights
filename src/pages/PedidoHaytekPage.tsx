@@ -406,8 +406,9 @@ const PedidoHaytekPage: React.FC = () => {
           height: frameConfig.height,
           width: frameConfig.width,
         },
-        right: buildEye(prescOd, prismaOd) as any,
-        left: buildEye(prescOe, prismaOe) as any,
+        // Pedidos monoculares: omitimos o lado não pedido inteiramente.
+        ...(olhosPedido.od && { right: buildEye(prescOd, prismaOd) as any }),
+        ...(olhosPedido.oe && { left: buildEye(prescOe, prismaOe) as any }),
       },
     };
 
