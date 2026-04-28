@@ -441,6 +441,8 @@ export default function AdminAdquirentesPage() {
 
       if (data?.ok) {
         toast.success(`Gestão de Vendas OK — ${data.ambiente}`);
+      } else if (data?.status === "REDE_INDISPONIVEL") {
+        toast.warning(data?.error || "REDE temporariamente indisponível. Tente novamente em alguns minutos.");
       } else if (data?.status === "AGUARDANDO_OPTIN") {
         toast.warning("Aguardando aceite do Opt-in no portal da REDE");
       } else if (data?.status === "CREDENCIAIS_INVALIDAS") {
