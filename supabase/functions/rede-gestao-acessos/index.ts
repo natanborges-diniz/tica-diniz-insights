@@ -396,6 +396,7 @@ serve(async (req) => {
           last_healthcheck_at: (data as any).gv_last_healthcheck_at,
           last_healthcheck_status: (data as any).gv_last_healthcheck_status,
           last_healthcheck_message: (data as any).gv_last_healthcheck_message,
+          mirrored_from: (data as any).gv_optin_mirrored_from,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
