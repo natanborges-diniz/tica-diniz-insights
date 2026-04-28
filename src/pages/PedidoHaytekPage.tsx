@@ -875,6 +875,7 @@ const PedidoHaytekPage: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+        )}
       </div>
 
       {/* Armação */}
