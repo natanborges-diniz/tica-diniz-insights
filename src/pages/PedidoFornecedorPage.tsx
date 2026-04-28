@@ -1701,7 +1701,10 @@ const PedidoFornecedorPage: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            <EyeSelector value={olhosPedido} onChange={setOlhosPedido} />
+            <Separator />
             {/* OD */}
+            {olhosPedido.od && (
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <div className="h-6 w-6 rounded-full bg-blue-500/15 text-blue-700 text-xs font-bold flex items-center justify-center">OD</div>
