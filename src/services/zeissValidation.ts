@@ -99,20 +99,21 @@ export function validateZeissPayload(
     }
   };
 
-  if (prescOd.esferico || prescOd.cilindrico) validateEye(prescOd, "OD");
-  if (prescOe.esferico || prescOe.cilindrico) validateEye(prescOe, "OE");
+  if (olhosPedido.od && (prescOd.esferico || prescOd.cilindrico)) validateEye(prescOd, "OD");
+  if (olhosPedido.oe && (prescOe.esferico || prescOe.cilindrico)) validateEye(prescOe, "OE");
 
   // ── Frame validation ──
-  const odLP = isLentePronta(produtoOdCod, produtoOdNome);
-  const oeLP = !produtoOeCod || isLentePronta(produtoOeCod, produtoOeNome);
+  // Em pedidos monoculares ignoramos o lado desmarcado para a checagem de LP.
+  const odLP = !olhosPedido.od || isLentePronta(produtoOdCod, produtoOdNome);
+  const oeLP = !olhosPedido.oe || !produtoOeCod || isLentePronta(produtoOeCod, produtoOeNome);
   const todosLP = odLP && oeLP;
 
   if (todosLP) {
     // Lente Pronta: Zeiss exige altura de montagem mesmo para LP
-    if (produtoOdCod && !prescOd.alturaMontagem.trim()) {
+    if (olhosPedido.od && produtoOdCod && !prescOd.alturaMontagem.trim()) {
       errors.push({ field: "prescOD.altura", message: "OD: Altura de montagem obrigatória para Lente Pronta", severity: "error" });
     }
-    if (produtoOeCod && !prescOe.alturaMontagem.trim()) {
+    if (olhosPedido.oe && produtoOeCod && !prescOe.alturaMontagem.trim()) {
       errors.push({ field: "prescOE.altura", message: "OE: Altura de montagem obrigatória para Lente Pronta", severity: "error" });
     }
   } else {
