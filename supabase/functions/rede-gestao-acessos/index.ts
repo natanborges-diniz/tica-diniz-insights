@@ -9,31 +9,14 @@ const corsHeaders = {
 /**
  * Edge function para Gestão de Acessos REDE.
  *
- * Conforme e-mail oficial da REDE (CNPJ matriz 12.107.885/0001-01), o fluxo
- * para ler vendas via Gestão de Vendas exige:
- *   1. Parceiro (nós) chamar a API de Gestão de Acessos para registrar
- *      a solicitação de acesso aos extratos do PV (opt-in).
- *   2. A loja dona do PV aceitar manualmente no portal da REDE
- *      (Minha Rede → PV → Conciliação → Compartilhar).
- *   3. Após o aceite, Gestão de Vendas devolve as transações.
+ * Modelo: cada loja física tem 1+ PVs Matriz Comerciais (coluna `pvs_matriz_production[]`).
+ * Para cada PV Matriz único, fazemos UMA chamada à REDE com requestType="T" (Total)
+ * e permissions=["R"]. O requestId retornado é replicado em TODAS as lojas que
+ * compartilham aquele PV (ex.: Antonio Agu + Sto Antonio = mesmo PV 90059441).
  *
- * Documentação base: https://developer.userede.com.br/gestao-acessos
- *
- * Actions suportadas:
- *   - solicitar_compartilhamento: dispara a chamada REST real à REDE para 1 PV
- *   - solicitar_compartilhamento_lote: dispara para vários cod_empresa de uma vez
- *   - registrar_aceite: marca como APROVADO após confirmação manual
- *   - reset: limpa o status (em caso de retrabalho)
- *   - status: devolve o estado atual da ativação
- *
- * As credenciais são EXCLUSIVAS da API Gestão de Acessos (REDE_GA_CLIENT_ID/SECRET) —
- * a REDE emite um par OAuth distinto do Gestão de Vendas (confirmado por e-mail oficial).
+ * Doc: https://developer.userede.com.br/gestao-acessos
  */
 
-// Base URLs por ambiente (confirmado em https://developer.userede.com.br/gestao-acessos)
-//   Sandbox:    https://rl7-sandbox-api.useredecloud.com.br
-//   Produção:   https://api.userede.com.br/redelabs
-// O mesmo base é usado para OAuth e para a API de Gestão de Acessos.
 const SANDBOX_OAUTH_BASE = "https://rl7-sandbox-api.useredecloud.com.br";
 const PRODUCTION_OAUTH_BASE = "https://api.userede.com.br/redelabs";
 const SANDBOX_API_BASE = "https://rl7-sandbox-api.useredecloud.com.br";
@@ -68,9 +51,6 @@ async function getOAuthToken(baseUrl: string): Promise<string> {
     throw new Error("REDE_GA_CLIENT_ID ou REDE_GA_CLIENT_SECRET não configurados");
   }
 
-  // Endpoint OAuth conforme PDF oficial:
-  // Sandbox:    https://rl7-sandbox-api.useredecloud.com.br/oauth/token
-  // Production: https://api.userede.com.br/redelabs/oauth/token
   const tokenUrl = `${baseUrl}/oauth/token`;
   console.log(`[rede-ga] Requesting OAuth token from ${tokenUrl}`);
 
@@ -97,23 +77,14 @@ async function getOAuthToken(baseUrl: string): Promise<string> {
   return cachedToken.token;
 }
 
-function resolveOAuthBase(ambiente?: string): string {
-  return ambiente === "production" ? PRODUCTION_OAUTH_BASE : SANDBOX_OAUTH_BASE;
-}
-function resolveApiBase(ambiente?: string): string {
-  return ambiente === "production" ? PRODUCTION_API_BASE : SANDBOX_API_BASE;
-}
-
-type AccessPermission = "R" | "W" | "D";
+const resolveOAuthBase = (a?: string) => a === "production" ? PRODUCTION_OAUTH_BASE : SANDBOX_OAUTH_BASE;
+const resolveApiBase = (a?: string) => a === "production" ? PRODUCTION_API_BASE : SANDBOX_API_BASE;
 
 interface AccessRequestPayload {
-  // 'I' = Individual (apenas o PV informado)
-  // 'P' = Parcial (matriz + algumas filiais listadas em companyNumbers)
-  // 'T' = Total (matriz + todas as filiais)
   requestType: "I" | "P" | "T";
-  requestCompanyNumber: number; // PV principal (matriz, filial ou autônomo)
-  permissions: AccessPermission; // R(ead), W(rite) ou D(elete) — string única
-  companyNumbers?: number[];    // usado apenas quando requestType = 'P'
+  requestCompanyNumber: number;
+  permissions: string; // "R" (string única, conforme Rede)
+  companyNumbers?: number[];
 }
 
 interface AccessRequestResult {
@@ -125,19 +96,12 @@ interface AccessRequestResult {
   response: unknown;
 }
 
-/**
- * Faz POST real ao endpoint de solicitação de acesso.
- * Endpoint oficial REDE Gestão de Acessos:
- *   POST {base}/partner/v1/organizations/requests/features/merchant-statement
- * Documentação: https://developer.userede.com.br/gestao-acessos
- */
 async function postStatementAccessRequest(
   baseUrl: string,
   token: string,
   payload: AccessRequestPayload,
 ): Promise<AccessRequestResult> {
   const url = `${baseUrl}/partner/v1/organizations/requests/features/merchant-statement`;
-  console.log(`[rede-ga] POST ${url}`, JSON.stringify(payload));
   console.log(`[rede-ga] POST ${url}`, JSON.stringify(payload));
 
   const res = await fetch(url, {
@@ -179,89 +143,182 @@ interface ConfigRow {
   merchant_id_production: string | null;
   pv_matriz: string | null;
   pv_matriz_production: string | null;
+  pvs_matriz_production: string[] | null;
 }
 
-function pickPvMatriz(cfg: ConfigRow, ambiente: string): string | null {
-  return ambiente === "production" ? cfg.pv_matriz_production : cfg.pv_matriz;
-}
-function pickMerchantId(cfg: ConfigRow, ambiente: string): string | null {
-  return ambiente === "production" ? cfg.merchant_id_production : cfg.merchant_id;
+function pickPvsMatriz(cfg: ConfigRow, ambiente: string): string[] {
+  if (ambiente === "production") {
+    const arr = Array.isArray(cfg.pvs_matriz_production) ? cfg.pvs_matriz_production : [];
+    if (arr.length > 0) return arr.filter(Boolean);
+    // fallback legado
+    if (cfg.pv_matriz_production) return [cfg.pv_matriz_production];
+    return [];
+  }
+  return cfg.pv_matriz ? [cfg.pv_matriz] : [];
 }
 
-async function processSingle(
+/**
+ * Processa um lote de configurações:
+ * 1. Expande (cfg, pv) para cada PV de cada loja.
+ * 2. Deduplica por PV.
+ * 3. Faz UMA chamada por PV único.
+ * 4. Persiste o resultado em TODAS as lojas que compartilham aquele PV.
+ */
+async function processBatch(
   supabase: any,
-  cfg: ConfigRow,
+  configs: ConfigRow[],
   ambiente: string,
   reference: string | null,
-): Promise<{ cod_empresa: number; ok: boolean; result?: AccessRequestResult; error?: string }> {
-  const pvMatriz = pickPvMatriz(cfg, ambiente);
-  const merchantId = pickMerchantId(cfg, ambiente);
-
-  // Para Gestão de Vendas Diniz, solicitamos acesso TOTAL via PV matriz
-  // (cobre matriz + todas as filiais com uma única chamada).
-  // Fallback: se não houver pv_matriz configurado, usa o merchant_id da própria loja.
-  const requestPv = pvMatriz || merchantId;
-
-  if (!requestPv) {
-    return {
-      cod_empresa: cfg.cod_empresa,
-      ok: false,
-      error: `PV matriz/Merchant ID (${ambiente}) não configurado`,
-    };
-  }
-
+) {
   const oauthBase = resolveOAuthBase(ambiente);
   const apiBase = resolveApiBase(ambiente);
-  const token = await getOAuthToken(oauthBase);
 
-  const requestCompanyNumber = Number(requestPv);
-  if (!Number.isFinite(requestCompanyNumber)) {
+  // 1+2. Expandir e agrupar por PV
+  const pvToConfigs: Map<string, ConfigRow[]> = new Map();
+  const skipped: { cod_empresa: number; reason: string }[] = [];
+
+  for (const cfg of configs) {
+    const pvs = pickPvsMatriz(cfg, ambiente);
+    if (pvs.length === 0) {
+      skipped.push({ cod_empresa: cfg.cod_empresa, reason: "PV Matriz não configurado" });
+      continue;
+    }
+    for (const pv of pvs) {
+      if (!pvToConfigs.has(pv)) pvToConfigs.set(pv, []);
+      pvToConfigs.get(pv)!.push(cfg);
+    }
+  }
+
+  if (pvToConfigs.size === 0) {
     return {
-      cod_empresa: cfg.cod_empresa,
-      ok: false,
-      error: `PV inválido (não numérico): ${requestPv}`,
+      total_pvs: 0,
+      sucesso: 0,
+      falha: 0,
+      skipped,
+      pv_results: [],
+      cfg_results: [],
     };
   }
 
-  // requestType "I" (Individual) sobre o PV matriz: a Rede consolida via grupo.
-  // permissions: "R" = Read (string única, conforme mensagem oficial da Rede).
-  const payload: AccessRequestPayload = {
-    requestType: "I",
-    requestCompanyNumber,
-    permissions: "R",
-  };
+  const token = await getOAuthToken(oauthBase);
 
-  console.log(`[rede-ga] Solicitando acesso TOTAL ao PV matriz ${requestPv} (cod_empresa=${cfg.cod_empresa})`);
+  const pvResults: Array<{
+    pv: string;
+    ok: boolean;
+    request_id?: string | null;
+    error?: string;
+    cod_empresas: number[];
+    response?: unknown;
+    status?: number;
+  }> = [];
 
-  const result = await postStatementAccessRequest(apiBase, token, payload);
+  const cfgResults: Array<{
+    cod_empresa: number;
+    pv: string;
+    ok: boolean;
+    request_id?: string | null;
+    error?: string;
+  }> = [];
 
-  // Persiste sempre — sucesso ou falha — para auditoria
-  const updates: Record<string, unknown> = {
-    gv_optin_request_payload: payload,
-    gv_optin_response: result.response,
-    gv_optin_requested_at: new Date().toISOString(),
-    gv_optin_reference: reference,
-  };
+  // 3. Uma chamada por PV único
+  for (const [pv, cfgs] of pvToConfigs.entries()) {
+    const requestCompanyNumber = Number(pv);
+    if (!Number.isFinite(requestCompanyNumber)) {
+      pvResults.push({
+        pv,
+        ok: false,
+        error: `PV inválido (não numérico): ${pv}`,
+        cod_empresas: cfgs.map(c => c.cod_empresa),
+      });
+      for (const c of cfgs) {
+        cfgResults.push({ cod_empresa: c.cod_empresa, pv, ok: false, error: "PV inválido" });
+      }
+      continue;
+    }
 
-  if (result.ok) {
-    updates.gv_optin_status = "AGUARDANDO_ACEITE";
-    updates.gv_optin_external_id = result.request_id;
-    updates.gv_approved_at = null;
-  } else {
-    updates.gv_optin_status = "ERRO_SOLICITACAO";
+    const payload: AccessRequestPayload = {
+      requestType: "T",
+      requestCompanyNumber,
+      permissions: "R",
+    };
+
+    console.log(`[rede-ga] PV ${pv} compartilhado por ${cfgs.length} loja(s): ${cfgs.map(c => c.cod_empresa).join(",")}`);
+
+    let result: AccessRequestResult;
+    try {
+      result = await postStatementAccessRequest(apiBase, token, payload);
+    } catch (e) {
+      const err = (e as Error).message;
+      pvResults.push({ pv, ok: false, error: err, cod_empresas: cfgs.map(c => c.cod_empresa) });
+      for (const c of cfgs) {
+        cfgResults.push({ cod_empresa: c.cod_empresa, pv, ok: false, error: err });
+      }
+      continue;
+    }
+
+    pvResults.push({
+      pv,
+      ok: result.ok,
+      request_id: result.request_id,
+      cod_empresas: cfgs.map(c => c.cod_empresa),
+      response: result.response,
+      status: result.status,
+    });
+
+    // 4. Persistir em TODAS as configs que compartilham este PV
+    const updates: Record<string, unknown> = {
+      gv_optin_request_payload: payload,
+      gv_optin_response: result.response,
+      gv_optin_requested_at: new Date().toISOString(),
+      gv_optin_reference: reference,
+    };
+
+    if (result.ok) {
+      updates.gv_optin_status = "AGUARDANDO_ACEITE";
+      updates.gv_optin_external_id = result.request_id;
+      updates.gv_approved_at = null;
+    } else {
+      updates.gv_optin_status = "ERRO_SOLICITACAO";
+    }
+
+    for (const cfg of cfgs) {
+      const { error: upErr } = await supabase
+        .from("adquirentes_config")
+        .update(updates)
+        .eq("id", cfg.id);
+
+      if (upErr) {
+        console.error(`[rede-ga] Erro ao persistir cfg ${cfg.id}:`, upErr);
+        cfgResults.push({
+          cod_empresa: cfg.cod_empresa,
+          pv,
+          ok: false,
+          error: `Persistência: ${upErr.message}`,
+        });
+      } else {
+        cfgResults.push({
+          cod_empresa: cfg.cod_empresa,
+          pv,
+          ok: result.ok,
+          request_id: result.request_id,
+          error: result.ok ? undefined : `HTTP ${result.status}`,
+        });
+      }
+    }
   }
 
-  const { error: upErr } = await supabase
-    .from("adquirentes_config")
-    .update(updates)
-    .eq("id", cfg.id);
-
-  if (upErr) {
-    console.error(`[rede-ga] Erro ao persistir cfg ${cfg.id}:`, upErr);
-  }
-
-  return { cod_empresa: cfg.cod_empresa, ok: result.ok, result };
+  const sucesso = pvResults.filter(r => r.ok).length;
+  return {
+    total_pvs: pvResults.length,
+    sucesso,
+    falha: pvResults.length - sucesso,
+    skipped,
+    pv_results: pvResults,
+    cfg_results: cfgResults,
+  };
 }
+
+const SELECT_COLS = "id, cod_empresa, ambiente, merchant_id, merchant_id_production, pv_matriz, pv_matriz_production, pvs_matriz_production";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -279,7 +336,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // ---------- Status (leitura) ----------
+    // ---------- Status ----------
     if (action === "status") {
       if (typeof cod_empresa !== "number") throw new Error("cod_empresa é obrigatório");
       const { data, error } = await supabase
@@ -362,7 +419,7 @@ serve(async (req) => {
       );
     }
 
-    // ---------- Solicitação real (single ou lote) ----------
+    // ---------- Solicitação (single ou lote) ----------
     const ambiente = ambReq || "production";
 
     let configs: ConfigRow[] = [];
@@ -371,7 +428,7 @@ serve(async (req) => {
       if (typeof cod_empresa !== "number") throw new Error("cod_empresa é obrigatório");
       const { data, error } = await supabase
         .from("adquirentes_config")
-        .select("id, cod_empresa, ambiente, merchant_id, merchant_id_production, pv_matriz, pv_matriz_production")
+        .select(SELECT_COLS)
         .eq("adquirente", "REDE")
         .eq("cod_empresa", cod_empresa);
       if (error) throw new Error(error.message);
@@ -379,7 +436,7 @@ serve(async (req) => {
     } else if (action === "solicitar_compartilhamento_lote") {
       let q = supabase
         .from("adquirentes_config")
-        .select("id, cod_empresa, ambiente, merchant_id, merchant_id_production, pv_matriz, pv_matriz_production")
+        .select(SELECT_COLS)
         .eq("adquirente", "REDE")
         .eq("ativo", true);
 
@@ -389,13 +446,6 @@ serve(async (req) => {
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       configs = (data || []) as ConfigRow[];
-
-      // Para lote em produção, filtra apenas as que têm credenciais de produção
-      if (ambiente === "production") {
-        configs = configs.filter(
-          (c) => c.merchant_id_production && c.pv_matriz_production,
-        );
-      }
     } else {
       throw new Error(`action '${action}' não suportada`);
     }
@@ -404,29 +454,13 @@ serve(async (req) => {
       throw new Error("Nenhuma configuração REDE elegível encontrada");
     }
 
-    const results = [];
-    for (const cfg of configs) {
-      try {
-        const r = await processSingle(supabase, cfg, ambiente, reference || null);
-        results.push(r);
-      } catch (e) {
-        results.push({
-          cod_empresa: cfg.cod_empresa,
-          ok: false,
-          error: (e as Error).message,
-        });
-      }
-    }
+    const summary = await processBatch(supabase, configs, ambiente, reference || null);
 
-    const okCount = results.filter((r) => r.ok).length;
     return new Response(
       JSON.stringify({
-        ok: okCount > 0,
+        ok: summary.sucesso > 0,
         ambiente,
-        total: results.length,
-        sucesso: okCount,
-        falha: results.length - okCount,
-        results,
+        ...summary,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
