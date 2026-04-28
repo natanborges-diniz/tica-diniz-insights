@@ -33,6 +33,7 @@ import {
 import { registrarPedidoNoCache } from "@/utils/pedidosMapCache";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { supabase } from "@/integrations/supabase/client";
+import { EyeSelector } from "@/components/lente/EyeSelector";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
