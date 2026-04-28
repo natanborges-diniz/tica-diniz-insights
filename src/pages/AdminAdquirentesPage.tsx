@@ -79,7 +79,7 @@ function ActivationGVBlock({
 }) {
   const status = config.gv_optin_status || "NAO_SOLICITADO";
   const hasCreds = !!form.merchant_id_production && !!form.integration_key_production;
-  const hasPvMatriz = !!form.pv_matriz_production;
+  const hasPvMatriz = (form.pvs_matriz_production?.length || 0) > 0;
   const isProd = form.ambiente === "production";
   const optinRequested = !!config.gv_optin_requested_at;
   const approved = status === "APROVADO" || !!config.gv_approved_at;
