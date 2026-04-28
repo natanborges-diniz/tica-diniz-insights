@@ -413,7 +413,7 @@ const PedidoZeissPage: React.FC = () => {
     const isProgressiveOd = produtoOd?.nome?.toUpperCase().startsWith("PR ") || false;
     const isProgressiveOe = (oeProduct || produtoOd)?.nome?.toUpperCase().startsWith("PR ") || false;
 
-    if (produtoOd || prescOd.esferico) {
+    if (olhosPedido.od && (produtoOd || prescOd.esferico)) {
       payload.od = {
         produto: produtoOd?.cod || "",
         esferico: prescOd.esferico,
@@ -433,7 +433,7 @@ const PedidoZeissPage: React.FC = () => {
       };
     }
 
-    if (oeProduct || prescOe.esferico) {
+    if (olhosPedido.oe && (oeProduct || prescOe.esferico)) {
       payload.oe = {
         produto: oeProduct?.cod || produtoOd?.cod || "",
         esferico: prescOe.esferico,
