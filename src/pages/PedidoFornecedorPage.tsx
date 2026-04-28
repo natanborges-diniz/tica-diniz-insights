@@ -183,6 +183,9 @@ const PedidoFornecedorPage: React.FC = () => {
     prismaH: "", basePrismaH: "", prismaV: "", basePrismaV: "",
   });
 
+  // Pedidos monoculares — default = ambos os olhos
+  const [olhosPedido, setOlhosPedido] = useState<{ od: boolean; oe: boolean }>({ od: true, oe: true });
+
   // Armação editável
   const [armacao, setArmacao] = useState({
     larguraLente: "", alturaLente: "", ponteLente: "",
