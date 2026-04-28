@@ -353,7 +353,7 @@ export default function AdminAdquirentesPage() {
   const handleTestGV = async (config: AdquirenteConfig, targetAmbiente: "sandbox" | "production") => {
     const form = editForms[config.id];
     const pvMatriz = targetAmbiente === "production"
-      ? (form?.pv_matriz_production || form?.pv_matriz)
+      ? (form?.pvs_matriz_production?.[0] || form?.pv_matriz_production || form?.pv_matriz)
       : form?.pv_matriz;
 
     if (!pvMatriz) {
