@@ -406,22 +406,44 @@ serve(async (req) => {
       if (typeof cod_empresa !== "number") throw new Error("cod_empresa é obrigatório");
       const { data, error } = await supabase
         .from("adquirentes_config")
-        .select("id")
+        .select("id, pvs_matriz_production")
         .eq("adquirente", "REDE")
         .eq("cod_empresa", cod_empresa)
         .maybeSingle();
       if (error || !data) throw new Error(`Configuração REDE inexistente para empresa ${cod_empresa}`);
 
-      await supabase
-        .from("adquirentes_config")
-        .update({
-          gv_optin_status: "APROVADO",
-          gv_approved_at: new Date().toISOString(),
-        })
-        .eq("id", data.id);
+      const pvs = Array.isArray((data as any).pvs_matriz_production) ? (data as any).pvs_matriz_production : [];
+      const updates = {
+        gv_optin_status: "APROVADO",
+        gv_approved_at: new Date().toISOString(),
+      };
+
+      // Atualiza a loja origem
+      await supabase.from("adquirentes_config").update(updates).eq("id", data.id);
+
+      // Espelha para todas as outras lojas que compartilham qualquer um dos PVs
+      let mirroredCount = 0;
+      if (pvs.length > 0) {
+        const { data: shared } = await supabase
+          .from("adquirentes_config")
+          .select("id, cod_empresa")
+          .eq("adquirente", "REDE")
+          .eq("ativo", true)
+          .neq("id", data.id)
+          .overlaps("pvs_matriz_production", pvs);
+
+        if (Array.isArray(shared) && shared.length > 0) {
+          const ids = shared.map((s: any) => s.id);
+          await supabase
+            .from("adquirentes_config")
+            .update({ ...updates, gv_optin_mirrored_from: cod_empresa })
+            .in("id", ids);
+          mirroredCount = shared.length;
+        }
+      }
 
       return new Response(
-        JSON.stringify({ ok: true, cod_empresa, status: "APROVADO" }),
+        JSON.stringify({ ok: true, cod_empresa, status: "APROVADO", mirrored_to: mirroredCount }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -431,24 +453,40 @@ serve(async (req) => {
       if (typeof cod_empresa !== "number") throw new Error("cod_empresa é obrigatório");
       const { data, error } = await supabase
         .from("adquirentes_config")
-        .select("id")
+        .select("id, pvs_matriz_production")
         .eq("adquirente", "REDE")
         .eq("cod_empresa", cod_empresa)
         .maybeSingle();
       if (error || !data) throw new Error(`Configuração REDE inexistente para empresa ${cod_empresa}`);
 
-      await supabase
-        .from("adquirentes_config")
-        .update({
-          gv_optin_status: null,
-          gv_optin_requested_at: null,
-          gv_optin_reference: null,
-          gv_optin_external_id: null,
-          gv_optin_request_payload: null,
-          gv_optin_response: null,
-          gv_approved_at: null,
-        })
-        .eq("id", data.id);
+      const pvs = Array.isArray((data as any).pvs_matriz_production) ? (data as any).pvs_matriz_production : [];
+      const resetFields = {
+        gv_optin_status: null,
+        gv_optin_requested_at: null,
+        gv_optin_reference: null,
+        gv_optin_external_id: null,
+        gv_optin_request_payload: null,
+        gv_optin_response: null,
+        gv_approved_at: null,
+        gv_optin_mirrored_from: null,
+      };
+
+      await supabase.from("adquirentes_config").update(resetFields).eq("id", data.id);
+
+      // Reseta também todas as lojas espelhadas (mesmo PV)
+      if (pvs.length > 0) {
+        const { data: shared } = await supabase
+          .from("adquirentes_config")
+          .select("id")
+          .eq("adquirente", "REDE")
+          .eq("ativo", true)
+          .neq("id", data.id)
+          .overlaps("pvs_matriz_production", pvs);
+
+        if (Array.isArray(shared) && shared.length > 0) {
+          await supabase.from("adquirentes_config").update(resetFields).in("id", shared.map((s: any) => s.id));
+        }
+      }
 
       return new Response(
         JSON.stringify({ ok: true, cod_empresa, status: "RESET" }),
