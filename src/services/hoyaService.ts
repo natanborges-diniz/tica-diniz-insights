@@ -68,8 +68,11 @@ export interface HoyaPedidoPayload {
     codigoFotossensivel?: number;
   };
   prescricao: {
-    esquerdo: HoyaPrescricaoOlho;
-    direito: HoyaPrescricaoOlho;
+    // Opcionais para permitir pedidos monoculares (apenas OD ou apenas OE).
+    // Quando o cliente pede só uma lente, o lado oposto é OMITIDO do payload —
+    // não enviar 0/zerado para evitar que o laboratório cobre lente plana indesejada.
+    esquerdo?: HoyaPrescricaoOlho;
+    direito?: HoyaPrescricaoOlho;
     afinamentoPrismatico?: boolean;
     equilibrioLente?: boolean;
   };
