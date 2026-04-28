@@ -176,6 +176,7 @@ async function processBatch(
   // 1+2. Expandir e agrupar por PV
   const pvToConfigs: Map<string, ConfigRow[]> = new Map();
   const skipped: { cod_empresa: number; reason: string }[] = [];
+  const requestedCodEmpresas = new Set(configs.map(c => c.cod_empresa));
 
   for (const cfg of configs) {
     const pvs = pickPvsMatriz(cfg, ambiente);
@@ -186,6 +187,33 @@ async function processBatch(
     for (const pv of pvs) {
       if (!pvToConfigs.has(pv)) pvToConfigs.set(pv, []);
       pvToConfigs.get(pv)!.push(cfg);
+    }
+  }
+
+  // 2.5. Auto-discovery: para cada PV, buscar TODAS as lojas que compartilham esse PV
+  // (mesmo que não estejam na lista de `configs` recebida). Isso garante que 1 Opt-in
+  // por PV cubra todas as lojas filhas e o status seja espelhado para todas.
+  const allPvs = Array.from(pvToConfigs.keys());
+  if (allPvs.length > 0) {
+    const { data: sharedConfigs } = await supabase
+      .from("adquirentes_config")
+      .select(SELECT_COLS)
+      .eq("adquirente", "REDE")
+      .eq("ativo", true)
+      .overlaps("pvs_matriz_production", allPvs);
+
+    if (Array.isArray(sharedConfigs)) {
+      for (const shared of sharedConfigs as ConfigRow[]) {
+        const sharedPvs = pickPvsMatriz(shared, ambiente);
+        for (const pv of sharedPvs) {
+          if (!pvToConfigs.has(pv)) continue;
+          const list = pvToConfigs.get(pv)!;
+          if (!list.some(c => c.id === shared.id)) {
+            list.push(shared);
+            console.log(`[rede-ga] Auto-incluída loja ${shared.cod_empresa} (compartilha PV ${pv})`);
+          }
+        }
+      }
     }
   }
 
