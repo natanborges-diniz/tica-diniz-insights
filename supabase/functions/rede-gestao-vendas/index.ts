@@ -77,7 +77,26 @@ async function getOAuthToken(baseUrl: string): Promise<string> {
     }
   }
 
-  throw new Error(`Falha ao obter token OAuth: ${lastStatus} ${lastText.slice(0, 200)}`);
+  const err = new Error(`Falha ao obter token OAuth: ${lastStatus} ${lastText.slice(0, 200)}`) as Error & { code?: string; status?: number; retryable?: boolean };
+  err.code = lastStatus >= 500 || lastStatus === 429 || lastStatus === 0 ? "GV_TOKEN_TEMPORARY_UNAVAILABLE" : "GV_TOKEN_ERROR";
+  err.status = lastStatus;
+  err.retryable = lastStatus >= 500 || lastStatus === 429 || lastStatus === 0;
+  throw err;
+}
+
+function tokenHealthFailure(err: Error & { code?: string; status?: number; retryable?: boolean }, baseUrl: string) {
+  const isTemporary = err.retryable || err.code === "GV_TOKEN_TEMPORARY_UNAVAILABLE";
+  return {
+    ok: false,
+    status: isTemporary ? "REDE_INDISPONIVEL" : "ERRO_TOKEN",
+    ambiente: baseUrl.includes("sandbox") ? "sandbox" : "production",
+    error: isTemporary
+      ? "A REDE retornou indisponibilidade temporária ao emitir o token OAuth. Tente validar novamente em alguns minutos."
+      : err.message,
+    error_code: err.code || "GV_TOKEN_ERROR",
+    http_status: err.status,
+    retryable: isTemporary,
+  };
 }
 
 
@@ -178,7 +197,17 @@ serve(async (req) => {
     if (!action) throw new Error("action é obrigatório");
 
     const baseUrl = resolveBaseUrl(ambiente);
-    const token = await getOAuthToken(baseUrl);
+    let token = "";
+    try {
+      token = await getOAuthToken(baseUrl);
+    } catch (tokenErr) {
+      if (action === "health") {
+        return new Response(JSON.stringify(tokenHealthFailure(tokenErr as Error & { code?: string; status?: number; retryable?: boolean }, baseUrl)), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      throw tokenErr;
+    }
 
     let result: unknown;
 
