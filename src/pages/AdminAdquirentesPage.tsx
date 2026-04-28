@@ -120,7 +120,7 @@ function ActivationGVBlock({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <Step done={hasCreds} label="Credenciais OAuth de produção cadastradas" />
-        <Step done={hasPvMatriz} label="PV Matriz de produção preenchido" />
+        <Step done={hasPvMatriz} label={hasPvMatriz ? `${form.pvs_matriz_production.length} PV(s) Matriz Comercial(is) cadastrado(s)` : "PVs Matriz Comerciais não cadastrados"} />
         <Step done={isProd} label="Ambiente ativo: PRODUÇÃO" hint={isProd ? undefined : "Alterne o toggle no topo"} />
         <Step
           done={optinRequested}
