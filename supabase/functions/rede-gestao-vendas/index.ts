@@ -80,26 +80,6 @@ async function getOAuthToken(baseUrl: string): Promise<string> {
   throw new Error(`Falha ao obter token OAuth: ${lastStatus} ${lastText.slice(0, 200)}`);
 }
 
-// Stub: o bloco abaixo (parse/cache) foi movido para dentro do loop acima.
-async function _unused_token_parse_block() {
-  const text = "";
-  const res = { ok: false } as Response;
-  if (!res.ok) {
-    throw new Error(`Falha ao obter token OAuth: ${text.slice(0, 200)}`);
-  }
-
-  const data = JSON.parse(text);
-  const token = data.access_token;
-  const expiresIn = data.expires_in || 3600;
-
-  cachedToken = {
-    token,
-    expiresAt: Date.now() + expiresIn * 1000,
-  };
-
-  console.log(`[rede-gv] Token obtained, expires in ${expiresIn}s`);
-  return token;
-}
 
 // Classifica erros operacionais comuns da REDE em produção
 function classifyApiError(status: number, text: string): { code: string; message: string } {
