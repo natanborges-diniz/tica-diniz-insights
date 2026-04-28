@@ -46,6 +46,7 @@ interface AdquirenteConfig {
   gv_last_healthcheck_at?: string | null;
   gv_last_healthcheck_status?: string | null;
   gv_last_healthcheck_message?: string | null;
+  gv_optin_mirrored_from?: number | null;
 }
 
 interface EditForm {
@@ -70,12 +71,14 @@ function ActivationGVBlock({
   onOptin,
   onTestProd,
   busy,
+  empresas,
 }: {
   config: AdquirenteConfig;
   form: EditForm;
   onOptin: (a: OptinAction) => void;
   onTestProd: () => void;
   busy: string | null;
+  empresas?: Array<{ codEmpresa: number; nomeFantasia?: string | null; nome?: string | null }>;
 }) {
   const status = config.gv_optin_status || "NAO_SOLICITADO";
   const hasCreds = !!form.merchant_id_production && !!form.integration_key_production;
@@ -84,6 +87,12 @@ function ActivationGVBlock({
   const optinRequested = !!config.gv_optin_requested_at;
   const approved = status === "APROVADO" || !!config.gv_approved_at;
   const healthOk = config.gv_last_healthcheck_status === "ATIVA";
+  const mirroredFrom = config.gv_optin_mirrored_from ?? null;
+  const mirroredFromName = mirroredFrom != null
+    ? (empresas?.find(e => e.codEmpresa === mirroredFrom)?.nomeFantasia
+        || empresas?.find(e => e.codEmpresa === mirroredFrom)?.nome
+        || `Loja ${mirroredFrom}`)
+    : null;
 
   const fmt = (iso?: string | null) =>
     iso ? new Date(iso).toLocaleString("pt-BR") : "—";
@@ -111,12 +120,23 @@ function ActivationGVBlock({
   return (
     <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <ShieldCheck className="h-4 w-4 text-primary" />
           <span className="text-sm font-medium">Ativação Gestão de Vendas (Produção)</span>
           {statusBadge}
+          {mirroredFromName && (
+            <Badge variant="outline" className="text-[10px] border-primary/40 text-primary">
+              Coberto pelo Opt-in de {mirroredFromName}
+            </Badge>
+          )}
         </div>
       </div>
+
+      {mirroredFromName && (
+        <div className="text-[11px] text-muted-foreground bg-primary/5 border border-primary/15 rounded p-2">
+          Esta loja compartilha o mesmo PV Matriz Comercial com <strong>{mirroredFromName}</strong>. O aceite no portal da REDE feito por aquela loja já cobre esta — não é necessária nova solicitação. Quando o status mudar para ATIVA, ambas serão liberadas simultaneamente.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <Step done={hasCreds} label="Credenciais OAuth de produção cadastradas" />
@@ -831,6 +851,7 @@ export default function AdminAdquirentesPage() {
                       onOptin={(action) => handleOptinAction(config, action)}
                       onTestProd={() => handleTestGV(config, "production")}
                       busy={testing}
+                      empresas={empresas}
                     />
                   )}
 
