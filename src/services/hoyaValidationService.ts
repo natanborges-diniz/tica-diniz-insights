@@ -96,12 +96,28 @@ export function validateHoyaPayload(
     errors.push({ field: "especificacoes.codigoProduto", message: "Produto Hoya não selecionado", severity: "error" });
   }
 
-  // Prescription — DNP obrigatório conforme requisitos do produto
-  errors.push(...validatePrescricaoOlho(payload.prescricao.direito, "OD", reqs));
-  errors.push(...validatePrescricaoOlho(payload.prescricao.esquerdo, "OE", reqs));
+  // Prescription — DNP obrigatório conforme requisitos do produto.
+  // Pedidos monoculares: validar APENAS o(s) olho(s) presente(s) no payload.
+  const hasOd = !!payload.prescricao.direito;
+  const hasOe = !!payload.prescricao.esquerdo;
+
+  if (!hasOd && !hasOe) {
+    errors.push({
+      field: "prescricao",
+      message: "Selecione ao menos um olho (OD ou OE) para o pedido",
+      severity: "error",
+    });
+  }
+
+  if (hasOd) {
+    errors.push(...validatePrescricaoOlho(payload.prescricao.direito!, "OD", reqs));
+  }
+  if (hasOe) {
+    errors.push(...validatePrescricaoOlho(payload.prescricao.esquerdo!, "OE", reqs));
+  }
 
   // Adicao warning
-  if (reqs.needsAdicao && payload.prescricao.direito.adicao === null && payload.prescricao.esquerdo.adicao === null) {
+  if (reqs.needsAdicao && (payload.prescricao.direito?.adicao ?? null) === null && (payload.prescricao.esquerdo?.adicao ?? null) === null) {
     warnings.push({
       field: "prescricao.adicao",
       message: "Sem adição — verifique se é lente monofocal",
