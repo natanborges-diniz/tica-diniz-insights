@@ -38,6 +38,7 @@ export type Database = {
           merchant_id_production: string | null
           pv_matriz: string | null
           pv_matriz_production: string | null
+          pvs_matriz_production: string[]
           updated_at: string
         }
         Insert: {
@@ -63,6 +64,7 @@ export type Database = {
           merchant_id_production?: string | null
           pv_matriz?: string | null
           pv_matriz_production?: string | null
+          pvs_matriz_production?: string[]
           updated_at?: string
         }
         Update: {
@@ -88,6 +90,7 @@ export type Database = {
           merchant_id_production?: string | null
           pv_matriz?: string | null
           pv_matriz_production?: string | null
+          pvs_matriz_production?: string[]
           updated_at?: string
         }
         Relationships: []

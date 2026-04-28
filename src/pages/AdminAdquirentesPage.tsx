@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   Loader2, Save, Plus, Eye, EyeOff, CreditCard,
   CheckCircle2, AlertCircle, Trash2, Wifi, ShieldCheck, FlaskConical,
-  Send, Code,
+  Send, Code, X,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Navigate } from "react-router-dom";
@@ -32,6 +32,7 @@ interface AdquirenteConfig {
   integration_key_production: string | null;
   pv_matriz: string | null;
   pv_matriz_production: string | null;
+  pvs_matriz_production: string[] | null;
   ativo: boolean;
   created_at: string;
   updated_at: string;
@@ -55,6 +56,7 @@ interface EditForm {
   integration_key_production: string;
   pv_matriz: string;
   pv_matriz_production: string;
+  pvs_matriz_production: string[];
   ativo: boolean;
 }
 
@@ -77,7 +79,7 @@ function ActivationGVBlock({
 }) {
   const status = config.gv_optin_status || "NAO_SOLICITADO";
   const hasCreds = !!form.merchant_id_production && !!form.integration_key_production;
-  const hasPvMatriz = !!form.pv_matriz_production;
+  const hasPvMatriz = (form.pvs_matriz_production?.length || 0) > 0;
   const isProd = form.ambiente === "production";
   const optinRequested = !!config.gv_optin_requested_at;
   const approved = status === "APROVADO" || !!config.gv_approved_at;
@@ -118,7 +120,7 @@ function ActivationGVBlock({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <Step done={hasCreds} label="Credenciais OAuth de produção cadastradas" />
-        <Step done={hasPvMatriz} label="PV Matriz de produção preenchido" />
+        <Step done={hasPvMatriz} label={hasPvMatriz ? `${form.pvs_matriz_production.length} PV(s) Matriz Comercial(is) cadastrado(s)` : "PVs Matriz Comerciais não cadastrados"} />
         <Step done={isProd} label="Ambiente ativo: PRODUÇÃO" hint={isProd ? undefined : "Alterne o toggle no topo"} />
         <Step
           done={optinRequested}
@@ -206,6 +208,60 @@ function ActivationGVBlock({
   );
 }
 
+function PvsMatrizManager({
+  configId,
+  pvs,
+  onChange,
+}: {
+  configId: string;
+  pvs: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    if (pvs.includes(v)) { setDraft(""); return; }
+    onChange([...pvs, v]);
+    setDraft("");
+  };
+  const remove = (pv: string) => onChange(pvs.filter(p => p !== pv));
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium">PVs Matriz Comerciais — Produção</Label>
+      <div className="flex gap-1">
+        <Input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          className="font-mono text-sm"
+          placeholder="Ex.: 31974325"
+          inputMode="numeric"
+        />
+        <Button variant="outline" size="sm" onClick={add} disabled={!draft.trim()} className="shrink-0">
+          <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar
+        </Button>
+      </div>
+      {pvs.length === 0 ? (
+        <Badge className="bg-warning/15 text-warning border-warning/30 text-[10px]">PV Matriz não configurado</Badge>
+      ) : (
+        <div className="flex flex-wrap gap-1 pt-1">
+          {pvs.map(pv => (
+            <Badge key={`${configId}-${pv}`} variant="secondary" className="font-mono text-xs gap-1 pr-1">
+              {pv}
+              <button onClick={() => remove(pv)} className="hover:bg-destructive/20 rounded p-0.5" aria-label={`Remover ${pv}`}>
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+      <p className="text-[10px] text-muted-foreground">PV Matriz Comercial de cada CNPJ. Múltiplos PVs por loja são suportados (ex.: Super Shopping). Lojas que compartilham CNPJ podem usar o mesmo PV.</p>
+    </div>
+  );
+}
+
 export default function AdminAdquirentesPage() {
   const { isAdmin } = useAuth();
   const { empresas } = useEmpresas();
@@ -245,6 +301,7 @@ export default function AdminAdquirentesPage() {
           integration_key_production: r.integration_key_production || "",
           pv_matriz: r.pv_matriz || "",
           pv_matriz_production: r.pv_matriz_production || "",
+          pvs_matriz_production: Array.isArray(r.pvs_matriz_production) ? r.pvs_matriz_production : [],
           ativo: r.ativo,
         };
       });
@@ -272,6 +329,7 @@ export default function AdminAdquirentesPage() {
         integration_key_production: form.integration_key_production || null,
         pv_matriz: form.pv_matriz || null,
         pv_matriz_production: form.pv_matriz_production || null,
+        pvs_matriz_production: form.pvs_matriz_production || [],
         ativo: form.ativo,
       } as any)
       .eq("id", config.id);
@@ -349,7 +407,7 @@ export default function AdminAdquirentesPage() {
   const handleTestGV = async (config: AdquirenteConfig, targetAmbiente: "sandbox" | "production") => {
     const form = editForms[config.id];
     const pvMatriz = targetAmbiente === "production"
-      ? (form?.pv_matriz_production || form?.pv_matriz)
+      ? (form?.pvs_matriz_production?.[0] || form?.pv_matriz_production || form?.pv_matriz)
       : form?.pv_matriz;
 
     if (!pvMatriz) {
@@ -422,13 +480,18 @@ export default function AdminAdquirentesPage() {
 
       // Para a chamada real, exibe resultado estruturado
       if (action === "solicitar_compartilhamento") {
-        const r = Array.isArray(data?.results) ? data.results[0] : null;
-        if (r?.ok) {
-          const protocolo = r.result?.request_id ? ` (protocolo ${r.result.request_id})` : "";
-          toast.success(`Solicitação enviada à REDE${protocolo}. Aguardando aceite no portal.`);
-        } else {
-          const err = r?.error || `HTTP ${r?.result?.status || "?"}`;
-          toast.error(`REDE recusou a solicitação: ${err}. Veja o response no detalhe.`);
+        const okPvs = (data?.pv_results || []).filter((r: any) => r.ok);
+        const failPvs = (data?.pv_results || []).filter((r: any) => !r.ok);
+        if (okPvs.length > 0) {
+          const protocolos = okPvs.map((r: any) => r.request_id).filter(Boolean).join(", ");
+          toast.success(`${okPvs.length} PV(s) enviado(s) à REDE${protocolos ? ` (protocolos: ${protocolos})` : ""}. Aguardando aceite no portal.`);
+        }
+        if (failPvs.length > 0) {
+          const err = failPvs[0].error || `HTTP ${failPvs[0].status || "?"}`;
+          toast.error(`${failPvs.length} PV(s) recusado(s) pela REDE: ${err}`);
+        }
+        if ((data?.skipped?.length || 0) > 0) {
+          toast.warning(`${data.skipped.length} loja(s) sem PV Matriz cadastrado — pulada(s).`);
         }
       } else {
         const labels: Record<string, string> = {
@@ -457,7 +520,9 @@ export default function AdminAdquirentesPage() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success(`Lote enviado: ${data.sucesso}/${data.total} PVs aceitos pela REDE. Aguardando aceite no portal por loja.`);
+      const skipped = (data?.skipped?.length || 0);
+      const skipMsg = skipped > 0 ? ` · ${skipped} loja(s) sem PV` : "";
+      toast.success(`Lote enviado: ${data.sucesso}/${data.total_pvs} PVs aceitos pela REDE${skipMsg}. Aguardando aceite no portal.`);
       fetchConfigs();
     } catch (e) {
       toast.error(`Erro lote: ${(e as Error).message}`);
@@ -476,6 +541,10 @@ export default function AdminAdquirentesPage() {
   const isChanged = (config: AdquirenteConfig) => {
     const form = editForms[config.id];
     if (!form) return false;
+    const cfgPvs = Array.isArray(config.pvs_matriz_production) ? config.pvs_matriz_production : [];
+    const formPvs = form.pvs_matriz_production || [];
+    const pvsChanged = cfgPvs.length !== formPvs.length
+      || cfgPvs.some((v, i) => v !== formPvs[i]);
     return form.ambiente !== config.ambiente
       || form.merchant_id !== (config.merchant_id || "")
       || form.merchant_id_production !== (config.merchant_id_production || "")
@@ -483,6 +552,7 @@ export default function AdminAdquirentesPage() {
       || form.integration_key_production !== (config.integration_key_production || "")
       || form.pv_matriz !== (config.pv_matriz || "")
       || form.pv_matriz_production !== (config.pv_matriz_production || "")
+      || pvsChanged
       || form.ativo !== config.ativo;
   };
 
@@ -534,11 +604,19 @@ export default function AdminAdquirentesPage() {
               </Button>
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">PV Matriz (Gestão de Vendas) — {isSandbox ? "Teste" : "Produção"}</Label>
-            <Input value={pvMatrizValue} onChange={e => updateForm(configId, pvMatrizField, e.target.value)} className="font-mono text-sm" placeholder={isSandbox ? "PV Matriz de teste" : "PV Matriz de produção"} />
-            <p className="text-[10px] text-muted-foreground">Usado pela API Gestão de Vendas (OAuth 2.0) para consultar vendas POS de todas as filiais</p>
-          </div>
+          {isSandbox ? (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">PV Matriz (Gestão de Vendas) — Teste</Label>
+              <Input value={pvMatrizValue} onChange={e => updateForm(configId, pvMatrizField, e.target.value)} className="font-mono text-sm" placeholder="PV Matriz de teste" />
+              <p className="text-[10px] text-muted-foreground">Usado pela API Gestão de Vendas (OAuth 2.0) para consultar vendas POS</p>
+            </div>
+          ) : (
+            <PvsMatrizManager
+              configId={configId}
+              pvs={form.pvs_matriz_production || []}
+              onChange={(next) => setEditForms(prev => ({ ...prev, [configId]: { ...prev[configId], pvs_matriz_production: next } }))}
+            />
+          )}
         </div>
 
         <div className="flex gap-2 pt-1">
