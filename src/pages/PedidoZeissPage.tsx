@@ -27,6 +27,7 @@ import {
   ZeissCorridorOption,
 } from "@/services/zeissProductGrouping";
 import { validateZeissPayload, hasBlockingErrors, ValidationError, isLentePronta } from "@/services/zeissValidation";
+import { EyeSelector } from "@/components/lente/EyeSelector";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { registrarPedidoNoCache } from "@/utils/pedidosMapCache";
 import { supabase } from "@/integrations/supabase/client";
