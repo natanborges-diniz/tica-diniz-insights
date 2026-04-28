@@ -429,8 +429,8 @@ const PedidoHaytekPage: React.FC = () => {
   // ── Validação de dioptria contra catálogo ──
   function validateDioptriaForProduct(product: HaytekProduto): string | null {
     const eyes = [
-      { label: "OD", presc: prescOd },
-      { label: "OE", presc: prescOe },
+      ...(olhosPedido.od ? [{ label: "OD", presc: prescOd }] : []),
+      ...(olhosPedido.oe ? [{ label: "OE", presc: prescOe }] : []),
     ];
     for (const { label, presc } of eyes) {
       const esf = parseFloat(presc.esferico || "0");
