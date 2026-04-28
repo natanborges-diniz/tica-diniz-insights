@@ -832,6 +832,7 @@ export default function AdminAdquirentesPage() {
                       onOptin={(action) => handleOptinAction(config, action)}
                       onTestProd={() => handleTestGV(config, "production")}
                       busy={testing}
+                      empresas={empresas}
                     />
                   )}
 
