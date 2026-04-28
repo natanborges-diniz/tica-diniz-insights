@@ -208,6 +208,60 @@ function ActivationGVBlock({
   );
 }
 
+function PvsMatrizManager({
+  configId,
+  pvs,
+  onChange,
+}: {
+  configId: string;
+  pvs: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    if (pvs.includes(v)) { setDraft(""); return; }
+    onChange([...pvs, v]);
+    setDraft("");
+  };
+  const remove = (pv: string) => onChange(pvs.filter(p => p !== pv));
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium">PVs Matriz Comerciais — Produção</Label>
+      <div className="flex gap-1">
+        <Input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          className="font-mono text-sm"
+          placeholder="Ex.: 31974325"
+          inputMode="numeric"
+        />
+        <Button variant="outline" size="sm" onClick={add} disabled={!draft.trim()} className="shrink-0">
+          <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar
+        </Button>
+      </div>
+      {pvs.length === 0 ? (
+        <Badge className="bg-warning/15 text-warning border-warning/30 text-[10px]">PV Matriz não configurado</Badge>
+      ) : (
+        <div className="flex flex-wrap gap-1 pt-1">
+          {pvs.map(pv => (
+            <Badge key={`${configId}-${pv}`} variant="secondary" className="font-mono text-xs gap-1 pr-1">
+              {pv}
+              <button onClick={() => remove(pv)} className="hover:bg-destructive/20 rounded p-0.5" aria-label={`Remover ${pv}`}>
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+      <p className="text-[10px] text-muted-foreground">PV Matriz Comercial de cada CNPJ. Múltiplos PVs por loja são suportados (ex.: Super Shopping). Lojas que compartilham CNPJ podem usar o mesmo PV.</p>
+    </div>
+  );
+}
+
 export default function AdminAdquirentesPage() {
   const { isAdmin } = useAuth();
   const { empresas } = useEmpresas();
