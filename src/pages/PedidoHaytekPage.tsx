@@ -117,6 +117,8 @@ const PedidoHaytekPage: React.FC = () => {
   // ── Prescrição OD/OE ──
   const [prescOd, setPrescOd] = useState({ esferico: "", cilindrico: "", eixo: "", adicao: "", dnp: "", altura: "" });
   const [prescOe, setPrescOe] = useState({ esferico: "", cilindrico: "", eixo: "", adicao: "", dnp: "", altura: "" });
+  // Pedidos monoculares — default = ambos os olhos
+  const [olhosPedido, setOlhosPedido] = useState<{ od: boolean; oe: boolean }>({ od: true, oe: true });
 
   // ── Prisma ──
   const [prismaOd, setPrismaOd] = useState({ hBase: "", hValue: "", vBase: "", vValue: "" });
