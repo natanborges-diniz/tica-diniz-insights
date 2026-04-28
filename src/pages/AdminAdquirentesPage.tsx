@@ -480,6 +480,10 @@ export default function AdminAdquirentesPage() {
   const isChanged = (config: AdquirenteConfig) => {
     const form = editForms[config.id];
     if (!form) return false;
+    const cfgPvs = Array.isArray(config.pvs_matriz_production) ? config.pvs_matriz_production : [];
+    const formPvs = form.pvs_matriz_production || [];
+    const pvsChanged = cfgPvs.length !== formPvs.length
+      || cfgPvs.some((v, i) => v !== formPvs[i]);
     return form.ambiente !== config.ambiente
       || form.merchant_id !== (config.merchant_id || "")
       || form.merchant_id_production !== (config.merchant_id_production || "")
@@ -487,6 +491,7 @@ export default function AdminAdquirentesPage() {
       || form.integration_key_production !== (config.integration_key_production || "")
       || form.pv_matriz !== (config.pv_matriz || "")
       || form.pv_matriz_production !== (config.pv_matriz_production || "")
+      || pvsChanged
       || form.ativo !== config.ativo;
   };
 
