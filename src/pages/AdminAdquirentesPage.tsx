@@ -275,6 +275,7 @@ export default function AdminAdquirentesPage() {
         integration_key_production: form.integration_key_production || null,
         pv_matriz: form.pv_matriz || null,
         pv_matriz_production: form.pv_matriz_production || null,
+        pvs_matriz_production: form.pvs_matriz_production || [],
         ativo: form.ativo,
       } as any)
       .eq("id", config.id);
