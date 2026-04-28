@@ -461,7 +461,9 @@ export default function AdminAdquirentesPage() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success(`Lote enviado: ${data.sucesso}/${data.total} PVs aceitos pela REDE. Aguardando aceite no portal por loja.`);
+      const skipped = (data?.skipped?.length || 0);
+      const skipMsg = skipped > 0 ? ` · ${skipped} loja(s) sem PV` : "";
+      toast.success(`Lote enviado: ${data.sucesso}/${data.total_pvs} PVs aceitos pela REDE${skipMsg}. Aguardando aceite no portal.`);
       fetchConfigs();
     } catch (e) {
       toast.error(`Erro lote: ${(e as Error).message}`);
