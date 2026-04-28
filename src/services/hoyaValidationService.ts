@@ -127,7 +127,9 @@ export function validateHoyaPayload(
 
   // Altura pupilar e medidas de armação — conforme requisitos do produto
   if (reqs.needsAlturaPupilar) {
-    if (payload.prescricao.direito.alturaPupilar === null && payload.prescricao.esquerdo.alturaPupilar === null) {
+    const odAP = payload.prescricao.direito?.alturaPupilar ?? null;
+    const oeAP = payload.prescricao.esquerdo?.alturaPupilar ?? null;
+    if (odAP === null && oeAP === null) {
       warnings.push({
         field: "prescricao.alturaPupilar",
         message: "Sem altura pupilar — recomendado para este produto",
@@ -135,23 +137,19 @@ export function validateHoyaPayload(
       });
     } else if (reqs.alturaPupilarRange) {
       const { min: apMin, max: apMax } = reqs.alturaPupilarRange;
-      if (payload.prescricao.direito.alturaPupilar != null) {
-        if (payload.prescricao.direito.alturaPupilar < apMin || payload.prescricao.direito.alturaPupilar > apMax) {
-          errors.push({
-            field: "prescricao.direito.alturaPupilar",
-            message: `OD: Altura pupilar (${payload.prescricao.direito.alturaPupilar}) fora do range do produto (${apMin}–${apMax})`,
-            severity: "error",
-          });
-        }
+      if (odAP != null && (odAP < apMin || odAP > apMax)) {
+        errors.push({
+          field: "prescricao.direito.alturaPupilar",
+          message: `OD: Altura pupilar (${odAP}) fora do range do produto (${apMin}–${apMax})`,
+          severity: "error",
+        });
       }
-      if (payload.prescricao.esquerdo.alturaPupilar != null) {
-        if (payload.prescricao.esquerdo.alturaPupilar < apMin || payload.prescricao.esquerdo.alturaPupilar > apMax) {
-          errors.push({
-            field: "prescricao.esquerdo.alturaPupilar",
-            message: `OE: Altura pupilar (${payload.prescricao.esquerdo.alturaPupilar}) fora do range do produto (${apMin}–${apMax})`,
-            severity: "error",
-          });
-        }
+      if (oeAP != null && (oeAP < apMin || oeAP > apMax)) {
+        errors.push({
+          field: "prescricao.esquerdo.alturaPupilar",
+          message: `OE: Altura pupilar (${oeAP}) fora do range do produto (${apMin}–${apMax})`,
+          severity: "error",
+        });
       }
     }
   }
