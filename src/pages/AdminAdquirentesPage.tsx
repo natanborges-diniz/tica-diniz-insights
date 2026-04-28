@@ -71,12 +71,14 @@ function ActivationGVBlock({
   onOptin,
   onTestProd,
   busy,
+  empresas,
 }: {
   config: AdquirenteConfig;
   form: EditForm;
   onOptin: (a: OptinAction) => void;
   onTestProd: () => void;
   busy: string | null;
+  empresas?: Array<{ codEmpresa: number; nomeFantasia?: string | null; nome?: string | null }>;
 }) {
   const status = config.gv_optin_status || "NAO_SOLICITADO";
   const hasCreds = !!form.merchant_id_production && !!form.integration_key_production;
@@ -85,6 +87,12 @@ function ActivationGVBlock({
   const optinRequested = !!config.gv_optin_requested_at;
   const approved = status === "APROVADO" || !!config.gv_approved_at;
   const healthOk = config.gv_last_healthcheck_status === "ATIVA";
+  const mirroredFrom = config.gv_optin_mirrored_from ?? null;
+  const mirroredFromName = mirroredFrom != null
+    ? (empresas?.find(e => e.codEmpresa === mirroredFrom)?.nomeFantasia
+        || empresas?.find(e => e.codEmpresa === mirroredFrom)?.nome
+        || `Loja ${mirroredFrom}`)
+    : null;
 
   const fmt = (iso?: string | null) =>
     iso ? new Date(iso).toLocaleString("pt-BR") : "—";
