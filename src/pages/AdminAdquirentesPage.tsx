@@ -46,6 +46,7 @@ interface AdquirenteConfig {
   gv_last_healthcheck_at?: string | null;
   gv_last_healthcheck_status?: string | null;
   gv_last_healthcheck_message?: string | null;
+  gv_optin_mirrored_from?: number | null;
 }
 
 interface EditForm {
