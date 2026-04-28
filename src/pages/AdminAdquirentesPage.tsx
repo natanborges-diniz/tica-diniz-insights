@@ -56,6 +56,7 @@ interface EditForm {
   integration_key_production: string;
   pv_matriz: string;
   pv_matriz_production: string;
+  pvs_matriz_production: string[];
   ativo: boolean;
 }
 
