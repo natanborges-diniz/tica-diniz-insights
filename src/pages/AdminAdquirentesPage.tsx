@@ -247,6 +247,7 @@ export default function AdminAdquirentesPage() {
           integration_key_production: r.integration_key_production || "",
           pv_matriz: r.pv_matriz || "",
           pv_matriz_production: r.pv_matriz_production || "",
+          pvs_matriz_production: Array.isArray(r.pvs_matriz_production) ? r.pvs_matriz_production : [],
           ativo: r.ativo,
         };
       });
