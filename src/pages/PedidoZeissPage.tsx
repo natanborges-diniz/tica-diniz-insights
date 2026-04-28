@@ -27,6 +27,7 @@ import {
   ZeissCorridorOption,
 } from "@/services/zeissProductGrouping";
 import { validateZeissPayload, hasBlockingErrors, ValidationError, isLentePronta } from "@/services/zeissValidation";
+import { EyeSelector } from "@/components/lente/EyeSelector";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { registrarPedidoNoCache } from "@/utils/pedidosMapCache";
 import { supabase } from "@/integrations/supabase/client";
@@ -138,6 +139,8 @@ const PedidoZeissPage: React.FC = () => {
     esferico: "", cilindrico: "", eixo: "", adicao: "", dnp: "", alturaMontagem: "",
     prisma: "", eixoPrisma: "",
   });
+  // Pedidos monoculares — default = ambos os olhos
+  const [olhosPedido, setOlhosPedido] = useState<{ od: boolean; oe: boolean }>({ od: true, oe: true });
   const [confirmedPrescription, setConfirmedPrescription] = useState(false);
   const [confirmedFrame, setConfirmedFrame] = useState(false);
   const [prescAutoFilled, setPrescAutoFilled] = useState(false);
@@ -375,11 +378,12 @@ const PedidoZeissPage: React.FC = () => {
       paciente,
       produtoOd?.nome || produtoOd?.descr || null,
       produtoOe?.nome || produtoOe?.descr || null,
+      olhosPedido,
     );
     setValidationErrors(errors);
     setShowValidation(true);
     return errors;
-  }, [produtoOd, produtoOe, prescOd, prescOe, armacao, osNumero, paciente]);
+  }, [produtoOd, produtoOe, prescOd, prescOe, armacao, osNumero, paciente, olhosPedido]);
 
   // ── Build payload ──
   function buildPayload(aprov?: ZeissApprovalResponse["aprov"]): ZeissPedidoPayload {
@@ -409,7 +413,7 @@ const PedidoZeissPage: React.FC = () => {
     const isProgressiveOd = produtoOd?.nome?.toUpperCase().startsWith("PR ") || false;
     const isProgressiveOe = (oeProduct || produtoOd)?.nome?.toUpperCase().startsWith("PR ") || false;
 
-    if (produtoOd || prescOd.esferico) {
+    if (olhosPedido.od && (produtoOd || prescOd.esferico)) {
       payload.od = {
         produto: produtoOd?.cod || "",
         esferico: prescOd.esferico,
@@ -429,7 +433,7 @@ const PedidoZeissPage: React.FC = () => {
       };
     }
 
-    if (oeProduct || prescOe.esferico) {
+    if (olhosPedido.oe && (oeProduct || prescOe.esferico)) {
       payload.oe = {
         produto: oeProduct?.cod || produtoOd?.cod || "",
         esferico: prescOe.esferico,
@@ -1195,40 +1199,50 @@ const PedidoZeissPage: React.FC = () => {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-xs font-semibold text-muted-foreground uppercase">Olho Direito (OD)</p>
-                <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-                  <RxField label="Esf" value={prescOd.esferico} onChange={v => setPrescOd(p => ({ ...p, esferico: v }))} />
-                  <RxField label="Cil" value={prescOd.cilindrico} onChange={v => setPrescOd(p => ({ ...p, cilindrico: v }))} />
-                  <RxField label="Eixo" value={prescOd.eixo} onChange={v => setPrescOd(p => ({ ...p, eixo: v }))} />
-                  <RxField label="Adição" value={prescOd.adicao} onChange={v => setPrescOd(p => ({ ...p, adicao: v }))} />
-                  <RxField label="DNP" value={prescOd.dnp} onChange={v => setPrescOd(p => ({ ...p, dnp: v }))} />
-                  <RxField label="Altura" value={prescOd.alturaMontagem} onChange={v => setPrescOd(p => ({ ...p, alturaMontagem: v }))} />
-                  <RxField label="Prisma" value={prescOd.prisma} onChange={v => setPrescOd(p => ({ ...p, prisma: v }))} />
-                  <RxField label="Eixo Pr" value={prescOd.eixoPrisma} onChange={v => setPrescOd(p => ({ ...p, eixoPrisma: v }))} />
-                </div>
-
-                {/* Sugestão de base OD */}
-                <ZeissSugestaoBase
-                  familia={familia}
-                  codEmpresa={codEmpresa}
-                  esferico={prescOd.esferico}
-                  cilindrico={prescOd.cilindrico}
-                  adicao={prescOd.adicao}
-                  onSugestao={handleSugestaoBase}
-                />
-
+                <EyeSelector value={olhosPedido} onChange={setOlhosPedido} />
                 <Separator />
-                <p className="text-xs font-semibold text-muted-foreground uppercase">Olho Esquerdo (OE)</p>
-                <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-                  <RxField label="Esf" value={prescOe.esferico} onChange={v => setPrescOe(p => ({ ...p, esferico: v }))} />
-                  <RxField label="Cil" value={prescOe.cilindrico} onChange={v => setPrescOe(p => ({ ...p, cilindrico: v }))} />
-                  <RxField label="Eixo" value={prescOe.eixo} onChange={v => setPrescOe(p => ({ ...p, eixo: v }))} />
-                  <RxField label="Adição" value={prescOe.adicao} onChange={v => setPrescOe(p => ({ ...p, adicao: v }))} />
-                  <RxField label="DNP" value={prescOe.dnp} onChange={v => setPrescOe(p => ({ ...p, dnp: v }))} />
-                  <RxField label="Altura" value={prescOe.alturaMontagem} onChange={v => setPrescOe(p => ({ ...p, alturaMontagem: v }))} />
-                  <RxField label="Prisma" value={prescOe.prisma} onChange={v => setPrescOe(p => ({ ...p, prisma: v }))} />
-                  <RxField label="Eixo Pr" value={prescOe.eixoPrisma} onChange={v => setPrescOe(p => ({ ...p, eixoPrisma: v }))} />
-                </div>
+                {olhosPedido.od && (
+                  <>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase">Olho Direito (OD)</p>
+                    <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+                      <RxField label="Esf" value={prescOd.esferico} onChange={v => setPrescOd(p => ({ ...p, esferico: v }))} />
+                      <RxField label="Cil" value={prescOd.cilindrico} onChange={v => setPrescOd(p => ({ ...p, cilindrico: v }))} />
+                      <RxField label="Eixo" value={prescOd.eixo} onChange={v => setPrescOd(p => ({ ...p, eixo: v }))} />
+                      <RxField label="Adição" value={prescOd.adicao} onChange={v => setPrescOd(p => ({ ...p, adicao: v }))} />
+                      <RxField label="DNP" value={prescOd.dnp} onChange={v => setPrescOd(p => ({ ...p, dnp: v }))} />
+                      <RxField label="Altura" value={prescOd.alturaMontagem} onChange={v => setPrescOd(p => ({ ...p, alturaMontagem: v }))} />
+                      <RxField label="Prisma" value={prescOd.prisma} onChange={v => setPrescOd(p => ({ ...p, prisma: v }))} />
+                      <RxField label="Eixo Pr" value={prescOd.eixoPrisma} onChange={v => setPrescOd(p => ({ ...p, eixoPrisma: v }))} />
+                    </div>
+
+                    {/* Sugestão de base OD */}
+                    <ZeissSugestaoBase
+                      familia={familia}
+                      codEmpresa={codEmpresa}
+                      esferico={prescOd.esferico}
+                      cilindrico={prescOd.cilindrico}
+                      adicao={prescOd.adicao}
+                      onSugestao={handleSugestaoBase}
+                    />
+                  </>
+                )}
+
+                {olhosPedido.od && olhosPedido.oe && <Separator />}
+                {olhosPedido.oe && (
+                  <>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase">Olho Esquerdo (OE)</p>
+                    <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+                      <RxField label="Esf" value={prescOe.esferico} onChange={v => setPrescOe(p => ({ ...p, esferico: v }))} />
+                      <RxField label="Cil" value={prescOe.cilindrico} onChange={v => setPrescOe(p => ({ ...p, cilindrico: v }))} />
+                      <RxField label="Eixo" value={prescOe.eixo} onChange={v => setPrescOe(p => ({ ...p, eixo: v }))} />
+                      <RxField label="Adição" value={prescOe.adicao} onChange={v => setPrescOe(p => ({ ...p, adicao: v }))} />
+                      <RxField label="DNP" value={prescOe.dnp} onChange={v => setPrescOe(p => ({ ...p, dnp: v }))} />
+                      <RxField label="Altura" value={prescOe.alturaMontagem} onChange={v => setPrescOe(p => ({ ...p, alturaMontagem: v }))} />
+                      <RxField label="Prisma" value={prescOe.prisma} onChange={v => setPrescOe(p => ({ ...p, prisma: v }))} />
+                      <RxField label="Eixo Pr" value={prescOe.eixoPrisma} onChange={v => setPrescOe(p => ({ ...p, eixoPrisma: v }))} />
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 

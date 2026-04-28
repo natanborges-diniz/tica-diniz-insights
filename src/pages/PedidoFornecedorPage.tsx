@@ -33,6 +33,7 @@ import {
 import { registrarPedidoNoCache } from "@/utils/pedidosMapCache";
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { supabase } from "@/integrations/supabase/client";
+import { EyeSelector } from "@/components/lente/EyeSelector";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -182,6 +183,9 @@ const PedidoFornecedorPage: React.FC = () => {
     esferico: "", cilindrico: "", eixo: "", adicao: "", dnpLonge: "", alturaPupilar: "",
     prismaH: "", basePrismaH: "", prismaV: "", basePrismaV: "",
   });
+
+  // Pedidos monoculares — default = ambos os olhos
+  const [olhosPedido, setOlhosPedido] = useState<{ od: boolean; oe: boolean }>({ od: true, oe: true });
 
   // Armação editável
   const [armacao, setArmacao] = useState({
@@ -725,33 +729,39 @@ const PedidoFornecedorPage: React.FC = () => {
           codigoFotossensivel: produtoSelecionado.codigoFotossensivel ?? undefined,
         },
         prescricao: {
-          direito: {
-            esferico: prescOd.esferico ? Number(prescOd.esferico) : 0,
-            cilindrico: prescOd.cilindrico ? Number(prescOd.cilindrico) : 0,
-            eixo: prescOd.eixo ? Number(prescOd.eixo) : 0,
-            adicao: prescOd.adicao ? Number(prescOd.adicao) : null,
-            prismaH: prescOd.prismaH ? Number(prescOd.prismaH) : null,
-            basePRPrismaH: prescOd.basePrismaH || null,
-            prismaV: prescOd.prismaV ? Number(prescOd.prismaV) : null,
-            basePRPrismaV: prescOd.basePrismaV || null,
-            dnpLonge: prescOd.dnpLonge ? Number(prescOd.dnpLonge) : null,
-            dnpPerto: null,
-            alturaPupilar: prescOd.alturaPupilar ? Number(prescOd.alturaPupilar) : null,
-          },
-          esquerdo: {
-            esferico: prescOe.esferico ? Number(prescOe.esferico) : 0,
-            cilindrico: prescOe.cilindrico ? Number(prescOe.cilindrico) : 0,
-            eixo: prescOe.eixo ? Number(prescOe.eixo) : 0,
-            adicao: prescOe.adicao ? Number(prescOe.adicao) : null,
-            prismaH: prescOe.prismaH ? Number(prescOe.prismaH) : null,
-            basePRPrismaH: prescOe.basePrismaH || null,
-            prismaV: prescOe.prismaV ? Number(prescOe.prismaV) : null,
-            basePRPrismaV: prescOe.basePrismaV || null,
-            dnpLonge: prescOe.dnpLonge ? Number(prescOe.dnpLonge) : null,
-            dnpPerto: null,
-            alturaPupilar: prescOe.alturaPupilar ? Number(prescOe.alturaPupilar) : null,
-          },
-          afinamentoPrismatico: hasPrismaOd || hasPrismaOe,
+          // Pedidos monoculares: omitimos o lado não pedido inteiramente do payload —
+          // enviar 0/zerado faria a Hoya cobrar e produzir uma lente plana indesejada.
+          ...(olhosPedido.od && {
+            direito: {
+              esferico: prescOd.esferico ? Number(prescOd.esferico) : 0,
+              cilindrico: prescOd.cilindrico ? Number(prescOd.cilindrico) : 0,
+              eixo: prescOd.eixo ? Number(prescOd.eixo) : 0,
+              adicao: prescOd.adicao ? Number(prescOd.adicao) : null,
+              prismaH: prescOd.prismaH ? Number(prescOd.prismaH) : null,
+              basePRPrismaH: prescOd.basePrismaH || null,
+              prismaV: prescOd.prismaV ? Number(prescOd.prismaV) : null,
+              basePRPrismaV: prescOd.basePrismaV || null,
+              dnpLonge: prescOd.dnpLonge ? Number(prescOd.dnpLonge) : null,
+              dnpPerto: null,
+              alturaPupilar: prescOd.alturaPupilar ? Number(prescOd.alturaPupilar) : null,
+            },
+          }),
+          ...(olhosPedido.oe && {
+            esquerdo: {
+              esferico: prescOe.esferico ? Number(prescOe.esferico) : 0,
+              cilindrico: prescOe.cilindrico ? Number(prescOe.cilindrico) : 0,
+              eixo: prescOe.eixo ? Number(prescOe.eixo) : 0,
+              adicao: prescOe.adicao ? Number(prescOe.adicao) : null,
+              prismaH: prescOe.prismaH ? Number(prescOe.prismaH) : null,
+              basePRPrismaH: prescOe.basePrismaH || null,
+              prismaV: prescOe.prismaV ? Number(prescOe.prismaV) : null,
+              basePRPrismaV: prescOe.basePrismaV || null,
+              dnpLonge: prescOe.dnpLonge ? Number(prescOe.dnpLonge) : null,
+              dnpPerto: null,
+              alturaPupilar: prescOe.alturaPupilar ? Number(prescOe.alturaPupilar) : null,
+            },
+          }),
+          afinamentoPrismatico: (olhosPedido.od && hasPrismaOd) || (olhosPedido.oe && hasPrismaOe),
           equilibrioLente: false,
         },
         dadosMedida: productReqs.needsDadosArmacao ? {
@@ -1691,7 +1701,10 @@ const PedidoFornecedorPage: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            <EyeSelector value={olhosPedido} onChange={setOlhosPedido} />
+            <Separator />
             {/* OD */}
+            {olhosPedido.od && (
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <div className="h-6 w-6 rounded-full bg-blue-500/15 text-blue-700 text-xs font-bold flex items-center justify-center">OD</div>
@@ -1751,8 +1764,10 @@ const PedidoFornecedorPage: React.FC = () => {
                 </div>
               </div>
             </div>
-            <Separator />
+            )}
+            {olhosPedido.od && olhosPedido.oe && <Separator />}
             {/* OE */}
+            {olhosPedido.oe && (
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <div className="h-6 w-6 rounded-full bg-emerald-500/15 text-emerald-700 text-xs font-bold flex items-center justify-center">OE</div>
@@ -1812,6 +1827,7 @@ const PedidoFornecedorPage: React.FC = () => {
                 </div>
               </div>
             </div>
+            )}
           </CardContent>
         </Card>
 

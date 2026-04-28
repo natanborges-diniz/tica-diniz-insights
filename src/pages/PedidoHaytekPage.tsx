@@ -21,6 +21,7 @@ import {
 import { resolverPrescricaoCompleta } from "@/utils/prescricaoResolver";
 import { registrarPedidoNoCache } from "@/utils/pedidosMapCache";
 import { supabase } from "@/integrations/supabase/client";
+import { EyeSelector } from "@/components/lente/EyeSelector";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -116,6 +117,8 @@ const PedidoHaytekPage: React.FC = () => {
   // ── Prescrição OD/OE ──
   const [prescOd, setPrescOd] = useState({ esferico: "", cilindrico: "", eixo: "", adicao: "", dnp: "", altura: "" });
   const [prescOe, setPrescOe] = useState({ esferico: "", cilindrico: "", eixo: "", adicao: "", dnp: "", altura: "" });
+  // Pedidos monoculares — default = ambos os olhos
+  const [olhosPedido, setOlhosPedido] = useState<{ od: boolean; oe: boolean }>({ od: true, oe: true });
 
   // ── Prisma ──
   const [prismaOd, setPrismaOd] = useState({ hBase: "", hValue: "", vBase: "", vValue: "" });
@@ -403,8 +406,9 @@ const PedidoHaytekPage: React.FC = () => {
           height: frameConfig.height,
           width: frameConfig.width,
         },
-        right: buildEye(prescOd, prismaOd) as any,
-        left: buildEye(prescOe, prismaOe) as any,
+        // Pedidos monoculares: omitimos o lado não pedido inteiramente.
+        ...(olhosPedido.od && { right: buildEye(prescOd, prismaOd) as any }),
+        ...(olhosPedido.oe && { left: buildEye(prescOe, prismaOe) as any }),
       },
     };
 
@@ -425,8 +429,8 @@ const PedidoHaytekPage: React.FC = () => {
   // ── Validação de dioptria contra catálogo ──
   function validateDioptriaForProduct(product: HaytekProduto): string | null {
     const eyes = [
-      { label: "OD", presc: prescOd },
-      { label: "OE", presc: prescOe },
+      ...(olhosPedido.od ? [{ label: "OD", presc: prescOd }] : []),
+      ...(olhosPedido.oe ? [{ label: "OE", presc: prescOe }] : []),
     ];
     for (const { label, presc } of eyes) {
       const esf = parseFloat(presc.esferico || "0");
@@ -733,8 +737,13 @@ const PedidoHaytekPage: React.FC = () => {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="px-1">
+        <EyeSelector value={olhosPedido} onChange={setOlhosPedido} />
+      </div>
+
+      <div className={`grid grid-cols-1 ${olhosPedido.od && olhosPedido.oe ? "lg:grid-cols-2" : ""} gap-4`}>
         {/* Prescrição OD */}
+        {olhosPedido.od && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -799,8 +808,10 @@ const PedidoHaytekPage: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+        )}
 
         {/* Prescrição OE */}
+        {olhosPedido.oe && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -864,6 +875,7 @@ const PedidoHaytekPage: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+        )}
       </div>
 
       {/* Armação */}

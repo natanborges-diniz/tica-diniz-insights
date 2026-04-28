@@ -48,13 +48,19 @@ export function validateZeissPayload(
   paciente: string,
   produtoOdNome?: string | null,
   produtoOeNome?: string | null,
+  /** Pedidos monoculares: indica quais olhos estão ativos. Default = ambos. */
+  olhosPedido: { od: boolean; oe: boolean } = { od: true, oe: true },
 ): ValidationError[] {
   const errors: ValidationError[] = [];
 
   // ── Mandatory fields ──
   if (!osNumero.trim()) errors.push({ field: "osNumero", message: "Número da OS é obrigatório", severity: "error" });
   if (!paciente.trim()) errors.push({ field: "paciente", message: "Nome do paciente é obrigatório", severity: "error" });
-  if (!produtoOdCod) errors.push({ field: "produtoOd", message: "Produto OD é obrigatório", severity: "error" });
+  if (!olhosPedido.od && !olhosPedido.oe) {
+    errors.push({ field: "olhosPedido", message: "Selecione ao menos um olho (OD ou OE)", severity: "error" });
+  }
+  if (olhosPedido.od && !produtoOdCod) errors.push({ field: "produtoOd", message: "Produto OD é obrigatório", severity: "error" });
+  if (olhosPedido.oe && !produtoOeCod) errors.push({ field: "produtoOe", message: "Produto OE é obrigatório", severity: "error" });
 
   // ── Prescription validation per eye ──
   const validateEye = (presc: PrescFields, eye: "OD" | "OE") => {
@@ -93,20 +99,21 @@ export function validateZeissPayload(
     }
   };
 
-  if (prescOd.esferico || prescOd.cilindrico) validateEye(prescOd, "OD");
-  if (prescOe.esferico || prescOe.cilindrico) validateEye(prescOe, "OE");
+  if (olhosPedido.od && (prescOd.esferico || prescOd.cilindrico)) validateEye(prescOd, "OD");
+  if (olhosPedido.oe && (prescOe.esferico || prescOe.cilindrico)) validateEye(prescOe, "OE");
 
   // ── Frame validation ──
-  const odLP = isLentePronta(produtoOdCod, produtoOdNome);
-  const oeLP = !produtoOeCod || isLentePronta(produtoOeCod, produtoOeNome);
+  // Em pedidos monoculares ignoramos o lado desmarcado para a checagem de LP.
+  const odLP = !olhosPedido.od || isLentePronta(produtoOdCod, produtoOdNome);
+  const oeLP = !olhosPedido.oe || !produtoOeCod || isLentePronta(produtoOeCod, produtoOeNome);
   const todosLP = odLP && oeLP;
 
   if (todosLP) {
     // Lente Pronta: Zeiss exige altura de montagem mesmo para LP
-    if (produtoOdCod && !prescOd.alturaMontagem.trim()) {
+    if (olhosPedido.od && produtoOdCod && !prescOd.alturaMontagem.trim()) {
       errors.push({ field: "prescOD.altura", message: "OD: Altura de montagem obrigatória para Lente Pronta", severity: "error" });
     }
-    if (produtoOeCod && !prescOe.alturaMontagem.trim()) {
+    if (olhosPedido.oe && produtoOeCod && !prescOe.alturaMontagem.trim()) {
       errors.push({ field: "prescOE.altura", message: "OE: Altura de montagem obrigatória para Lente Pronta", severity: "error" });
     }
   } else {
