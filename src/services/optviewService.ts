@@ -92,8 +92,9 @@ export interface OptviewPedidoPayload {
     distanciaVerticeOe?: string;
     curvaturaOd?: string;
     curvaturaOe?: string;
-    codigoProdutoOd: string;
-    codigoProdutoOe: string;
+    // Opcionais para suportar pedidos monoculares (apenas OD ou apenas OE)
+    codigoProdutoOd?: string;
+    codigoProdutoOe?: string;
     tracerBase64?: string;
   };
   servicos?: OptviewServiceItem[];
