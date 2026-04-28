@@ -808,8 +808,10 @@ const PedidoHaytekPage: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+        )}
 
         {/* Prescrição OE */}
+        {olhosPedido.oe && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
