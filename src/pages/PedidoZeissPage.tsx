@@ -378,11 +378,12 @@ const PedidoZeissPage: React.FC = () => {
       paciente,
       produtoOd?.nome || produtoOd?.descr || null,
       produtoOe?.nome || produtoOe?.descr || null,
+      olhosPedido,
     );
     setValidationErrors(errors);
     setShowValidation(true);
     return errors;
-  }, [produtoOd, produtoOe, prescOd, prescOe, armacao, osNumero, paciente]);
+  }, [produtoOd, produtoOe, prescOd, prescOe, armacao, osNumero, paciente, olhosPedido]);
 
   // ── Build payload ──
   function buildPayload(aprov?: ZeissApprovalResponse["aprov"]): ZeissPedidoPayload {
