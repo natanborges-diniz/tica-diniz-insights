@@ -550,11 +550,19 @@ export default function AdminAdquirentesPage() {
               </Button>
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">PV Matriz (Gestão de Vendas) — {isSandbox ? "Teste" : "Produção"}</Label>
-            <Input value={pvMatrizValue} onChange={e => updateForm(configId, pvMatrizField, e.target.value)} className="font-mono text-sm" placeholder={isSandbox ? "PV Matriz de teste" : "PV Matriz de produção"} />
-            <p className="text-[10px] text-muted-foreground">Usado pela API Gestão de Vendas (OAuth 2.0) para consultar vendas POS de todas as filiais</p>
-          </div>
+          {isSandbox ? (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">PV Matriz (Gestão de Vendas) — Teste</Label>
+              <Input value={pvMatrizValue} onChange={e => updateForm(configId, pvMatrizField, e.target.value)} className="font-mono text-sm" placeholder="PV Matriz de teste" />
+              <p className="text-[10px] text-muted-foreground">Usado pela API Gestão de Vendas (OAuth 2.0) para consultar vendas POS</p>
+            </div>
+          ) : (
+            <PvsMatrizManager
+              configId={configId}
+              pvs={form.pvs_matriz_production || []}
+              onChange={(next) => setEditForms(prev => ({ ...prev, [configId]: { ...prev[configId], pvs_matriz_production: next } }))}
+            />
+          )}
         </div>
 
         <div className="flex gap-2 pt-1">
