@@ -309,10 +309,19 @@ async function processBatch(
       updates.gv_optin_status = "ERRO_SOLICITACAO";
     }
 
+    // Origem do request: a primeira loja explicitamente solicitada que compartilha este PV
+    const originCfg = cfgs.find(c => requestedCodEmpresas.has(c.cod_empresa)) ?? cfgs[0];
+
     for (const cfg of cfgs) {
+      const isMirror = cfg.id !== originCfg.id;
+      const cfgUpdates = {
+        ...updates,
+        gv_optin_mirrored_from: isMirror ? originCfg.cod_empresa : null,
+      };
+
       const { error: upErr } = await supabase
         .from("adquirentes_config")
-        .update(updates)
+        .update(cfgUpdates)
         .eq("id", cfg.id);
 
       if (upErr) {
