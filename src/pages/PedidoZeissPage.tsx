@@ -138,6 +138,8 @@ const PedidoZeissPage: React.FC = () => {
     esferico: "", cilindrico: "", eixo: "", adicao: "", dnp: "", alturaMontagem: "",
     prisma: "", eixoPrisma: "",
   });
+  // Pedidos monoculares — default = ambos os olhos
+  const [olhosPedido, setOlhosPedido] = useState<{ od: boolean; oe: boolean }>({ od: true, oe: true });
   const [confirmedPrescription, setConfirmedPrescription] = useState(false);
   const [confirmedFrame, setConfirmedFrame] = useState(false);
   const [prescAutoFilled, setPrescAutoFilled] = useState(false);
