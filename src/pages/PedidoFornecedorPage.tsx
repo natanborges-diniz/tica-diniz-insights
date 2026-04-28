@@ -1764,8 +1764,10 @@ const PedidoFornecedorPage: React.FC = () => {
                 </div>
               </div>
             </div>
-            <Separator />
+            )}
+            {olhosPedido.od && olhosPedido.oe && <Separator />}
             {/* OE */}
+            {olhosPedido.oe && (
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <div className="h-6 w-6 rounded-full bg-emerald-500/15 text-emerald-700 text-xs font-bold flex items-center justify-center">OE</div>
