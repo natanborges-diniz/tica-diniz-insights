@@ -737,8 +737,13 @@ const PedidoHaytekPage: React.FC = () => {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="px-1">
+        <EyeSelector value={olhosPedido} onChange={setOlhosPedido} />
+      </div>
+
+      <div className={`grid grid-cols-1 ${olhosPedido.od && olhosPedido.oe ? "lg:grid-cols-2" : ""} gap-4`}>
         {/* Prescrição OD */}
+        {olhosPedido.od && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
