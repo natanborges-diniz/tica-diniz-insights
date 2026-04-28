@@ -120,12 +120,23 @@ function ActivationGVBlock({
   return (
     <div className="rounded-lg border border-primary/20 bg-primary/[0.03] p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <ShieldCheck className="h-4 w-4 text-primary" />
           <span className="text-sm font-medium">Ativação Gestão de Vendas (Produção)</span>
           {statusBadge}
+          {mirroredFromName && (
+            <Badge variant="outline" className="text-[10px] border-primary/40 text-primary">
+              Coberto pelo Opt-in de {mirroredFromName}
+            </Badge>
+          )}
         </div>
       </div>
+
+      {mirroredFromName && (
+        <div className="text-[11px] text-muted-foreground bg-primary/5 border border-primary/15 rounded p-2">
+          Esta loja compartilha o mesmo PV Matriz Comercial com <strong>{mirroredFromName}</strong>. O aceite no portal da REDE feito por aquela loja já cobre esta — não é necessária nova solicitação. Quando o status mudar para ATIVA, ambas serão liberadas simultaneamente.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <Step done={hasCreds} label="Credenciais OAuth de produção cadastradas" />
