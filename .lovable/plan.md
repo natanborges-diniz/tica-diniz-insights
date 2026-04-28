@@ -1,51 +1,85 @@
-## Contexto
+## Permitir pedidos monoculares (apenas um olho) em todos os fornecedores de lentes
 
-Lojas que compartilham o mesmo **PV Matriz Comercial** (ex.: AGU e STO ANTONIO ambos no PV `90059441`) recebem **um único aceite consolidado** da REDE — a resposta do Opt-in já lista todos os `companyNumbers` filhos cobertos. Portanto, **basta um request por PV Matriz**, não um por loja.
+### Diagnóstico
 
-Hoje a UI trata cada loja como independente, fazendo parecer que o STO ANTONIO precisa de outro Opt-in quando, na verdade, ele já está coberto pelo request da AGU.
+Hoje o sistema trata pedidos de lentes como sempre **binoculares** (OD + OE). Quando o cliente precisa apenas de uma lente, o sistema falha:
 
-## Solução
+- **Hoya**: bloqueia no validador exigindo "Esférico ou Cilíndrico obrigatório" para o olho vazio; e mesmo passando, o builder envia `esferico=0, cilindrico=0` para o olho não pedido — fazendo a Hoya **cobrar e produzir uma lente plana indesejada**.
+- **Zeiss**: exige sempre `produtoOd` mesmo quando o pedido é só OE.
+- **Haytek**: sempre injeta `right` e `left` no payload, sem opção de omitir um lado.
+- **OptView**: ainda não tem UI de pedido construída (só service e edge function); mas o tipo `OptviewPedidoPayload.receita` já marca `codigoProdutoOd` e `codigoProdutoOe` como obrigatórios — herdaria o mesmo bug. Vamos corrigir o tipo agora para deixar a base preparada.
 
-Espelhar (compartilhar) o estado de Opt-in entre todas as lojas que possuem o mesmo PV Matriz Comercial em comum.
+### Solução
 
-### 1. Edge Function `rede-gestao-vendas` — action `solicitar_optin`
+Introduzir um **seletor de Olhos do Pedido** padronizado em cada formulário:
 
-Após persistir a resposta da REDE na linha de origem (ex.: AGU/cod 9):
+```
+[ ✓ Olho Direito (OD) ]   [ ✓ Olho Esquerdo (OE) ]
+```
 
-- Identificar todas as outras `adquirentes_config` cujo array `pvs_matriz_production` contenha o mesmo `requestCompanyNumber` (`90059441`).
-- Copiar para essas linhas: `gv_optin_external_id`, `gv_optin_status`, `gv_optin_requested_at`, `gv_optin_response`, `gv_optin_request_payload`.
-- Marcar essas linhas como "espelhadas" (campo novo `gv_optin_mirrored_from cod_empresa`) para deixar claro de onde veio.
+- Default: ambos marcados (preserva o comportamento atual).
+- Pelo menos 1 olho deve estar marcado (validação local).
+- Olho desmarcado: a seção de prescrição desse olho fica colapsada/desabilitada visualmente, validações são puladas, e o lado correspondente é **omitido do payload** enviado ao laboratório.
 
-### 2. Edge Function — action `consultar_optin_status` / "Validar Ativação"
+### Mudanças por fornecedor
 
-Quando consultar o status de uma loja:
-- Se a linha tem `gv_optin_external_id` próprio → consulta normal.
-- Após receber o novo status (PENDENTE/ATIVA/REJEITADA), propagar para todas as outras lojas que compartilham o mesmo PV Matriz, atualizando `gv_optin_status` e `gv_approved_at`.
+#### 1. Hoya — `PedidoFornecedorPage.tsx` + `hoyaValidationService.ts` + `hoyaService.ts`
 
-### 3. UI `AdminAdquirentesPage.tsx`
+- Adicionar estado `olhosPedido: { od: boolean; oe: boolean }` (default `{od:true, oe:true}`).
+- UI: chips/toggles acima das seções de prescrição. Seção OD/OE colapsa quando desmarcada.
+- Tornar `prescricao.direito` e `prescricao.esquerdo` opcionais em `HoyaPedidoPayload` (`HoyaPrescricaoOlho | null`).
+- Builder do payload: omitir o lado desmarcado (não incluir a chave, em vez de enviar zeros).
+- `hoyaValidationService.validateHoyaPayload`: pular `validatePrescricaoOlho` para o olho omitido. Validar que ao menos um olho está presente.
+- Mensagem informativa: "Pedido monocular — somente OD/OE".
 
-- Antes de chamar `solicitar_optin`, verificar se já existe outra loja com o mesmo PV Matriz já com Opt-in solicitado. Se sim:
-  - Bloquear botão "Solicitar Opt-in" e mostrar badge: **"Coberto pelo Opt-in de DINIZ ANTONIO AGU (request `049d2a00…`)"**.
-  - Permitir apenas "Validar Ativação" e "Reaproveitar status".
-- Quando o status virar `ATIVA`, mostrar nas duas lojas simultaneamente.
+#### 2. Zeiss — `PedidoZeissPage.tsx` + `zeissValidation.ts`
 
-### 4. Migração pontual (one-shot, para o caso atual)
+- Mesmo seletor de olhos.
+- Em `validateZeissPayload`: trocar `if (!produtoOdCod)` por `if (olhosPedido.od && !produtoOdCod)` e adicionar simétrico para OE quando `olhosPedido.oe && !produtoOeCod`.
+- Builder: já tem `if (produtoOd || prescOd.esferico)` e `if (oeProduct || prescOe.esferico)` — apenas garantir que o lado desmarcado nunca seja injetado mesmo se houver dado residual.
+- Toggle "Mesmo produto para OD e OE" só aparece quando ambos olhos marcados.
 
-Copiar os campos de Opt-in da linha `cod_empresa=9` (AGU) para `cod_empresa=17` (STO ANTONIO) — assim o STO ANTONIO já fica refletindo o `AGUARDANDO_ACEITE` correto e quando o portal REDE liberar o `90059441`, o "Validar Ativação" do STO ANTONIO retornará `ATIVA` automaticamente.
+#### 3. Haytek — `PedidoHaytekPage.tsx`
 
-> Nota: a 3ª filial coberta (`companyNumber 97734748`) também deve ser espelhada se houver `adquirentes_config` para ela.
+- Mesmo seletor de olhos.
+- `buildPayload`: em `products`, incluir `right` somente se `olhosPedido.od`, e `left` somente se `olhosPedido.oe`.
+- `validateDioptriaForProduct`: filtrar o array `eyes` pelos olhos selecionados.
+- Logs de debug devem refletir omissões.
 
-## Detalhes técnicos
+#### 4. OptView — `optviewService.ts` (preparação para UI futura)
 
-- Tabela: `adquirentes_config`
-- Coluna chave de agrupamento: `pvs_matriz_production` (text[])
-- Campos a sincronizar: `gv_optin_external_id`, `gv_optin_status`, `gv_optin_requested_at`, `gv_optin_response`, `gv_optin_request_payload`, `gv_approved_at`
-- Adicionar coluna nova: `gv_optin_mirrored_from int` (referência ao `cod_empresa` de origem, para auditoria e UI)
+- Tornar `codigoProdutoOd` e `codigoProdutoOe` opcionais (`string?`) em `OptviewPedidoPayload.receita`, alinhando com o resto dos campos OD/OE que já são opcionais.
+- Quando a UI de pedido OptView for construída no futuro, ela já deve nascer com o `<EyeSelector>` e omitir o lado não pedido.
+- Não há UI de pedido OptView hoje, então nenhuma mudança visual nesta etapa.
 
-## O que NÃO muda
+### Componente reutilizável
 
-- Credenciais (`integration_key_production`) e `merchant_id_production` continuam **por loja** — o Opt-in libera o acesso, mas cada CNPJ filho ainda tem suas próprias chaves para consulta de vendas.
+- Criar `<EyeSelector value={olhosPedido} onChange={...} />` em `src/components/lente/EyeSelector.tsx`:
+  - 2 chips toggláveis no padrão tech do design system.
+  - Garante que ao menos 1 fica ativo (impede desmarcar o último).
+  - Reutilizado por Hoya, Zeiss e Haytek (e OptView quando ganhar UI).
 
-## Memória
+### Auditoria pós-pedido
 
-Atualizar `mem://integrations/rede/gestao-vendas-activation-flow` com a regra: **"1 PV Matriz = 1 Opt-in que cobre todas as lojas filhas; status deve ser espelhado entre lojas com o mesmo PV"**.
+- Tabela `pedidos_fornecedor` já registra o payload — nenhum ajuste necessário, a omissão do lado fica visível no payload salvo.
+
+### Memória — atualizar
+
+- `mem://integrations/hoya/master-specification`
+- `mem://integrations/zeiss/master-specification`
+- `mem://integrations/haytek/master-specification`
+- `mem://integrations/supplier-order-validation-standard`
+
+Adicionando regra: **"Pedidos podem ser monoculares — UI deve permitir desmarcar OD ou OE; o lado omitido NÃO deve ir no payload (enviar `0` faria o lab cobrar lente plana indesejada). Pelo menos 1 olho obrigatório. Padrão default = binocular."**
+
+### Detalhes técnicos
+
+- Sem migração de banco; mudança puramente client + tipos TypeScript + lógica de validação.
+- Backend dos proxies (`hoya-proxy`, `zeiss-proxy`, `haytek-proxy`, `optview-proxy`): apenas repassam o payload, não há lógica que assume binocular. Nenhum ajuste necessário.
+- Resolver de prescrição (`prescricaoResolver.ts`): continua extraindo os dois olhos da OS quando disponível; o usuário decide quais enviar.
+
+### O que NÃO muda
+
+- Resgate de prescrição da OS no Firebird permanece igual.
+- Layout/visual geral dos formulários permanece; apenas adiciona o seletor no topo da seção de prescrição.
+- Comportamento default = binocular (ninguém precisa reaprender).
