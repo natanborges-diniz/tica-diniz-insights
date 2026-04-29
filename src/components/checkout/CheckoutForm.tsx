@@ -243,10 +243,30 @@ export default function CheckoutForm({ linkData, linkId, fmtCurrency, onSuccess 
               </div>
             )}
 
-            {paymentError && (
-              <div className="bg-red-50 text-red-700 text-sm p-3 rounded-md flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>{paymentError}</span>
+            {paymentError && errorVisual && (
+              <div className={`text-sm p-3 rounded-md border ${toneClasses[errorVisual.tone]}`}>
+                <div className="flex items-start gap-2">
+                  <errorVisual.icon className="h-4 w-4 mt-0.5 shrink-0" />
+                  <div className="flex-1 space-y-1">
+                    <p className="font-semibold leading-tight">{errorVisual.title}</p>
+                    <p className="text-[13px] leading-snug">{paymentError.message}</p>
+                    {paymentError.suggestion && (
+                      <p className="text-[12px] opacity-80 leading-snug">{paymentError.suggestion}</p>
+                    )}
+                  </div>
+                </div>
+                {(paymentError.category === "ISSUER" || paymentError.category === "BLOCKED" || paymentError.category === "CARD_DATA") && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTryAnotherCard}
+                    className="mt-3 w-full bg-white"
+                  >
+                    <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+                    Tentar com outro cartão
+                  </Button>
+                )}
               </div>
             )}
 
