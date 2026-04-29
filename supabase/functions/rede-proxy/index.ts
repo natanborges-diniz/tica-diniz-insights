@@ -56,6 +56,74 @@ function basicAuth(pv: string, key: string): string {
   return "Basic " + btoa(`${pv}:${key}`);
 }
 
+// Mapeamento de returnCode REDE -> mensagem amigável + categoria + ação sugerida
+// Categorias: "ISSUER" (cliente liga no banco), "CARD_DATA" (revisar dados), "RETRY" (tentar de novo), "BLOCKED" (não tente de novo), "MERCHANT" (problema do lojista)
+type RedeErrorCategory = "ISSUER" | "CARD_DATA" | "RETRY" | "BLOCKED" | "MERCHANT" | "UNKNOWN";
+
+interface RedeErrorInfo {
+  userMessage: string;
+  category: RedeErrorCategory;
+  retryable: boolean;
+  suggestion: string;
+}
+
+const REDE_RETURN_CODES: Record<string, RedeErrorInfo> = {
+  "00": { userMessage: "Aprovado", category: "UNKNOWN", retryable: false, suggestion: "" },
+  "01": { userMessage: "Cartão recusado pelo banco emissor.", category: "ISSUER", retryable: false, suggestion: "Entre em contato com seu banco ou tente outro cartão." },
+  "04": { userMessage: "Cartão bloqueado pelo banco emissor.", category: "BLOCKED", retryable: false, suggestion: "Use outro cartão." },
+  "05": { userMessage: "Cartão recusado.", category: "ISSUER", retryable: false, suggestion: "Verifique com seu banco ou tente outro cartão." },
+  "06": { userMessage: "Erro temporário no banco emissor.", category: "RETRY", retryable: true, suggestion: "Tente novamente em alguns minutos." },
+  "12": { userMessage: "Transação inválida.", category: "MERCHANT", retryable: false, suggestion: "Entre em contato com a loja." },
+  "13": { userMessage: "Valor inválido.", category: "MERCHANT", retryable: false, suggestion: "Entre em contato com a loja." },
+  "14": { userMessage: "Número do cartão incorreto.", category: "CARD_DATA", retryable: true, suggestion: "Confira o número do cartão e tente novamente." },
+  "15": { userMessage: "Banco emissor desconhecido.", category: "ISSUER", retryable: false, suggestion: "Use outro cartão." },
+  "30": { userMessage: "Erro de comunicação com a operadora.", category: "RETRY", retryable: true, suggestion: "Tente novamente em alguns instantes." },
+  "41": { userMessage: "Cartão informado como perdido.", category: "BLOCKED", retryable: false, suggestion: "Use outro cartão." },
+  "43": { userMessage: "Cartão informado como roubado.", category: "BLOCKED", retryable: false, suggestion: "Use outro cartão." },
+  "51": { userMessage: "Saldo ou limite insuficiente.", category: "ISSUER", retryable: false, suggestion: "Tente um valor menor ou outro cartão." },
+  "54": { userMessage: "Cartão vencido.", category: "CARD_DATA", retryable: false, suggestion: "Confira a validade ou use outro cartão." },
+  "55": { userMessage: "Senha incorreta.", category: "CARD_DATA", retryable: true, suggestion: "Tente novamente." },
+  "57": { userMessage: "Transação não permitida para este cartão.", category: "ISSUER", retryable: false, suggestion: "Use outro cartão de crédito." },
+  "58": { userMessage: "Transação não permitida pelo estabelecimento.", category: "MERCHANT", retryable: false, suggestion: "Entre em contato com a loja." },
+  "61": { userMessage: "Valor excede o limite do cartão.", category: "ISSUER", retryable: false, suggestion: "Tente um valor menor ou outro cartão." },
+  "62": { userMessage: "Cartão restrito pelo banco emissor.", category: "ISSUER", retryable: false, suggestion: "Entre em contato com seu banco ou use outro cartão." },
+  "63": { userMessage: "Violação de segurança no cartão.", category: "BLOCKED", retryable: false, suggestion: "Use outro cartão." },
+  "65": { userMessage: "Limite de saques/compras excedido.", category: "ISSUER", retryable: false, suggestion: "Tente novamente amanhã ou use outro cartão." },
+  "75": { userMessage: "Excedido número de tentativas com senha incorreta.", category: "BLOCKED", retryable: false, suggestion: "Use outro cartão." },
+  "78": { userMessage: "Cartão bloqueado para primeiro uso.", category: "ISSUER", retryable: false, suggestion: "Desbloqueie no app do banco e tente novamente." },
+  "82": { userMessage: "CVV inválido.", category: "CARD_DATA", retryable: true, suggestion: "Confira o código de segurança (CVV) e tente novamente." },
+  "91": { userMessage: "Banco emissor temporariamente indisponível.", category: "RETRY", retryable: true, suggestion: "Tente novamente em alguns minutos." },
+  "96": { userMessage: "Erro temporário do sistema.", category: "RETRY", retryable: true, suggestion: "Tente novamente em alguns instantes." },
+  "107": { userMessage: "Pagamento recusado pelo banco emissor.", category: "ISSUER", retryable: false, suggestion: "O cartão pode não estar habilitado para compras online. Entre em contato com seu banco ou tente outro cartão." },
+  "150": { userMessage: "Erro no processamento do banco emissor.", category: "RETRY", retryable: true, suggestion: "Tente novamente em alguns instantes." },
+  "203": { userMessage: "Cartão bloqueado para compras online.", category: "ISSUER", retryable: false, suggestion: "Habilite compras online no app do seu banco ou use outro cartão." },
+  "303": { userMessage: "Tempo de processamento excedido.", category: "RETRY", retryable: true, suggestion: "Tente novamente." },
+  "475": { userMessage: "Antifraude recusou a transação.", category: "ISSUER", retryable: false, suggestion: "Verifique seus dados ou tente outro cartão." },
+  "569": { userMessage: "Pagamento não autorizado pelo emissor.", category: "ISSUER", retryable: false, suggestion: "Entre em contato com seu banco ou use outro cartão." },
+};
+
+function classifyRedeError(returnCode: unknown, returnMessage?: string): RedeErrorInfo {
+  const code = String(returnCode ?? "").trim();
+  if (REDE_RETURN_CODES[code]) return REDE_RETURN_CODES[code];
+  // Fallback inteligente por mensagem
+  const msg = (returnMessage || "").toLowerCase();
+  if (msg.includes("unauth")) {
+    return { userMessage: "Pagamento recusado pelo banco emissor.", category: "ISSUER", retryable: false, suggestion: "Entre em contato com seu banco ou tente outro cartão." };
+  }
+  if (msg.includes("expired") || msg.includes("vencid")) {
+    return { userMessage: "Cartão vencido.", category: "CARD_DATA", retryable: false, suggestion: "Confira a validade ou use outro cartão." };
+  }
+  if (msg.includes("insufficient") || msg.includes("limite")) {
+    return { userMessage: "Saldo ou limite insuficiente.", category: "ISSUER", retryable: false, suggestion: "Tente um valor menor ou outro cartão." };
+  }
+  return {
+    userMessage: "Não foi possível processar o pagamento.",
+    category: "UNKNOWN",
+    retryable: true,
+    suggestion: "Tente novamente ou use outro cartão.",
+  };
+}
+
 async function redeRequest(baseUrl: string, path: string, pv: string, key: string, method = "GET", body?: unknown) {
   const url = `${baseUrl}${path}`;
   console.log(`[rede-proxy] ${method} ${url}`);
@@ -74,12 +142,21 @@ async function redeRequest(baseUrl: string, path: string, pv: string, key: strin
   const res = await fetch(url, opts);
   const text = await res.text();
 
-  let parsed: unknown;
+  let parsed: any;
   try { parsed = JSON.parse(text); } catch { parsed = { raw: text }; }
 
   if (!res.ok) {
+    // Se a REDE devolveu um returnCode estruturado dentro do 4xx (caso típico de recusa do emissor),
+    // não tratamos como erro de transporte: devolvemos a resposta para o caller classificar.
+    if (parsed && typeof parsed === "object" && (parsed.returnCode !== undefined || parsed.tid)) {
+      console.warn(`[rede-proxy] ${res.status} with structured returnCode=${parsed.returnCode} tid=${parsed.tid}`);
+      return parsed;
+    }
     console.error(`[rede-proxy] ${res.status} response:`, text.slice(0, 500));
-    throw new Error(`e.Rede API ${res.status}: ${text.slice(0, 300)}`);
+    const err = new Error(`e.Rede API ${res.status}`) as Error & { httpStatus?: number; redeRaw?: string };
+    err.httpStatus = res.status;
+    err.redeRaw = text.slice(0, 300);
+    throw err;
   }
 
   return parsed;
@@ -150,7 +227,11 @@ serve(async (req) => {
           txBody.securityCode = params.securityCode;
         }
 
-        result = await redeRequest(baseUrl, "/v1/transactions", pv, key, "POST", txBody);
+        const redeResp: any = await redeRequest(baseUrl, "/v1/transactions", pv, key, "POST", txBody);
+        if (redeResp && typeof redeResp === "object" && redeResp.returnCode !== undefined) {
+          redeResp.classification = classifyRedeError(redeResp.returnCode, redeResp.returnMessage);
+        }
+        result = redeResp;
         break;
       }
 

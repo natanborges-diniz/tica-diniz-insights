@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CreditCard, Lock, AlertTriangle, Loader2 } from "lucide-react";
+import { CreditCard, Lock, AlertTriangle, Loader2, RefreshCw, XCircle, Info, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+type ErrorCategory = "ISSUER" | "CARD_DATA" | "RETRY" | "BLOCKED" | "MERCHANT" | "UNKNOWN";
+
+interface PaymentError {
+  message: string;
+  category: ErrorCategory;
+  retryable: boolean;
+  suggestion: string;
+  returnCode?: string;
+}
 
 interface LinkData {
   id: string;
@@ -35,7 +45,7 @@ function maskExpiry(value: string) {
 
 export default function CheckoutForm({ linkData, linkId, fmtCurrency, onSuccess }: Props) {
   const [processing, setProcessing] = useState(false);
-  const [paymentError, setPaymentError] = useState("");
+  const [paymentError, setPaymentError] = useState<PaymentError | null>(null);
   const [form, setForm] = useState({
     cardNumber: "",
     cardholderName: "",
@@ -44,26 +54,34 @@ export default function CheckoutForm({ linkData, linkId, fmtCurrency, onSuccess 
     installments: "1",
   });
 
+  const setLocalError = (message: string, opts?: Partial<PaymentError>) =>
+    setPaymentError({ message, category: "CARD_DATA", retryable: true, suggestion: "", ...opts });
+
+  const handleTryAnotherCard = () => {
+    setPaymentError(null);
+    setForm({ cardNumber: "", cardholderName: "", expiry: "", securityCode: "", installments: form.installments });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPaymentError("");
+    setPaymentError(null);
     setProcessing(true);
 
     const cardDigits = form.cardNumber.replace(/\s/g, "");
     const [expMonth, expYear] = form.expiry.split("/");
 
     if (cardDigits.length < 13 || cardDigits.length > 19) {
-      setPaymentError("Número do cartão inválido");
+      setLocalError("Número do cartão inválido", { suggestion: "Confira o número impresso no cartão." });
       setProcessing(false);
       return;
     }
     if (!expMonth || !expYear || parseInt(expMonth) < 1 || parseInt(expMonth) > 12) {
-      setPaymentError("Data de validade inválida");
+      setLocalError("Data de validade inválida", { suggestion: "Use o formato MM/AA conforme o cartão." });
       setProcessing(false);
       return;
     }
     if (form.securityCode.length < 3) {
-      setPaymentError("CVV inválido");
+      setLocalError("CVV inválido", { suggestion: "O CVV tem 3 dígitos (4 no Amex)." });
       setProcessing(false);
       return;
     }
@@ -85,16 +103,48 @@ export default function CheckoutForm({ linkData, linkId, fmtCurrency, onSuccess 
       });
       const data = await res.json();
       if (data.error) {
-        setPaymentError(data.error);
+        setPaymentError({
+          message: data.error,
+          category: (data.errorCategory as ErrorCategory) || "UNKNOWN",
+          retryable: data.retryable !== false,
+          suggestion: data.suggestion || "",
+          returnCode: data.returnCode,
+        });
       } else {
         onSuccess(data);
       }
     } catch {
-      setPaymentError("Erro ao processar pagamento. Tente novamente.");
+      setPaymentError({
+        message: "Não foi possível conectar à operadora.",
+        category: "RETRY",
+        retryable: true,
+        suggestion: "Verifique sua conexão e tente novamente.",
+      });
     } finally {
       setProcessing(false);
     }
   };
+
+  const errorVisual = (() => {
+    if (!paymentError) return null;
+    const map: Record<ErrorCategory, { icon: typeof AlertTriangle; tone: string; title: string }> = {
+      ISSUER:    { icon: ShieldAlert,   tone: "amber",  title: "Cartão recusado pelo banco" },
+      CARD_DATA: { icon: Info,          tone: "blue",   title: "Verifique os dados do cartão" },
+      RETRY:     { icon: RefreshCw,     tone: "blue",   title: "Tente novamente" },
+      BLOCKED:   { icon: XCircle,       tone: "red",    title: "Cartão indisponível" },
+      MERCHANT:  { icon: AlertTriangle, tone: "amber",  title: "Pagamento não permitido" },
+      UNKNOWN:   { icon: AlertTriangle, tone: "amber",  title: "Pagamento não aprovado" },
+    };
+    return map[paymentError.category];
+  })();
+
+  const toneClasses: Record<string, string> = {
+    amber: "bg-amber-50 border-amber-200 text-amber-900",
+    blue:  "bg-blue-50 border-blue-200 text-blue-900",
+    red:   "bg-red-50 border-red-200 text-red-900",
+  };
+
+
 
   const maxParcelas = linkData.parcelas_max || 1;
   const parcelaOptions = Array.from({ length: maxParcelas }, (_, i) => i + 1);
@@ -193,10 +243,30 @@ export default function CheckoutForm({ linkData, linkId, fmtCurrency, onSuccess 
               </div>
             )}
 
-            {paymentError && (
-              <div className="bg-red-50 text-red-700 text-sm p-3 rounded-md flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>{paymentError}</span>
+            {paymentError && errorVisual && (
+              <div className={`text-sm p-3 rounded-md border ${toneClasses[errorVisual.tone]}`}>
+                <div className="flex items-start gap-2">
+                  <errorVisual.icon className="h-4 w-4 mt-0.5 shrink-0" />
+                  <div className="flex-1 space-y-1">
+                    <p className="font-semibold leading-tight">{errorVisual.title}</p>
+                    <p className="text-[13px] leading-snug">{paymentError.message}</p>
+                    {paymentError.suggestion && (
+                      <p className="text-[12px] opacity-80 leading-snug">{paymentError.suggestion}</p>
+                    )}
+                  </div>
+                </div>
+                {(paymentError.category === "ISSUER" || paymentError.category === "BLOCKED" || paymentError.category === "CARD_DATA") && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTryAnotherCard}
+                    className="mt-3 w-full bg-white"
+                  >
+                    <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+                    Tentar com outro cartão
+                  </Button>
+                )}
               </div>
             )}
 
