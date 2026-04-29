@@ -227,7 +227,11 @@ serve(async (req) => {
           txBody.securityCode = params.securityCode;
         }
 
-        result = await redeRequest(baseUrl, "/v1/transactions", pv, key, "POST", txBody);
+        const redeResp: any = await redeRequest(baseUrl, "/v1/transactions", pv, key, "POST", txBody);
+        if (redeResp && typeof redeResp === "object" && redeResp.returnCode !== undefined) {
+          redeResp.classification = classifyRedeError(redeResp.returnCode, redeResp.returnMessage);
+        }
+        result = redeResp;
         break;
       }
 
