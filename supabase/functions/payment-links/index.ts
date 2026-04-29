@@ -254,17 +254,34 @@ serve(async (req) => {
         const redeData = await redeRes.json();
 
         if (redeData.error) {
-          console.error("[payment-links] Rede payment error:", redeData.error);
-          throw new Error("Erro ao processar pagamento: " + redeData.error);
+          console.error("[payment-links] Rede transport error:", redeData.error);
+          return new Response(JSON.stringify({
+            error: "Não foi possível conectar à operadora. Tente novamente em alguns instantes.",
+            errorCategory: "RETRY",
+            retryable: true,
+            suggestion: "Tente novamente em alguns instantes.",
+          }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
-        // Check if transaction was approved
         const returnCode = redeData.returnCode;
         const isApproved = returnCode === "00" || returnCode === 0;
 
         if (!isApproved) {
-          const returnMsg = redeData.returnMessage || "Transação não aprovada";
-          throw new Error(`Pagamento recusado: ${returnMsg} (código ${returnCode})`);
+          const cls = redeData.classification || {
+            userMessage: "Pagamento não aprovado.",
+            category: "UNKNOWN",
+            retryable: true,
+            suggestion: "Tente novamente ou use outro cartão.",
+          };
+          console.warn(`[payment-links] Recusa link=${link_id} returnCode=${returnCode} category=${cls.category} tid=${redeData.tid}`);
+          return new Response(JSON.stringify({
+            error: cls.userMessage,
+            errorCategory: cls.category,
+            retryable: cls.retryable,
+            suggestion: cls.suggestion,
+            returnCode: String(returnCode ?? ""),
+            tid: redeData.tid || null,
+          }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         // Fetch empresa info for receipts
