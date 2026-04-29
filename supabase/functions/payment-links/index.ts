@@ -337,27 +337,78 @@ serve(async (req) => {
           .eq("origem_id", link_id);
 
         // Notify Connect & Flow about payment confirmation
-        if (link.origem === "CHATBOT") {
+        // Fires for any link originated from external integrations (CHATBOT, ATRIUM_INFOCO, etc)
+        // MANUAL links created internally don't need external notification
+        const NOTIFIABLE_ORIGENS = ["CHATBOT", "ATRIUM_INFOCO"];
+        if (NOTIFIABLE_ORIGENS.includes(link.origem)) {
+          const webhookUrl = "https://kvggebtnqmxydtwaumqz.supabase.co/functions/v1/payment-webhook";
+          const webhookPayload = {
+            payment_link_id: link_id,
+            status: "PAGO",
+            tid: redeData.tid,
+            nsu: redeData.nsu,
+            authorization: redeData.authorizationCode,
+            date: redeData.date,
+            time: redeData.time,
+            valor: link.valor,
+            installments: redeData.installments,
+            cardBin: redeData.cardBin,
+            last4: redeData.last4,
+            origem_ref: link.origem_ref,
+            origem: link.origem,
+          };
+
+          // Retry with exponential backoff: 0s, 2s, 5s
+          const delays = [0, 2000, 5000];
+          let webhookOk = false;
+          let lastError = "";
+          let lastStatus = 0;
+
+          for (let attempt = 0; attempt < delays.length; attempt++) {
+            if (delays[attempt] > 0) await new Promise(r => setTimeout(r, delays[attempt]));
+            try {
+              const resp = await fetch(webhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "x-service-key": INTERNAL_SERVICE_SECRET },
+                body: JSON.stringify(webhookPayload),
+              });
+              lastStatus = resp.status;
+              if (resp.ok) {
+                webhookOk = true;
+                console.log(`[payment-links] CF webhook OK (attempt ${attempt + 1}) link=${link_id} origem=${link.origem}`);
+                break;
+              } else {
+                lastError = await resp.text().catch(() => "");
+                console.warn(`[payment-links] CF webhook attempt ${attempt + 1} failed: ${resp.status} ${lastError}`);
+              }
+            } catch (e) {
+              lastError = (e as Error).message;
+              console.warn(`[payment-links] CF webhook attempt ${attempt + 1} error: ${lastError}`);
+            }
+          }
+
+          // Audit log: persist final result on the link itself for reconciliation
           try {
-            await fetch("https://kvggebtnqmxydtwaumqz.supabase.co/functions/v1/payment-webhook", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "x-service-key": INTERNAL_SERVICE_SECRET },
-              body: JSON.stringify({
-                payment_link_id: link_id,
-                status: "PAGO",
-                tid: redeData.tid,
-                nsu: redeData.nsu,
-                authorization: redeData.authorizationCode,
-                date: redeData.date,
-                time: redeData.time,
-                valor: link.valor,
-                installments: redeData.installments,
-                cardBin: redeData.cardBin,
-                last4: redeData.last4,
-                origem_ref: link.origem_ref,
-              }),
-            });
-          } catch (e) { console.warn("[payment-links] CF webhook notify error:", e); }
+            await admin.from("payment_links").update({
+              webhook_payload: {
+                ...((link as any).webhook_payload || {}),
+                cf_notify: {
+                  ok: webhookOk,
+                  attempts: delays.length,
+                  last_status: lastStatus,
+                  last_error: webhookOk ? null : lastError,
+                  notified_at: new Date().toISOString(),
+                  url: webhookUrl,
+                },
+              },
+            }).eq("id", link_id);
+          } catch (e) {
+            console.warn("[payment-links] Audit log update error:", (e as Error).message);
+          }
+
+          if (!webhookOk) {
+            console.error(`[payment-links] CF webhook FAILED after ${delays.length} attempts. link=${link_id} origem=${link.origem} tid=${redeData.tid}`);
+          }
         }
 
 
