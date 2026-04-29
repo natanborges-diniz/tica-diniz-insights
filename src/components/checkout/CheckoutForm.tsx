@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CreditCard, Lock, AlertTriangle, Loader2 } from "lucide-react";
+import { CreditCard, Lock, AlertTriangle, Loader2, RefreshCw, XCircle, Info, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+type ErrorCategory = "ISSUER" | "CARD_DATA" | "RETRY" | "BLOCKED" | "MERCHANT" | "UNKNOWN";
+
+interface PaymentError {
+  message: string;
+  category: ErrorCategory;
+  retryable: boolean;
+  suggestion: string;
+  returnCode?: string;
+}
 
 interface LinkData {
   id: string;
