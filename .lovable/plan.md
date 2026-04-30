@@ -1,85 +1,55 @@
-## Permitir pedidos monoculares (apenas um olho) em todos os fornecedores de lentes
+Revisei a documentação da REDE Gestão de Vendas, o código atual e a base. Confirmado: Diniz Super (13) e Diniz Jandira (14) estão inativas — fora do escopo. As 9 lojas ativas (1, 2, 4, 6, 9, 15, 16, 17, 18) já têm `pvs_matriz_production[]` cadastrados conforme os prints do portal.
 
-### Diagnóstico
+O problema real do consumo está no nosso código: o sync usa **um único** PV Matriz arbitrário e o mapeamento de retorno só olha `merchant_id_production`. Por isso só uma loja recebe dados, mesmo com tudo liberado no portal da REDE.
 
-Hoje o sistema trata pedidos de lentes como sempre **binoculares** (OD + OE). Quando o cliente precisa apenas de uma lente, o sistema falha:
+## Mudanças
 
-- **Hoya**: bloqueia no validador exigindo "Esférico ou Cilíndrico obrigatório" para o olho vazio; e mesmo passando, o builder envia `esferico=0, cilindrico=0` para o olho não pedido — fazendo a Hoya **cobrar e produzir uma lente plana indesejada**.
-- **Zeiss**: exige sempre `produtoOd` mesmo quando o pedido é só OE.
-- **Haytek**: sempre injeta `right` e `left` no payload, sem opção de omitir um lado.
-- **OptView**: ainda não tem UI de pedido construída (só service e edge function); mas o tipo `OptviewPedidoPayload.receita` já marca `codigoProdutoOd` e `codigoProdutoOe` como obrigatórios — herdaria o mesmo bug. Vamos corrigir o tipo agora para deixar a base preparada.
+### 1. `supabase/functions/rede-gestao-vendas` — pequenos ajustes
 
-### Solução
+- Confirmar base URL de produção: hoje usamos `https://api.userede.com.br`. Ajustar para `https://api.userede.com.br/redelabs` (URL oficial de produção da Gestão de Vendas no portal). Sandbox permanece `https://rl7-sandbox-api.useredecloud.com.br`.
+- Manter regra: omitir `subsidiaries` em sandbox; em produção só envia se passado.
+- `health` continua igual (1 PV consultado por chamada). A varredura de múltiplos PVs fica no caller, não aqui.
+- Logs já estão estruturados; manter.
 
-Introduzir um **seletor de Olhos do Pedido** padronizado em cada formulário:
+### 2. `supabase/functions/sync-vendas-cartao` — refatoração principal
 
-```
-[ ✓ Olho Direito (OD) ]   [ ✓ Olho Esquerdo (OE) ]
-```
+Substituir a lógica "um único matrizConfig" por uma varredura de **todos os PVs Matriz Comerciais ativos**:
 
-- Default: ambos marcados (preserva o comportamento atual).
-- Pelo menos 1 olho deve estar marcado (validação local).
-- Olho desmarcado: a seção de prescrição desse olho fica colapsada/desabilitada visualmente, validações são puladas, e o lado correspondente é **omitido do payload** enviado ao laboratório.
+- Buscar todas as `adquirentes_config` REDE ativas em produção.
+- Coletar union de `pvs_matriz_production[]` de todas (deduplicado).
+  - Em sandbox cair no `pv_matriz` legado (mantém compatibilidade).
+- Para cada PV Matriz único: chamar `rede-gestao-vendas` paginando até esgotar.
+- Consolidar todas as transações em uma única lista, mantendo de qual PV Matriz vieram (para debug).
 
-### Mudanças por fornecedor
+Mapeamento `companyNumber → cod_empresa`:
 
-#### 1. Hoya — `PedidoFornecedorPage.tsx` + `hoyaValidationService.ts` + `hoyaService.ts`
+- Construir um mapa que cobre simultaneamente:
+  - `merchant_id_production` (PV de filiação direto da loja)
+  - cada item de `pvs_matriz_production[]` (PV Matriz Comercial)
+- Resolver `cod_empresa` da transação tentando, nesta ordem: `tx.merchant.companyNumber` → `tx.subsidiaryNumber` → `tx.companyNumber`.
+- Quando a transação vier por um PV Matriz compartilhado por mais de uma loja (ex.: 90059441 cobre Antonio Agu + Sto Antonio), o mapeamento ainda diferencia pela filial real (`merchant.companyNumber`), porque a REDE retorna o PV da filial dentro da transação.
 
-- Adicionar estado `olhosPedido: { od: boolean; oe: boolean }` (default `{od:true, oe:true}`).
-- UI: chips/toggles acima das seções de prescrição. Seção OD/OE colapsa quando desmarcada.
-- Tornar `prescricao.direito` e `prescricao.esquerdo` opcionais em `HoyaPedidoPayload` (`HoyaPrescricaoOlho | null`).
-- Builder do payload: omitir o lado desmarcado (não incluir a chave, em vez de enviar zeros).
-- `hoyaValidationService.validateHoyaPayload`: pular `validatePrescricaoOlho` para o olho omitido. Validar que ao menos um olho está presente.
-- Mensagem informativa: "Pedido monocular — somente OD/OE".
+Robustez:
 
-#### 2. Zeiss — `PedidoZeissPage.tsx` + `zeissValidation.ts`
+- Dedup por `(nsu, cod_empresa)` já existe — manter.
+- Aumentar `size` do paginate para `100` (estava `20`) para reduzir round-trips.
+- Coletar `unmappedPvs` com contagem por PV para diagnóstico, não só o set de PVs.
+- Resumo final passa a incluir: `pvs_consultados`, `pvs_com_falha`, `pvs_com_dados`, `total_api`, `inserted`, `skipped`, `unmapped` (com contagem), `recebiveis_created`.
 
-- Mesmo seletor de olhos.
-- Em `validateZeissPayload`: trocar `if (!produtoOdCod)` por `if (olhosPedido.od && !produtoOdCod)` e adicionar simétrico para OE quando `olhosPedido.oe && !produtoOeCod`.
-- Builder: já tem `if (produtoOd || prescOd.esferico)` e `if (oeProduct || prescOe.esferico)` — apenas garantir que o lado desmarcado nunca seja injetado mesmo se houver dado residual.
-- Toggle "Mesmo produto para OD e OE" só aparece quando ambos olhos marcados.
+Tolerância a falha por PV: se um PV específico falhar (ex.: ainda não aceito), continuar com os demais e reportar no resumo, em vez de abortar a função inteira.
 
-#### 3. Haytek — `PedidoHaytekPage.tsx`
+### 3. `/admin/adquirentes` — diagnóstico por PV
 
-- Mesmo seletor de olhos.
-- `buildPayload`: em `products`, incluir `right` somente se `olhosPedido.od`, e `left` somente se `olhosPedido.oe`.
-- `validateDioptriaForProduct`: filtrar o array `eyes` pelos olhos selecionados.
-- Logs de debug devem refletir omissões.
+- "Validar Ativação" passa a iterar sobre todos os PVs em `pvs_matriz_production[]` da loja e mostrar o resultado por PV (✓/✗ com mensagem). Persistir o status agregado em `gv_last_healthcheck_status` (ATIVA se todos OK; ERRO se algum falhar).
+- Adicionar botão "Sincronizar vendas (últimos 7 dias)" no header da página, que dispara `sync-vendas-cartao` em produção e exibe o resumo retornado num toast/popover (PVs consultados, inseridos, unmapped) — facilita conferir se a integração está realmente puxando dados.
 
-#### 4. OptView — `optviewService.ts` (preparação para UI futura)
+### 4. Memória
 
-- Tornar `codigoProdutoOd` e `codigoProdutoOe` opcionais (`string?`) em `OptviewPedidoPayload.receita`, alinhando com o resto dos campos OD/OE que já são opcionais.
-- Quando a UI de pedido OptView for construída no futuro, ela já deve nascer com o `<EyeSelector>` e omitir o lado não pedido.
-- Não há UI de pedido OptView hoje, então nenhuma mudança visual nesta etapa.
+- Atualizar `mem://integrations/rede/system-architecture` para registrar que o sync varre **todos** os PVs Matriz Comerciais ativos, não um único.
 
-### Componente reutilizável
+## Fora do escopo
 
-- Criar `<EyeSelector value={olhosPedido} onChange={...} />` em `src/components/lente/EyeSelector.tsx`:
-  - 2 chips toggláveis no padrão tech do design system.
-  - Garante que ao menos 1 fica ativo (impede desmarcar o último).
-  - Reutilizado por Hoya, Zeiss e Haytek (e OptView quando ganhar UI).
-
-### Auditoria pós-pedido
-
-- Tabela `pedidos_fornecedor` já registra o payload — nenhum ajuste necessário, a omissão do lado fica visível no payload salvo.
-
-### Memória — atualizar
-
-- `mem://integrations/hoya/master-specification`
-- `mem://integrations/zeiss/master-specification`
-- `mem://integrations/haytek/master-specification`
-- `mem://integrations/supplier-order-validation-standard`
-
-Adicionando regra: **"Pedidos podem ser monoculares — UI deve permitir desmarcar OD ou OE; o lado omitido NÃO deve ir no payload (enviar `0` faria o lab cobrar lente plana indesejada). Pelo menos 1 olho obrigatório. Padrão default = binocular."**
-
-### Detalhes técnicos
-
-- Sem migração de banco; mudança puramente client + tipos TypeScript + lógica de validação.
-- Backend dos proxies (`hoya-proxy`, `zeiss-proxy`, `haytek-proxy`, `optview-proxy`): apenas repassam o payload, não há lógica que assume binocular. Nenhum ajuste necessário.
-- Resolver de prescrição (`prescricaoResolver.ts`): continua extraindo os dois olhos da OS quando disponível; o usuário decide quais enviar.
-
-### O que NÃO muda
-
-- Resgate de prescrição da OS no Firebird permanece igual.
-- Layout/visual geral dos formulários permanece; apenas adiciona o seletor no topo da seção de prescrição.
-- Comportamento default = binocular (ninguém precisa reaprender).
+- Não criar configurações para lojas inativas (13, 14).
+- Não tocar em secrets nem em credenciais OAuth — já estão configuradas.
+- Não alterar `rede-gestao-acessos` (Opt-in já está funcionando: 9 lojas com `AGUARDANDO_ACEITE`/`APROVADO`).
+- Não mexer em `rede-proxy` (e.Rede / links de pagamento).

@@ -7,7 +7,8 @@ const corsHeaders = {
 };
 
 const SANDBOX_BASE_URL = "https://rl7-sandbox-api.useredecloud.com.br";
-const PRODUCTION_BASE_URL = "https://api.userede.com.br";
+// Base de produção oficial da API Gestão de Vendas conforme portal do desenvolvedor REDE
+const PRODUCTION_BASE_URL = "https://api.userede.com.br/redelabs";
 
 // Token cache (in-memory, per function instance)
 let cachedToken: { token: string; expiresAt: number } | null = null;
