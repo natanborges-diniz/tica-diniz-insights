@@ -426,12 +426,12 @@ export default function AdminAdquirentesPage() {
 
   const handleTestGV = async (config: AdquirenteConfig, targetAmbiente: "sandbox" | "production") => {
     const form = editForms[config.id];
-    const pvMatriz = targetAmbiente === "production"
-      ? (form?.pvs_matriz_production?.[0] || form?.pv_matriz_production || form?.pv_matriz)
-      : form?.pv_matriz;
+    const pvsToTest: string[] = targetAmbiente === "production"
+      ? ((form?.pvs_matriz_production?.length ? form.pvs_matriz_production : (form?.pv_matriz_production ? [form.pv_matriz_production] : [])))
+      : (form?.pv_matriz ? [form.pv_matriz] : []);
 
-    if (!pvMatriz) {
-      toast.error(`Configure o PV Matriz (${targetAmbiente}) primeiro`);
+    if (pvsToTest.length === 0) {
+      toast.error(`Configure ao menos 1 PV Matriz (${targetAmbiente}) primeiro`);
       return;
     }
 
@@ -441,38 +441,71 @@ export default function AdminAdquirentesPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Sessão expirada");
 
-      const { data, error } = await supabase.functions.invoke("rede-gestao-vendas", {
-        body: { action: "health", ambiente: targetAmbiente, parentCompanyNumber: pvMatriz },
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (error) throw error;
+      const results: Array<{ pv: string; ok: boolean; status?: string; error?: string }> = [];
+      for (const pv of pvsToTest) {
+        const { data, error } = await supabase.functions.invoke("rede-gestao-vendas", {
+          body: { action: "health", ambiente: targetAmbiente, parentCompanyNumber: pv },
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (error) {
+          results.push({ pv, ok: false, error: error.message });
+        } else {
+          results.push({ pv, ok: !!data?.ok, status: data?.status, error: data?.error });
+        }
+      }
 
-      // Persist healthcheck status (production only — sandbox é exploratório)
+      const okCount = results.filter(r => r.ok).length;
+      const allOk = okCount === results.length;
+
       if (targetAmbiente === "production") {
+        const summary = results.map(r => `${r.pv}: ${r.ok ? "OK" : (r.status || r.error || "ERRO")}`).join(" | ");
         await supabase
           .from("adquirentes_config")
           .update({
             gv_last_healthcheck_at: new Date().toISOString(),
-            gv_last_healthcheck_status: data?.status || (data?.ok ? "ATIVA" : "ERRO"),
-            gv_last_healthcheck_message: data?.error || null,
+            gv_last_healthcheck_status: allOk ? "ATIVA" : (okCount > 0 ? "PARCIAL" : "ERRO"),
+            gv_last_healthcheck_message: allOk ? null : summary,
           } as any)
           .eq("id", config.id);
       }
 
-      if (data?.ok) {
-        toast.success(`Gestão de Vendas OK — ${data.ambiente}`);
-      } else if (data?.status === "REDE_INDISPONIVEL") {
-        toast.warning(data?.error || "REDE temporariamente indisponível. Tente novamente em alguns minutos.");
-      } else if (data?.status === "AGUARDANDO_OPTIN") {
-        toast.warning("Aguardando aceite do Opt-in no portal da REDE");
-      } else if (data?.status === "CREDENCIAIS_INVALIDAS") {
-        toast.error("Credenciais inválidas para o PV consultado");
+      if (allOk) {
+        toast.success(`Gestão de Vendas OK — ${okCount}/${results.length} PV(s) ativos`);
+      } else if (okCount > 0) {
+        const failed = results.filter(r => !r.ok).map(r => r.pv).join(", ");
+        toast.warning(`${okCount}/${results.length} PV(s) OK. Falhou: ${failed}`);
       } else {
-        toast.error(`Falha GV: ${data?.error || "Erro desconhecido"}`);
+        const first = results[0];
+        toast.error(`Falha em todos os PVs: ${first.error || first.status || "erro desconhecido"}`);
       }
       fetchConfigs();
     } catch (e) {
       toast.error(`Erro GV: ${(e as Error).message}`);
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const handleSyncVendas = async () => {
+    setTesting("sync-vendas");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sessão expirada");
+      const { data, error } = await supabase.functions.invoke("sync-vendas-cartao", {
+        body: { ambiente: "production" },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const unmappedKeys = Object.keys(data?.unmapped || {});
+      const unmappedMsg = unmappedKeys.length > 0 ? ` · ${unmappedKeys.length} PV(s) sem mapeamento` : "";
+      toast.success(
+        `Sync: ${data.inserted} venda(s) inseridas em ${data.pvs_com_dados}/${data.pvs_consultados} PV(s)${unmappedMsg}`,
+        { duration: 8000 },
+      );
+      console.log("[sync-vendas-cartao] resultado:", data);
+    } catch (e) {
+      toast.error(`Erro sync: ${(e as Error).message}`);
     } finally {
       setTesting(null);
     }
@@ -665,6 +698,19 @@ export default function AdminAdquirentesPage() {
         icon={<CreditCard className="h-5 w-5" />}
         actions={
           <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSyncVendas}
+              disabled={testing === "sync-vendas"}
+            >
+              {testing === "sync-vendas" ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Wifi className="h-4 w-4 mr-1" />
+              )}
+              Sincronizar vendas (7 dias)
+            </Button>
             <Button
               size="sm"
               variant="outline"

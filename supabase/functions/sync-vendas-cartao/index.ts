@@ -12,137 +12,192 @@ const BRAND_MAP: Record<number, string> = {
   36: "CABAL", 37: "BANESCARD", 38: "SOROCRED", 39: "CREDZ",
 };
 
+interface AdqConfig {
+  cod_empresa: number;
+  ambiente: string;
+  merchant_id: string | null;
+  merchant_id_production: string | null;
+  pv_matriz: string | null;
+  pv_matriz_production: string | null;
+  pvs_matriz_production: string[] | null;
+  ativo: boolean;
+}
+
+/** Build map: any known PV (filiação ou matriz) → cod_empresa */
+function buildPvToEmpresa(configs: AdqConfig[], env: string): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const c of configs) {
+    if (env === "production") {
+      if (c.merchant_id_production) map[c.merchant_id_production] = c.cod_empresa;
+      const arr = Array.isArray(c.pvs_matriz_production) ? c.pvs_matriz_production : [];
+      for (const pv of arr) {
+        if (pv && map[pv] === undefined) map[pv] = c.cod_empresa;
+      }
+      if (c.pv_matriz_production && map[c.pv_matriz_production] === undefined) {
+        map[c.pv_matriz_production] = c.cod_empresa;
+      }
+    } else {
+      if (c.merchant_id) map[c.merchant_id] = c.cod_empresa;
+      if (c.pv_matriz && map[c.pv_matriz] === undefined) map[c.pv_matriz] = c.cod_empresa;
+    }
+  }
+  return map;
+}
+
+/** Collect distinct PV Matriz Comerciais to query */
+function collectMatrizPvs(configs: AdqConfig[], env: string): string[] {
+  const set = new Set<string>();
+  for (const c of configs) {
+    if (env === "production") {
+      const arr = Array.isArray(c.pvs_matriz_production) ? c.pvs_matriz_production : [];
+      for (const pv of arr) if (pv) set.add(pv);
+      if (set.size === 0 && c.pv_matriz_production) set.add(c.pv_matriz_production);
+    } else {
+      if (c.pv_matriz) set.add(c.pv_matriz);
+    }
+  }
+  return [...set];
+}
+
+async function fetchAllPagesForPv(
+  supabaseUrl: string,
+  serviceKey: string,
+  env: string,
+  pv: string,
+  start: string,
+  end: string,
+): Promise<{ ok: boolean; transactions: any[]; pages: number; error?: string }> {
+  const transactions: any[] = [];
+  let page = 0;
+  let totalPages = 1;
+
+  while (page < totalPages) {
+    const res = await fetch(`${supabaseUrl}/functions/v1/rede-gestao-vendas`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({
+        action: "consultar_vendas",
+        ambiente: env,
+        parentCompanyNumber: pv,
+        startDate: start,
+        endDate: end,
+        size: "100",
+        page: String(page),
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return { ok: false, transactions, pages: page, error: `HTTP ${res.status}: ${errText.slice(0, 300)}` };
+    }
+
+    const data = await res.json();
+    if (data?.error) {
+      return { ok: false, transactions, pages: page, error: data.error };
+    }
+
+    const txs = data?.content?.transactions || data?.content || [];
+    if (Array.isArray(txs)) transactions.push(...txs);
+
+    const pageInfo = data?.content?.page || data?.page;
+    totalPages = pageInfo?.totalPages || 1;
+    page++;
+    if (page > 200) break; // safety guard
+  }
+
+  return { ok: true, transactions, pages: page };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const body = await req.json();
-    const { data_inicio, data_fim, ambiente: ambienteOverride } = body;
+    const body = await req.json().catch(() => ({}));
+    const { data_inicio, data_fim, ambiente: ambienteOverride } = body || {};
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_KEY);
 
     const end = data_fim || new Date().toISOString().slice(0, 10);
     const start = data_inicio || new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 
-    // 1. Find config with pv_matriz
-    const { data: configs, error: cfgErr } = await supabaseAdmin
+    // 1. Fetch all active REDE configs
+    const { data: configsRaw, error: cfgErr } = await supabaseAdmin
       .from("adquirentes_config")
-      .select("*")
+      .select("cod_empresa, ambiente, merchant_id, merchant_id_production, pv_matriz, pv_matriz_production, pvs_matriz_production, ativo")
       .eq("adquirente", "REDE")
       .eq("ativo", true);
+    if (cfgErr) throw new Error(`Erro ao buscar configs: ${cfgErr.message}`);
 
-    if (cfgErr) throw new Error(`Erro ao buscar config: ${cfgErr.message}`);
+    const configs = (configsRaw || []) as AdqConfig[];
+    if (configs.length === 0) throw new Error("Nenhuma configuração REDE ativa encontrada.");
 
-    const matrizConfig = configs?.find((c: any) => c.pv_matriz || c.pv_matriz_production);
-    if (!matrizConfig) {
-      throw new Error("Nenhuma configuração com PV Matriz encontrada. Configure na tela de Adquirentes.");
+    // Default env: prefer production if any active config is production
+    const env = ambienteOverride
+      || (configs.some(c => c.ambiente === "production") ? "production" : "sandbox");
+
+    const pvsMatriz = collectMatrizPvs(configs, env);
+    if (pvsMatriz.length === 0) {
+      throw new Error(`Nenhum PV Matriz Comercial cadastrado para ambiente ${env}.`);
     }
 
-    // Resolve environment and credentials
-    const env = ambienteOverride || matrizConfig.ambiente || "sandbox";
-    const pvMatriz = env === "production"
-      ? (matrizConfig.pv_matriz_production || matrizConfig.pv_matriz)
-      : matrizConfig.pv_matriz;
+    const pvToEmpresa = buildPvToEmpresa(configs, env);
 
-    if (!pvMatriz) {
-      throw new Error(`PV Matriz não configurado para ambiente ${env}`);
+    console.log(`[sync-vendas-cartao] env=${env} period=${start}→${end} matrizPVs=${pvsMatriz.length} (${pvsMatriz.join(",")})`);
+    console.log(`[sync-vendas-cartao] PV→Empresa map keys=${Object.keys(pvToEmpresa).length}`);
+
+    // 2. Fan-out: query each Matriz PV, tolerate per-PV failure
+    interface PvOutcome {
+      pv: string;
+      ok: boolean;
+      pages: number;
+      txs: number;
+      error?: string;
     }
+    const pvOutcomes: PvOutcome[] = [];
+    const allTransactions: Array<{ tx: any; sourcePv: string }> = [];
 
-    console.log(`[sync-vendas-cartao] PV Matriz ${pvMatriz}, ambiente ${env}, period ${start}→${end}`);
-
-    // 2. Build merchant_id → cod_empresa lookup
-    const { data: allConfigs } = await supabaseAdmin
-      .from("adquirentes_config")
-      .select("cod_empresa, merchant_id, merchant_id_production, ambiente")
-      .eq("adquirente", "REDE")
-      .eq("ativo", true);
-
-    const pvToEmpresa: Record<string, number> = {};
-    for (const c of allConfigs || []) {
-      // Map PVs based on the active environment
-      if (env === "production") {
-        if (c.merchant_id_production) pvToEmpresa[c.merchant_id_production] = c.cod_empresa;
+    for (const pv of pvsMatriz) {
+      const r = await fetchAllPagesForPv(SUPABASE_URL, SERVICE_KEY, env, pv, start, end);
+      pvOutcomes.push({ pv, ok: r.ok, pages: r.pages, txs: r.transactions.length, error: r.error });
+      if (r.ok) {
+        for (const tx of r.transactions) allTransactions.push({ tx, sourcePv: pv });
       } else {
-        if (c.merchant_id) pvToEmpresa[c.merchant_id] = c.cod_empresa;
+        console.error(`[sync-vendas-cartao] PV ${pv} falhou: ${r.error}`);
       }
-    }
-    if (!pvToEmpresa[pvMatriz]) {
-      pvToEmpresa[pvMatriz] = matrizConfig.cod_empresa;
-    }
-
-    console.log(`[sync-vendas-cartao] PV→Empresa map:`, pvToEmpresa);
-
-    // 3. Fetch all pages from Gestão de Vendas API
-    let allTransactions: any[] = [];
-    let page = 0;
-    let totalPages = 1;
-
-    while (page < totalPages) {
-      const gvRes = await fetch(
-        `${Deno.env.get("SUPABASE_URL")}/functions/v1/rede-gestao-vendas`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-          },
-          body: JSON.stringify({
-            action: "consultar_vendas",
-            ambiente: env,
-            parentCompanyNumber: pvMatriz,
-            startDate: start,
-            endDate: end,
-            size: "20",
-            page: String(page),
-          }),
-        }
-      );
-
-      if (!gvRes.ok) {
-        const errText = await gvRes.text();
-        throw new Error(`rede-gestao-vendas error: ${gvRes.status} ${errText.slice(0, 300)}`);
-      }
-
-      const gvData = await gvRes.json();
-
-      // Real API: { content: { transactions: [...], page: { number, totalPages, ... } } }
-      const transactions = gvData?.content?.transactions || gvData?.content || [];
-      allTransactions = allTransactions.concat(Array.isArray(transactions) ? transactions : []);
-
-      const pageInfo = gvData?.content?.page || gvData?.page;
-      if (pageInfo) {
-        totalPages = pageInfo.totalPages || 1;
-      }
-
-      console.log(`[sync-vendas-cartao] Page ${page + 1}/${totalPages}, got ${Array.isArray(transactions) ? transactions.length : 0} records`);
-      page++;
     }
 
     console.log(`[sync-vendas-cartao] Total transactions: ${allTransactions.length}`);
 
-    // 4. Process and insert
+    // 3. Process and insert
     let inserted = 0;
     let skipped = 0;
     let recebiveisCreated = 0;
-    const unmappedPvs = new Set<string>();
+    const unmappedCounts: Record<string, number> = {};
 
-    for (const tx of allTransactions) {
+    for (const { tx, sourcePv } of allTransactions) {
       const nsu = tx.nsu ? String(tx.nsu) : null;
-      // Real API uses tx.merchant.companyNumber for subsidiary
       const subsidiaryPv = tx.merchant?.companyNumber
         ? String(tx.merchant.companyNumber)
-        : (tx.subsidiaryNumber ? String(tx.subsidiaryNumber) : null);
+        : (tx.subsidiaryNumber ? String(tx.subsidiaryNumber)
+          : (tx.companyNumber ? String(tx.companyNumber) : null));
 
       if (!nsu) { skipped++; continue; }
 
-      const codEmpresa = subsidiaryPv ? pvToEmpresa[subsidiaryPv] : null;
+      // Tenta filial → fallback para PV consultado (matriz comercial mapeada para a loja origem)
+      const codEmpresa = (subsidiaryPv && pvToEmpresa[subsidiaryPv])
+        || pvToEmpresa[sourcePv]
+        || null;
+
       if (!codEmpresa) {
-        if (subsidiaryPv) unmappedPvs.add(subsidiaryPv);
+        const key = subsidiaryPv || sourcePv;
+        unmappedCounts[key] = (unmappedCounts[key] || 0) + 1;
         skipped++;
         continue;
       }
@@ -154,10 +209,8 @@ serve(async (req) => {
         .eq("nsu", nsu)
         .eq("cod_empresa", codEmpresa)
         .maybeSingle();
-
       if (existing) { skipped++; continue; }
 
-      // Map fields (real API structure)
       const modality = tx.modality?.type || tx.modality || "CREDIT";
       const modalityMap: Record<string, string> = { CREDIT: "CREDITO", DEBIT: "DEBITO" };
       const statusMap: Record<string, string> = {
@@ -186,7 +239,7 @@ serve(async (req) => {
         data_venda: tx.saleDate || start,
         data_prevista_credito: tx.expectedPaymentDate || null,
         status: statusMap[tx.status] || "APROVADA",
-        dados_extras: tx,
+        dados_extras: { ...tx, _source_matriz_pv: sourcePv },
       };
 
       const { error: insertErr } = await supabaseAdmin
@@ -200,7 +253,6 @@ serve(async (req) => {
       }
       inserted++;
 
-      // Create recebivel for credit
       if (record.tipo === "CREDITO" && record.status === "APROVADA" && record.data_prevista_credito) {
         const { error: recErr } = await supabaseAdmin
           .from("recebiveis_cartao")
@@ -222,17 +274,19 @@ serve(async (req) => {
 
     const result = {
       periodo: { inicio: start, fim: end },
-      pv_matriz: pvMatriz,
       ambiente: env,
+      pvs_consultados: pvOutcomes.length,
+      pvs_com_dados: pvOutcomes.filter(p => p.ok && p.txs > 0).length,
+      pvs_com_falha: pvOutcomes.filter(p => !p.ok).length,
+      pv_outcomes: pvOutcomes,
       total_api: allTransactions.length,
-      pages_fetched: page,
       inserted,
       skipped,
       recebiveis_created: recebiveisCreated,
-      unmapped_pvs: [...unmappedPvs],
+      unmapped: unmappedCounts,
     };
 
-    console.log(`[sync-vendas-cartao] Done:`, result);
+    console.log(`[sync-vendas-cartao] Done:`, JSON.stringify(result));
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
