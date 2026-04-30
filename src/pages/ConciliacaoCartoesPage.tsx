@@ -466,7 +466,7 @@ export default function ConciliacaoCartoesPage() {
                                 </TableCell>
                               </TableRow>
                             )}
-                          </>
+                          </FragmentRow>
                         );
                       })}
                 </TableBody>
