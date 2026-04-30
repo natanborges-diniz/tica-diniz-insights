@@ -170,7 +170,9 @@ function resolveBaseUrl(ambiente?: string): string {
 }
 
 // Em sandbox, a documentação manda omitir `subsidiaries`.
-// Em produção, só envia se foi passado explicitamente.
+// Em produção, a API exige `subsidiaries` obrigatoriamente. Quando não passado,
+// usamos o próprio parentCompanyNumber como subsidiary (retorna todas as filiais
+// vinculadas ao PV Matriz).
 function applySubsidiariesPolicy(
   qp: Record<string, string>,
   ambiente: string | undefined,
@@ -183,6 +185,9 @@ function applySubsidiariesPolicy(
   }
   if (subsidiaries && subsidiaries.trim().length > 0) {
     qp.subsidiaries = subsidiaries;
+  } else if (qp.parentCompanyNumber) {
+    // Default: usa o próprio PV Matriz como subsidiary para satisfazer o campo obrigatório
+    qp.subsidiaries = qp.parentCompanyNumber;
   }
 }
 
