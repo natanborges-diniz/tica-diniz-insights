@@ -1,55 +1,109 @@
-Revisei a documentação da REDE Gestão de Vendas, o código atual e a base. Confirmado: Diniz Super (13) e Diniz Jandira (14) estão inativas — fora do escopo. As 9 lojas ativas (1, 2, 4, 6, 9, 15, 16, 17, 18) já têm `pvs_matriz_production[]` cadastrados conforme os prints do portal.
+# Portal de Conciliação de Cartões — Plano
 
-O problema real do consumo está no nosso código: o sync usa **um único** PV Matriz arbitrário e o mapeamento de retorno só olha `merchant_id_production`. Por isso só uma loja recebe dados, mesmo com tudo liberado no portal da REDE.
+## Contexto atual
 
-## Mudanças
+Hoje temos:
+- **9 lojas** configuradas com PVs REDE em produção (1 aprovada, 8 aguardando opt-in).
+- **86 vendas** importadas em 5 lojas (1, 2, 4, 9, 15) — `vendas_cartao` com payload completo da REDE em `dados_extras` (NSU, TID, autorização, MDR, data prevista de crédito, parcelas, bandeira, captureType).
+- **0 conciliações** feitas até agora; lado ERP tem `lancamentos_financeiros` com `forma_pagamento='CARTÃO'` (243 títulos só na loja 1).
+- A página atual (`ConciliacaoCartoesPage`) é uma tabela linear, sem visão por loja nem por PV, e a conciliação automática só compara valor bruto.
 
-### 1. `supabase/functions/rede-gestao-vendas` — pequenos ajustes
+## Objetivo
 
-- Confirmar base URL de produção: hoje usamos `https://api.userede.com.br`. Ajustar para `https://api.userede.com.br/redelabs` (URL oficial de produção da Gestão de Vendas no portal). Sandbox permanece `https://rl7-sandbox-api.useredecloud.com.br`.
-- Manter regra: omitir `subsidiaries` em sandbox; em produção só envia se passado.
-- `health` continua igual (1 PV consultado por chamada). A varredura de múltiplos PVs fica no caller, não aqui.
-- Logs já estão estruturados; manter.
+Transformar `/financeiro/conciliacao-cartoes` em um **hub de conciliação** com 3 níveis de navegação (Lojas → PVs → Transações), conciliação automática multi-critério e ações conectadas ao Hub Financeiro.
 
-### 2. `supabase/functions/sync-vendas-cartao` — refatoração principal
+## Estrutura da nova página
 
-Substituir a lógica "um único matrizConfig" por uma varredura de **todos os PVs Matriz Comerciais ativos**:
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ KPIs globais: Bruto · Líquido · Taxas · Conciliado% · Pendentes │
+├─────────────────────────────────────────────────────────────────┤
+│ Filtros: Período | Status | Bandeira | Adquirente               │
+├─────────────────────────────────────────────────────────────────┤
+│ TAB 1: Visão por Loja  │ TAB 2: Por PV  │ TAB 3: Transações     │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-- Buscar todas as `adquirentes_config` REDE ativas em produção.
-- Coletar union de `pvs_matriz_production[]` de todas (deduplicado).
-  - Em sandbox cair no `pv_matriz` legado (mantém compatibilidade).
-- Para cada PV Matriz único: chamar `rede-gestao-vendas` paginando até esgotar.
-- Consolidar todas as transações em uma única lista, mantendo de qual PV Matriz vieram (para debug).
+### Tab 1 — Visão por Loja (default)
+Tabela agregada com uma linha por `cod_empresa`:
+- Nome da loja · # PVs ativos · # PVs com vendas no período · # PVs sem movimento
+- Última sincronização · Status opt-in (badge: APROVADO / AGUARDANDO / ERRO)
+- Vendas (qtd) · Bruto · Líquido · Taxas · Ticket médio
+- % Conciliado (barra de progresso)
+- Botões inline: **Sincronizar** (7d) · **Conciliar Auto** · **Detalhar**
 
-Mapeamento `companyNumber → cod_empresa`:
+### Tab 2 — Visão por PV (drill-down ao clicar numa loja)
+Para a loja selecionada, lista cada PV (`pvs_matriz_production`):
+- PV · Tem vendas? (✓/✗) · Última venda · Qtd · Bruto · Líquido
+- Status opt-in individual + healthcheck
+- Separação visual: **PVs com movimento** vs **PVs sem movimento** (collapse)
+- Ação: re-testar PV individual
 
-- Construir um mapa que cobre simultaneamente:
-  - `merchant_id_production` (PV de filiação direto da loja)
-  - cada item de `pvs_matriz_production[]` (PV Matriz Comercial)
-- Resolver `cod_empresa` da transação tentando, nesta ordem: `tx.merchant.companyNumber` → `tx.subsidiaryNumber` → `tx.companyNumber`.
-- Quando a transação vier por um PV Matriz compartilhado por mais de uma loja (ex.: 90059441 cobre Antonio Agu + Sto Antonio), o mapeamento ainda diferencia pela filial real (`merchant.companyNumber`), porque a REDE retorna o PV da filial dentro da transação.
+### Tab 3 — Transações (lista detalhada)
+Versão melhorada da tabela atual:
+- Linhas expansíveis mostrando payload REDE (NSU, TID, autorização, captureType, device, parcelas, MDR%)
+- Coluna **Match ERP**: badge mostrando lançamento ERP correlacionado (ou "Sem match")
+- Ação inline: **Conciliar manualmente** (abre sheet com candidatos do ERP)
 
-Robustez:
+## Conciliação automática (motor v2)
 
-- Dedup por `(nsu, cod_empresa)` já existe — manter.
-- Aumentar `size` do paginate para `100` (estava `20`) para reduzir round-trips.
-- Coletar `unmappedPvs` com contagem por PV para diagnóstico, não só o set de PVs.
-- Resumo final passa a incluir: `pvs_consultados`, `pvs_com_falha`, `pvs_com_dados`, `total_api`, `inserted`, `skipped`, `unmapped` (com contagem), `recebiveis_created`.
+Edge function `conciliar-vendas` reescrita para casar `vendas_cartao` × `lancamentos_financeiros` por **score multi-critério**:
 
-Tolerância a falha por PV: se um PV específico falhar (ex.: ainda não aceito), continuar com os demais e reportar no resumo, em vez de abortar a função inteira.
+| Critério | Peso | Tolerância |
+|---|---|---|
+| Valor bruto | 40 | ±R$ 0,01 |
+| Data (venda × emissão) | 25 | ±2 dias |
+| Bandeira | 15 | exata |
+| Parcelas | 10 | exata |
+| Forma de pagamento contém "CARTÃO" | 10 | substring |
 
-### 3. `/admin/adquirentes` — diagnóstico por PV
+Score ≥ 80 → `CONCILIADO` automático
+Score 50–79 → `DIVERGENTE` (revisão humana)
+Score < 50 ou sem candidato → `PENDENTE_ERP`
 
-- "Validar Ativação" passa a iterar sobre todos os PVs em `pvs_matriz_production[]` da loja e mostrar o resultado por PV (✓/✗ com mensagem). Persistir o status agregado em `gv_last_healthcheck_status` (ATIVA se todos OK; ERRO se algum falhar).
-- Adicionar botão "Sincronizar vendas (últimos 7 dias)" no header da página, que dispara `sync-vendas-cartao` em produção e exibe o resumo retornado num toast/popover (PVs consultados, inseridos, unmapped) — facilita conferir se a integração está realmente puxando dados.
+Em caso de match único e exato, gera automaticamente:
+- Lançamento de **taxa** (PAGAR, categoria `TAXA_ADQUIRENTE`) com `data_vencimento = data_prevista_credito`
+- Lançamento de **recebível líquido** (RECEBER, categoria `RECEBIVEL_CARTAO`) ligado ao `venda_cartao_id`
 
-### 4. Memória
+## Integrações com o sistema
 
-- Atualizar `mem://integrations/rede/system-architecture` para registrar que o sync varre **todos** os PVs Matriz Comerciais ativos, não um único.
+1. **Hub Financeiro** (`/financeiro/hub`): novo filtro "origem=ADQUIRENTE" mostra taxas e recebíveis gerados pela conciliação.
+2. **Carteira de Recebíveis**: vendas conciliadas alimentam o cronograma de crédito previsto (D+30 padrão).
+3. **Extrato BTG** (futuro): comparar `data_prevista_credito` com créditos reais no `btg_extrato`.
+4. **Dashboard de Vendas**: badge "Cartão conciliado %" por loja.
 
-## Fora do escopo
+## Detalhes técnicos
 
-- Não criar configurações para lojas inativas (13, 14).
-- Não tocar em secrets nem em credenciais OAuth — já estão configuradas.
-- Não alterar `rede-gestao-acessos` (Opt-in já está funcionando: 9 lojas com `AGUARDANDO_ACEITE`/`APROVADO`).
-- Não mexer em `rede-proxy` (e.Rede / links de pagamento).
+**Frontend (`ConciliacaoCartoesPage.tsx`)**
+- 3 tabs com `Tabs` do shadcn; estado de loja selecionada compartilhado entre Tab 1 e Tab 2.
+- Hook novo `useConciliacaoCartoes(periodo)` agregando vendas_cartao + adquirentes_config + conciliacao_vendas em uma só query (RPC ou múltiplas queries paralelas).
+- Visão por PV usa `dados_extras->merchant->companyNumber` para identificar qual PV originou cada venda.
+- Botões "Sincronizar todas" e "Conciliar todas" no header (mass action).
+
+**Backend**
+- `conciliar-vendas` (edge): novo motor de score (descrito acima).
+- `sync-vendas-cartao` (edge existente): adicionar parâmetro `per_pv: true` para retornar breakdown por PV no resultado, persistir em `dados_extras.merchant.companyNumber`.
+- View SQL `v_conciliacao_loja_resumo` agregando KPIs por loja para evitar N+1.
+- Não precisa de migration de schema (`vendas_cartao.dados_extras` já tem o `merchant.companyNumber`).
+
+**Tabelas envolvidas (sem alterações de schema)**
+- `vendas_cartao` (source)
+- `lancamentos_financeiros` (alvo do match)
+- `conciliacao_vendas` (resultado)
+- `adquirentes_config` (PVs por loja)
+- `empresa` (nomes)
+
+## Entregáveis
+
+1. `src/pages/ConciliacaoCartoesPage.tsx` reescrita com 3 tabs e drill-down.
+2. `src/hooks/useConciliacaoCartoes.ts` novo hook agregador.
+3. `src/components/conciliacao-cartoes/` novos componentes: `LojasResumoTable`, `PvsBreakdownTable`, `TransacaoExpandedRow`, `ConciliarManualSheet`.
+4. `supabase/functions/conciliar-vendas/index.ts` motor de score multi-critério + geração automática de lançamentos.
+5. View SQL `v_conciliacao_loja_resumo` (migration).
+6. Ajuste em `sync-vendas-cartao` para retornar resumo por PV.
+
+## Fora deste plano (próximos passos)
+
+- Conciliação contra extrato BTG (créditos reais).
+- Antecipação de recebíveis e cálculo de custo financeiro.
+- Alertas automáticos de divergência de MDR.

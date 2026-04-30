@@ -2655,6 +2655,26 @@ export type Database = {
         }
         Relationships: []
       }
+      v_conciliacao_loja_resumo: {
+        Row: {
+          ambiente: string | null
+          cod_empresa: number | null
+          gv_last_healthcheck_status: string | null
+          gv_optin_status: string | null
+          nome_fantasia: string | null
+          qtd_conciliado: number | null
+          qtd_divergente: number | null
+          qtd_pendente: number | null
+          qtd_pvs: number | null
+          qtd_vendas: number | null
+          total_bruto: number | null
+          total_liquido: number | null
+          total_taxas: number | null
+          ultima_sync: string | null
+          ultima_venda: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       acquire_sync_lock: {
