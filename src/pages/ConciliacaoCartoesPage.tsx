@@ -72,11 +72,11 @@ export default function ConciliacaoCartoesPage() {
   const { data: lojas = [], isLoading: loadingLojas, refetch: refetchLojas } = useQuery({
     queryKey: ["conciliacao-loja-resumo"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("v_conciliacao_loja_resumo" as any)
+      const { data, error } = await (supabase as any)
+        .from("v_conciliacao_loja_resumo")
         .select("*");
       if (error) throw error;
-      return (data || []) as LojaResumo[];
+      return ((data || []) as unknown) as LojaResumo[];
     },
   });
 
