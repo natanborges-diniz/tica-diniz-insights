@@ -423,9 +423,8 @@ export default function ConciliacaoCartoesPage() {
                         const isExp = expandedTx === vc.id;
                         const lojaNome = lojas.find(l => l.cod_empresa === vc.cod_empresa)?.nome_fantasia || vc.cod_empresa;
                         return (
-                          <>
-                          <>
-                            <TableRow key={vc.id} className="cursor-pointer hover:bg-muted/50"
+                          <FragmentRow key={vc.id}>
+                            <TableRow className="cursor-pointer hover:bg-muted/50"
                               onClick={() => setExpandedTx(isExp ? null : vc.id)}>
                               <TableCell>{isExp ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</TableCell>
                               <TableCell className="font-mono text-sm">{vc.data_venda}</TableCell>
