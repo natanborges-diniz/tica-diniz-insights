@@ -701,6 +701,19 @@ export default function AdminAdquirentesPage() {
             <Button
               size="sm"
               variant="outline"
+              onClick={handleSyncVendas}
+              disabled={testing === "sync-vendas"}
+            >
+              {testing === "sync-vendas" ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Wifi className="h-4 w-4 mr-1" />
+              )}
+              Sincronizar vendas (7 dias)
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={handleSolicitarLote}
               disabled={testing === "lote-rede"}
             >
