@@ -26,6 +26,8 @@ type Action =
   | "solicitar_compartilhamento"
   | "solicitar_compartilhamento_lote"
   | "registrar_aceite"
+  | "verificar_status_optin"
+  | "verificar_status_optin_lote"
   | "reset"
   | "status";
 
