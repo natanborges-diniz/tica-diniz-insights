@@ -19,13 +19,15 @@ function generateCorrelationId(): string {
   return crypto.randomUUID().slice(0, 8);
 }
 
-interface HaytekRuntimeConfig {
-  baseUrl: string;
-  ambiente: string;
-  apiKey: string | null;
+interface HaytekGlobalConfig {
+  baseUrlStaging: string;
+  baseUrlProduction: string;
+  ambienteDefault: string;
+  apiKeyStaging: string | null;
+  apiKeyProductionFallback: string | null;
 }
 
-async function loadHaytekConfig(sb: ReturnType<typeof createClient>): Promise<HaytekRuntimeConfig> {
+async function loadHaytekGlobalConfig(sb: ReturnType<typeof createClient>): Promise<HaytekGlobalConfig> {
   try {
     const { data } = await sb
       .from("fornecedor_configuracao")
@@ -35,21 +37,23 @@ async function loadHaytekConfig(sb: ReturnType<typeof createClient>): Promise<Ha
       .maybeSingle();
 
     if (data) {
-      const isProduction = data.ambiente === "production";
-      const baseUrl = isProduction
-        ? (data.base_url_production || "https://api.haytek.com.br")
-        : (data.base_url_staging || "https://stg-api.haytek.com.br");
-      const rawKey = isProduction ? (data.api_key_production || null) : (data.api_key_staging || null);
-      const apiKey = rawKey ? rawKey.replace(/\s+/g, "") : null;
-      return { baseUrl, ambiente: data.ambiente, apiKey };
+      return {
+        baseUrlStaging: data.base_url_staging || "https://stg-api.haytek.com.br",
+        baseUrlProduction: data.base_url_production || "https://api.haytek.com.br",
+        ambienteDefault: data.ambiente || "staging",
+        apiKeyStaging: data.api_key_staging ? String(data.api_key_staging).replace(/\s+/g, "") : null,
+        apiKeyProductionFallback: data.api_key_production ? String(data.api_key_production).replace(/\s+/g, "") : null,
+      };
     }
   } catch (e) {
-    console.warn("[haytek-proxy] Could not load DB config:", e);
+    console.warn("[haytek-proxy] Could not load global DB config:", e);
   }
   return {
-    baseUrl: "https://stg-api.haytek.com.br",
-    ambiente: "staging",
-    apiKey: null,
+    baseUrlStaging: "https://stg-api.haytek.com.br",
+    baseUrlProduction: "https://api.haytek.com.br",
+    ambienteDefault: "staging",
+    apiKeyStaging: null,
+    apiKeyProductionFallback: null,
   };
 }
 
@@ -57,20 +61,44 @@ interface HaytekStoreConfig {
   storeId: string;
   addressId: string | null;
   alias: string | null;
+  apiKeyProduction: string | null;
+  ambienteOverride: string | null;
 }
 
 async function loadStoreConfig(sb: ReturnType<typeof createClient>, codEmpresa: number): Promise<HaytekStoreConfig | null> {
   const { data } = await sb
     .from("haytek_empresa_config")
-    .select("store_id, address_id, alias")
+    .select("store_id, address_id, alias, api_key_production, ambiente_override")
     .eq("cod_empresa", codEmpresa)
     .eq("ativo", true)
     .maybeSingle();
 
   if (data?.store_id) {
-    return { storeId: data.store_id, addressId: data.address_id || null, alias: data.alias || null };
+    return {
+      storeId: data.store_id,
+      addressId: data.address_id || null,
+      alias: data.alias || null,
+      apiKeyProduction: data.api_key_production ? String(data.api_key_production).replace(/\s+/g, "") : null,
+      ambienteOverride: data.ambiente_override || null,
+    };
   }
   return null;
+}
+
+interface ResolvedHaytekConfig {
+  baseUrl: string;
+  ambiente: string;
+  apiKey: string | null;
+}
+
+function resolveHaytekConfig(global: HaytekGlobalConfig, store: HaytekStoreConfig | null): ResolvedHaytekConfig {
+  const ambiente = (store?.ambienteOverride ?? global.ambienteDefault) || "staging";
+  const isProd = ambiente === "production";
+  const baseUrl = isProd ? global.baseUrlProduction : global.baseUrlStaging;
+  const apiKey = isProd
+    ? (store?.apiKeyProduction ?? global.apiKeyProductionFallback)
+    : global.apiKeyStaging;
+  return { baseUrl, ambiente, apiKey };
 }
 
 async function fetchHaytek(url: string, options: RequestInit, correlationId: string, action: string, apiKey?: string | null): Promise<Response> {
@@ -122,10 +150,14 @@ serve(async (req) => {
 
     const user = await authGuard(req, { requiredRole: "authenticated" });
     const sbService = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const haytekConfig = await loadHaytekConfig(sbService);
-    const BASE_URL = haytekConfig.baseUrl;
+    const globalConfig = await loadHaytekGlobalConfig(sbService);
+    // Default (para actions sem cod_empresa específica: consultar/tracking/historico)
+    const defaultConfig = resolveHaytekConfig(globalConfig, null);
+    let BASE_URL = defaultConfig.baseUrl;
+    let activeApiKey: string | null = defaultConfig.apiKey;
+    let activeAmbiente: string = defaultConfig.ambiente;
 
-    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${haytekConfig.ambiente} | Base: ${BASE_URL} | User: ${user.userId}`);
+    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | DefaultEnv: ${defaultConfig.ambiente} | Base: ${BASE_URL} | User: ${user.userId}`);
 
     switch (action) {
       // ── Criar Pedido ──
@@ -137,6 +169,23 @@ serve(async (req) => {
           return new Response(JSON.stringify({ error: "Loja não configurada para Haytek", code: HAYTEK_ERROR_CODES.CONFIG_ERROR, correlationId }), {
             status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
+        }
+
+        // Resolução por loja: ambiente_override + token de produção próprio
+        const resolved = resolveHaytekConfig(globalConfig, store);
+        BASE_URL = resolved.baseUrl;
+        activeApiKey = resolved.apiKey;
+        activeAmbiente = resolved.ambiente;
+        console.log(`[haytek-proxy] [${correlationId}] Loja ${codEmpresa} (${store.storeId}) -> Env: ${activeAmbiente} | Base: ${BASE_URL} | TokenSource: ${activeAmbiente === "production" ? (store.apiKeyProduction ? "store" : "global-fallback") : "global-staging"}`);
+
+        if (!activeApiKey) {
+          return new Response(JSON.stringify({
+            error: activeAmbiente === "production"
+              ? `Token de produção não configurado para a loja ${codEmpresa}. Configure em Admin > Haytek por Empresa.`
+              : "Token de staging Haytek não configurado em Admin > Fornecedores.",
+            code: HAYTEK_ERROR_CODES.CONFIG_ERROR,
+            correlationId,
+          }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         const pedidoPayload = params.pedido || {};
@@ -152,7 +201,7 @@ serve(async (req) => {
         const payloadStr = JSON.stringify(pedidoPayload);
         const payloadHash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payloadStr));
         const hashHex = Array.from(new Uint8Array(payloadHash)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
-        const idempotencyKey = `HAYTEK_${codEmpresa}_${codOs}_${haytekConfig.ambiente}_${hashHex}`;
+        const idempotencyKey = `HAYTEK_${codEmpresa}_${codOs}_${activeAmbiente}_${hashHex}`;
 
         const { data: existing } = await sbService
           .from("pedidos_fornecedor")
@@ -179,7 +228,7 @@ serve(async (req) => {
         const resp = await fetchHaytek(url, {
           method: "POST",
           body: payloadStr,
-        }, correlationId, "criar-pedido", haytekConfig.apiKey);
+        }, correlationId, "criar-pedido", activeApiKey);
 
         const respText = await resp.text();
         let respData: Record<string, unknown>;
@@ -196,7 +245,7 @@ serve(async (req) => {
             payload: pedidoPayload,
             response: respData,
             requested_by: user.userId,
-            hoya_environment: haytekConfig.ambiente,
+            hoya_environment: activeAmbiente,
             idempotency_key: idempotencyKey,
           });
 
@@ -221,7 +270,7 @@ serve(async (req) => {
           payload: pedidoPayload,
           response: respData,
           requested_by: user.userId,
-          hoya_environment: haytekConfig.ambiente,
+          hoya_environment: activeAmbiente,
           idempotency_key: idempotencyKey,
         });
 
@@ -244,7 +293,7 @@ serve(async (req) => {
         }
 
         const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/${orderId}`;
-        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "consultar-pedido", haytekConfig.apiKey);
+        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "consultar-pedido", activeApiKey);
         const data = await resp.json();
 
         if (resp.status >= 400) {
@@ -271,7 +320,7 @@ serve(async (req) => {
         }
 
         const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/${orderId}`;
-        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "atualizar-tracking", haytekConfig.apiKey);
+        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "atualizar-tracking", activeApiKey);
         const data = await resp.json();
 
         if (resp.status >= 400) {
