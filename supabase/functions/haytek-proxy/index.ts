@@ -150,10 +150,14 @@ serve(async (req) => {
 
     const user = await authGuard(req, { requiredRole: "authenticated" });
     const sbService = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const haytekConfig = await loadHaytekConfig(sbService);
-    const BASE_URL = haytekConfig.baseUrl;
+    const globalConfig = await loadHaytekGlobalConfig(sbService);
+    // Default (para actions sem cod_empresa específica: consultar/tracking/historico)
+    const defaultConfig = resolveHaytekConfig(globalConfig, null);
+    let BASE_URL = defaultConfig.baseUrl;
+    let activeApiKey: string | null = defaultConfig.apiKey;
+    let activeAmbiente: string = defaultConfig.ambiente;
 
-    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${haytekConfig.ambiente} | Base: ${BASE_URL} | User: ${user.userId}`);
+    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | DefaultEnv: ${defaultConfig.ambiente} | Base: ${BASE_URL} | User: ${user.userId}`);
 
     switch (action) {
       // ── Criar Pedido ──
