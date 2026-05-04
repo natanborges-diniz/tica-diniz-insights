@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -636,10 +636,13 @@ export default function AdminAdquirentesPage() {
 
   // Verificação automática silenciosa: ao carregar a página, consulta a REDE
   // sobre todos os Opt-ins em AGUARDANDO_ACEITE e atualiza o status.
+  const autoVerifyDoneRef = useRef(false);
   useEffect(() => {
     if (loading) return;
+    if (autoVerifyDoneRef.current) return;
     const hasPending = configs.some(c => c.gv_optin_status === "AGUARDANDO_ACEITE" && c.gv_optin_external_id);
     if (!hasPending) return;
+    autoVerifyDoneRef.current = true;
     handleVerificarLotePendentes(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
