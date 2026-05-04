@@ -664,17 +664,17 @@ serve(async (req) => {
         if (error) throw new Error(error.message);
         configs = data || [];
       } else {
+        // Healthcheck-based: precisamos apenas de PV Matriz cadastrado.
         let q = supabase
           .from("adquirentes_config")
           .select(SELECT_COLS_WITH_OPTIN)
           .eq("adquirente", "REDE")
-          .eq("ativo", true)
-          .not("gv_optin_external_id", "is", null);
-        // Por padrão, verifica apenas os pendentes (AGUARDANDO_ACEITE)
+          .eq("ativo", true);
+        // Por padrão, verifica apenas os ainda não aprovados (AGUARDANDO_ACEITE)
         if (Array.isArray(cod_empresas) && cod_empresas.length > 0) {
           q = q.in("cod_empresa", cod_empresas);
         } else {
-          q = q.eq("gv_optin_status", "AGUARDANDO_ACEITE");
+          q = q.neq("gv_optin_status", "APROVADO");
         }
         const { data, error } = await q;
         if (error) throw new Error(error.message);
