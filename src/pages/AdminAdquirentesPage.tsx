@@ -387,9 +387,7 @@ export default function AdminAdquirentesPage() {
       toast.success("Adquirente configurada com sucesso");
       setShowAddForm(false);
       setNewForm({ cod_empresa: 0, adquirente: "REDE", merchant_id: "", integration_key_encrypted: "" });
-      if (!silent || (data?.approved || 0) > 0 || (data?.rejected || 0) > 0) {
-        fetchConfigs();
-      }
+      fetchConfigs();
     }
     setSaving(null);
   };
@@ -400,7 +398,9 @@ export default function AdminAdquirentesPage() {
       toast.error("Erro ao excluir: " + error.message);
     } else {
       toast.success("Configuração removida");
-      fetchConfigs();
+      if (!silent || (data?.approved || 0) > 0 || (data?.rejected || 0) > 0) {
+        fetchConfigs();
+      }
     }
   };
 
