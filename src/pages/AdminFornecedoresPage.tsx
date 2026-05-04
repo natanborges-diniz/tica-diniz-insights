@@ -274,31 +274,45 @@ function CredenciaisSection({
           <div className="border-t" />
 
           {/* Key Produção */}
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2 text-sm">
-              <span className="h-2 w-2 rounded-full bg-primary inline-block" />
-              {isBtg ? "Client Secret" : "API Key"} — Produção
-              {isProduction && <span className="text-xs font-medium text-primary ml-1">(ativa)</span>}
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                type={showKeyProd ? "text" : "password"}
-                value={form.api_key_production}
-                onChange={(e) => setForm((f) => ({ ...f, api_key_production: e.target.value }))}
-                placeholder="••••••••••••••••••••"
-                className="font-mono text-sm flex-1"
-              />
-              <Button variant="outline" size="icon" onClick={() => setShowKeyProd((v) => !v)} type="button">
-                {showKeyProd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
-            </div>
-            {config.api_key_production && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <CheckCircle2 className="h-3 w-3 text-primary" />
-                {isBtg ? "Client Secret" : "API Key"} de produção configurada.
+          {isHaytek ? (
+            <div className="space-y-2 p-4 rounded-lg border border-dashed bg-muted/30">
+              <Label className="flex items-center gap-2 text-sm">
+                <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+                API Key — Produção
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Para Haytek/HiTech em produção, o token é <strong>individual por loja</strong>.
+                Configure em <em>Admin &gt; Configuração Haytek por Empresa</em> (<code>/admin/haytek</code>).
+                Não há mais token de produção global.
               </p>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-sm">
+                <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+                {isBtg ? "Client Secret" : "API Key"} — Produção
+                {isProduction && <span className="text-xs font-medium text-primary ml-1">(ativa)</span>}
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  type={showKeyProd ? "text" : "password"}
+                  value={form.api_key_production}
+                  onChange={(e) => setForm((f) => ({ ...f, api_key_production: e.target.value }))}
+                  placeholder="••••••••••••••••••••"
+                  className="font-mono text-sm flex-1"
+                />
+                <Button variant="outline" size="icon" onClick={() => setShowKeyProd((v) => !v)} type="button">
+                  {showKeyProd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+              {config.api_key_production && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-primary" />
+                  {isBtg ? "Client Secret" : "API Key"} de produção configurada.
+                </p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
