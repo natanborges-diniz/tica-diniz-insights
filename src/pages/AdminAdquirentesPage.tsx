@@ -63,7 +63,7 @@ interface EditForm {
 
 const ADQUIRENTES = ["REDE", "CIELO", "STONE", "PAGSEGURO", "GETNET"];
 
-type OptinAction = "solicitar_compartilhamento" | "registrar_aceite" | "reset";
+type OptinAction = "solicitar_compartilhamento" | "verificar_status_optin" | "reset";
 
 function ActivationGVBlock({
   config,
