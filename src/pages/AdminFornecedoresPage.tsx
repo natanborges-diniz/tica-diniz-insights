@@ -67,6 +67,7 @@ function CredenciaisSection({
   fornecedor: string;
 }) {
   const isBtg = fornecedor.toLowerCase() === "btg";
+  const isHaytek = fornecedor.toLowerCase() === "haytek";
   const [form, setForm] = useState({
     ambiente: config.ambiente,
     base_url_staging: config.base_url_staging || "",
