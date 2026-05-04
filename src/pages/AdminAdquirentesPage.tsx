@@ -201,10 +201,11 @@ function ActivationGVBlock({
         <Button
           size="sm" variant="outline" className="text-xs"
           disabled={!!busy || !optinRequested || approved}
-          onClick={() => onOptin("registrar_aceite")}
+          onClick={() => onOptin("verificar_status_optin")}
+          title="Consulta o status atual diretamente na API da REDE"
         >
-          {busy === `${config.id}-optin-registrar_aceite` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-          Marcar como Aprovado
+          {busy === `${config.id}-optin-verificar_status_optin` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+          Verificar na REDE
         </Button>
         <Button
           size="sm" variant="outline" className="text-xs"
