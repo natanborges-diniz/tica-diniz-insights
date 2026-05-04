@@ -150,7 +150,7 @@ function ActivationGVBlock({
         <Step
           done={approved}
           label="Aceite confirmado no portal da REDE"
-          hint={approved ? `em ${fmt(config.gv_approved_at)}` : "Aprove com perfil master no portal"}
+          hint={approved ? `em ${fmt(config.gv_approved_at)}` : "O sistema verifica automaticamente — aprove com perfil master no portal"}
         />
         <Step
           done={healthOk}
