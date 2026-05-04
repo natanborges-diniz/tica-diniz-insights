@@ -1,109 +1,93 @@
-# Portal de Conciliação de Cartões — Plano
 
-## Contexto atual
+## Contexto descoberto
 
-Hoje temos:
-- **9 lojas** configuradas com PVs REDE em produção (1 aprovada, 8 aguardando opt-in).
-- **86 vendas** importadas em 5 lojas (1, 2, 4, 9, 15) — `vendas_cartao` com payload completo da REDE em `dados_extras` (NSU, TID, autorização, MDR, data prevista de crédito, parcelas, bandeira, captureType).
-- **0 conciliações** feitas até agora; lado ERP tem `lancamentos_financeiros` com `forma_pagamento='CARTÃO'` (243 títulos só na loja 1).
-- A página atual (`ConciliacaoCartoesPage`) é uma tabela linear, sem visão por loja nem por PV, e a conciliação automática só compara valor bruto.
+**Address ID na homologação:** A homologação foi feita com sucesso para as 9 lojas Diniz (SP0156, SP0161, SP0163, SP0165, SP1010, SP2180, SP2987, SP2956, SP3341) **sem nenhum address_id preenchido** no banco. No edge function `haytek-proxy`, o campo `addressId` só é injetado no payload se existir (`if (store.addressId)`), portanto **a HiTech não exigiu este campo em homologação** — ele é opcional. Vamos manter a coluna no banco (para casos futuros) mas tirar do destaque visual da página.
 
-## Objetivo
+**Estado atual de credenciais:** A tabela `fornecedor_configuracao` tem **uma única linha** para HAYTEK com `api_key_staging` (preenchida) e `api_key_production` (vazia). Isso reflete o modelo "1 token por ambiente" — incompatível com o novo modelo da HiTech, que será **1 token de produção por loja**, mantendo apenas 1 token de staging compartilhado.
 
-Transformar `/financeiro/conciliacao-cartoes` em um **hub de conciliação** com 3 níveis de navegação (Lojas → PVs → Transações), conciliação automática multi-critério e ações conectadas ao Hub Financeiro.
+**Problema chave:** Hoje o `haytek-proxy` lê `apiKey` de `fornecedor_configuracao` (global). Em produção, ele precisa ler o token específico da loja que está enviando o pedido.
 
-## Estrutura da nova página
+---
+
+## Mudanças propostas
+
+### 1. Banco — adicionar token de produção por empresa
+
+Migration na tabela `haytek_empresa_config`:
+- Adicionar coluna `api_key_production text` (nullable)
+- Adicionar coluna `ambiente_override text` (nullable, valores: `staging` | `production` | null = usar global)
+
+Assim cada loja pode ter seu próprio token de produção, e o admin pode forçar uma loja específica a operar em staging/produção independentemente.
+
+### 2. Edge Function `haytek-proxy`
+
+Reescrever `loadStoreConfig` + `loadHaytekConfig` para resolver token e ambiente por empresa:
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│ KPIs globais: Bruto · Líquido · Taxas · Conciliado% · Pendentes │
-├─────────────────────────────────────────────────────────────────┤
-│ Filtros: Período | Status | Bandeira | Adquirente               │
-├─────────────────────────────────────────────────────────────────┤
-│ TAB 1: Visão por Loja  │ TAB 2: Por PV  │ TAB 3: Transações     │
-└─────────────────────────────────────────────────────────────────┘
+Para cada pedido (codEmpresa):
+  1. Carrega haytek_empresa_config da empresa (store_id, api_key_production, ambiente_override)
+  2. Carrega fornecedor_configuracao global (base URLs + api_key_staging)
+  3. Resolve ambiente:
+       - se ambiente_override existe -> usa ele
+       - senão usa fornecedor_configuracao.ambiente
+  4. Resolve token:
+       - se ambiente=production -> usa empresa.api_key_production
+                                   (erro CONFIG_ERROR se vazio)
+       - se ambiente=staging    -> usa fornecedor_configuracao.api_key_staging
+  5. Resolve baseUrl pela base_url_staging/production global
 ```
 
-### Tab 1 — Visão por Loja (default)
-Tabela agregada com uma linha por `cod_empresa`:
-- Nome da loja · # PVs ativos · # PVs com vendas no período · # PVs sem movimento
-- Última sincronização · Status opt-in (badge: APROVADO / AGUARDANDO / ERRO)
-- Vendas (qtd) · Bruto · Líquido · Taxas · Ticket médio
-- % Conciliado (barra de progresso)
-- Botões inline: **Sincronizar** (7d) · **Conciliar Auto** · **Detalhar**
+O `idempotency_key` e o `hoya_environment` (campo legado usado para registrar ambiente) devem refletir o ambiente real resolvido.
 
-### Tab 2 — Visão por PV (drill-down ao clicar numa loja)
-Para a loja selecionada, lista cada PV (`pvs_matriz_production`):
-- PV · Tem vendas? (✓/✗) · Última venda · Qtd · Bruto · Líquido
-- Status opt-in individual + healthcheck
-- Separação visual: **PVs com movimento** vs **PVs sem movimento** (collapse)
-- Ação: re-testar PV individual
+### 3. Página `AdminHaytekConfigPage`
 
-### Tab 3 — Transações (lista detalhada)
-Versão melhorada da tabela atual:
-- Linhas expansíveis mostrando payload REDE (NSU, TID, autorização, captureType, device, parcelas, MDR%)
-- Coluna **Match ERP**: badge mostrando lançamento ERP correlacionado (ou "Sem match")
-- Ação inline: **Conciliar manualmente** (abre sheet com candidatos do ERP)
+Reorganizar a tabela para refletir o novo modelo:
 
-## Conciliação automática (motor v2)
+- Colunas: `Cód.` | `Alias` | `CNPJ` | `Store ID` | `Token Produção` | `Ambiente` | `Status` | `Ação`
+- Esconder `Address ID` da tabela principal (deixar editável só num "expand row" opcional, já que não foi necessário em homologação)
+- Campo `Token Produção`: input tipo password, mostra apenas últimos 4 caracteres quando salvo (`••••XXXX`), botão "olho" para revelar
+- Campo `Ambiente`: select com opções `Staging (global)` | `Produção` — quando setado para Produção, exige `api_key_production` preenchido para considerar "Configurada"
+- Cards de KPI:
+  - Total empresas
+  - Em produção (com token prod ativo)
+  - Em staging
+- Aviso visual no topo: "Token de staging permanece global em Configuração de Fornecedores. Em produção, cada loja usa seu próprio token."
 
-Edge function `conciliar-vendas` reescrita para casar `vendas_cartao` × `lancamentos_financeiros` por **score multi-critério**:
+### 4. Página `AdminFornecedoresPage` (sem mudança funcional grande)
 
-| Critério | Peso | Tolerância |
-|---|---|---|
-| Valor bruto | 40 | ±R$ 0,01 |
-| Data (venda × emissão) | 25 | ±2 dias |
-| Bandeira | 15 | exata |
-| Parcelas | 10 | exata |
-| Forma de pagamento contém "CARTÃO" | 10 | substring |
+Adicionar uma nota informativa na seção HAYTEK: "Para Haytek/HiTech em produção, configure o token de cada loja em Admin > Configuração Haytek por Empresa. O campo 'API Key Production' aqui é apenas fallback."
 
-Score ≥ 80 → `CONCILIADO` automático
-Score 50–79 → `DIVERGENTE` (revisão humana)
-Score < 50 ou sem candidato → `PENDENTE_ERP`
+Manter o `api_key_production` global como fallback opcional (caso uma loja não tenha token próprio — embora na prática novo modelo deva sempre ter por loja).
 
-Em caso de match único e exato, gera automaticamente:
-- Lançamento de **taxa** (PAGAR, categoria `TAXA_ADQUIRENTE`) com `data_vencimento = data_prevista_credito`
-- Lançamento de **recebível líquido** (RECEBER, categoria `RECEBIVEL_CARTAO`) ligado ao `venda_cartao_id`
+### 5. Plano de ativação da Diniz Primitiva I
 
-## Integrações com o sistema
+Após deploy:
+1. Admin entra em `/admin/haytek` e cola o token de produção da loja `cod_empresa=1` (DINIZ PRIMITIVA I)
+2. Define `Ambiente = Produção` apenas para essa loja
+3. As outras 8 continuam em `Staging (global)` até receberem seus próprios tokens
+4. Teste real de pedido pela loja 1 → deve bater na URL de produção com o token novo
 
-1. **Hub Financeiro** (`/financeiro/hub`): novo filtro "origem=ADQUIRENTE" mostra taxas e recebíveis gerados pela conciliação.
-2. **Carteira de Recebíveis**: vendas conciliadas alimentam o cronograma de crédito previsto (D+30 padrão).
-3. **Extrato BTG** (futuro): comparar `data_prevista_credito` com créditos reais no `btg_extrato`.
-4. **Dashboard de Vendas**: badge "Cartão conciliado %" por loja.
+---
 
 ## Detalhes técnicos
 
-**Frontend (`ConciliacaoCartoesPage.tsx`)**
-- 3 tabs com `Tabs` do shadcn; estado de loja selecionada compartilhado entre Tab 1 e Tab 2.
-- Hook novo `useConciliacaoCartoes(periodo)` agregando vendas_cartao + adquirentes_config + conciliacao_vendas em uma só query (RPC ou múltiplas queries paralelas).
-- Visão por PV usa `dados_extras->merchant->companyNumber` para identificar qual PV originou cada venda.
-- Botões "Sincronizar todas" e "Conciliar todas" no header (mass action).
+**SQL (migration):**
+```sql
+ALTER TABLE public.haytek_empresa_config
+  ADD COLUMN IF NOT EXISTS api_key_production text,
+  ADD COLUMN IF NOT EXISTS ambiente_override text 
+    CHECK (ambiente_override IN ('staging','production'));
+```
 
-**Backend**
-- `conciliar-vendas` (edge): novo motor de score (descrito acima).
-- `sync-vendas-cartao` (edge existente): adicionar parâmetro `per_pv: true` para retornar breakdown por PV no resultado, persistir em `dados_extras.merchant.companyNumber`.
-- View SQL `v_conciliacao_loja_resumo` agregando KPIs por loja para evitar N+1.
-- Não precisa de migration de schema (`vendas_cartao.dados_extras` já tem o `merchant.companyNumber`).
+**Resolução de token (pseudo):**
+```ts
+const isProd = (storeCfg.ambiente_override ?? globalCfg.ambiente) === 'production';
+const apiKey = isProd 
+  ? (storeCfg.api_key_production ?? globalCfg.api_key_production)
+  : globalCfg.api_key_staging;
+if (!apiKey) throw CONFIG_ERROR('Token não configurado para esta loja/ambiente');
+```
 
-**Tabelas envolvidas (sem alterações de schema)**
-- `vendas_cartao` (source)
-- `lancamentos_financeiros` (alvo do match)
-- `conciliacao_vendas` (resultado)
-- `adquirentes_config` (PVs por loja)
-- `empresa` (nomes)
+**Segurança:** `api_key_production` em `haytek_empresa_config` segue as RLS já existentes (admin-only + service role). O frontend nunca recebe o valor cru — a página exibe apenas máscara `••••XXXX` calculada via Edge Function dedicada `haytek-token-mask` (ou via select que retorna só `RIGHT(api_key_production,4)`). Para simplificar inicialmente, exibimos apenas indicador "Token configurado ✓" sem mostrar nenhum dígito.
 
-## Entregáveis
-
-1. `src/pages/ConciliacaoCartoesPage.tsx` reescrita com 3 tabs e drill-down.
-2. `src/hooks/useConciliacaoCartoes.ts` novo hook agregador.
-3. `src/components/conciliacao-cartoes/` novos componentes: `LojasResumoTable`, `PvsBreakdownTable`, `TransacaoExpandedRow`, `ConciliarManualSheet`.
-4. `supabase/functions/conciliar-vendas/index.ts` motor de score multi-critério + geração automática de lançamentos.
-5. View SQL `v_conciliacao_loja_resumo` (migration).
-6. Ajuste em `sync-vendas-cartao` para retornar resumo por PV.
-
-## Fora deste plano (próximos passos)
-
-- Conciliação contra extrato BTG (créditos reais).
-- Antecipação de recebíveis e cálculo de custo financeiro.
-- Alertas automáticos de divergência de MDR.
+**Address ID:** mantido na tabela e no payload (opcional). Removido apenas do destaque da UI principal, acessível via toggle "Mostrar campos avançados".

@@ -802,6 +802,8 @@ export type Database = {
         Row: {
           address_id: string | null
           alias: string | null
+          ambiente_override: string | null
+          api_key_production: string | null
           ativo: boolean | null
           cnpj: string | null
           cod_empresa: number
@@ -813,6 +815,8 @@ export type Database = {
         Insert: {
           address_id?: string | null
           alias?: string | null
+          ambiente_override?: string | null
+          api_key_production?: string | null
           ativo?: boolean | null
           cnpj?: string | null
           cod_empresa: number
@@ -824,6 +828,8 @@ export type Database = {
         Update: {
           address_id?: string | null
           alias?: string | null
+          ambiente_override?: string | null
+          api_key_production?: string | null
           ativo?: boolean | null
           cnpj?: string | null
           cod_empresa?: number
