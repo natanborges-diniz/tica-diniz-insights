@@ -601,6 +601,52 @@ serve(async (req) => {
       );
     }
 
+    // ---------- Verificar status do Opt-in (consulta GET na REDE) ----------
+    if (action === "verificar_status_optin" || action === "verificar_status_optin_lote") {
+      const ambiente = ambReq || "production";
+      let configs: any[] = [];
+
+      if (action === "verificar_status_optin") {
+        if (typeof cod_empresa !== "number") throw new Error("cod_empresa é obrigatório");
+        const { data, error } = await supabase
+          .from("adquirentes_config")
+          .select(SELECT_COLS_WITH_OPTIN)
+          .eq("adquirente", "REDE")
+          .eq("cod_empresa", cod_empresa);
+        if (error) throw new Error(error.message);
+        configs = data || [];
+      } else {
+        let q = supabase
+          .from("adquirentes_config")
+          .select(SELECT_COLS_WITH_OPTIN)
+          .eq("adquirente", "REDE")
+          .eq("ativo", true)
+          .not("gv_optin_external_id", "is", null);
+        // Por padrão, verifica apenas os pendentes (AGUARDANDO_ACEITE)
+        if (Array.isArray(cod_empresas) && cod_empresas.length > 0) {
+          q = q.in("cod_empresa", cod_empresas);
+        } else {
+          q = q.eq("gv_optin_status", "AGUARDANDO_ACEITE");
+        }
+        const { data, error } = await q;
+        if (error) throw new Error(error.message);
+        configs = data || [];
+      }
+
+      if (configs.length === 0) {
+        return new Response(
+          JSON.stringify({ ok: true, checked: 0, approved: 0, pending: 0, rejected: 0, errors: 0, skipped: [], results: [], message: "Nenhuma solicitação para verificar" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const summary = await verifyOptinStatus(supabase, configs, ambiente);
+      return new Response(
+        JSON.stringify({ ok: true, ambiente, ...summary }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // ---------- Registrar aceite manual ----------
     if (action === "registrar_aceite") {
       if (typeof cod_empresa !== "number") throw new Error("cod_empresa é obrigatório");
