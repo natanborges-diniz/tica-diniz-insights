@@ -480,9 +480,7 @@ export default function AdminAdquirentesPage() {
         const first = results[0];
         toast.error(`Falha em todos os PVs: ${first.error || first.status || "erro desconhecido"}`);
       }
-      if (!silent || (data?.approved || 0) > 0 || (data?.rejected || 0) > 0) {
-        fetchConfigs();
-      }
+      fetchConfigs();
     } catch (e) {
       toast.error(`Erro GV: ${(e as Error).message}`);
     } finally {
@@ -572,7 +570,9 @@ export default function AdminAdquirentesPage() {
         };
         toast.success(labels[action] || "Ação executada");
       }
-      fetchConfigs();
+      if (!silent || (data?.approved || 0) > 0 || (data?.rejected || 0) > 0) {
+        fetchConfigs();
+      }
     } catch (e) {
       toast.error(`Erro Opt-in: ${(e as Error).message}`);
     } finally {
