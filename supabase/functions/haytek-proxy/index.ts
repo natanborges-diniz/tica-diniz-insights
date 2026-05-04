@@ -245,7 +245,7 @@ serve(async (req) => {
             payload: pedidoPayload,
             response: respData,
             requested_by: user.userId,
-            hoya_environment: haytekConfig.ambiente,
+            hoya_environment: activeAmbiente,
             idempotency_key: idempotencyKey,
           });
 
@@ -270,7 +270,7 @@ serve(async (req) => {
           payload: pedidoPayload,
           response: respData,
           requested_by: user.userId,
-          hoya_environment: haytekConfig.ambiente,
+          hoya_environment: activeAmbiente,
           idempotency_key: idempotencyKey,
         });
 
@@ -293,7 +293,7 @@ serve(async (req) => {
         }
 
         const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/${orderId}`;
-        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "consultar-pedido", haytekConfig.apiKey);
+        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "consultar-pedido", activeApiKey);
         const data = await resp.json();
 
         if (resp.status >= 400) {
@@ -320,7 +320,7 @@ serve(async (req) => {
         }
 
         const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/${orderId}`;
-        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "atualizar-tracking", haytekConfig.apiKey);
+        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "atualizar-tracking", activeApiKey);
         const data = await resp.json();
 
         if (resp.status >= 400) {
