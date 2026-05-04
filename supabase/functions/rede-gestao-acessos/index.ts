@@ -419,7 +419,139 @@ async function processBatch(
   };
 }
 
-const SELECT_COLS = "id, cod_empresa, ambiente, merchant_id, merchant_id_production, pv_matriz, pv_matriz_production, pvs_matriz_production";
+/**
+ * Verifica o status atual do Opt-in na REDE para um conjunto de configs.
+ * - Agrupa configs pelo gv_optin_external_id (mesmo requestId pode cobrir múltiplas lojas via PV).
+ * - Faz 1 GET por requestId único.
+ * - Atualiza gv_optin_status conforme retorno da REDE.
+ * - Espelha o status para todas as lojas que compartilham o PV (via overlaps).
+ */
+async function verifyOptinStatus(
+  supabase: any,
+  configs: Array<ConfigRow & { gv_optin_external_id: string | null; pvs_matriz_production: string[] | null }>,
+  ambiente: string,
+) {
+  const oauthBase = resolveOAuthBase(ambiente);
+  const apiBase = resolveApiBase(ambiente);
+
+  const eligible = configs.filter(c => !!c.gv_optin_external_id);
+  const skipped = configs
+    .filter(c => !c.gv_optin_external_id)
+    .map(c => ({ cod_empresa: c.cod_empresa, reason: "Sem requestId — solicitação ainda não foi enviada" }));
+
+  // Agrupa por requestId
+  const byRequestId: Map<string, typeof eligible> = new Map();
+  for (const c of eligible) {
+    const rid = c.gv_optin_external_id!;
+    if (!byRequestId.has(rid)) byRequestId.set(rid, []);
+    byRequestId.get(rid)!.push(c);
+  }
+
+  if (byRequestId.size === 0) {
+    return { checked: 0, approved: 0, pending: 0, rejected: 0, errors: 0, skipped, results: [] as any[] };
+  }
+
+  const token = await getOAuthToken(oauthBase);
+
+  const results: Array<{
+    request_id: string;
+    cod_empresas: number[];
+    remote_status: string | null;
+    internal_status: string | null;
+    is_approved: boolean;
+    ok: boolean;
+    error?: string;
+  }> = [];
+
+  let approved = 0, pending = 0, rejected = 0, errors = 0;
+
+  for (const [requestId, cfgs] of byRequestId.entries()) {
+    let queryResult;
+    try {
+      queryResult = await getStatementAccessRequestStatus(apiBase, token, requestId);
+    } catch (e) {
+      errors++;
+      results.push({
+        request_id: requestId,
+        cod_empresas: cfgs.map(c => c.cod_empresa),
+        remote_status: null,
+        internal_status: null,
+        is_approved: false,
+        ok: false,
+        error: (e as Error).message,
+      });
+      continue;
+    }
+
+    if (!queryResult.ok) {
+      errors++;
+      results.push({
+        request_id: requestId,
+        cod_empresas: cfgs.map(c => c.cod_empresa),
+        remote_status: queryResult.remote_status,
+        internal_status: null,
+        is_approved: false,
+        ok: false,
+        error: `HTTP ${queryResult.status}`,
+      });
+      continue;
+    }
+
+    const mapped = mapRemoteStatus(queryResult.remote_status);
+    if (mapped.isApproved) approved++;
+    else if (mapped.internal === "REJEITADO" || mapped.internal === "EXPIRADO") rejected++;
+    else pending++;
+
+    // Identificar TODAS as configs afetadas (incluindo espelhadas via PV)
+    const affectedIds = new Set(cfgs.map(c => c.id));
+    const allPvs = Array.from(new Set(cfgs.flatMap(c => c.pvs_matriz_production || [])));
+    if (allPvs.length > 0) {
+      const { data: shared } = await supabase
+        .from("adquirentes_config")
+        .select("id, cod_empresa")
+        .eq("adquirente", "REDE")
+        .eq("ativo", true)
+        .overlaps("pvs_matriz_production", allPvs);
+      if (Array.isArray(shared)) {
+        for (const s of shared) affectedIds.add(s.id);
+      }
+    }
+
+    const updates: Record<string, unknown> = {
+      gv_optin_response: queryResult.response,
+    };
+    if (mapped.internal) updates.gv_optin_status = mapped.internal;
+    if (mapped.isApproved) updates.gv_approved_at = new Date().toISOString();
+
+    const { error: upErr } = await supabase
+      .from("adquirentes_config")
+      .update(updates)
+      .in("id", Array.from(affectedIds));
+
+    if (upErr) {
+      console.error(`[rede-ga] Erro ao persistir status do request ${requestId}:`, upErr);
+    }
+
+    results.push({
+      request_id: requestId,
+      cod_empresas: cfgs.map(c => c.cod_empresa),
+      remote_status: queryResult.remote_status,
+      internal_status: mapped.internal,
+      is_approved: mapped.isApproved,
+      ok: true,
+    });
+  }
+
+  return {
+    checked: byRequestId.size,
+    approved,
+    pending,
+    rejected,
+    errors,
+    skipped,
+    results,
+  };
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
