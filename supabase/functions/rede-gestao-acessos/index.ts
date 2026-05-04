@@ -553,6 +553,9 @@ async function verifyOptinStatus(
   };
 }
 
+const SELECT_COLS = "id, cod_empresa, ambiente, merchant_id, merchant_id_production, pv_matriz, pv_matriz_production, pvs_matriz_production";
+const SELECT_COLS_WITH_OPTIN = SELECT_COLS + ", gv_optin_external_id, gv_optin_status";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
