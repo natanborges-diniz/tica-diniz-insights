@@ -782,6 +782,20 @@ export default function AdminAdquirentesPage() {
               )}
               Solicitar compartilhamento (lote REDE)
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleVerificarLotePendentes(false)}
+              disabled={testing === "lote-verificar"}
+              title="Consulta a REDE sobre todos os Opt-ins ainda pendentes e atualiza automaticamente os que foram aprovados"
+            >
+              {testing === "lote-verificar" ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
+              Verificar aceites pendentes
+            </Button>
             <Button size="sm" onClick={() => setShowAddForm(true)}>
               <Plus className="h-4 w-4 mr-1" /> Nova Adquirente
             </Button>
