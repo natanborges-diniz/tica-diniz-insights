@@ -137,6 +137,68 @@ async function postStatementAccessRequest(
   };
 }
 
+/**
+ * Consulta o status atual de um access request na REDE pelo requestId.
+ * Endpoint: GET /partner/v1/organizations/requests/features/merchant-statement/{requestId}
+ */
+async function getStatementAccessRequestStatus(
+  baseUrl: string,
+  token: string,
+  requestId: string,
+): Promise<{ ok: boolean; status: number; remote_status: string | null; response: any }> {
+  const url = `${baseUrl}/partner/v1/organizations/requests/features/merchant-statement/${encodeURIComponent(requestId)}`;
+  console.log(`[rede-ga] GET ${url}`);
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+  });
+
+  const text = await res.text();
+  let parsed: any;
+  try { parsed = JSON.parse(text); } catch { parsed = { raw: text }; }
+
+  console.log(`[rede-ga] GET status response ${res.status}:`, text.slice(0, 800));
+
+  // A REDE retorna campos como: status, requestStatus, state — normalizamos para uppercase
+  const remoteRaw = parsed?.status || parsed?.requestStatus || parsed?.state || null;
+  const remote_status = typeof remoteRaw === "string" ? remoteRaw.toUpperCase() : null;
+
+  return {
+    ok: res.ok,
+    status: res.status,
+    remote_status,
+    response: parsed,
+  };
+}
+
+/**
+ * Mapeia o status remoto da REDE para o status interno do sistema.
+ * Possíveis valores remotos: PENDING, APPROVED, REJECTED, EXPIRED, CANCELED, ACTIVE...
+ */
+function mapRemoteStatus(remote: string | null): {
+  internal: string | null;
+  isFinal: boolean;
+  isApproved: boolean;
+} {
+  if (!remote) return { internal: null, isFinal: false, isApproved: false };
+  const r = remote.toUpperCase();
+  if (["APPROVED", "ACTIVE", "GRANTED", "ACCEPTED", "AUTHORIZED"].includes(r)) {
+    return { internal: "APROVADO", isFinal: true, isApproved: true };
+  }
+  if (["REJECTED", "DENIED", "REFUSED"].includes(r)) {
+    return { internal: "REJEITADO", isFinal: true, isApproved: false };
+  }
+  if (["EXPIRED", "CANCELED", "CANCELLED", "REVOKED"].includes(r)) {
+    return { internal: "EXPIRADO", isFinal: true, isApproved: false };
+  }
+  // PENDING, IN_REVIEW, etc
+  return { internal: "AGUARDANDO_ACEITE", isFinal: false, isApproved: false };
+}
+
 interface ConfigRow {
   id: string;
   cod_empresa: number;
