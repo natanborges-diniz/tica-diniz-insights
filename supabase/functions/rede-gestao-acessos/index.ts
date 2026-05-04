@@ -26,6 +26,8 @@ type Action =
   | "solicitar_compartilhamento"
   | "solicitar_compartilhamento_lote"
   | "registrar_aceite"
+  | "verificar_status_optin"
+  | "verificar_status_optin_lote"
   | "reset"
   | "status";
 
@@ -133,6 +135,68 @@ async function postStatementAccessRequest(
     payload,
     response: parsed,
   };
+}
+
+/**
+ * Consulta o status atual de um access request na REDE pelo requestId.
+ * Endpoint: GET /partner/v1/organizations/requests/features/merchant-statement/{requestId}
+ */
+async function getStatementAccessRequestStatus(
+  baseUrl: string,
+  token: string,
+  requestId: string,
+): Promise<{ ok: boolean; status: number; remote_status: string | null; response: any }> {
+  const url = `${baseUrl}/partner/v1/organizations/requests/features/merchant-statement/${encodeURIComponent(requestId)}`;
+  console.log(`[rede-ga] GET ${url}`);
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    },
+  });
+
+  const text = await res.text();
+  let parsed: any;
+  try { parsed = JSON.parse(text); } catch { parsed = { raw: text }; }
+
+  console.log(`[rede-ga] GET status response ${res.status}:`, text.slice(0, 800));
+
+  // A REDE retorna campos como: status, requestStatus, state — normalizamos para uppercase
+  const remoteRaw = parsed?.status || parsed?.requestStatus || parsed?.state || null;
+  const remote_status = typeof remoteRaw === "string" ? remoteRaw.toUpperCase() : null;
+
+  return {
+    ok: res.ok,
+    status: res.status,
+    remote_status,
+    response: parsed,
+  };
+}
+
+/**
+ * Mapeia o status remoto da REDE para o status interno do sistema.
+ * Possíveis valores remotos: PENDING, APPROVED, REJECTED, EXPIRED, CANCELED, ACTIVE...
+ */
+function mapRemoteStatus(remote: string | null): {
+  internal: string | null;
+  isFinal: boolean;
+  isApproved: boolean;
+} {
+  if (!remote) return { internal: null, isFinal: false, isApproved: false };
+  const r = remote.toUpperCase();
+  if (["APPROVED", "ACTIVE", "GRANTED", "ACCEPTED", "AUTHORIZED"].includes(r)) {
+    return { internal: "APROVADO", isFinal: true, isApproved: true };
+  }
+  if (["REJECTED", "DENIED", "REFUSED"].includes(r)) {
+    return { internal: "REJEITADO", isFinal: true, isApproved: false };
+  }
+  if (["EXPIRED", "CANCELED", "CANCELLED", "REVOKED"].includes(r)) {
+    return { internal: "EXPIRADO", isFinal: true, isApproved: false };
+  }
+  // PENDING, IN_REVIEW, etc
+  return { internal: "AGUARDANDO_ACEITE", isFinal: false, isApproved: false };
 }
 
 interface ConfigRow {
@@ -355,7 +419,142 @@ async function processBatch(
   };
 }
 
+/**
+ * Verifica o status atual do Opt-in na REDE para um conjunto de configs.
+ * - Agrupa configs pelo gv_optin_external_id (mesmo requestId pode cobrir múltiplas lojas via PV).
+ * - Faz 1 GET por requestId único.
+ * - Atualiza gv_optin_status conforme retorno da REDE.
+ * - Espelha o status para todas as lojas que compartilham o PV (via overlaps).
+ */
+async function verifyOptinStatus(
+  supabase: any,
+  configs: Array<ConfigRow & { gv_optin_external_id: string | null; pvs_matriz_production: string[] | null }>,
+  ambiente: string,
+) {
+  const oauthBase = resolveOAuthBase(ambiente);
+  const apiBase = resolveApiBase(ambiente);
+
+  const eligible = configs.filter(c => !!c.gv_optin_external_id);
+  const skipped = configs
+    .filter(c => !c.gv_optin_external_id)
+    .map(c => ({ cod_empresa: c.cod_empresa, reason: "Sem requestId — solicitação ainda não foi enviada" }));
+
+  // Agrupa por requestId
+  const byRequestId: Map<string, typeof eligible> = new Map();
+  for (const c of eligible) {
+    const rid = c.gv_optin_external_id!;
+    if (!byRequestId.has(rid)) byRequestId.set(rid, []);
+    byRequestId.get(rid)!.push(c);
+  }
+
+  if (byRequestId.size === 0) {
+    return { checked: 0, approved: 0, pending: 0, rejected: 0, errors: 0, skipped, results: [] as any[] };
+  }
+
+  const token = await getOAuthToken(oauthBase);
+
+  const results: Array<{
+    request_id: string;
+    cod_empresas: number[];
+    remote_status: string | null;
+    internal_status: string | null;
+    is_approved: boolean;
+    ok: boolean;
+    error?: string;
+  }> = [];
+
+  let approved = 0, pending = 0, rejected = 0, errors = 0;
+
+  for (const [requestId, cfgs] of byRequestId.entries()) {
+    let queryResult;
+    try {
+      queryResult = await getStatementAccessRequestStatus(apiBase, token, requestId);
+    } catch (e) {
+      errors++;
+      results.push({
+        request_id: requestId,
+        cod_empresas: cfgs.map(c => c.cod_empresa),
+        remote_status: null,
+        internal_status: null,
+        is_approved: false,
+        ok: false,
+        error: (e as Error).message,
+      });
+      continue;
+    }
+
+    if (!queryResult.ok) {
+      errors++;
+      results.push({
+        request_id: requestId,
+        cod_empresas: cfgs.map(c => c.cod_empresa),
+        remote_status: queryResult.remote_status,
+        internal_status: null,
+        is_approved: false,
+        ok: false,
+        error: `HTTP ${queryResult.status}`,
+      });
+      continue;
+    }
+
+    const mapped = mapRemoteStatus(queryResult.remote_status);
+    if (mapped.isApproved) approved++;
+    else if (mapped.internal === "REJEITADO" || mapped.internal === "EXPIRADO") rejected++;
+    else pending++;
+
+    // Identificar TODAS as configs afetadas (incluindo espelhadas via PV)
+    const affectedIds = new Set(cfgs.map(c => c.id));
+    const allPvs = Array.from(new Set(cfgs.flatMap(c => c.pvs_matriz_production || [])));
+    if (allPvs.length > 0) {
+      const { data: shared } = await supabase
+        .from("adquirentes_config")
+        .select("id, cod_empresa")
+        .eq("adquirente", "REDE")
+        .eq("ativo", true)
+        .overlaps("pvs_matriz_production", allPvs);
+      if (Array.isArray(shared)) {
+        for (const s of shared) affectedIds.add(s.id);
+      }
+    }
+
+    const updates: Record<string, unknown> = {
+      gv_optin_response: queryResult.response,
+    };
+    if (mapped.internal) updates.gv_optin_status = mapped.internal;
+    if (mapped.isApproved) updates.gv_approved_at = new Date().toISOString();
+
+    const { error: upErr } = await supabase
+      .from("adquirentes_config")
+      .update(updates)
+      .in("id", Array.from(affectedIds));
+
+    if (upErr) {
+      console.error(`[rede-ga] Erro ao persistir status do request ${requestId}:`, upErr);
+    }
+
+    results.push({
+      request_id: requestId,
+      cod_empresas: cfgs.map(c => c.cod_empresa),
+      remote_status: queryResult.remote_status,
+      internal_status: mapped.internal,
+      is_approved: mapped.isApproved,
+      ok: true,
+    });
+  }
+
+  return {
+    checked: byRequestId.size,
+    approved,
+    pending,
+    rejected,
+    errors,
+    skipped,
+    results,
+  };
+}
+
 const SELECT_COLS = "id, cod_empresa, ambiente, merchant_id, merchant_id_production, pv_matriz, pv_matriz_production, pvs_matriz_production";
+const SELECT_COLS_WITH_OPTIN = SELECT_COLS + ", gv_optin_external_id, gv_optin_status";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -398,6 +597,52 @@ serve(async (req) => {
           last_healthcheck_message: (data as any).gv_last_healthcheck_message,
           mirrored_from: (data as any).gv_optin_mirrored_from,
         }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // ---------- Verificar status do Opt-in (consulta GET na REDE) ----------
+    if (action === "verificar_status_optin" || action === "verificar_status_optin_lote") {
+      const ambiente = ambReq || "production";
+      let configs: any[] = [];
+
+      if (action === "verificar_status_optin") {
+        if (typeof cod_empresa !== "number") throw new Error("cod_empresa é obrigatório");
+        const { data, error } = await supabase
+          .from("adquirentes_config")
+          .select(SELECT_COLS_WITH_OPTIN)
+          .eq("adquirente", "REDE")
+          .eq("cod_empresa", cod_empresa);
+        if (error) throw new Error(error.message);
+        configs = data || [];
+      } else {
+        let q = supabase
+          .from("adquirentes_config")
+          .select(SELECT_COLS_WITH_OPTIN)
+          .eq("adquirente", "REDE")
+          .eq("ativo", true)
+          .not("gv_optin_external_id", "is", null);
+        // Por padrão, verifica apenas os pendentes (AGUARDANDO_ACEITE)
+        if (Array.isArray(cod_empresas) && cod_empresas.length > 0) {
+          q = q.in("cod_empresa", cod_empresas);
+        } else {
+          q = q.eq("gv_optin_status", "AGUARDANDO_ACEITE");
+        }
+        const { data, error } = await q;
+        if (error) throw new Error(error.message);
+        configs = data || [];
+      }
+
+      if (configs.length === 0) {
+        return new Response(
+          JSON.stringify({ ok: true, checked: 0, approved: 0, pending: 0, rejected: 0, errors: 0, skipped: [], results: [], message: "Nenhuma solicitação para verificar" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const summary = await verifyOptinStatus(supabase, configs, ambiente);
+      return new Response(
+        JSON.stringify({ ok: true, ambiente, ...summary }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

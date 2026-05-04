@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   Loader2, Save, Plus, Eye, EyeOff, CreditCard,
   CheckCircle2, AlertCircle, Trash2, Wifi, ShieldCheck, FlaskConical,
-  Send, Code, X,
+  Send, Code, X, RefreshCw,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Navigate } from "react-router-dom";
@@ -63,7 +63,7 @@ interface EditForm {
 
 const ADQUIRENTES = ["REDE", "CIELO", "STONE", "PAGSEGURO", "GETNET"];
 
-type OptinAction = "solicitar_compartilhamento" | "registrar_aceite" | "reset";
+type OptinAction = "solicitar_compartilhamento" | "verificar_status_optin" | "reset";
 
 function ActivationGVBlock({
   config,
@@ -150,7 +150,7 @@ function ActivationGVBlock({
         <Step
           done={approved}
           label="Aceite confirmado no portal da REDE"
-          hint={approved ? `em ${fmt(config.gv_approved_at)}` : "Aprove com perfil master no portal"}
+          hint={approved ? `em ${fmt(config.gv_approved_at)}` : "O sistema verifica automaticamente — aprove com perfil master no portal"}
         />
         <Step
           done={healthOk}
@@ -201,10 +201,11 @@ function ActivationGVBlock({
         <Button
           size="sm" variant="outline" className="text-xs"
           disabled={!!busy || !optinRequested || approved}
-          onClick={() => onOptin("registrar_aceite")}
+          onClick={() => onOptin("verificar_status_optin")}
+          title="Consulta o status atual diretamente na API da REDE"
         >
-          {busy === `${config.id}-optin-registrar_aceite` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-          Marcar como Aprovado
+          {busy === `${config.id}-optin-verificar_status_optin` ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+          Verificar na REDE
         </Button>
         <Button
           size="sm" variant="outline" className="text-xs"
@@ -548,9 +549,21 @@ export default function AdminAdquirentesPage() {
         if ((data?.skipped?.length || 0) > 0) {
           toast.warning(`${data.skipped.length} loja(s) sem PV Matriz cadastrado — pulada(s).`);
         }
+      } else if (action === "verificar_status_optin") {
+        if (data?.checked === 0) {
+          toast.info(data?.message || "Nenhuma solicitação para verificar");
+        } else if (data?.approved > 0) {
+          toast.success(`Aceite confirmado pela REDE para ${data.approved} solicitação(ões)`);
+        } else if (data?.rejected > 0) {
+          toast.error(`${data.rejected} solicitação(ões) rejeitada(s)/expirada(s) pela REDE`);
+        } else if (data?.pending > 0) {
+          const remote = data?.results?.[0]?.remote_status || "PENDING";
+          toast.info(`Ainda aguardando aceite no portal da REDE (status: ${remote})`);
+        } else if (data?.errors > 0) {
+          toast.error(`Erro ao consultar REDE: ${data?.results?.[0]?.error || "verifique os logs"}`);
+        }
       } else {
         const labels: Record<string, string> = {
-          registrar_aceite: "Aceite registrado — integração marcada como aprovada",
           reset: "Status de Opt-in reiniciado",
           solicitar_compartilhamento: "Solicitação processada",
         };
@@ -585,6 +598,51 @@ export default function AdminAdquirentesPage() {
       setTesting(null);
     }
   };
+
+  const handleVerificarLotePendentes = useCallback(async (silent = false) => {
+    if (!silent) setTesting("lote-verificar");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const { data, error } = await supabase.functions.invoke("rede-gestao-acessos", {
+        body: { action: "verificar_status_optin_lote", ambiente: "production" },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      if (!silent) {
+        if ((data?.checked || 0) === 0) {
+          toast.info("Nenhuma solicitação pendente para verificar");
+        } else {
+          const parts: string[] = [];
+          if (data.approved > 0) parts.push(`${data.approved} aprovada(s)`);
+          if (data.pending > 0) parts.push(`${data.pending} ainda pendente(s)`);
+          if (data.rejected > 0) parts.push(`${data.rejected} rejeitada(s)`);
+          if (data.errors > 0) parts.push(`${data.errors} erro(s)`);
+          toast.success(`Verificação concluída: ${parts.join(" · ")}`);
+        }
+      } else if ((data?.approved || 0) > 0) {
+        toast.success(`${data.approved} aceite(s) confirmado(s) automaticamente pela REDE`);
+      }
+      fetchConfigs();
+    } catch (e) {
+      if (!silent) toast.error(`Erro: ${(e as Error).message}`);
+      else console.warn("[adquirentes] Verificação automática falhou:", (e as Error).message);
+    } finally {
+      if (!silent) setTesting(null);
+    }
+  }, [fetchConfigs]);
+
+  // Verificação automática silenciosa: ao carregar a página, consulta a REDE
+  // sobre todos os Opt-ins em AGUARDANDO_ACEITE e atualiza o status.
+  useEffect(() => {
+    if (loading) return;
+    const hasPending = configs.some(c => c.gv_optin_status === "AGUARDANDO_ACEITE" && c.gv_optin_external_id);
+    if (!hasPending) return;
+    handleVerificarLotePendentes(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   const updateForm = (id: string, field: string, value: string | boolean) => {
     setEditForms(prev => ({
@@ -723,6 +781,20 @@ export default function AdminAdquirentesPage() {
                 <Send className="h-4 w-4 mr-1" />
               )}
               Solicitar compartilhamento (lote REDE)
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleVerificarLotePendentes(false)}
+              disabled={testing === "lote-verificar"}
+              title="Consulta a REDE sobre todos os Opt-ins ainda pendentes e atualiza automaticamente os que foram aprovados"
+            >
+              {testing === "lote-verificar" ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
+              Verificar aceites pendentes
             </Button>
             <Button size="sm" onClick={() => setShowAddForm(true)}>
               <Plus className="h-4 w-4 mr-1" /> Nova Adquirente
