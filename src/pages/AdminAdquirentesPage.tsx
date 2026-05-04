@@ -599,6 +599,51 @@ export default function AdminAdquirentesPage() {
     }
   };
 
+  const handleVerificarLotePendentes = useCallback(async (silent = false) => {
+    if (!silent) setTesting("lote-verificar");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const { data, error } = await supabase.functions.invoke("rede-gestao-acessos", {
+        body: { action: "verificar_status_optin_lote", ambiente: "production" },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      if (!silent) {
+        if ((data?.checked || 0) === 0) {
+          toast.info("Nenhuma solicitação pendente para verificar");
+        } else {
+          const parts: string[] = [];
+          if (data.approved > 0) parts.push(`${data.approved} aprovada(s)`);
+          if (data.pending > 0) parts.push(`${data.pending} ainda pendente(s)`);
+          if (data.rejected > 0) parts.push(`${data.rejected} rejeitada(s)`);
+          if (data.errors > 0) parts.push(`${data.errors} erro(s)`);
+          toast.success(`Verificação concluída: ${parts.join(" · ")}`);
+        }
+      } else if ((data?.approved || 0) > 0) {
+        toast.success(`${data.approved} aceite(s) confirmado(s) automaticamente pela REDE`);
+      }
+      fetchConfigs();
+    } catch (e) {
+      if (!silent) toast.error(`Erro: ${(e as Error).message}`);
+      else console.warn("[adquirentes] Verificação automática falhou:", (e as Error).message);
+    } finally {
+      if (!silent) setTesting(null);
+    }
+  }, [fetchConfigs]);
+
+  // Verificação automática silenciosa: ao carregar a página, consulta a REDE
+  // sobre todos os Opt-ins em AGUARDANDO_ACEITE e atualiza o status.
+  useEffect(() => {
+    if (loading) return;
+    const hasPending = configs.some(c => c.gv_optin_status === "AGUARDANDO_ACEITE" && c.gv_optin_external_id);
+    if (!hasPending) return;
+    handleVerificarLotePendentes(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
   const updateForm = (id: string, field: string, value: string | boolean) => {
     setEditForms(prev => ({
       ...prev,
