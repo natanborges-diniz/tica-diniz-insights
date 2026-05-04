@@ -549,9 +549,21 @@ export default function AdminAdquirentesPage() {
         if ((data?.skipped?.length || 0) > 0) {
           toast.warning(`${data.skipped.length} loja(s) sem PV Matriz cadastrado — pulada(s).`);
         }
+      } else if (action === "verificar_status_optin") {
+        if (data?.checked === 0) {
+          toast.info(data?.message || "Nenhuma solicitação para verificar");
+        } else if (data?.approved > 0) {
+          toast.success(`Aceite confirmado pela REDE para ${data.approved} solicitação(ões)`);
+        } else if (data?.rejected > 0) {
+          toast.error(`${data.rejected} solicitação(ões) rejeitada(s)/expirada(s) pela REDE`);
+        } else if (data?.pending > 0) {
+          const remote = data?.results?.[0]?.remote_status || "PENDING";
+          toast.info(`Ainda aguardando aceite no portal da REDE (status: ${remote})`);
+        } else if (data?.errors > 0) {
+          toast.error(`Erro ao consultar REDE: ${data?.results?.[0]?.error || "verifique os logs"}`);
+        }
       } else {
         const labels: Record<string, string> = {
-          registrar_aceite: "Aceite registrado — integração marcada como aprovada",
           reset: "Status de Opt-in reiniciado",
           solicitar_compartilhamento: "Solicitação processada",
         };
