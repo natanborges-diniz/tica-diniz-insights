@@ -420,133 +420,181 @@ async function processBatch(
 }
 
 /**
- * Verifica o status atual do Opt-in na REDE para um conjunto de configs.
- * - Agrupa configs pelo gv_optin_external_id (mesmo requestId pode cobrir múltiplas lojas via PV).
- * - Faz 1 GET por requestId único.
- * - Atualiza gv_optin_status conforme retorno da REDE.
- * - Espelha o status para todas as lojas que compartilham o PV (via overlaps).
+ * Verifica o status do Opt-in via HEALTHCHECK funcional na API Gestão de Vendas.
+ *
+ * MOTIVO: O endpoint GET /partner/v1/organizations/requests/features/merchant-statement/{requestId}
+ * retorna 403 "Requisição inválida" no escopo OAuth atual (REDE_GA). A fonte de verdade
+ * funcional é tentar consultar `/merchant-statement/v1/sales` para o PV — se retornar 200,
+ * o opt-in está ATIVO; se retornar 403 com "consent/opt-in/authorization", está PENDENTE.
+ *
+ * - Itera por config (1 PV Matriz cada).
+ * - Faz 1 GET /sales por PV único.
+ * - Atualiza gv_optin_status: ATIVO -> APROVADO (com gv_approved_at).
+ * - Espelha o status APROVADO para todas as lojas que compartilham o PV.
  */
 async function verifyOptinStatus(
   supabase: any,
   configs: Array<ConfigRow & { gv_optin_external_id: string | null; pvs_matriz_production: string[] | null }>,
   ambiente: string,
 ) {
-  const oauthBase = resolveOAuthBase(ambiente);
-  const apiBase = resolveApiBase(ambiente);
-
-  const eligible = configs.filter(c => !!c.gv_optin_external_id);
-  const skipped = configs
-    .filter(c => !c.gv_optin_external_id)
-    .map(c => ({ cod_empresa: c.cod_empresa, reason: "Sem requestId — solicitação ainda não foi enviada" }));
-
-  // Agrupa por requestId
-  const byRequestId: Map<string, typeof eligible> = new Map();
-  for (const c of eligible) {
-    const rid = c.gv_optin_external_id!;
-    if (!byRequestId.has(rid)) byRequestId.set(rid, []);
-    byRequestId.get(rid)!.push(c);
+  // Token específico da API Gestão de Vendas (REDE_GV_*)
+  const gvClientId = Deno.env.get("REDE_GV_CLIENT_ID");
+  const gvClientSecret = Deno.env.get("REDE_GV_CLIENT_SECRET");
+  if (!gvClientId || !gvClientSecret) {
+    throw new Error("REDE_GV_CLIENT_ID/SECRET não configurados — necessário para healthcheck de opt-in");
   }
 
-  if (byRequestId.size === 0) {
+  const gvBase = ambiente === "production"
+    ? "https://api.userede.com.br/redelabs"
+    : "https://rl7-sandbox-api.useredecloud.com.br";
+
+  // Obter token GV (escopo correto para /merchant-statement/v1/sales)
+  const tokenUrl = `${gvBase}/oauth2/token`;
+  const tokenRes = await fetch(tokenUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: "Basic " + btoa(`${gvClientId}:${gvClientSecret}`),
+    },
+    body: "grant_type=client_credentials",
+  });
+  if (!tokenRes.ok) {
+    const errText = await tokenRes.text();
+    throw new Error(`Falha ao obter token GV: ${tokenRes.status} ${errText.slice(0, 200)}`);
+  }
+  const tokenData = await tokenRes.json();
+  const gvToken = tokenData.access_token as string;
+
+  // Configs elegíveis: precisa ter ao menos 1 PV em pvs_matriz_production
+  const eligible = configs.filter(c => Array.isArray(c.pvs_matriz_production) && c.pvs_matriz_production.length > 0);
+  const skipped = configs
+    .filter(c => !Array.isArray(c.pvs_matriz_production) || c.pvs_matriz_production.length === 0)
+    .map(c => ({ cod_empresa: c.cod_empresa, reason: "Sem PV Matriz cadastrado" }));
+
+  // Coleta PVs únicos a testar
+  const uniquePvs = Array.from(new Set(eligible.flatMap(c => c.pvs_matriz_production || [])));
+
+  if (uniquePvs.length === 0) {
     return { checked: 0, approved: 0, pending: 0, rejected: 0, errors: 0, skipped, results: [] as any[] };
   }
 
-  const token = await getOAuthToken(oauthBase);
-
   const results: Array<{
-    request_id: string;
+    pv: string;
     cod_empresas: number[];
-    remote_status: string | null;
-    internal_status: string | null;
+    http_status: number;
     is_approved: boolean;
+    reason: string;
     ok: boolean;
     error?: string;
   }> = [];
 
-  let approved = 0, pending = 0, rejected = 0, errors = 0;
+  let approved = 0, pending = 0, errors = 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
 
-  for (const [requestId, cfgs] of byRequestId.entries()) {
-    let queryResult;
+  for (const pv of uniquePvs) {
+    const qp: Record<string, string> = {
+      parentCompanyNumber: pv,
+      startDate: weekAgo,
+      endDate: today,
+      size: "1",
+    };
+    // Em produção, subsidiaries é obrigatório (default: o próprio PV)
+    if (ambiente === "production") qp.subsidiaries = pv;
+    const url = `${gvBase}/merchant-statement/v1/sales?${new URLSearchParams(qp)}`;
+
+    let httpStatus = 0;
+    let isApproved = false;
+    let reason = "";
+    let errorMsg: string | undefined;
+
     try {
-      queryResult = await getStatementAccessRequestStatus(apiBase, token, requestId);
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${gvToken}`, Accept: "application/json" },
+      });
+      httpStatus = res.status;
+      const txt = await res.text();
+      if (res.ok) {
+        isApproved = true;
+        reason = "Healthcheck 200 — opt-in ATIVO";
+        approved++;
+      } else {
+        const lower = txt.toLowerCase();
+        if (
+          (res.status === 401 || res.status === 403) &&
+          (lower.includes("opt") || lower.includes("consent") || lower.includes("authorization") ||
+           lower.includes("compartilh") || lower.includes("not shared"))
+        ) {
+          reason = `Opt-in pendente (HTTP ${res.status})`;
+          pending++;
+        } else {
+          reason = `HTTP ${res.status}: ${txt.slice(0, 160)}`;
+          errors++;
+          errorMsg = reason;
+        }
+      }
     } catch (e) {
       errors++;
-      results.push({
-        request_id: requestId,
-        cod_empresas: cfgs.map(c => c.cod_empresa),
-        remote_status: null,
-        internal_status: null,
-        is_approved: false,
-        ok: false,
-        error: (e as Error).message,
-      });
-      continue;
+      errorMsg = (e as Error).message;
+      reason = errorMsg;
     }
 
-    if (!queryResult.ok) {
-      errors++;
-      results.push({
-        request_id: requestId,
-        cod_empresas: cfgs.map(c => c.cod_empresa),
-        remote_status: queryResult.remote_status,
-        internal_status: null,
-        is_approved: false,
-        ok: false,
-        error: `HTTP ${queryResult.status}`,
-      });
-      continue;
-    }
+    // Configs afetadas por este PV (no conjunto verificado + espelhamento)
+    const cfgsForPv = eligible.filter(c => (c.pvs_matriz_production || []).includes(pv));
+    const affectedIds = new Set(cfgsForPv.map(c => c.id));
 
-    const mapped = mapRemoteStatus(queryResult.remote_status);
-    if (mapped.isApproved) approved++;
-    else if (mapped.internal === "REJEITADO" || mapped.internal === "EXPIRADO") rejected++;
-    else pending++;
-
-    // Identificar TODAS as configs afetadas (incluindo espelhadas via PV)
-    const affectedIds = new Set(cfgs.map(c => c.id));
-    const allPvs = Array.from(new Set(cfgs.flatMap(c => c.pvs_matriz_production || [])));
-    if (allPvs.length > 0) {
+    if (isApproved) {
+      // Espelha aprovação para TODAS as lojas ativas que compartilham o PV
       const { data: shared } = await supabase
         .from("adquirentes_config")
-        .select("id, cod_empresa")
+        .select("id")
         .eq("adquirente", "REDE")
         .eq("ativo", true)
-        .overlaps("pvs_matriz_production", allPvs);
-      if (Array.isArray(shared)) {
-        for (const s of shared) affectedIds.add(s.id);
-      }
-    }
+        .contains("pvs_matriz_production", [pv]);
+      if (Array.isArray(shared)) for (const s of shared) affectedIds.add(s.id);
 
-    const updates: Record<string, unknown> = {
-      gv_optin_response: queryResult.response,
-    };
-    if (mapped.internal) updates.gv_optin_status = mapped.internal;
-    if (mapped.isApproved) updates.gv_approved_at = new Date().toISOString();
-
-    const { error: upErr } = await supabase
-      .from("adquirentes_config")
-      .update(updates)
-      .in("id", Array.from(affectedIds));
-
-    if (upErr) {
-      console.error(`[rede-ga] Erro ao persistir status do request ${requestId}:`, upErr);
+      const updates: Record<string, unknown> = {
+        gv_optin_status: "APROVADO",
+        gv_approved_at: new Date().toISOString(),
+        gv_last_healthcheck_at: new Date().toISOString(),
+        gv_last_healthcheck_status: "ATIVA",
+        gv_last_healthcheck_message: reason,
+      };
+      const { error: upErr } = await supabase
+        .from("adquirentes_config")
+        .update(updates)
+        .in("id", Array.from(affectedIds));
+      if (upErr) console.error(`[rede-ga] Erro ao persistir aprovação do PV ${pv}:`, upErr);
+    } else {
+      // Apenas registra o resultado do healthcheck nas configs verificadas (sem alterar status)
+      const updates: Record<string, unknown> = {
+        gv_last_healthcheck_at: new Date().toISOString(),
+        gv_last_healthcheck_status: errorMsg && httpStatus !== 401 && httpStatus !== 403 ? "ERRO" : "INATIVA",
+        gv_last_healthcheck_message: reason,
+      };
+      const { error: upErr } = await supabase
+        .from("adquirentes_config")
+        .update(updates)
+        .in("id", Array.from(affectedIds));
+      if (upErr) console.error(`[rede-ga] Erro ao registrar healthcheck PV ${pv}:`, upErr);
     }
 
     results.push({
-      request_id: requestId,
-      cod_empresas: cfgs.map(c => c.cod_empresa),
-      remote_status: queryResult.remote_status,
-      internal_status: mapped.internal,
-      is_approved: mapped.isApproved,
-      ok: true,
+      pv,
+      cod_empresas: cfgsForPv.map(c => c.cod_empresa),
+      http_status: httpStatus,
+      is_approved: isApproved,
+      reason,
+      ok: httpStatus > 0,
+      error: errorMsg,
     });
   }
 
   return {
-    checked: byRequestId.size,
+    checked: uniquePvs.length,
     approved,
     pending,
-    rejected,
+    rejected: 0,
     errors,
     skipped,
     results,
@@ -616,17 +664,17 @@ serve(async (req) => {
         if (error) throw new Error(error.message);
         configs = data || [];
       } else {
+        // Healthcheck-based: precisamos apenas de PV Matriz cadastrado.
         let q = supabase
           .from("adquirentes_config")
           .select(SELECT_COLS_WITH_OPTIN)
           .eq("adquirente", "REDE")
-          .eq("ativo", true)
-          .not("gv_optin_external_id", "is", null);
-        // Por padrão, verifica apenas os pendentes (AGUARDANDO_ACEITE)
+          .eq("ativo", true);
+        // Por padrão, verifica apenas os ainda não aprovados (AGUARDANDO_ACEITE)
         if (Array.isArray(cod_empresas) && cod_empresas.length > 0) {
           q = q.in("cod_empresa", cod_empresas);
         } else {
-          q = q.eq("gv_optin_status", "AGUARDANDO_ACEITE");
+          q = q.neq("gv_optin_status", "APROVADO");
         }
         const { data, error } = await q;
         if (error) throw new Error(error.message);
