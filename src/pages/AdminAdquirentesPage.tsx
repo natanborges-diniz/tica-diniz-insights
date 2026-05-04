@@ -398,9 +398,7 @@ export default function AdminAdquirentesPage() {
       toast.error("Erro ao excluir: " + error.message);
     } else {
       toast.success("Configuração removida");
-      if (!silent || (data?.approved || 0) > 0 || (data?.rejected || 0) > 0) {
-        fetchConfigs();
-      }
+      fetchConfigs();
     }
   };
 
@@ -482,7 +480,9 @@ export default function AdminAdquirentesPage() {
         const first = results[0];
         toast.error(`Falha em todos os PVs: ${first.error || first.status || "erro desconhecido"}`);
       }
-      fetchConfigs();
+      if (!silent || (data?.approved || 0) > 0 || (data?.rejected || 0) > 0) {
+        fetchConfigs();
+      }
     } catch (e) {
       toast.error(`Erro GV: ${(e as Error).message}`);
     } finally {
