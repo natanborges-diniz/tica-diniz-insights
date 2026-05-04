@@ -171,6 +171,23 @@ serve(async (req) => {
           });
         }
 
+        // Resolução por loja: ambiente_override + token de produção próprio
+        const resolved = resolveHaytekConfig(globalConfig, store);
+        BASE_URL = resolved.baseUrl;
+        activeApiKey = resolved.apiKey;
+        activeAmbiente = resolved.ambiente;
+        console.log(`[haytek-proxy] [${correlationId}] Loja ${codEmpresa} (${store.storeId}) -> Env: ${activeAmbiente} | Base: ${BASE_URL} | TokenSource: ${activeAmbiente === "production" ? (store.apiKeyProduction ? "store" : "global-fallback") : "global-staging"}`);
+
+        if (!activeApiKey) {
+          return new Response(JSON.stringify({
+            error: activeAmbiente === "production"
+              ? `Token de produção não configurado para a loja ${codEmpresa}. Configure em Admin > Haytek por Empresa.`
+              : "Token de staging Haytek não configurado em Admin > Fornecedores.",
+            code: HAYTEK_ERROR_CODES.CONFIG_ERROR,
+            correlationId,
+          }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
         const pedidoPayload = params.pedido || {};
         pedidoPayload.storeId = store.storeId;
         if (store.alias) {
@@ -184,7 +201,7 @@ serve(async (req) => {
         const payloadStr = JSON.stringify(pedidoPayload);
         const payloadHash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(payloadStr));
         const hashHex = Array.from(new Uint8Array(payloadHash)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
-        const idempotencyKey = `HAYTEK_${codEmpresa}_${codOs}_${haytekConfig.ambiente}_${hashHex}`;
+        const idempotencyKey = `HAYTEK_${codEmpresa}_${codOs}_${activeAmbiente}_${hashHex}`;
 
         const { data: existing } = await sbService
           .from("pedidos_fornecedor")
@@ -211,7 +228,7 @@ serve(async (req) => {
         const resp = await fetchHaytek(url, {
           method: "POST",
           body: payloadStr,
-        }, correlationId, "criar-pedido", haytekConfig.apiKey);
+        }, correlationId, "criar-pedido", activeApiKey);
 
         const respText = await resp.text();
         let respData: Record<string, unknown>;
