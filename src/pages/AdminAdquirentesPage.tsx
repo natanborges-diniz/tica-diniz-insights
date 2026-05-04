@@ -570,9 +570,7 @@ export default function AdminAdquirentesPage() {
         };
         toast.success(labels[action] || "Ação executada");
       }
-      if (!silent || (data?.approved || 0) > 0 || (data?.rejected || 0) > 0) {
-        fetchConfigs();
-      }
+      fetchConfigs();
     } catch (e) {
       toast.error(`Erro Opt-in: ${(e as Error).message}`);
     } finally {
@@ -628,7 +626,9 @@ export default function AdminAdquirentesPage() {
       } else if ((data?.approved || 0) > 0) {
         toast.success(`${data.approved} aceite(s) confirmado(s) automaticamente pela REDE`);
       }
-      fetchConfigs();
+      if (!silent || (data?.approved || 0) > 0 || (data?.rejected || 0) > 0) {
+        fetchConfigs();
+      }
     } catch (e) {
       if (!silent) toast.error(`Erro: ${(e as Error).message}`);
       else console.warn("[adquirentes] Verificação automática falhou:", (e as Error).message);
