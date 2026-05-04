@@ -360,9 +360,7 @@ export default function AdminAdquirentesPage() {
       toast.error("Erro ao salvar: " + error.message);
     } else {
       toast.success(`Configuração ${config.adquirente} — Empresa ${config.cod_empresa} salva`);
-      if (!silent || (data?.approved || 0) > 0 || (data?.rejected || 0) > 0) {
-        fetchConfigs();
-      }
+      fetchConfigs();
     }
     setSaving(null);
   };
@@ -389,7 +387,9 @@ export default function AdminAdquirentesPage() {
       toast.success("Adquirente configurada com sucesso");
       setShowAddForm(false);
       setNewForm({ cod_empresa: 0, adquirente: "REDE", merchant_id: "", integration_key_encrypted: "" });
-      fetchConfigs();
+      if (!silent || (data?.approved || 0) > 0 || (data?.rejected || 0) > 0) {
+        fetchConfigs();
+      }
     }
     setSaving(null);
   };
