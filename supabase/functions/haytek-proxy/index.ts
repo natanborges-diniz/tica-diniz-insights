@@ -128,13 +128,19 @@ serve(async (req) => {
     const user = await authGuard(req, { requiredRole: "authenticated" });
     const sbService = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const globalConfig = await loadHaytekGlobalConfig(sbService);
-    // Default (para actions sem cod_empresa específica: consultar/tracking/historico)
-    const defaultConfig = resolveHaytekConfig(globalConfig, null);
-    let BASE_URL = defaultConfig.baseUrl;
-    let activeApiKey: string | null = defaultConfig.apiKey;
-    let activeAmbiente: string = defaultConfig.ambiente;
+    const BASE_URL = globalConfig.baseUrl;
+    const activeApiKey: string | null = globalConfig.apiKey;
+    const activeAmbiente: string = globalConfig.ambiente;
 
-    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | DefaultEnv: ${defaultConfig.ambiente} | Base: ${BASE_URL} | User: ${user.userId}`);
+    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${activeAmbiente} | Base: ${BASE_URL} | User: ${user.userId}`);
+
+    if (!activeApiKey) {
+      return new Response(JSON.stringify({
+        error: `Token Haytek (${activeAmbiente}) não configurado. Configure em Admin > Fornecedores.`,
+        code: HAYTEK_ERROR_CODES.CONFIG_ERROR,
+        correlationId,
+      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     switch (action) {
       // ── Criar Pedido ──
@@ -148,23 +154,7 @@ serve(async (req) => {
           });
         }
 
-        // Resolução por loja: ambiente_override + token de produção próprio
-        const resolved = resolveHaytekConfig(globalConfig, store);
-        BASE_URL = resolved.baseUrl;
-        activeApiKey = resolved.apiKey;
-        activeAmbiente = resolved.ambiente;
-        console.log(`[haytek-proxy] [${correlationId}] Loja ${codEmpresa} (${store.storeId}) -> Env: ${activeAmbiente} | Base: ${BASE_URL} | TokenSource: ${activeAmbiente === "production" ? (store.apiKeyProduction ? "store" : "global-fallback") : "global-staging"}`);
-
-        if (!activeApiKey) {
-          return new Response(JSON.stringify({
-            error: activeAmbiente === "production"
-              ? `Token de produção não configurado para a loja ${codEmpresa}. Configure em Admin > Haytek por Empresa.`
-              : "Token de staging Haytek não configurado em Admin > Fornecedores.",
-            code: HAYTEK_ERROR_CODES.CONFIG_ERROR,
-            correlationId,
-          }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-
+        console.log(`[haytek-proxy] [${correlationId}] Loja ${codEmpresa} (${store.storeId})`);
         const pedidoPayload = params.pedido || {};
         pedidoPayload.storeId = store.storeId;
         if (store.alias) {
