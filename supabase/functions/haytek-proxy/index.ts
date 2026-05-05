@@ -20,11 +20,9 @@ function generateCorrelationId(): string {
 }
 
 interface HaytekGlobalConfig {
-  baseUrlStaging: string;
-  baseUrlProduction: string;
-  ambienteDefault: string;
-  apiKeyStaging: string | null;
-  apiKeyProductionFallback: string | null;
+  baseUrl: string;
+  ambiente: string;
+  apiKey: string | null;
 }
 
 async function loadHaytekGlobalConfig(sb: ReturnType<typeof createClient>): Promise<HaytekGlobalConfig> {
@@ -37,23 +35,22 @@ async function loadHaytekGlobalConfig(sb: ReturnType<typeof createClient>): Prom
       .maybeSingle();
 
     if (data) {
-      return {
-        baseUrlStaging: data.base_url_staging || "https://stg-api.haytek.com.br",
-        baseUrlProduction: data.base_url_production || "https://api.haytek.com.br",
-        ambienteDefault: data.ambiente || "staging",
-        apiKeyStaging: data.api_key_staging ? String(data.api_key_staging).replace(/\s+/g, "") : null,
-        apiKeyProductionFallback: data.api_key_production ? String(data.api_key_production).replace(/\s+/g, "") : null,
-      };
+      const ambiente = data.ambiente || "staging";
+      const isProd = ambiente === "production";
+      const baseUrl = isProd
+        ? (data.base_url_production || "https://api.haytek.com.br")
+        : (data.base_url_staging || "https://stg-api.haytek.com.br");
+      const rawKey = isProd ? data.api_key_production : data.api_key_staging;
+      const apiKey = rawKey ? String(rawKey).replace(/\s+/g, "") : null;
+      return { baseUrl, ambiente, apiKey };
     }
   } catch (e) {
     console.warn("[haytek-proxy] Could not load global DB config:", e);
   }
   return {
-    baseUrlStaging: "https://stg-api.haytek.com.br",
-    baseUrlProduction: "https://api.haytek.com.br",
-    ambienteDefault: "staging",
-    apiKeyStaging: null,
-    apiKeyProductionFallback: null,
+    baseUrl: "https://stg-api.haytek.com.br",
+    ambiente: "staging",
+    apiKey: null,
   };
 }
 
@@ -61,14 +58,12 @@ interface HaytekStoreConfig {
   storeId: string;
   addressId: string | null;
   alias: string | null;
-  apiKeyProduction: string | null;
-  ambienteOverride: string | null;
 }
 
 async function loadStoreConfig(sb: ReturnType<typeof createClient>, codEmpresa: number): Promise<HaytekStoreConfig | null> {
   const { data } = await sb
     .from("haytek_empresa_config")
-    .select("store_id, address_id, alias, api_key_production, ambiente_override")
+    .select("store_id, address_id, alias")
     .eq("cod_empresa", codEmpresa)
     .eq("ativo", true)
     .maybeSingle();
@@ -78,27 +73,9 @@ async function loadStoreConfig(sb: ReturnType<typeof createClient>, codEmpresa: 
       storeId: data.store_id,
       addressId: data.address_id || null,
       alias: data.alias || null,
-      apiKeyProduction: data.api_key_production ? String(data.api_key_production).replace(/\s+/g, "") : null,
-      ambienteOverride: data.ambiente_override || null,
     };
   }
   return null;
-}
-
-interface ResolvedHaytekConfig {
-  baseUrl: string;
-  ambiente: string;
-  apiKey: string | null;
-}
-
-function resolveHaytekConfig(global: HaytekGlobalConfig, store: HaytekStoreConfig | null): ResolvedHaytekConfig {
-  const ambiente = (store?.ambienteOverride ?? global.ambienteDefault) || "staging";
-  const isProd = ambiente === "production";
-  const baseUrl = isProd ? global.baseUrlProduction : global.baseUrlStaging;
-  const apiKey = isProd
-    ? (store?.apiKeyProduction ?? global.apiKeyProductionFallback)
-    : global.apiKeyStaging;
-  return { baseUrl, ambiente, apiKey };
 }
 
 async function fetchHaytek(url: string, options: RequestInit, correlationId: string, action: string, apiKey?: string | null): Promise<Response> {
