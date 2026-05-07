@@ -284,6 +284,36 @@ serve(async (req) => {
           }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
+        // Enriquecer com GET /v1/transactions/{tid} (Rede só retorna brand/dateTime completos no GET)
+        let enriched: any = redeData;
+        try {
+          const getRes = await fetch(`${SUPABASE_URL}/functions/v1/rede-proxy`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-service-key": INTERNAL_SERVICE_SECRET },
+            body: JSON.stringify({
+              action: "consultar_transacao",
+              cod_empresa: link.cod_empresa,
+              params: { tid: redeData.tid },
+            }),
+          });
+          if (getRes.ok) {
+            const getJson = await getRes.json();
+            const payload = getJson?.data ?? getJson;
+            enriched = { ...redeData, ...payload };
+            console.log(`[payment-links] GET enrich OK tid=${redeData.tid} brand=${enriched?.brand?.name || enriched?.brandName || "?"} dateTime=${enriched?.dateTime || "?"}`);
+          } else {
+            console.warn(`[payment-links] GET enrich status=${getRes.status}`);
+          }
+        } catch (e) {
+          console.warn("[payment-links] GET enrich falhou:", (e as Error).message);
+        }
+
+        // Derivar date/time BRT a partir do dateTime ISO com offset -03:00
+        const _dt: string | null = enriched?.dateTime || null;
+        const _dateBR = _dt ? _dt.slice(0, 10) : null;
+        const _timeBR = _dt ? _dt.slice(11, 19) : null;
+        const _brand = enriched?.brand?.name || enriched?.brandName || null;
+
         // Fetch empresa info for receipts
         let empresaNome = "";
         let empresaCnpj = "";
