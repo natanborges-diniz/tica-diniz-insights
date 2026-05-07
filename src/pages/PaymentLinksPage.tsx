@@ -95,15 +95,37 @@ export default function PaymentLinksPage() {
     queryFn: () => invokeAction("listar", { cod_empresa: codEmpresa, status: filtroStatus }),
   });
 
+  const parseValor = (v: string): number => {
+    const s = String(v ?? "").trim();
+    if (!s) return NaN;
+    const hasComma = s.includes(",");
+    const hasDot = s.includes(".");
+    let n = s;
+    if (hasComma && hasDot) {
+      n = s.lastIndexOf(",") > s.lastIndexOf(".")
+        ? s.replace(/\./g, "").replace(",", ".")
+        : s.replace(/,/g, "");
+    } else if (hasComma) {
+      n = s.replace(/\./g, "").replace(",", ".");
+    }
+    return parseFloat(n);
+  };
+
   const criarMutation = useMutation({
-    mutationFn: () => invokeAction("criar", {
-      cod_empresa: newLinkEmpresa,
-      valor: parseFloat(newLink.valor),
-      descricao: newLink.descricao,
-      parcelas_max: parseInt(newLink.parcelas_max),
-      cliente_nome: newLink.cliente_nome || undefined,
-      cliente_telefone: newLink.cliente_telefone || undefined,
-    }),
+    mutationFn: () => {
+      const valorNum = parseValor(newLink.valor);
+      if (!Number.isFinite(valorNum) || valorNum <= 0) {
+        throw new Error("Valor inválido. Use números com vírgula ou ponto (ex.: 150,00 ou 150.00).");
+      }
+      return invokeAction("criar", {
+        cod_empresa: newLinkEmpresa,
+        valor: valorNum,
+        descricao: newLink.descricao,
+        parcelas_max: parseInt(newLink.parcelas_max),
+        cliente_nome: newLink.cliente_nome || undefined,
+        cliente_telefone: newLink.cliente_telefone || undefined,
+      });
+    },
     onSuccess: (data: { url_pagamento?: string; tid?: string }) => {
       toast.success(`Link criado${data?.tid ? ` — TID: ${data.tid}` : ""}`);
       setDialogOpen(false);
@@ -183,9 +205,10 @@ export default function PaymentLinksPage() {
                   <div className="space-y-1">
                     <Label className="text-xs">Valor (R$)</Label>
                     <Input
-                      type="number" step="0.01" min="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={newLink.valor}
-                      onChange={e => setNewLink(f => ({ ...f, valor: e.target.value }))}
+                      onChange={e => setNewLink(f => ({ ...f, valor: e.target.value.replace(/[^\d.,]/g, "") }))}
                       placeholder="0,00"
                     />
                   </div>
