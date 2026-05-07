@@ -284,6 +284,36 @@ serve(async (req) => {
           }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
+        // Enriquecer com GET /v1/transactions/{tid} (Rede só retorna brand/dateTime completos no GET)
+        let enriched: any = redeData;
+        try {
+          const getRes = await fetch(`${SUPABASE_URL}/functions/v1/rede-proxy`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-service-key": INTERNAL_SERVICE_SECRET },
+            body: JSON.stringify({
+              action: "consultar_transacao",
+              cod_empresa: link.cod_empresa,
+              params: { tid: redeData.tid },
+            }),
+          });
+          if (getRes.ok) {
+            const getJson = await getRes.json();
+            const payload = getJson?.data ?? getJson;
+            enriched = { ...redeData, ...payload };
+            console.log(`[payment-links] GET enrich OK tid=${redeData.tid} brand=${enriched?.brand?.name || enriched?.brandName || "?"} dateTime=${enriched?.dateTime || "?"}`);
+          } else {
+            console.warn(`[payment-links] GET enrich status=${getRes.status}`);
+          }
+        } catch (e) {
+          console.warn("[payment-links] GET enrich falhou:", (e as Error).message);
+        }
+
+        // Derivar date/time BRT a partir do dateTime ISO com offset -03:00
+        const _dt: string | null = enriched?.dateTime || null;
+        const _dateBR = _dt ? _dt.slice(0, 10) : null;
+        const _timeBR = _dt ? _dt.slice(11, 19) : null;
+        const _brand = enriched?.brand?.name || enriched?.brandName || null;
+
         // Fetch empresa info for receipts
         let empresaNome = "";
         let empresaCnpj = "";
@@ -317,10 +347,10 @@ serve(async (req) => {
         // Update link status
         await admin.from("payment_links").update({
           status: "PAGO",
-          tid: redeData.tid || null,
+          tid: enriched.tid || null,
           pago_em: new Date().toISOString(),
           dados_extras: {
-            rede_response: redeData,
+            rede_response: enriched,
             empresa_nome: empresaNome,
             empresa_cnpj: empresaCnpj,
             merchant_pv: merchantPv,
@@ -345,15 +375,19 @@ serve(async (req) => {
           const webhookPayload = {
             payment_link_id: link_id,
             status: "PAGO",
-            tid: redeData.tid,
-            nsu: redeData.nsu,
-            authorization: redeData.authorizationCode,
-            date: redeData.date,
-            time: redeData.time,
+            tid: enriched.tid,
+            nsu: enriched.nsu,
+            authorization: enriched.authorizationCode,
+            dateTime: _dt,
+            date: _dateBR,
+            time: _timeBR,
             valor: link.valor,
-            installments: redeData.installments,
-            cardBin: redeData.cardBin,
-            last4: redeData.last4,
+            installments: enriched.installments,
+            cardBin: enriched.cardBin,
+            last4: enriched.last4,
+            brand: _brand,
+            brandName: _brand,
+            kind: enriched.kind || null,
             origem_ref: link.origem_ref,
             origem: link.origem,
           };
@@ -407,7 +441,7 @@ serve(async (req) => {
           }
 
           if (!webhookOk) {
-            console.error(`[payment-links] CF webhook FAILED after ${delays.length} attempts. link=${link_id} origem=${link.origem} tid=${redeData.tid}`);
+            console.error(`[payment-links] CF webhook FAILED after ${delays.length} attempts. link=${link_id} origem=${link.origem} tid=${enriched.tid}`);
           }
         }
 
@@ -416,20 +450,20 @@ serve(async (req) => {
         result = {
           success: true,
           status: "PAGO",
-          tid: redeData.tid,
-          nsu: redeData.nsu,
-          authorization: redeData.authorizationCode,
-          date: redeData.date,
-          time: redeData.time,
-          dateTime: redeData.dateTime || null,
-          installments: redeData.installments,
-          cardBin: redeData.cardBin,
-          last4: redeData.last4,
-          amount: redeData.amount,
-          returnMessage: redeData.returnMessage,
-          returnCode: redeData.returnCode,
-          brand: redeData.brand?.name || redeData.brandName || null,
-          kind: redeData.kind || null,
+          tid: enriched.tid,
+          nsu: enriched.nsu,
+          authorization: enriched.authorizationCode,
+          date: _dateBR,
+          time: _timeBR,
+          dateTime: _dt,
+          installments: enriched.installments,
+          cardBin: enriched.cardBin,
+          last4: enriched.last4,
+          amount: enriched.amount,
+          returnMessage: enriched.returnMessage,
+          returnCode: enriched.returnCode,
+          brand: _brand,
+          kind: enriched.kind || null,
           reference,
           empresaNome,
           merchantPv,
