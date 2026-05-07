@@ -205,9 +205,10 @@ export default function PaymentLinksPage() {
                   <div className="space-y-1">
                     <Label className="text-xs">Valor (R$)</Label>
                     <Input
-                      type="number" step="0.01" min="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={newLink.valor}
-                      onChange={e => setNewLink(f => ({ ...f, valor: e.target.value }))}
+                      onChange={e => setNewLink(f => ({ ...f, valor: e.target.value.replace(/[^\d.,]/g, "") }))}
                       placeholder="0,00"
                     />
                   </div>
