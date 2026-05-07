@@ -347,10 +347,10 @@ serve(async (req) => {
         // Update link status
         await admin.from("payment_links").update({
           status: "PAGO",
-          tid: redeData.tid || null,
+          tid: enriched.tid || null,
           pago_em: new Date().toISOString(),
           dados_extras: {
-            rede_response: redeData,
+            rede_response: enriched,
             empresa_nome: empresaNome,
             empresa_cnpj: empresaCnpj,
             merchant_pv: merchantPv,
