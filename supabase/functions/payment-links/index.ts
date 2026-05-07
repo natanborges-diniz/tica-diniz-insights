@@ -441,7 +441,7 @@ serve(async (req) => {
           }
 
           if (!webhookOk) {
-            console.error(`[payment-links] CF webhook FAILED after ${delays.length} attempts. link=${link_id} origem=${link.origem} tid=${redeData.tid}`);
+            console.error(`[payment-links] CF webhook FAILED after ${delays.length} attempts. link=${link_id} origem=${link.origem} tid=${enriched.tid}`);
           }
         }
 
@@ -450,20 +450,20 @@ serve(async (req) => {
         result = {
           success: true,
           status: "PAGO",
-          tid: redeData.tid,
-          nsu: redeData.nsu,
-          authorization: redeData.authorizationCode,
-          date: redeData.date,
-          time: redeData.time,
-          dateTime: redeData.dateTime || null,
-          installments: redeData.installments,
-          cardBin: redeData.cardBin,
-          last4: redeData.last4,
-          amount: redeData.amount,
-          returnMessage: redeData.returnMessage,
-          returnCode: redeData.returnCode,
-          brand: redeData.brand?.name || redeData.brandName || null,
-          kind: redeData.kind || null,
+          tid: enriched.tid,
+          nsu: enriched.nsu,
+          authorization: enriched.authorizationCode,
+          date: _dateBR,
+          time: _timeBR,
+          dateTime: _dt,
+          installments: enriched.installments,
+          cardBin: enriched.cardBin,
+          last4: enriched.last4,
+          amount: enriched.amount,
+          returnMessage: enriched.returnMessage,
+          returnCode: enriched.returnCode,
+          brand: _brand,
+          kind: enriched.kind || null,
           reference,
           empresaNome,
           merchantPv,
