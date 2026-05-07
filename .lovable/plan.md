@@ -1,76 +1,59 @@
-# Resposta direta
+# Aceitar vírgula e ponto como separador decimal no valor do link
 
-- **Infoco Optical Business (este projeto)**: SIM — é onde a correção precisa acontecer. A `payment-links` é quem monta e envia o payload para o webhook (Connect & Flow), e hoje envia `brand=null`/`date=null`/`time=null` porque não consulta a Rede via GET após a aprovação.
-- **InFoco Messenger**: NÃO — varri o repositório (`payment-webhook`, `brand`, `dados_extras`, `rede_response`, `cf_notify`, `picote`, `comprovante`, `bandeira`) e ele **não consome** os campos do comprovante nem hospeda o webhook. O destino do POST é `https://kvggebtnqmxydtwaumqz.supabase.co/functions/v1/payment-webhook` (projeto Connect & Flow), não o Messenger. O Messenger só lida com agendamentos/conversas.
+## Problema
+Em `src/pages/PaymentLinksPage.tsx` o input "Valor (R$)" usa `type="number"` e `parseFloat(newLink.valor)`. Isso só aceita ponto como separador decimal — quando o usuário digita `150,00`, o navegador rejeita silenciosamente (alguns aceitam, outros não) e o `parseFloat` retorna `NaN`, gerando erro genérico.
 
-# O que mudar no OB
+## Mudança
 
-### 1. `supabase/functions/payment-links/index.ts` (caso `processar_pagamento`)
+### `src/pages/PaymentLinksPage.tsx`
 
-Após confirmar `isApproved` e antes de montar o `webhookPayload`, fazer um GET enriquecido na Rede para obter a bandeira (a Rede só devolve `brand` no GET `/v1/transactions/{tid}`, não no POST):
+1. Trocar o input de `type="number"` para `type="text"` com `inputMode="decimal"` e `placeholder="0,00"`, permitindo digitar vírgula livremente:
 
-```ts
-// Enriquecer com GET (a Rede só retorna brand/dateTime completos no GET)
-let enriched = redeData;
-try {
-  const getRes = await fetch(`${SUPABASE_URL}/functions/v1/rede-proxy`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-service-key": INTERNAL_SERVICE_SECRET },
-    body: JSON.stringify({
-      action: "consultar_transacao",
-      cod_empresa: link.cod_empresa,
-      params: { tid: redeData.tid },
-    }),
-  });
-  if (getRes.ok) {
-    const getJson = await getRes.json();
-    enriched = { ...redeData, ...(getJson?.data ?? getJson) };
-  }
-} catch (e) {
-  console.warn("[payment-links] GET enrich falhou:", (e as Error).message);
-}
+```tsx
+<Input
+  type="text"
+  inputMode="decimal"
+  value={newLink.valor}
+  onChange={e => setNewLink(f => ({ ...f, valor: e.target.value.replace(/[^\d.,]/g, "") }))}
+  placeholder="0,00"
+/>
 ```
 
-Trocar `redeData` por `enriched` no `webhookPayload` e no `result`. Substituir `date`/`time` por valores derivados de `dateTime` (que vem com timezone `-03:00`):
+2. Adicionar helper `parseValor` que normaliza ambos os formatos (BR e US, com ou sem milhar) antes de enviar:
 
 ```ts
-const dt = enriched.dateTime || null;          // "2026-05-07T14:33:21-03:00"
-const dateBR = dt ? dt.slice(0, 10) : null;    // "2026-05-07"
-const timeBR = dt ? dt.slice(11, 19) : null;   // "14:33:21" (BRT)
-
-const webhookPayload = {
-  payment_link_id: link_id,
-  status: "PAGO",
-  tid: enriched.tid,
-  nsu: enriched.nsu,
-  authorization: enriched.authorizationCode,
-  dateTime: dt,
-  date: dateBR,
-  time: timeBR,
-  valor: link.valor,
-  installments: enriched.installments,
-  cardBin: enriched.cardBin,
-  last4: enriched.last4,
-  brand: enriched.brand?.name || enriched.brandName || null,
-  brandName: enriched.brand?.name || enriched.brandName || null,
-  kind: enriched.kind || null,
-  origem_ref: link.origem_ref,
-  origem: link.origem,
+const parseValor = (v: string): number => {
+  const s = String(v ?? "").trim();
+  if (!s) return NaN;
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
+  let n = s;
+  if (hasComma && hasDot) {
+    // último separador é o decimal
+    n = s.lastIndexOf(",") > s.lastIndexOf(".")
+      ? s.replace(/\./g, "").replace(",", ".")
+      : s.replace(/,/g, "");
+  } else if (hasComma) {
+    n = s.replace(/\./g, "").replace(",", ".");
+  }
+  return parseFloat(n);
 };
 ```
 
-Aplicar a mesma derivação no objeto `result` (linhas 416–436) para o frontend ver os valores corretos também.
+3. Em `criarMutation.mutationFn`, validar antes de chamar a edge function e abortar com toast claro se inválido:
 
-### 2. Memória `mem://integrations/chatbot/payment-webhook-contract`
+```ts
+const valorNum = parseValor(newLink.valor);
+if (!Number.isFinite(valorNum) || valorNum <= 0) {
+  throw new Error("Valor inválido. Use números com vírgula ou ponto (ex.: 150,00 ou 150.00).");
+}
+return invokeAction("criar", { ..., valor: valorNum, ... });
+```
 
-Atualizar o contrato do payload listando os novos campos garantidos (`dateTime`, `date` BRT, `time` BRT, `brand`, `brandName`, `kind`) e marcando que `date`/`time` agora são sempre derivados de `dateTime` (timezone `-03:00`).
+Aceitará: `150`, `150,00`, `150.00`, `1.234,56`, `1,234.56`, `1234,5`.
 
-# Arquivos editados
+## Arquivo editado
+- `src/pages/PaymentLinksPage.tsx`
 
-- `supabase/functions/payment-links/index.ts`
-- `mem://integrations/chatbot/payment-webhook-contract`
-
-# Fora do escopo
-
-- **InFoco Messenger** — sem alterações.
-- **Connect & Flow** (projeto que renderiza o picote) — recebe o payload novo automaticamente; se o picote dele lê `brand`/`time`, passará a exibir corretamente sem mudança de código lá. Se ainda assim algo não aparecer, o ajuste seria no template do picote naquele projeto, não aqui.
+## Fora do escopo
+- Edge function `payment-links` já recebe `valor` como número — sem mudança no backend.
