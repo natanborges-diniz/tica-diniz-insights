@@ -1,40 +1,26 @@
-## Diagnóstico revisado
+## Objetivo
 
-A URL de produção está correta:
+Remover o botão "Testar autenticação na Haytek" e a action `ping-auth`, já que o `GET /orders/{id}` do Swagger exige um `orderId` real e não serve como teste limpo de autenticação. A validação do token vai acontecer naturalmente no envio de um pedido real via fluxo de OS.
 
-```text
-POST https://dev.haytek.com.br/orders/lab
-Authorization: Bearer <api_key_production>
-```
+## Mudanças
 
-O Swagger declara apenas `BearerAuth` (header `Authorization`). Não existe endpoint público de login. Logo a Haytek aceita exclusivamente o token configurado em `fornecedor_configuracao.api_key_production`. O retorno `AuthenticationRequired` significa que o token enviado não é reconhecido pela Haytek em produção.
+### 1. `src/pages/AdminFornecedoresPage.tsx`
+- Remover o sub-componente `HaytekTestAuthButton` inteiro.
+- Remover a renderização do botão na seção da Haytek.
+- Manter o indicador de prefixo do token (`eyJhbGciOi…` + length) — continua útil para confirmar visualmente qual chave está salva.
+- Limpar imports não usados (`CheckCircle2` se não for usado em outro lugar).
 
-Como você confirmou que o token é o mesmo para todas as lojas, **não vamos** criar token por loja. O ajuste é só garantir que o token correto esteja salvo e que o proxy envie de forma rastreável.
+### 2. `supabase/functions/haytek-proxy/index.ts`
+- Remover o bloco `if (action === 'ping-auth') { ... }` por completo.
+- Manter o logging melhorado (`tokenPrefix`, `tokenLen`) — é útil para debug do `criar-pedido`.
+- Manter a mensagem amigável de erro 401 no `criar-pedido` (`"Token Haytek de produção não reconhecido pela API. Atualize a chave em Admin > Fornecedores > Haytek."`).
+- Redeploy do edge function.
 
-## Plano
+### 3. `mem://integrations/haytek/master-specification`
+- Remover a menção ao `ping-auth`.
+- Adicionar nota: "Validação do token de produção é feita via envio real de pedido pelo fluxo de OS. Não há endpoint de health-check dedicado na API Haytek."
 
-1. Tela `Admin > Fornecedores > Haytek`
-   - Manter um único campo `API Key — Produção` (já existe).
-   - Adicionar um pequeno indicador `Prefixo do token salvo: eyJhbGciOi… (127 chars)` para confirmar visualmente o que está no banco sem expor o token.
-   - Adicionar botão `Testar autenticação` que chama o `haytek-proxy` com a ação `ping-auth` e mostra o status retornado pela Haytek (200/401/403).
+## Resultado
 
-2. `haytek-proxy`
-   - Nenhuma mudança de roteamento (continua usando `fornecedor_configuracao.api_key_production` quando ambiente = production).
-   - Logar com mais clareza a origem do token e seu prefixo:
-
-   ```text
-   Action: criar-pedido | Env: production | TokenSource: fornecedor_configuracao.api_key_production | TokenPrefix: eyJhbGciOi… | Len: 127
-   ```
-
-   - Adicionar nova ação `ping-auth` que faz `GET /orders/<id-fake>` só para forçar a Haytek a validar o token e devolver 401/403/200/404. Útil para validar credenciais sem criar pedido.
-   - Em caso de 401, devolver mensagem amigável: `Token Haytek de produção não reconhecido pela API. Atualize a chave em Admin > Fornecedores > Haytek.`
-
-3. Validação manual
-   - Você cola o token de produção fornecido pela HiTech em `Admin > Fornecedores > Haytek > API Key — Produção` e salva.
-   - Clica em `Testar autenticação`.
-   - Se voltar 200/404 → token aceito. Se voltar 401 → token incorreto ou ainda não provisionado pela HiTech para o ambiente `dev.haytek.com.br`.
-
-## Observações
-
-- Não vou alterar o schema do banco — `haytek_empresa_config.api_key_production` permanece existindo mas continua sem uso, conforme regra atual de token único.
-- Vou ajustar a memória `Haytek Master Spec` para refletir que produção usa token único em `fornecedor_configuracao`, removendo a parte de "token por loja".
+- Tela de Admin > Fornecedores > Haytek mostra só: campo de API Key, indicador de prefixo, e o select de ambiente.
+- Para validar um token novo, o usuário envia um pedido real pelo Hub de OS e observa a resposta (logging detalhado do proxy mostra prefixo do token usado + erro 401 amigável se inválido).
