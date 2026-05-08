@@ -34,69 +34,91 @@ import { registerAction, unregisterAction } from "@/lib/actionCatalog";
 import { useNavigate } from "react-router-dom";
 
 // KPI Cards Component
-function EstoqueKPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueUnificado>['metricas'] }) {
+function EstoqueKPICards({
+  metricas,
+  categoria,
+}: {
+  metricas: ReturnType<typeof useEstoqueUnificado>["metricas"];
+  categoria: string;
+}) {
+  const filtroAtivo = categoria !== "TODOS";
+  const labelCategoria =
+    categoria === "ARMACOES" ? "Armações" :
+    categoria === "LENTES" ? "Lentes" :
+    categoria === "ACESSORIOS" ? "Acessórios" :
+    categoria === "OUTROS" ? "Outros" : "Todas categorias";
+
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total em Estoque</CardTitle>
-          <Package className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{metricas.totalPecas.toLocaleString('pt-BR')}</div>
-          <p className="text-xs text-muted-foreground">{metricas.totalSkusComEstoque} SKUs distintos</p>
-        </CardContent>
-      </Card>
+    <div className="space-y-2">
+      {filtroAtivo && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Filter className="h-3 w-3" />
+          <span>Métricas filtradas por categoria:</span>
+          <Badge variant="secondary">{labelCategoria}</Badge>
+        </div>
+      )}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total em Estoque</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{metricas.totalPecas.toLocaleString('pt-BR')}</div>
+            <p className="text-xs text-muted-foreground">peças • {metricas.totalSkusComEstoque.toLocaleString('pt-BR')} SKUs distintos</p>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Valor em Estoque</CardTitle>
-          <BoxIcon className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">
-            {metricas.valorTotalCusto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </div>
-          <p className="text-xs text-muted-foreground">custo total</p>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Valor em Estoque</CardTitle>
+            <BoxIcon className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {metricas.valorTotalCusto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </div>
+            <p className="text-xs text-muted-foreground">custo total{filtroAtivo ? ` • ${labelCategoria}` : ''}</p>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Dead Stock</CardTitle>
-          <AlertTriangle className="h-4 w-4 text-accent-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold text-accent-foreground">
-            {metricas.deadStockPecas.toLocaleString('pt-BR')}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {metricas.deadStockPercentual.toFixed(1)}% do estoque • {metricas.deadStockValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </p>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Dead Stock</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-accent-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-accent-foreground">
+              {metricas.deadStockPecas.toLocaleString('pt-BR')}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {metricas.deadStockPercentual.toFixed(1)}% {filtroAtivo ? `de ${labelCategoria.toLowerCase()}` : 'do estoque'} • {metricas.deadStockValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </p>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Fornecedores</CardTitle>
-          <Users className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{metricas.fornecedoresDistintos}</div>
-          <p className="text-xs text-muted-foreground">{metricas.marcasDistintas} marcas</p>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Fornecedores</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{metricas.fornecedoresDistintos}</div>
+            <p className="text-xs text-muted-foreground">{metricas.marcasDistintas} marcas</p>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Peças p/ Liquidar</CardTitle>
-          <AlertTriangle className="h-4 w-4 text-destructive" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold text-destructive">{metricas.pecasLiquidar.toLocaleString('pt-BR')}</div>
-          <p className="text-xs text-muted-foreground">ação sugerida: liquidar</p>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Peças p/ Liquidar</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-destructive">{metricas.pecasLiquidar.toLocaleString('pt-BR')}</div>
+            <p className="text-xs text-muted-foreground">ação sugerida: liquidar</p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
