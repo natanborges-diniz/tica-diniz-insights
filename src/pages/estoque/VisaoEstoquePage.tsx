@@ -572,7 +572,7 @@ export default function VisaoEstoquePage() {
           </Card>
 
           {/* KPIs */}
-          <EstoqueKPICards metricas={metricas} />
+          <EstoqueKPICards metricas={metricas} categoria={filters.categoria} />
 
           {/* Tabela */}
           <Card>
