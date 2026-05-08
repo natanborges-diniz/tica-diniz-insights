@@ -244,12 +244,16 @@ serve(async (req) => {
             idempotency_key: idempotencyKey,
           });
 
+          const rawErr = String((respData as any)?.error || (respData as any)?.message || "");
+          const isFreightErr = /freight|frete/i.test(rawErr);
           return new Response(JSON.stringify({
             error: resp.status === 401
               ? "Token Haytek de produção não reconhecido pela API. Atualize a chave em Admin > Fornecedores > Haytek."
-              : (Array.isArray((respData as any)?.errors) && (respData as any).errors.length
-                  ? (respData as any).errors.join("; ")
-                  : ((respData as any).message || (respData as any).rawResponse || `HTTP ${resp.status}`)),
+              : isFreightErr
+                ? `Haytek não conseguiu calcular o frete para a loja ${store.storeId}${store.alias ? ` (${store.alias})` : ""}. Configure o Address ID em Admin > Configuração Haytek (ou solicite à Haytek o cadastro do endereço padrão dessa loja).`
+                : (Array.isArray((respData as any)?.errors) && (respData as any).errors.length
+                    ? (respData as any).errors.join("; ")
+                    : ((respData as any).message || (respData as any).error || (respData as any).rawResponse || `HTTP ${resp.status}`)),
             code: HAYTEK_ERROR_CODES.API_ERROR,
             correlationId,
             raw: respData,
