@@ -1,98 +1,81 @@
-# Fase 1 — Saneamento de dados de Estoque & Plano de Compra
+## Objetivo
 
-> Objetivo: antes de qualquer redesign de UX (Fase 2), ter UMA fonte de verdade, números bate-com-bate entre páginas, e dados de venda/giro confiáveis. Sem isso, qualquer "inteligência de compra" mente.
-
-A Fase 2 (reestruturação do Plano de Compra como motor de sugestão dinâmica de mix + reposição) será planejada e aprovada em ciclo separado, depois que a Fase 1 estiver validada por você em produção.
+Responder às 3 dúvidas levantadas e entregar um checklist de QA para validar que itens `SEM CADASTRO` não poluem mais os KPIs de liquidação. Inclui correções pequenas de UI/dados onde a ambiguidade vem do código.
 
 ---
 
-## 1. Divergência "1.174 itens (filtro Armações) vs 1.388 no card Total em Estoque"
+## 1) Respostas às dúvidas
 
-**Diagnóstico esperado** (a confirmar lendo os componentes):
-- `1.174` é a contagem de SKUs/linhas exibidas na tabela (`itensComEstoque` filtrados por categoria).
-- `1.388` é o **somatório de peças** (`estoqueAtual`) dos mesmos SKUs — não é divergência, é métrica diferente (SKUs vs peças).
+### a) "DINIZ BARUERI • 1.388 peças em estoque • 1174 SKUs • Período: 180 dias" — ambíguo
+Concordo. O endpoint `/estoque/completo` retorna **inventário físico atual** (snapshot agora). Os 180 dias só se aplicam às métricas de **vendas/giro** que vêm de `/vendas/analise-sku` (mesclado por `cod_sku`).
 
-**Ações:**
-- Auditar `metricas.totalPecas` vs contagem da tabela e confirmar que ambos usam o **mesmo conjunto filtrado** (`itensFiltrados`/`comEstoque`).
-- Ajustar rótulos para deixar explícito: card "Total em Estoque" mostra `1.388 peças (1.174 SKUs)` quando há filtro ativo.
-- Garantir que TODOS os KPIs (Total, Valor, Dead Stock, Peças p/ Liquidar, Fornecedores, Marcas) reagem ao filtro de Categoria/Curva/Marca/Fornecedor — incluindo a base do percentual ("31,4% do estoque" passa a ser % do estoque da categoria filtrada, não global).
-- Adicionar badge no topo dos cards: "Filtro ativo: Armações" para deixar visível.
+**Correção proposta (UI only, em `VisaoEstoquePage.tsx` e `AnaliseOTBPage.tsx`):**
+Trocar a linha única atual por duas informações separadas:
+```
+DINIZ BARUERI
+Estoque: 1.388 peças • 1.174 SKUs (posição agora)
+Vendas: últimos 180 dias
+```
+Sem mudar nenhuma lógica de cálculo.
 
-## 2. Itens com "dias em estoque vazio" e "valor de custo zero" caindo em LIQUIDA 50%
+### b) Mesmo SKU repetido (1761149 aparecendo duas vezes com fornecedores diferentes)
+Origem confirmada: o Firebird Bridge `/estoque/completo` está retornando **uma linha por vínculo SKU↔fornecedor** (no print: `AVODAH ACESSORIO EIRELI` e `A-ACESSORIOS OPTICAL LTDA` para o mesmo `cod_sku=1761149`). Hoje o frontend não deduplica — cada linha vira uma row independente, o que **infla peças, valor e contagem de "LIQUIDA 30%"**.
 
-**Investigação no backend (Bridge/Firebird):**
-- Levantar exatamente quais campos vêm vazios do endpoint `/estoque/completo`: `precoCusto`, `dataUltimaEntrada`, `diasEmEstoque`.
-- Identificar se é:
-  - (a) produto sem cadastro de custo no ERP (campo nulo na origem),
-  - (b) produto novo sem movimentação ainda registrada,
-  - (c) bug na transformação Bridge → Supabase.
-- Documentar por SKU exemplo (pegar 5 SKUs problemáticos e rastrear até a Bridge).
+**Correção proposta (`estoqueCompletoService.ts`):** deduplicar por `cod_sku` mantendo o fornecedor "preferencial" (regra: o que tem `data_ultima_entrada` mais recente; empate → ordem alfabética). Logar quantas linhas foram colapsadas para auditoria.
 
-**Resultado entregue:** relatório com causa raiz por categoria de problema + recomendação (corrigir cadastro no ERP, popular via Bridge, ou tratar como "SEM CADASTRO" na UI). Sem mexer em UI ainda.
+Impacto esperado: 1.388 peças continua igual (já está somando estoque do SKU, não do vínculo, no Bridge — confirmar) **ou** cai para o número correto após dedupe. O QA abaixo cobre os dois cenários.
 
-**Patch defensivo mínimo no front:** SKUs com `precoCusto = 0 E diasEmEstoque = 0 E qtdVendidos = 0` deixam de cair em "LIQUIDA 50%" e ficam fora dos cards de ação até o cadastro ser corrigido (evita poluir decisão). Eles continuam visíveis na tabela com flag visual.
+### c) O que é "Dead Stock"?
+Definido em `estoqueCompletoService.ts` linha 178: **`isDeadStock = diasEmEstoque > 180`** (mais de 180 dias desde a última entrada na loja, sem giro). É independente da `acaoSugerida`. O card "Dead Stock" mostra peças e % do estoque com `diasEmEstoque > 180`.
 
-## 3. Loja selecionada não persiste entre Visão Estoque ↔ Plano de Compra
-
-**Causa:** cada página instancia `useEstoqueUnificado()` com seu próprio `useState`, então o filtro `empresa` é local.
-
-**Solução:**
-- Promover o filtro de empresa (e idealmente o snapshot de dados carregados) para escopo global via Zustand store ou Context (`EstoqueContext`).
-- Ao trocar de página, manter `filters.empresa` e os dados já carregados; só re-disparar `carregarDados` se a empresa mudar ou o usuário clicar em atualizar.
-- Indicador no topo da página: "Loja: BARUERI · dados carregados há Xmin" + botão "Atualizar".
-
-## 4. Divergência de números entre Visão Estoque e Plano de Compra (5.159 peças, 1.602 SKUs, 92 vendidos)
-
-Como ambas as páginas hoje usam o mesmo hook, a divergência vem de:
-- **Estado isolado** (item 3): cada página carrega em momentos diferentes, com filtros diferentes.
-- **Possível filtro implícito** no Plano de Compra (ex.: só armações, só curva A) que não está visível no header.
-
-**Ações:**
-- Após unificação do contexto (item 3), garantir que ambas as páginas leiam do mesmo `itensProcessados`.
-- Auditar se o "92 vendidos em 6 meses" corresponde a uma marca específica (visualização por marca em `resumoPorMarca`) — se sim, deixar explícito no rótulo: "92 peças vendidas em 6 meses (marca X)".
-- Validar acuracidade do `qtdVendidos` cruzando com endpoint `/vendas/analise-sku` para 1 loja real (ex.: Barueri, últimos 180 dias) e produzir relatório de conferência. Investigar se há SKUs perdidos por mismatch de `cod_sku` entre `/estoque/completo` e `/vendas/analise-sku`.
-
-## 5. "Gap de compra zerado" no Plano de Compra
-
-**Causa provável:** `estoque_minimo_loja` não tem registros para a loja selecionada → `estoqueMinimo = 0` → `otb = max(0, 0 - estoque) = 0` para todos.
-
-**Ações:**
-- Conferir conteúdo da tabela `estoque_minimo_loja` para Barueri.
-- Se vazia: documentar que mínimos precisam ser configurados OU mudar regra de fallback para usar projeção de venda diária × N dias quando não houver mínimo configurado (preview da Fase 2).
-- Por ora apenas diagnóstico + documentação no card ("Mínimos não configurados para esta loja — gap de compra usando projeção provisória de 90 dias").
+**Correção proposta (UI only):** adicionar tooltip no card explicando "Peças paradas há mais de 180 dias desde a última entrada".
 
 ---
 
-## Detalhes técnicos
+## 2) Checklist de QA — `SEM CADASTRO` não polui KPIs de liquidação
 
-### Arquivos envolvidos
-- `src/hooks/useEstoqueUnificado.ts` — fonte única; ajustar rótulos e proteção contra LIQUIDA 50% indevida.
-- `src/pages/estoque/VisaoEstoquePage.tsx`, `AnaliseOTBPage.tsx`, `OQueFazerPage.tsx` — consumir contexto compartilhado.
-- Novo: `src/contexts/EstoqueContext.tsx` (ou `src/stores/useEstoqueStore.ts` com Zustand) para empresa selecionada + cache de `dadosEstoqueCompleto`/`dadosVendasSku`.
-- Backend: investigação read-only via `firebird-bridge` (endpoints `/estoque/completo` e `/vendas/analise-sku`) — não muda contrato.
-- Tabela `estoque_minimo_loja` — apenas leitura nesta fase.
+Loja recomendada: **DINIZ BARUERI**. Repetir em pelo menos 1 outra loja (ex.: RJ1062) para garantir.
 
-### Entregáveis desta Fase 1
-1. Contexto/store de Estoque compartilhado entre as 3 páginas.
-2. KPIs com rótulos coerentes ao filtro ativo + indicador de filtro.
-3. Patch defensivo: SKUs sem cadastro saem do bucket de liquidação.
-4. Documento (markdown na pasta `docs/`) com:
-   - Causa raiz dos campos vazios na Bridge (com 5 SKUs de exemplo).
-   - Conferência de "vendas em 6 meses" para Barueri (esperado vs obtido).
-   - Estado de `estoque_minimo_loja` por loja ativa.
-5. Lista clara para Fase 2 (não implementar ainda) com requisitos da nova lógica de sugestão de compra:
-   - Mix ideal por subcategoria/marca baseado em vendas dos últimos 6 meses.
-   - Quantidade mínima por loja e por grife.
-   - Reposição com peso = velocidade de saída (dias para vender).
-   - Período de venda usado para projeção configurável (default 90d) — sem afetar a janela de 6m do mix.
+### Pré-condição
+- [ ] Limpar cache do estoque (botão "Carregar Dados" em Visão Estoque)
+- [ ] Confirmar que `acaoSugerida = 'SEM CADASTRO'` está sendo gerado pelo backend ou pelo fallback do `estoqueCompletoService.ts` (linhas 117–127)
 
-### Fora do escopo da Fase 1
-- Redesign visual do Plano de Compra (relatório do Mark).
-- Algoritmo novo de sugestão de compra (mix ideal + qty mínima por grife).
-- Mudanças no contrato da Bridge.
+### KPIs (Visão Estoque → card "Peças p/ Liquidar")
+- [ ] Número do card = soma de `estoqueAtual` apenas de itens com `acaoSugerida` contendo `LIQUIDA` (`LIQUIDA 20%`, `LIQUIDA 30%`, `LIQUIDA 50%`)
+- [ ] Itens com `acaoSugerida = 'SEM CADASTRO'` **NÃO** entram nesse total
+- [ ] Aplicar filtro Categoria=Armações → KPI recalcula e ainda exclui SEM CADASTRO
 
-## Validação ao final da Fase 1
-- Selecionar Barueri em "Visão Estoque", aplicar filtro Armações: KPIs e tabela mostram a mesma base, com rótulos claros.
-- Navegar para "Plano de Compra": loja já carregada, mesmos números agregados.
-- Nenhum SKU sem custo/dias aparece em "LIQUIDA 50%".
-- Relatório de acuracidade entregue para sua revisão antes de abrir a Fase 2.
+### Tabela detalhada (Visão Estoque)
+- [ ] Filtrar coluna "Ação" por `SEM CADASTRO` retorna lista esperada
+- [ ] Filtrar por `LIQUIDA 50%` não traz nenhum item com `precoCusto = 0` E `diasEmEstoque = 0` E `qtdVendidos = 0`
+- [ ] Exportar CSV → abrir e confirmar que nenhuma linha `LIQUIDA *` tem os 3 zeros simultâneos
+
+### Plano de Compra (`AnaliseOTBPage`)
+- [ ] Card "Capital em Risco" (dead stock valor) exclui itens SEM CADASTRO
+- [ ] Bloco "Estoque doente" por marca não mostra itens SEM CADASTRO
+- [ ] Mix Ideal por subcategoria continua somando os SEM CADASTRO no estoque (eles existem fisicamente) mas não como ação de liquidação
+
+### Persistência entre páginas
+- [ ] Carregar Barueri em Visão Estoque → ir para Plano de Compra → mesma loja, mesmos números, sem reload
+- [ ] Indicador `EstoqueLoadStatus` mostra "carregado há Xmin" nas duas páginas
+
+### Logs / Backend
+- [ ] Console: `[estoqueCompletoService] Contagem por tipo` deve listar quantos SEM CADASTRO existem
+- [ ] Documentar em `docs/estoque-fase-1.md` quantos SKUs Barueri caíram em SEM CADASTRO e listar 5 exemplos para investigação no ERP
+
+### Regressão
+- [ ] Total em Estoque (peças e SKUs) **não** mudou após o patch defensivo
+- [ ] Dead Stock continua usando `diasEmEstoque > 180` (independente da ação)
+
+---
+
+## 3) Mudanças de código propostas (pequenas, UI + 1 service)
+
+| Arquivo | Mudança |
+|---|---|
+| `src/pages/estoque/VisaoEstoquePage.tsx` | Header em duas linhas: "Estoque (posição agora)" vs "Vendas (180d)"; tooltip no card Dead Stock |
+| `src/pages/estoque/AnaliseOTBPage.tsx` | Mesmo header reescrito |
+| `src/services/estoqueCompletoService.ts` | Dedupe por `cod_sku` mantendo fornecedor preferencial + log de colapsos |
+| `docs/estoque-fase-1.md` | Anexar este checklist + resultado do QA em Barueri |
+
+Sem mudanças de schema, sem mudanças no Bridge, sem mexer em lógica de classificação além do que já foi feito.
