@@ -494,10 +494,13 @@ export default function VisaoEstoquePage() {
             <Alert className="bg-primary/5 border-primary/20">
               <Info className="h-4 w-4 text-primary" />
               <AlertDescription>
-                <strong>{empresaSelecionada.nome}</strong> • 
-                {' '}{metricas.totalPecas.toLocaleString('pt-BR')} peças em estoque • 
-                {' '}{metricas.totalSkusComEstoque} SKUs • 
-                {' '}Período: {diasPeriodo} dias
+                <div><strong>{empresaSelecionada.nome}</strong></div>
+                <div className="text-xs mt-1">
+                  Estoque: {metricas.totalPecas.toLocaleString('pt-BR')} peças • {metricas.totalSkusComEstoque.toLocaleString('pt-BR')} SKUs <span className="text-muted-foreground">(posição agora)</span>
+                </div>
+                <div className="text-xs">
+                  Vendas / giro: últimos {diasPeriodo} dias
+                </div>
               </AlertDescription>
             </Alert>
           )}
