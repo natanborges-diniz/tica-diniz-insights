@@ -1,52 +1,40 @@
+## Diagnóstico revisado
 
-# Ajuste do path da API Haytek para produção
-
-## Problema
-Em produção (`https://dev.haytek.com.br`), o swagger expõe os endpoints diretamente em `/orders/lab`, `/orders/{orderId}` etc. (basePath `/`).
-
-Em staging (`https://stg-api.haytek.com.br`), os endpoints estão em `/external/api/v1/haytek-public/orders/lab`.
-
-Hoje o `haytek-proxy/index.ts` tem o path **hardcoded**:
-```ts
-const HAYTEK_API_PATH = "/external/api/v1/haytek-public";
-```
-
-Isso faz com que em produção a chamada vá para `https://dev.haytek.com.br/external/api/v1/haytek-public/orders/lab`, que não existe → cai num bucket S3 default → retorna XML `<AuthenticationRequired>`.
-
-## Solução
-Resolver o `apiPath` por ambiente, vindo da função `loadHaytekGlobalConfig`:
+A URL de produção está correta:
 
 ```text
-ambiente = staging    → apiPath = "/external/api/v1/haytek-public"
-ambiente = production → apiPath = ""   (endpoints diretos: /orders/lab)
+POST https://dev.haytek.com.br/orders/lab
+Authorization: Bearer <api_key_production>
 ```
 
-## Mudanças
+O Swagger declara apenas `BearerAuth` (header `Authorization`). Não existe endpoint público de login. Logo a Haytek aceita exclusivamente o token configurado em `fornecedor_configuracao.api_key_production`. O retorno `AuthenticationRequired` significa que o token enviado não é reconhecido pela Haytek em produção.
 
-### 1. `supabase/functions/haytek-proxy/index.ts`
-- Remover constante global `HAYTEK_API_PATH`.
-- Em `loadHaytekGlobalConfig`, devolver também `apiPath` calculado a partir de `ambiente`.
-- Substituir os 3 usos de `${BASE_URL}${HAYTEK_API_PATH}/...` por `${BASE_URL}${apiPath}/...` nas actions:
-  - `criar-pedido` → `${BASE_URL}${apiPath}/orders/lab`
-  - `consultar-pedido` → `${BASE_URL}${apiPath}/orders/${orderId}`
-  - `atualizar-tracking` → `${BASE_URL}${apiPath}/orders/${orderId}`
-- Aceitar `201` (Created) como sucesso explicitamente em `criar-pedido` (hoje funciona porque o filtro é `status >= 400`, mas deixamos comentado).
+Como você confirmou que o token é o mesmo para todas as lojas, **não vamos** criar token por loja. O ajuste é só garantir que o token correto esteja salvo e que o proxy envie de forma rastreável.
 
-### 2. Sem mudanças de schema
-A coluna `ambiente` em `fornecedor_configuracao` já existe e já está com `production`. Não precisa migration.
+## Plano
 
-### 3. Sem mudanças no frontend
-O `PedidoHaytekPage`/`HaytekTrackingPage` chamam o proxy via `supabase.functions.invoke` — não tocam URL.
+1. Tela `Admin > Fornecedores > Haytek`
+   - Manter um único campo `API Key — Produção` (já existe).
+   - Adicionar um pequeno indicador `Prefixo do token salvo: eyJhbGciOi… (127 chars)` para confirmar visualmente o que está no banco sem expor o token.
+   - Adicionar botão `Testar autenticação` que chama o `haytek-proxy` com a ação `ping-auth` e mostra o status retornado pela Haytek (200/401/403).
 
-## Validação após deploy
-1. Conferir nos logs do `haytek-proxy`:
+2. `haytek-proxy`
+   - Nenhuma mudança de roteamento (continua usando `fornecedor_configuracao.api_key_production` quando ambiente = production).
+   - Logar com mais clareza a origem do token e seu prefixo:
+
+   ```text
+   Action: criar-pedido | Env: production | TokenSource: fornecedor_configuracao.api_key_production | TokenPrefix: eyJhbGciOi… | Len: 127
    ```
-   Env: production | Base: https://dev.haytek.com.br
-   criar-pedido URL: https://dev.haytek.com.br/orders/lab
-   ```
-2. Smoke test: criar pedido em SP0156, validar HTTP 201 + `orderId` retornado.
-3. Rollback: reverter `ambiente = 'staging'` (1 update na linha de `fornecedor_configuracao`).
 
-## Fora de escopo (futuro)
-- Adicionar action `enviar-tracing-remoto` para `POST /orders/lab/remote-tracing` (multipart/form-data) — endpoint novo do swagger de produção.
-- Validar enums `model.Frame.code` (`3PC|ARF|FIN|FIA`) e `model.CustomizationInput.workDistance` (`1.3|2|4`) no formulário Haytek.
+   - Adicionar nova ação `ping-auth` que faz `GET /orders/<id-fake>` só para forçar a Haytek a validar o token e devolver 401/403/200/404. Útil para validar credenciais sem criar pedido.
+   - Em caso de 401, devolver mensagem amigável: `Token Haytek de produção não reconhecido pela API. Atualize a chave em Admin > Fornecedores > Haytek.`
+
+3. Validação manual
+   - Você cola o token de produção fornecido pela HiTech em `Admin > Fornecedores > Haytek > API Key — Produção` e salva.
+   - Clica em `Testar autenticação`.
+   - Se voltar 200/404 → token aceito. Se voltar 401 → token incorreto ou ainda não provisionado pela HiTech para o ambiente `dev.haytek.com.br`.
+
+## Observações
+
+- Não vou alterar o schema do banco — `haytek_empresa_config.api_key_production` permanece existindo mas continua sem uso, conforme regra atual de token único.
+- Vou ajustar a memória `Haytek Master Spec` para refletir que produção usa token único em `fornecedor_configuracao`, removendo a parte de "token por loja".

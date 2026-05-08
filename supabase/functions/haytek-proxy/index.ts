@@ -138,7 +138,9 @@ serve(async (req) => {
     const activeAmbiente: string = globalConfig.ambiente;
     const apiPath: string = globalConfig.apiPath;
 
-    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${activeAmbiente} | Base: ${BASE_URL}${apiPath} | User: ${user.userId}`);
+    const tokenPrefix = activeApiKey ? `${activeApiKey.slice(0, 10)}…` : "(vazio)";
+    const tokenLen = activeApiKey ? activeApiKey.length : 0;
+    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${activeAmbiente} | Base: ${BASE_URL}${apiPath} | TokenSource: fornecedor_configuracao.api_key_${activeAmbiente} | TokenPrefix: ${tokenPrefix} | Len: ${tokenLen} | User: ${user.userId}`);
 
     if (!activeApiKey) {
       return new Response(JSON.stringify({
