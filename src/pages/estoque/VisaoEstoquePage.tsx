@@ -571,6 +571,13 @@ export default function VisaoEstoquePage() {
             </CardContent>
           </Card>
 
+          {/* Indicador de dados compartilhados */}
+          <EstoqueLoadStatus
+            empresaNome={empresaSelecionada?.nome}
+            onRecarregar={carregarDados}
+            loading={loading}
+          />
+
           {/* KPIs */}
           <EstoqueKPICards metricas={metricas} categoria={filters.categoria} />
 
