@@ -25,6 +25,7 @@ interface HaytekGlobalConfig {
   baseUrl: string;
   ambiente: string;
   apiKey: string | null;
+  apiPath: string;
 }
 
 async function loadHaytekGlobalConfig(sb: ReturnType<typeof createClient>): Promise<HaytekGlobalConfig> {
