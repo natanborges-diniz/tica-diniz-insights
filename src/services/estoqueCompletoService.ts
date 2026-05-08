@@ -179,18 +179,43 @@ export async function getEstoqueCompleto(
     };
   });
   
+  // Dedupe por cod_sku — Bridge pode retornar 1 linha por vínculo SKU↔fornecedor.
+  // Mantém o registro com data_ultima_entrada mais recente; empate → fornecedor por ordem alfabética.
+  const dedupMap = new Map<number, EstoqueCompleto>();
+  let colapsadas = 0;
+  for (const item of resultado) {
+    const existing = dedupMap.get(item.codSku);
+    if (!existing) {
+      dedupMap.set(item.codSku, item);
+      continue;
+    }
+    colapsadas++;
+    const tA = item.dataUltimaEntrada ? new Date(item.dataUltimaEntrada).getTime() : 0;
+    const tB = existing.dataUltimaEntrada ? new Date(existing.dataUltimaEntrada).getTime() : 0;
+    if (tA > tB || (tA === tB && item.fornecedor < existing.fornecedor)) {
+      dedupMap.set(item.codSku, item);
+    }
+  }
+  const deduped = Array.from(dedupMap.values());
+  if (colapsadas > 0) {
+    console.log(`[estoqueCompletoService] Dedupe por cod_sku: ${colapsadas} linhas colapsadas (de ${resultado.length} → ${deduped.length})`);
+  }
+
   // Log tipos extraídos para debug
-  const tiposExtraidos = [...new Set(resultado.map(r => r.tipo))];
+  const tiposExtraidos = [...new Set(deduped.map(r => r.tipo))];
   console.log('[estoqueCompletoService] Tipos extraídos das descrições:', tiposExtraidos);
-  
-  // Contagem por tipo
+
+  // Contagem por tipo + por ação (inclui SEM CADASTRO)
   const contagemTipos: Record<string, number> = {};
-  resultado.forEach(r => {
+  const contagemAcoes: Record<string, number> = {};
+  deduped.forEach(r => {
     contagemTipos[r.tipo] = (contagemTipos[r.tipo] || 0) + 1;
+    contagemAcoes[r.acaoSugerida] = (contagemAcoes[r.acaoSugerida] || 0) + 1;
   });
   console.log('[estoqueCompletoService] Contagem por tipo:', contagemTipos);
-  
-  return resultado;
+  console.log('[estoqueCompletoService] Contagem por ação:', contagemAcoes);
+
+  return deduped;
 }
 
 // ============================================
