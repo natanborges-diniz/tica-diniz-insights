@@ -136,8 +136,9 @@ serve(async (req) => {
     const BASE_URL = globalConfig.baseUrl;
     const activeApiKey: string | null = globalConfig.apiKey;
     const activeAmbiente: string = globalConfig.ambiente;
+    const apiPath: string = globalConfig.apiPath;
 
-    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${activeAmbiente} | Base: ${BASE_URL} | User: ${user.userId}`);
+    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${activeAmbiente} | Base: ${BASE_URL}${apiPath} | User: ${user.userId}`);
 
     if (!activeApiKey) {
       return new Response(JSON.stringify({
