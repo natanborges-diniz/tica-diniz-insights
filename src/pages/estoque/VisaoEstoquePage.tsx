@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { OtbFornecedorMarcaConfig } from "@/components/otb/OtbFornecedorMarcaConfig";
+import { EstoqueLoadStatus } from "@/components/estoque/EstoqueLoadStatus";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { DataTable, DataTableColumn, QueryState } from "@/components/ui/data-table";
 import { formatters, ExportColumn } from "@/utils/exportData";
