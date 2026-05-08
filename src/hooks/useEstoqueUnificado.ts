@@ -6,7 +6,7 @@
 // - /vendas/analise-sku: Métricas de giro/vendas para "Análise OTB"
 // - Dados são MESCLADOS pelo cod_sku para ter visão completa
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useCallback, useMemo, useEffect } from "react";
 import { useUserEmpresas } from "./useUserEmpresas";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
@@ -15,20 +15,10 @@ import { getEstoqueCompleto, EstoqueCompleto } from "@/services/estoqueCompletoS
 import { categorizarProduto, subcategorizarProduto, type SubcategoriaProduto } from "@/utils/categorizarProduto";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useEstoqueStore, type EstoqueFilters } from "@/stores/useEstoqueStore";
 
-// ============================================
-// INTERFACES
-// ============================================
-
-export interface EstoqueFilters {
-  empresa: EmpresaParam;
-  categoria: 'TODOS' | 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS';
-  curvaABC: 'A' | 'B' | 'C' | null;
-  fornecedor: string;
-  marca: string;
-  acao: string;
-  busca: string;
-}
+// Re-export para compatibilidade com imports existentes
+export type { EstoqueFilters };
 
 export interface ItemEstoque {
   codSku: number;
