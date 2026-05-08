@@ -6,7 +6,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authGuard, corsHeaders } from "../_shared/authGuard.ts";
 
-const HAYTEK_API_PATH = "/external/api/v1/haytek-public";
+// API path varies by environment:
+// - staging: /external/api/v1/haytek-public/orders/...
+// - production (dev.haytek.com.br): /orders/... (basePath = "/")
 
 const HAYTEK_ERROR_CODES = {
   TIMEOUT: "HAYTEK_TIMEOUT",
