@@ -83,7 +83,7 @@ function EstoqueKPICards({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card title="Peças paradas há mais de 180 dias desde a última entrada na loja, independente da ação sugerida.">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Dead Stock</CardTitle>
             <AlertTriangle className="h-4 w-4 text-accent-foreground" />
@@ -95,6 +95,7 @@ function EstoqueKPICards({
             <p className="text-xs text-muted-foreground">
               {metricas.deadStockPercentual.toFixed(1)}% {filtroAtivo ? `de ${labelCategoria.toLowerCase()}` : 'do estoque'} • {metricas.deadStockValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </p>
+            <p className="text-[10px] text-muted-foreground mt-1">+180 dias sem entrada</p>
           </CardContent>
         </Card>
 
