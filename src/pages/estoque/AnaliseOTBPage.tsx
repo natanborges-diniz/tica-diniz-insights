@@ -457,6 +457,11 @@ export default function AnaliseOTBPage() {
       {/* Conteúdo Principal */}
       {!loading && itensProcessados.length > 0 && (
         <>
+          <EstoqueLoadStatus
+            empresaNome={empresaSelecionada?.nome}
+            onRecarregar={carregarDados}
+            loading={loading}
+          />
           {empresaSelecionada && (
             <Alert className="bg-primary/5 border-primary/20">
               <Info className="h-4 w-4 text-primary" />
