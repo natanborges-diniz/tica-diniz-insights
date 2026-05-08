@@ -294,7 +294,13 @@ function CredenciaisSection({
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <CheckCircle2 className="h-3 w-3 text-primary" />
                 {isBtg ? "Client Secret" : "API Key"} de produção configurada.
+                <span className="ml-1 font-mono">
+                  Prefixo: {config.api_key_production.slice(0, 10)}… ({config.api_key_production.length} chars)
+                </span>
               </p>
+            )}
+            {fornecedor.toLowerCase() === "haytek" && (
+              <HaytekTestAuthButton />
             )}
           </div>
         </CardContent>
