@@ -196,8 +196,8 @@ export function useEstoqueUnificado() {
   }, [defaultEmpresa, filters.empresa, setFilters]);
 
   // Estado local apenas para mapeamentos (são globais e não dependem de empresa)
-  const [mapeamentoFornecedor, setMapeamentoFornecedor] = useStateLocal<Map<string, string>>(new Map());
-  const [configMinimos, setConfigMinimos] = useStateLocal<EstoqueMinimoConfig[]>([]);
+  const [mapeamentoFornecedor, setMapeamentoFornecedor] = useState<Map<string, string>>(new Map());
+  const [configMinimos, setConfigMinimos] = useState<EstoqueMinimoConfig[]>([]);
 
   useEffect(() => {
     const carregarMapeamentos = async () => {
