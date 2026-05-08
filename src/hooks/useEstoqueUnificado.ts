@@ -677,5 +677,6 @@ export function useEstoqueUnificado() {
     mixIdealCategoria, mixIdealMarca,
     resumoPorMarca, estoqueDoenteAgrupado,
     carregarDados,
+    carregadoEm, empresaCarregada,
   };
 }
