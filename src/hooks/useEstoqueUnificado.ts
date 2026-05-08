@@ -15,20 +15,10 @@ import { getEstoqueCompleto, EstoqueCompleto } from "@/services/estoqueCompletoS
 import { categorizarProduto, subcategorizarProduto, type SubcategoriaProduto } from "@/utils/categorizarProduto";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useEstoqueStore, type EstoqueFilters } from "@/stores/useEstoqueStore";
 
-// ============================================
-// INTERFACES
-// ============================================
-
-export interface EstoqueFilters {
-  empresa: EmpresaParam;
-  categoria: 'TODOS' | 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS';
-  curvaABC: 'A' | 'B' | 'C' | null;
-  fornecedor: string;
-  marca: string;
-  acao: string;
-  busca: string;
-}
+// Re-export para compatibilidade com imports existentes
+export type { EstoqueFilters };
 
 export interface ItemEstoque {
   codSku: number;
@@ -186,28 +176,26 @@ export function useEstoqueUnificado() {
   const dataFim = hoje.toISOString().split('T')[0];
   const dataInicio = new Date(hoje.getTime() - DIAS_PERIODO * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
-  const [filters, setFilters] = useState<EstoqueFilters>({
-    empresa: null,
-    categoria: 'TODOS',
-    curvaABC: null,
-    fornecedor: 'TODOS',
-    marca: 'TODAS',
-    acao: 'TODAS',
-    busca: '',
-  });
+  // Estado compartilhado entre páginas via Zustand store
+  const filters = useEstoqueStore((s) => s.filters);
+  const setFilters = useEstoqueStore((s) => s.setFilters);
+  const loading = useEstoqueStore((s) => s.loading);
+  const setLoading = useEstoqueStore((s) => s.setLoading);
+  const error = useEstoqueStore((s) => s.error);
+  const setError = useEstoqueStore((s) => s.setError);
+  const dadosEstoqueCompleto = useEstoqueStore((s) => s.dadosEstoqueCompleto);
+  const dadosVendasSku = useEstoqueStore((s) => s.dadosVendasSku);
+  const setDados = useEstoqueStore((s) => s.setDados);
+  const carregadoEm = useEstoqueStore((s) => s.carregadoEm);
+  const empresaCarregada = useEstoqueStore((s) => s.empresaCarregada);
 
   useEffect(() => {
     if (defaultEmpresa && !filters.empresa) {
-      setFilters(prev => ({ ...prev, empresa: defaultEmpresa }));
+      setFilters((prev) => ({ ...prev, empresa: defaultEmpresa }));
     }
-  }, [defaultEmpresa]);
+  }, [defaultEmpresa, filters.empresa, setFilters]);
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  
-  const [dadosEstoqueCompleto, setDadosEstoqueCompleto] = useState<EstoqueCompleto[]>([]);
-  const [dadosVendasSku, setDadosVendasSku] = useState<AnaliseSku[]>([]);
-  
+  // Estado local apenas para mapeamentos (são globais e não dependem de empresa)
   const [mapeamentoFornecedor, setMapeamentoFornecedor] = useState<Map<string, string>>(new Map());
   const [configMinimos, setConfigMinimos] = useState<EstoqueMinimoConfig[]>([]);
 
@@ -661,8 +649,7 @@ export function useEstoqueUnificado() {
       const totalPecasEstoque = estoqueCompleto.reduce((acc, d) => acc + d.quantidadeEstoque, 0);
       const pecasDeadStock = estoqueCompleto.filter(d => d.isDeadStock).reduce((acc, d) => acc + d.quantidadeEstoque, 0);
       
-      setDadosEstoqueCompleto(estoqueCompleto);
-      setDadosVendasSku(vendasSku);
+      setDados(estoqueCompleto, vendasSku);
       
       toast({
         title: "Dados Carregados",
@@ -675,7 +662,7 @@ export function useEstoqueUnificado() {
     } finally {
       setLoading(false);
     }
-  }, [filters.empresa, dataInicio, dataFim]);
+  }, [filters.empresa, dataInicio, dataFim, setLoading, setError, setDados]);
 
   const dadosBrutos = dadosVendasSku;
 
@@ -690,5 +677,6 @@ export function useEstoqueUnificado() {
     mixIdealCategoria, mixIdealMarca,
     resumoPorMarca, estoqueDoenteAgrupado,
     carregarDados,
+    carregadoEm, empresaCarregada,
   };
 }

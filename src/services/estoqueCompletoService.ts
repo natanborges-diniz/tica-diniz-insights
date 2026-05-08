@@ -121,8 +121,10 @@ export async function getEstoqueCompleto(
                            (r.dias_estoque !== undefined && r.dias_estoque !== null);
       
       if (!temInfoTempo) {
-        // Itens sem nenhum registro de movimento - potencialmente antigos
-        acaoSugerida = 'LIQUIDA 50%';
+        // Defensivo: itens sem NENHUM registro de tempo (precoCusto e dias zerados)
+        // não devem cair em LIQUIDA 50% — provavelmente é cadastro incompleto.
+        // Marcamos como SEM CADASTRO para tratamento separado na UI.
+        acaoSugerida = 'SEM CADASTRO';
       } else if (diasEmEstoque <= 90) {
         acaoSugerida = 'ANALISE PARA RECOMPRA';
       } else if (diasEmEstoque <= 180) {

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { OtbFornecedorMarcaConfig } from "@/components/otb/OtbFornecedorMarcaConfig";
+import { EstoqueLoadStatus } from "@/components/estoque/EstoqueLoadStatus";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { formatters, ExportColumn } from "@/utils/exportData";
 import { 
@@ -456,6 +457,11 @@ export default function AnaliseOTBPage() {
       {/* Conteúdo Principal */}
       {!loading && itensProcessados.length > 0 && (
         <>
+          <EstoqueLoadStatus
+            empresaNome={empresaSelecionada?.nome}
+            onRecarregar={carregarDados}
+            loading={loading}
+          />
           {empresaSelecionada && (
             <Alert className="bg-primary/5 border-primary/20">
               <Info className="h-4 w-4 text-primary" />
