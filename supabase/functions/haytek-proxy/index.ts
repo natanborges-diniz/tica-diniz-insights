@@ -157,6 +157,24 @@ serve(async (req) => {
       case "criar-pedido": {
         const codEmpresa = Number(params.codEmpresa);
         const codOs = Number(params.codOs);
+
+        // Defensive sanitization: Haytek API exige string numérica com 2 casas, SEM '+'
+        const sanitizeDiopter = (v: unknown): string => {
+          if (v === null || v === undefined || v === "") return "0.00";
+          const n = parseFloat(String(v).replace(",", ".").replace(/^\+/, ""));
+          if (isNaN(n)) return "0.00";
+          return n.toFixed(2);
+        };
+        const sanitizeEye = (eye: Record<string, unknown> | undefined) => {
+          if (!eye || typeof eye !== "object") return;
+          if ("spherical" in eye) eye.spherical = sanitizeDiopter(eye.spherical);
+          if ("cylindrical" in eye) eye.cylindrical = sanitizeDiopter(eye.cylindrical);
+          if ("addition" in eye) eye.addition = sanitizeDiopter(eye.addition);
+        };
+        const productsObj = (params.pedido?.products ?? {}) as Record<string, unknown>;
+        sanitizeEye(productsObj.right as Record<string, unknown>);
+        sanitizeEye(productsObj.left as Record<string, unknown>);
+
         const store = await loadStoreConfig(sbService, codEmpresa);
         if (!store) {
           return new Response(JSON.stringify({ error: "Loja não configurada para Haytek", code: HAYTEK_ERROR_CODES.CONFIG_ERROR, correlationId }), {
