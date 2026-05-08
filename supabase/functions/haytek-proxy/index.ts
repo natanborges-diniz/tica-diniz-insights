@@ -43,11 +43,11 @@ async function loadHaytekGlobalConfig(sb: ReturnType<typeof createClient>): Prom
       const ambiente = data.ambiente || "staging";
       const isProd = ambiente === "production";
       const baseUrl = isProd
-        ? (data.base_url_production || "https://dev.haytek.com.br")
+        ? (data.base_url_production || "https://api.haytek.com.br")
         : (data.base_url_staging || "https://stg-api.haytek.com.br");
       const rawKey = isProd ? data.api_key_production : data.api_key_staging;
       const apiKey = rawKey ? String(rawKey).replace(/\s+/g, "") : null;
-      const apiPath = isProd ? "" : "/external/api/v1/haytek-public";
+      const apiPath = "/external/api/v1/haytek-public";
       return { baseUrl, ambiente, apiKey, apiPath };
     }
   } catch (e) {
