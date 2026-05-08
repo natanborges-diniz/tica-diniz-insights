@@ -662,7 +662,7 @@ export function useEstoqueUnificado() {
     } finally {
       setLoading(false);
     }
-  }, [filters.empresa, dataInicio, dataFim]);
+  }, [filters.empresa, dataInicio, dataFim, setLoading, setError, setDados]);
 
   const dadosBrutos = dadosVendasSku;
 
