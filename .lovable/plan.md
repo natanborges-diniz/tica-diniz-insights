@@ -1,59 +1,69 @@
-# Aceitar vírgula e ponto como separador decimal no valor do link
 
-## Problema
-Em `src/pages/PaymentLinksPage.tsx` o input "Valor (R$)" usa `type="number"` e `parseFloat(newLink.valor)`. Isso só aceita ponto como separador decimal — quando o usuário digita `150,00`, o navegador rejeita silenciosamente (alguns aceitam, outros não) e o `parseFloat` retorna `NaN`, gerando erro genérico.
+# Cutover Haytek → Produção (todas as lojas Diniz)
 
-## Mudança
+## Objetivo
+Ativar o ambiente de produção da API Haytek para todas as 9 lojas Diniz já configuradas, usando o token e a base URL informados no PDF, mantendo o staging preservado para rollback rápido.
 
-### `src/pages/PaymentLinksPage.tsx`
+## Credenciais (do PDF)
+- **Base URL produção:** `https://dev.haytek.com.br`
+- **Token produção (loja master SP0156):** `eyJ...hxYI6VKq-4oIDkKvxpBucac-BrQvixbifS4VTLKM-oQ`
+- **Path da API:** mantém `/external/api/v1/haytek-public` (igual ao staging)
 
-1. Trocar o input de `type="number"` para `type="text"` com `inputMode="decimal"` e `placeholder="0,00"`, permitindo digitar vírgula livremente:
+> Observação: o token é único e atende todas as lojas (mesmo padrão do staging). O `storeId` por loja já está mapeado em `haytek_empresa_config`.
 
-```tsx
-<Input
-  type="text"
-  inputMode="decimal"
-  value={newLink.valor}
-  onChange={e => setNewLink(f => ({ ...f, valor: e.target.value.replace(/[^\d.,]/g, "") }))}
-  placeholder="0,00"
-/>
+## Etapas
+
+### 1. Atualizar configuração no banco
+Atualizar a linha de `fornecedor_configuracao` onde `fornecedor='HAYTEK'`:
+- `base_url_production = 'https://dev.haytek.com.br'`
+- `api_key_production = '<token do PDF>'`
+- `ambiente = 'production'` (vira o ambiente ativo)
+
+Mantém `api_key_staging` e `base_url_staging` intactos para rollback.
+
+### 2. Validar via Edge Function
+Após salvar, disparar uma chamada de teste no `haytek-proxy` (action `consultar-pedido` com um orderId conhecido, ou um `criar-pedido` mínimo no SP0156) e conferir nos logs:
+- `Env: production`
+- `Base: https://dev.haytek.com.br`
+- HTTP 2xx da Haytek
+
+### 3. UI Admin > Fornecedores
+Confirmar visualmente em `/admin/fornecedores` que:
+- Badge mostra "Produção"
+- Token de produção aparece mascarado
+- Botão de "Testar conexão" (se existente) responde OK
+
+### 4. Smoke test operacional
+Pedido real de teste em SP0156 (loja 1) via `/pedido-haytek/:codOs`, validar:
+- Pedido criado, `numero_pedido` retornado
+- Aparece em `pedidos_fornecedor` com `hoya_environment = 'production'`
+- Tracking funciona (`atualizar-tracking`)
+
+### 5. Comunicação
+Após confirmação do smoke test, as outras 8 lojas Diniz já passam a operar em produção automaticamente (mesma config global). Nenhum deploy adicional necessário.
+
+## Rollback
+Caso algo dê errado: reverter `ambiente = 'staging'` na mesma linha de `fornecedor_configuracao` (1 update SQL). Token e URL de staging continuam preservados.
+
+## Sem mudanças de código
+Esta operação é **somente configuração**. O `haytek-proxy/index.ts` já lê `ambiente`, `base_url_production` e `api_key_production` dinamicamente do banco — não precisa de redeploy nem alteração de código.
+
+## Detalhes técnicos
+
+```text
+fornecedor_configuracao (HAYTEK)
+├── ambiente: staging        → production
+├── base_url_staging:        https://stg-api.haytek.com.br   (preservada)
+├── base_url_production:     NULL                            → https://dev.haytek.com.br
+├── api_key_staging:         <preservado>
+└── api_key_production:      NULL                            → <token PDF>
 ```
 
-2. Adicionar helper `parseValor` que normaliza ambos os formatos (BR e US, com ou sem milhar) antes de enviar:
-
-```ts
-const parseValor = (v: string): number => {
-  const s = String(v ?? "").trim();
-  if (!s) return NaN;
-  const hasComma = s.includes(",");
-  const hasDot = s.includes(".");
-  let n = s;
-  if (hasComma && hasDot) {
-    // último separador é o decimal
-    n = s.lastIndexOf(",") > s.lastIndexOf(".")
-      ? s.replace(/\./g, "").replace(",", ".")
-      : s.replace(/,/g, "");
-  } else if (hasComma) {
-    n = s.replace(/\./g, "").replace(",", ".");
-  }
-  return parseFloat(n);
-};
+Resolução em runtime (`loadHaytekGlobalConfig`):
+```text
+isProd = (ambiente === 'production')
+baseUrl = isProd ? base_url_production : base_url_staging
+apiKey  = isProd ? api_key_production  : api_key_staging
 ```
 
-3. Em `criarMutation.mutationFn`, validar antes de chamar a edge function e abortar com toast claro se inválido:
-
-```ts
-const valorNum = parseValor(newLink.valor);
-if (!Number.isFinite(valorNum) || valorNum <= 0) {
-  throw new Error("Valor inválido. Use números com vírgula ou ponto (ex.: 150,00 ou 150.00).");
-}
-return invokeAction("criar", { ..., valor: valorNum, ... });
-```
-
-Aceitará: `150`, `150,00`, `150.00`, `1.234,56`, `1,234.56`, `1234,5`.
-
-## Arquivo editado
-- `src/pages/PaymentLinksPage.tsx`
-
-## Fora do escopo
-- Edge function `payment-links` já recebe `valor` como número — sem mudança no backend.
+Como o token será gravado via SQL direto (DB column existente), uso o tool `secrets--update_secret` **não é necessário** — manteremos o padrão atual da integração.
