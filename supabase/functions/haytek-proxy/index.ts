@@ -138,7 +138,9 @@ serve(async (req) => {
     const activeAmbiente: string = globalConfig.ambiente;
     const apiPath: string = globalConfig.apiPath;
 
-    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${activeAmbiente} | Base: ${BASE_URL}${apiPath} | User: ${user.userId}`);
+    const tokenPrefix = activeApiKey ? `${activeApiKey.slice(0, 10)}…` : "(vazio)";
+    const tokenLen = activeApiKey ? activeApiKey.length : 0;
+    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${activeAmbiente} | Base: ${BASE_URL}${apiPath} | TokenSource: fornecedor_configuracao.api_key_${activeAmbiente} | TokenPrefix: ${tokenPrefix} | Len: ${tokenLen} | User: ${user.userId}`);
 
     if (!activeApiKey) {
       return new Response(JSON.stringify({
@@ -149,7 +151,35 @@ serve(async (req) => {
     }
 
     switch (action) {
-      // ── Criar Pedido ──
+      // ── Ping Auth (valida token sem criar pedido) ──
+      case "ping-auth": {
+        const url = `${BASE_URL}${apiPath}/orders/PING-${correlationId}`;
+        console.log(`[haytek-proxy] [${correlationId}] ping-auth URL: ${url}`);
+        const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "ping-auth", activeApiKey);
+        const respText = await resp.text();
+        const ok = resp.status === 200 || resp.status === 404; // 404 = token aceito mas pedido inexistente
+        return new Response(JSON.stringify({
+          ok,
+          status: resp.status,
+          ambiente: activeAmbiente,
+          baseUrl: BASE_URL,
+          apiPath,
+          tokenPrefix,
+          tokenLen,
+          message: ok
+            ? "Token Haytek aceito pela API."
+            : resp.status === 401
+              ? "Token Haytek de produção não reconhecido pela API. Atualize a chave em Admin > Fornecedores > Haytek."
+              : resp.status === 403
+                ? "Token aceito, mas sem permissão para este recurso (verifique provisão da loja na HiTech)."
+                : `Resposta inesperada da Haytek: ${respText.substring(0, 300)}`,
+          raw: respText.substring(0, 500),
+        }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Correlation-Id": correlationId },
+        });
+      }
+
+
       case "criar-pedido": {
         const codEmpresa = Number(params.codEmpresa);
         const codOs = Number(params.codOs);
@@ -223,7 +253,9 @@ serve(async (req) => {
           });
 
           return new Response(JSON.stringify({
-            error: respData.message || respData.rawResponse || `HTTP ${resp.status}`,
+            error: resp.status === 401
+              ? "Token Haytek de produção não reconhecido pela API. Atualize a chave em Admin > Fornecedores > Haytek."
+              : (respData.message || respData.rawResponse || `HTTP ${resp.status}`),
             code: HAYTEK_ERROR_CODES.API_ERROR,
             correlationId,
             raw: respData,
