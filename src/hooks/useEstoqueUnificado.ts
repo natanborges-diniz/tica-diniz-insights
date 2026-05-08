@@ -176,30 +176,28 @@ export function useEstoqueUnificado() {
   const dataFim = hoje.toISOString().split('T')[0];
   const dataInicio = new Date(hoje.getTime() - DIAS_PERIODO * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
-  const [filters, setFilters] = useState<EstoqueFilters>({
-    empresa: null,
-    categoria: 'TODOS',
-    curvaABC: null,
-    fornecedor: 'TODOS',
-    marca: 'TODAS',
-    acao: 'TODAS',
-    busca: '',
-  });
+  // Estado compartilhado entre páginas via Zustand store
+  const filters = useEstoqueStore((s) => s.filters);
+  const setFilters = useEstoqueStore((s) => s.setFilters);
+  const loading = useEstoqueStore((s) => s.loading);
+  const setLoading = useEstoqueStore((s) => s.setLoading);
+  const error = useEstoqueStore((s) => s.error);
+  const setError = useEstoqueStore((s) => s.setError);
+  const dadosEstoqueCompleto = useEstoqueStore((s) => s.dadosEstoqueCompleto);
+  const dadosVendasSku = useEstoqueStore((s) => s.dadosVendasSku);
+  const setDados = useEstoqueStore((s) => s.setDados);
+  const carregadoEm = useEstoqueStore((s) => s.carregadoEm);
+  const empresaCarregada = useEstoqueStore((s) => s.empresaCarregada);
 
   useEffect(() => {
     if (defaultEmpresa && !filters.empresa) {
-      setFilters(prev => ({ ...prev, empresa: defaultEmpresa }));
+      setFilters((prev) => ({ ...prev, empresa: defaultEmpresa }));
     }
-  }, [defaultEmpresa]);
+  }, [defaultEmpresa, filters.empresa, setFilters]);
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  
-  const [dadosEstoqueCompleto, setDadosEstoqueCompleto] = useState<EstoqueCompleto[]>([]);
-  const [dadosVendasSku, setDadosVendasSku] = useState<AnaliseSku[]>([]);
-  
-  const [mapeamentoFornecedor, setMapeamentoFornecedor] = useState<Map<string, string>>(new Map());
-  const [configMinimos, setConfigMinimos] = useState<EstoqueMinimoConfig[]>([]);
+  // Estado local apenas para mapeamentos (são globais e não dependem de empresa)
+  const [mapeamentoFornecedor, setMapeamentoFornecedor] = useStateLocal<Map<string, string>>(new Map());
+  const [configMinimos, setConfigMinimos] = useStateLocal<EstoqueMinimoConfig[]>([]);
 
   useEffect(() => {
     const carregarMapeamentos = async () => {
