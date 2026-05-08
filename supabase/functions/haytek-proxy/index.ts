@@ -6,9 +6,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authGuard, corsHeaders } from "../_shared/authGuard.ts";
 
-// API path varies by environment:
-// - staging: /external/api/v1/haytek-public/orders/...
-// - production (dev.haytek.com.br): /orders/... (basePath = "/")
+// Hosts (descobertos no Swagger UI oficial — https://dev.haytek.com.br):
+//   staging:    https://stg-api.haytek.com.br
+//   production: https://api.haytek.com.br
+// Path é o MESMO nos dois ambientes: /external/api/v1/haytek-public/orders/...
+// (dev.haytek.com.br é apenas o site/Swagger UI estático, NÃO é a API.)
 
 const HAYTEK_ERROR_CODES = {
   TIMEOUT: "HAYTEK_TIMEOUT",
@@ -41,11 +43,11 @@ async function loadHaytekGlobalConfig(sb: ReturnType<typeof createClient>): Prom
       const ambiente = data.ambiente || "staging";
       const isProd = ambiente === "production";
       const baseUrl = isProd
-        ? (data.base_url_production || "https://dev.haytek.com.br")
+        ? (data.base_url_production || "https://api.haytek.com.br")
         : (data.base_url_staging || "https://stg-api.haytek.com.br");
       const rawKey = isProd ? data.api_key_production : data.api_key_staging;
       const apiKey = rawKey ? String(rawKey).replace(/\s+/g, "") : null;
-      const apiPath = isProd ? "" : "/external/api/v1/haytek-public";
+      const apiPath = "/external/api/v1/haytek-public";
       return { baseUrl, ambiente, apiKey, apiPath };
     }
   } catch (e) {
