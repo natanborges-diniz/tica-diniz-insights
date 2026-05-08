@@ -194,7 +194,7 @@ serve(async (req) => {
           });
         }
 
-        const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/lab`;
+        const url = `${BASE_URL}${apiPath}/orders/lab`;
         console.log(`[haytek-proxy] [${correlationId}] criar-pedido URL: ${url}`);
         console.log(`[haytek-proxy] [${correlationId}] criar-pedido BODY: ${payloadStr.substring(0, 2000)}`);
 
@@ -265,7 +265,7 @@ serve(async (req) => {
           });
         }
 
-        const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/${orderId}`;
+        const url = `${BASE_URL}${apiPath}/orders/${orderId}`;
         const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "consultar-pedido", activeApiKey);
         const data = await resp.json();
 
@@ -292,7 +292,7 @@ serve(async (req) => {
           });
         }
 
-        const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/${orderId}`;
+        const url = `${BASE_URL}${apiPath}/orders/${orderId}`;
         const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "atualizar-tracking", activeApiKey);
         const data = await resp.json();
 
