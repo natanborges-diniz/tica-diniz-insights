@@ -299,9 +299,6 @@ function CredenciaisSection({
                 </span>
               </p>
             )}
-            {fornecedor.toLowerCase() === "haytek" && (
-              <HaytekTestAuthButton />
-            )}
           </div>
         </CardContent>
       </Card>
