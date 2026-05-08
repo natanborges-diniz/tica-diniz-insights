@@ -649,8 +649,7 @@ export function useEstoqueUnificado() {
       const totalPecasEstoque = estoqueCompleto.reduce((acc, d) => acc + d.quantidadeEstoque, 0);
       const pecasDeadStock = estoqueCompleto.filter(d => d.isDeadStock).reduce((acc, d) => acc + d.quantidadeEstoque, 0);
       
-      setDadosEstoqueCompleto(estoqueCompleto);
-      setDadosVendasSku(vendasSku);
+      setDados(estoqueCompleto, vendasSku);
       
       toast({
         title: "Dados Carregados",
