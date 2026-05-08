@@ -817,6 +817,8 @@ function HaytekEmpresasSection() {
               {configs.map((c) => {
                 const row = editing[c.id];
                 if (!row) return null;
+                const changed = isChanged(c);
+                const isSaving = saving === c.id;
                 return (
                   <div key={c.id} className="flex items-center gap-3">
                     <span className="font-mono text-sm text-muted-foreground w-10">{c.cod_empresa}</span>
@@ -826,6 +828,16 @@ function HaytekEmpresasSection() {
                       onChange={(e) => handleChange(c.id, "address_id", e.target.value)}
                       placeholder="Ex: RJ106205"
                     />
+                    <Button
+                      size="sm"
+                      variant={changed ? "default" : "ghost"}
+                      className="h-8"
+                      onClick={() => handleSave(c)}
+                      disabled={!changed || isSaving}
+                    >
+                      {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                      Salvar
+                    </Button>
                     <span className="text-xs text-muted-foreground">{row.alias || ""}</span>
                   </div>
                 );
