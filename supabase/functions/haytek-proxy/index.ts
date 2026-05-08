@@ -253,7 +253,9 @@ serve(async (req) => {
           });
 
           return new Response(JSON.stringify({
-            error: respData.message || respData.rawResponse || `HTTP ${resp.status}`,
+            error: resp.status === 401
+              ? "Token Haytek de produção não reconhecido pela API. Atualize a chave em Admin > Fornecedores > Haytek."
+              : (respData.message || respData.rawResponse || `HTTP ${resp.status}`),
             code: HAYTEK_ERROR_CODES.API_ERROR,
             correlationId,
             raw: respData,
