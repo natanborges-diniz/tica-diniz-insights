@@ -179,43 +179,35 @@ export async function getEstoqueCompleto(
     };
   });
   
-  // Dedupe por cod_sku — Bridge pode retornar 1 linha por vínculo SKU↔fornecedor.
-  // Mantém o registro com data_ultima_entrada mais recente; empate → fornecedor por ordem alfabética.
-  const dedupMap = new Map<number, EstoqueCompleto>();
-  let colapsadas = 0;
-  for (const item of resultado) {
-    const existing = dedupMap.get(item.codSku);
-    if (!existing) {
-      dedupMap.set(item.codSku, item);
-      continue;
-    }
-    colapsadas++;
-    const tA = item.dataUltimaEntrada ? new Date(item.dataUltimaEntrada).getTime() : 0;
-    const tB = existing.dataUltimaEntrada ? new Date(existing.dataUltimaEntrada).getTime() : 0;
-    if (tA > tB || (tA === tB && item.fornecedor < existing.fornecedor)) {
-      dedupMap.set(item.codSku, item);
-    }
-  }
-  const deduped = Array.from(dedupMap.values());
-  if (colapsadas > 0) {
-    console.log(`[estoqueCompletoService] Dedupe por cod_sku: ${colapsadas} linhas colapsadas (de ${resultado.length} → ${deduped.length})`);
+  // Guarda de regressão: o Bridge DEVE retornar 1 linha por cod_sku (regra "vínculo mais recente").
+  // Se vier duplicata, NÃO colapsamos — apenas alertamos. Frontend confia no contrato.
+  // Ver firebird-bridge/CONTRACT.md → /estoque/completo.
+  const skuCount = new Map<number, number>();
+  resultado.forEach(r => skuCount.set(r.codSku, (skuCount.get(r.codSku) || 0) + 1));
+  const duplicados = Array.from(skuCount.entries()).filter(([, n]) => n > 1);
+  if (duplicados.length > 0) {
+    console.warn(
+      `[estoqueCompletoService] ⚠️ REGRESSÃO DE CONTRATO: Bridge retornou ${duplicados.length} cod_sku duplicado(s). ` +
+      `Esperado: 1 linha por SKU (vínculo mais recente). Exemplos:`,
+      duplicados.slice(0, 5).map(([sku, n]) => ({ cod_sku: sku, vezes: n }))
+    );
   }
 
   // Log tipos extraídos para debug
-  const tiposExtraidos = [...new Set(deduped.map(r => r.tipo))];
+  const tiposExtraidos = [...new Set(resultado.map(r => r.tipo))];
   console.log('[estoqueCompletoService] Tipos extraídos das descrições:', tiposExtraidos);
 
   // Contagem por tipo + por ação (inclui SEM CADASTRO)
   const contagemTipos: Record<string, number> = {};
   const contagemAcoes: Record<string, number> = {};
-  deduped.forEach(r => {
+  resultado.forEach(r => {
     contagemTipos[r.tipo] = (contagemTipos[r.tipo] || 0) + 1;
     contagemAcoes[r.acaoSugerida] = (contagemAcoes[r.acaoSugerida] || 0) + 1;
   });
   console.log('[estoqueCompletoService] Contagem por tipo:', contagemTipos);
   console.log('[estoqueCompletoService] Contagem por ação:', contagemAcoes);
 
-  return deduped;
+  return resultado;
 }
 
 // ============================================

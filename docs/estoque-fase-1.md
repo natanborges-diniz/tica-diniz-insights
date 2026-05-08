@@ -102,3 +102,19 @@ Loja recomendada: **DINIZ BARUERI**. Repetir em pelo menos 1 outra (ex.: RJ1062)
 - **Header da loja** agora separa "Estoque (posição agora)" de "Vendas/giro: últimos 180 dias" — eliminando a ambiguidade do "Período: 180 dias" aplicado a estoque físico.
 - **Card Dead Stock** ganhou tooltip e legenda "+180 dias sem entrada".
 - **SKU duplicado**: causa identificada — Bridge `/estoque/completo` retornava 1 linha por vínculo SKU↔fornecedor. Aplicado dedupe por `cod_sku` mantendo o vínculo com `data_ultima_entrada` mais recente.
+
+---
+
+## Atualização: Dedupe movido para o Bridge (decisão)
+
+Decisão: o dedupe SKU↔fornecedor **deixa de ser feito no frontend** e passa a ser
+responsabilidade do Bridge (`/api/v1/estoque/completo`).
+
+- **Regra acordada:** "vínculo mais recente" — uma linha por `cod_sku`, com fornecedor
+  de `MAX(data_ultima_entrada)`. `quantidade_estoque` permanece sendo o estoque do SKU
+  (já consolidado em `ESTOQUE`), **não** somar entre vínculos.
+- **Frontend:** `estoqueCompletoService.ts` removeu o dedupe e mantém apenas um
+  `console.warn` se detectar `cod_sku` duplicado (sinal de regressão no Bridge).
+- **Contrato:** documentado em `firebird-bridge/CONTRACT.md` § 3.7.b com SQL sugerido.
+- **Ação pendente (equipe Bridge / Railway):** ajustar o SQL do endpoint conforme
+  CONTRACT.md e fazer deploy. Testar em DINIZ BARUERI: SKU 1761149 deve voltar 1 vez.
