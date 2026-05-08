@@ -55,45 +55,6 @@ interface EmpresaConfig {
 }
 
 // ─────────────────────────────────────────
-// Sub-component: Haytek Test Auth Button
-// ─────────────────────────────────────────
-function HaytekTestAuthButton() {
-  const [testing, setTesting] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; message: string; status?: number } | null>(null);
-
-  const handleTest = async () => {
-    setTesting(true);
-    setResult(null);
-    const { data, error } = await supabase.functions.invoke("haytek-proxy", {
-      body: { action: "ping-auth" },
-    });
-    if (error) {
-      setResult({ ok: false, message: error.message });
-    } else {
-      setResult({ ok: !!data?.ok, status: data?.status, message: data?.message || "Sem resposta" });
-    }
-    setTesting(false);
-  };
-
-  return (
-    <div className="mt-3 space-y-2">
-      <Button size="sm" variant="outline" onClick={handleTest} disabled={testing} type="button">
-        {testing ? <Loader2 className="h-3 w-3 mr-2 animate-spin" /> : <FlaskConical className="h-3 w-3 mr-2" />}
-        Testar autenticação na Haytek
-      </Button>
-      {result && (
-        <div className={`text-xs px-3 py-2 rounded-md flex items-start gap-2 ${result.ok ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
-          {result.ok ? <CheckCircle2 className="h-3 w-3 mt-0.5 shrink-0" /> : <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />}
-          <span>
-            {result.status ? `[${result.status}] ` : ""}{result.message}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────
 // Sub-component: Seção de Credenciais
 // ─────────────────────────────────────────
 function CredenciaisSection({
@@ -337,9 +298,6 @@ function CredenciaisSection({
                   Prefixo: {config.api_key_production.slice(0, 10)}… ({config.api_key_production.length} chars)
                 </span>
               </p>
-            )}
-            {fornecedor.toLowerCase() === "haytek" && (
-              <HaytekTestAuthButton />
             )}
           </div>
         </CardContent>
