@@ -6,7 +6,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { authGuard, corsHeaders } from "../_shared/authGuard.ts";
 
-const HAYTEK_API_PATH = "/external/api/v1/haytek-public";
+// API path varies by environment:
+// - staging: /external/api/v1/haytek-public/orders/...
+// - production (dev.haytek.com.br): /orders/... (basePath = "/")
 
 const HAYTEK_ERROR_CODES = {
   TIMEOUT: "HAYTEK_TIMEOUT",
@@ -23,6 +25,7 @@ interface HaytekGlobalConfig {
   baseUrl: string;
   ambiente: string;
   apiKey: string | null;
+  apiPath: string;
 }
 
 async function loadHaytekGlobalConfig(sb: ReturnType<typeof createClient>): Promise<HaytekGlobalConfig> {
@@ -38,11 +41,12 @@ async function loadHaytekGlobalConfig(sb: ReturnType<typeof createClient>): Prom
       const ambiente = data.ambiente || "staging";
       const isProd = ambiente === "production";
       const baseUrl = isProd
-        ? (data.base_url_production || "https://api.haytek.com.br")
+        ? (data.base_url_production || "https://dev.haytek.com.br")
         : (data.base_url_staging || "https://stg-api.haytek.com.br");
       const rawKey = isProd ? data.api_key_production : data.api_key_staging;
       const apiKey = rawKey ? String(rawKey).replace(/\s+/g, "") : null;
-      return { baseUrl, ambiente, apiKey };
+      const apiPath = isProd ? "" : "/external/api/v1/haytek-public";
+      return { baseUrl, ambiente, apiKey, apiPath };
     }
   } catch (e) {
     console.warn("[haytek-proxy] Could not load global DB config:", e);
@@ -51,6 +55,7 @@ async function loadHaytekGlobalConfig(sb: ReturnType<typeof createClient>): Prom
     baseUrl: "https://stg-api.haytek.com.br",
     ambiente: "staging",
     apiKey: null,
+    apiPath: "/external/api/v1/haytek-public",
   };
 }
 
@@ -131,8 +136,9 @@ serve(async (req) => {
     const BASE_URL = globalConfig.baseUrl;
     const activeApiKey: string | null = globalConfig.apiKey;
     const activeAmbiente: string = globalConfig.ambiente;
+    const apiPath: string = globalConfig.apiPath;
 
-    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${activeAmbiente} | Base: ${BASE_URL} | User: ${user.userId}`);
+    console.log(`[haytek-proxy] [${correlationId}] Action: ${action} | Env: ${activeAmbiente} | Base: ${BASE_URL}${apiPath} | User: ${user.userId}`);
 
     if (!activeApiKey) {
       return new Response(JSON.stringify({
@@ -188,7 +194,7 @@ serve(async (req) => {
           });
         }
 
-        const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/lab`;
+        const url = `${BASE_URL}${apiPath}/orders/lab`;
         console.log(`[haytek-proxy] [${correlationId}] criar-pedido URL: ${url}`);
         console.log(`[haytek-proxy] [${correlationId}] criar-pedido BODY: ${payloadStr.substring(0, 2000)}`);
 
@@ -259,7 +265,7 @@ serve(async (req) => {
           });
         }
 
-        const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/${orderId}`;
+        const url = `${BASE_URL}${apiPath}/orders/${orderId}`;
         const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "consultar-pedido", activeApiKey);
         const data = await resp.json();
 
@@ -286,7 +292,7 @@ serve(async (req) => {
           });
         }
 
-        const url = `${BASE_URL}${HAYTEK_API_PATH}/orders/${orderId}`;
+        const url = `${BASE_URL}${apiPath}/orders/${orderId}`;
         const resp = await fetchHaytek(url, { method: "GET" }, correlationId, "atualizar-tracking", activeApiKey);
         const data = await resp.json();
 

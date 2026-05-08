@@ -1,69 +1,52 @@
 
-# Cutover Haytek → Produção (todas as lojas Diniz)
+# Ajuste do path da API Haytek para produção
 
-## Objetivo
-Ativar o ambiente de produção da API Haytek para todas as 9 lojas Diniz já configuradas, usando o token e a base URL informados no PDF, mantendo o staging preservado para rollback rápido.
+## Problema
+Em produção (`https://dev.haytek.com.br`), o swagger expõe os endpoints diretamente em `/orders/lab`, `/orders/{orderId}` etc. (basePath `/`).
 
-## Credenciais (do PDF)
-- **Base URL produção:** `https://dev.haytek.com.br`
-- **Token produção (loja master SP0156):** `eyJ...hxYI6VKq-4oIDkKvxpBucac-BrQvixbifS4VTLKM-oQ`
-- **Path da API:** mantém `/external/api/v1/haytek-public` (igual ao staging)
+Em staging (`https://stg-api.haytek.com.br`), os endpoints estão em `/external/api/v1/haytek-public/orders/lab`.
 
-> Observação: o token é único e atende todas as lojas (mesmo padrão do staging). O `storeId` por loja já está mapeado em `haytek_empresa_config`.
-
-## Etapas
-
-### 1. Atualizar configuração no banco
-Atualizar a linha de `fornecedor_configuracao` onde `fornecedor='HAYTEK'`:
-- `base_url_production = 'https://dev.haytek.com.br'`
-- `api_key_production = '<token do PDF>'`
-- `ambiente = 'production'` (vira o ambiente ativo)
-
-Mantém `api_key_staging` e `base_url_staging` intactos para rollback.
-
-### 2. Validar via Edge Function
-Após salvar, disparar uma chamada de teste no `haytek-proxy` (action `consultar-pedido` com um orderId conhecido, ou um `criar-pedido` mínimo no SP0156) e conferir nos logs:
-- `Env: production`
-- `Base: https://dev.haytek.com.br`
-- HTTP 2xx da Haytek
-
-### 3. UI Admin > Fornecedores
-Confirmar visualmente em `/admin/fornecedores` que:
-- Badge mostra "Produção"
-- Token de produção aparece mascarado
-- Botão de "Testar conexão" (se existente) responde OK
-
-### 4. Smoke test operacional
-Pedido real de teste em SP0156 (loja 1) via `/pedido-haytek/:codOs`, validar:
-- Pedido criado, `numero_pedido` retornado
-- Aparece em `pedidos_fornecedor` com `hoya_environment = 'production'`
-- Tracking funciona (`atualizar-tracking`)
-
-### 5. Comunicação
-Após confirmação do smoke test, as outras 8 lojas Diniz já passam a operar em produção automaticamente (mesma config global). Nenhum deploy adicional necessário.
-
-## Rollback
-Caso algo dê errado: reverter `ambiente = 'staging'` na mesma linha de `fornecedor_configuracao` (1 update SQL). Token e URL de staging continuam preservados.
-
-## Sem mudanças de código
-Esta operação é **somente configuração**. O `haytek-proxy/index.ts` já lê `ambiente`, `base_url_production` e `api_key_production` dinamicamente do banco — não precisa de redeploy nem alteração de código.
-
-## Detalhes técnicos
-
-```text
-fornecedor_configuracao (HAYTEK)
-├── ambiente: staging        → production
-├── base_url_staging:        https://stg-api.haytek.com.br   (preservada)
-├── base_url_production:     NULL                            → https://dev.haytek.com.br
-├── api_key_staging:         <preservado>
-└── api_key_production:      NULL                            → <token PDF>
+Hoje o `haytek-proxy/index.ts` tem o path **hardcoded**:
+```ts
+const HAYTEK_API_PATH = "/external/api/v1/haytek-public";
 ```
 
-Resolução em runtime (`loadHaytekGlobalConfig`):
+Isso faz com que em produção a chamada vá para `https://dev.haytek.com.br/external/api/v1/haytek-public/orders/lab`, que não existe → cai num bucket S3 default → retorna XML `<AuthenticationRequired>`.
+
+## Solução
+Resolver o `apiPath` por ambiente, vindo da função `loadHaytekGlobalConfig`:
+
 ```text
-isProd = (ambiente === 'production')
-baseUrl = isProd ? base_url_production : base_url_staging
-apiKey  = isProd ? api_key_production  : api_key_staging
+ambiente = staging    → apiPath = "/external/api/v1/haytek-public"
+ambiente = production → apiPath = ""   (endpoints diretos: /orders/lab)
 ```
 
-Como o token será gravado via SQL direto (DB column existente), uso o tool `secrets--update_secret` **não é necessário** — manteremos o padrão atual da integração.
+## Mudanças
+
+### 1. `supabase/functions/haytek-proxy/index.ts`
+- Remover constante global `HAYTEK_API_PATH`.
+- Em `loadHaytekGlobalConfig`, devolver também `apiPath` calculado a partir de `ambiente`.
+- Substituir os 3 usos de `${BASE_URL}${HAYTEK_API_PATH}/...` por `${BASE_URL}${apiPath}/...` nas actions:
+  - `criar-pedido` → `${BASE_URL}${apiPath}/orders/lab`
+  - `consultar-pedido` → `${BASE_URL}${apiPath}/orders/${orderId}`
+  - `atualizar-tracking` → `${BASE_URL}${apiPath}/orders/${orderId}`
+- Aceitar `201` (Created) como sucesso explicitamente em `criar-pedido` (hoje funciona porque o filtro é `status >= 400`, mas deixamos comentado).
+
+### 2. Sem mudanças de schema
+A coluna `ambiente` em `fornecedor_configuracao` já existe e já está com `production`. Não precisa migration.
+
+### 3. Sem mudanças no frontend
+O `PedidoHaytekPage`/`HaytekTrackingPage` chamam o proxy via `supabase.functions.invoke` — não tocam URL.
+
+## Validação após deploy
+1. Conferir nos logs do `haytek-proxy`:
+   ```
+   Env: production | Base: https://dev.haytek.com.br
+   criar-pedido URL: https://dev.haytek.com.br/orders/lab
+   ```
+2. Smoke test: criar pedido em SP0156, validar HTTP 201 + `orderId` retornado.
+3. Rollback: reverter `ambiente = 'staging'` (1 update na linha de `fornecedor_configuracao`).
+
+## Fora de escopo (futuro)
+- Adicionar action `enviar-tracing-remoto` para `POST /orders/lab/remote-tracing` (multipart/form-data) — endpoint novo do swagger de produção.
+- Validar enums `model.Frame.code` (`3PC|ARF|FIN|FIA`) e `model.CustomizationInput.workDistance` (`1.3|2|4`) no formulário Haytek.
