@@ -322,6 +322,70 @@ Usado pela sincronização de cache (`sync-agregados-diarios`).
 
 ---
 
+### 3.7.b Estoque — Inventário Completo
+
+#### `GET /api/v1/estoque/completo`
+
+Retorna o **inventário físico atual** da loja (todos SKUs com `quantidade_estoque > 0`),
+independente de vendas. Usado por "Visão Estoque" e "Plano de Compra" no frontend.
+
+**Request:**
+
+| Param | Tipo | Obrigatório | Descrição |
+|-------|------|:-----------:|-----------|
+| `empresa` | number | ✅ | Código específico (não aceita ALL) |
+
+**Regra de unicidade (OBRIGATÓRIA):**
+- O endpoint **DEVE retornar 1 (uma) linha por `cod_sku`**.
+- Quando o mesmo SKU tem vínculos com fornecedores diferentes em `PRODUTO_FORNECEDOR`
+  (ou equivalente), aplicar a regra **"vínculo mais recente"**:
+  - Selecionar o registro com `MAX(data_ultima_entrada)` por `cod_sku`.
+  - Empate em data → ordem alfabética de `fornecedor_nome`.
+  - `quantidade_estoque` é o estoque do SKU (já consolidado em `ESTOQUE` por `cod_produto`),
+    **NÃO** somar entre vínculos de fornecedor.
+- Implementação sugerida (Firebird):
+  ```sql
+  WITH vinculo_recente AS (
+    SELECT
+      pf.COD_PRODUTO,
+      FIRST_VALUE(pf.COD_FORNECEDOR) OVER (
+        PARTITION BY pf.COD_PRODUTO
+        ORDER BY pf.DATA_ULTIMA_ENTRADA DESC NULLS LAST, p.NOME ASC
+      ) AS COD_FORNECEDOR_PREF
+    FROM PRODUTO_FORNECEDOR pf
+    JOIN PESSOA p ON p.COD_PESSOA = pf.COD_FORNECEDOR
+  )
+  SELECT ...
+  FROM ESTOQUE e
+  JOIN vinculo_recente vr ON vr.COD_PRODUTO = e.COD_PRODUTO
+  JOIN PESSOA forn ON forn.COD_PESSOA = vr.COD_FORNECEDOR_PREF
+  ...
+  ```
+
+**Response (200) — `data[]` shape (snake_case):**
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| `cod_sku` | number | Identificador único do SKU (chave de unicidade) |
+| `codigo_barras` | string | EAN |
+| `descricao` | string | Descrição do item |
+| `fornecedor_nome` | string | Fornecedor da entrada mais recente |
+| `grife` | string | Marca |
+| `tipo` | string \| null | Categoria; se nulo o frontend deduz da descrição |
+| `quantidade_estoque` | number | Estoque físico atual do SKU |
+| `preco_custo` | number | Último custo de entrada |
+| `preco_venda` | number | Preço de venda atual |
+| `data_ultima_entrada` | date \| null | |
+| `data_ultima_venda` | date \| null | |
+| `dias_estoque` | number \| null | Dias desde a última entrada |
+| `dias_sem_venda` | number \| null | |
+| `acao_sugerida` | string \| null | Se nulo, frontend deriva |
+
+**Validação client-side:** o frontend (`estoqueCompletoService.ts`) emite `console.warn`
+quando detecta `cod_sku` duplicado. Tratar como bug do Bridge.
+
+---
+
 ### 3.8 Financeiro — Parcelas
 
 #### `GET /api/v1/financeiro/parcelas`
