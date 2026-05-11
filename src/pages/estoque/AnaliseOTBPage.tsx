@@ -24,9 +24,34 @@ import {
 // KPIs
 // ============================================
 
-function KPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueUnificado>['metricas'] }) {
+function KPICards({
+  metricas,
+  comprar,
+}: {
+  metricas: ReturnType<typeof useEstoqueUnificado>['metricas'];
+  comprar: { pecas: number; valor: number; skus: number; urgentes: number };
+}) {
+  const coberturaMedia = useMemo(() => {
+    const vendaDiariaTotal = metricas.totalVendido6mPecas / Math.max(1, metricas.diasPeriodo);
+    if (vendaDiariaTotal <= 0) return 0;
+    return Math.round(metricas.totalPecas / vendaDiariaTotal);
+  }, [metricas]);
+
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <Card>
+        <CardContent className="pt-5 pb-4">
+          <div className="flex items-center gap-2 mb-1">
+            <ShoppingCart className="h-4 w-4 text-primary" />
+            <span className="text-sm text-muted-foreground">A Comprar Agora</span>
+          </div>
+          <div className="text-2xl font-bold text-primary">{comprar.pecas.toLocaleString('pt-BR')}</div>
+          <p className="text-xs text-muted-foreground">
+            {comprar.skus} SKUs • {comprar.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
+            {comprar.urgentes > 0 && <span className="block text-destructive font-medium">{comprar.urgentes} urgentes</span>}
+          </p>
+        </CardContent>
+      </Card>
       <Card>
         <CardContent className="pt-5 pb-4">
           <div className="flex items-center gap-2 mb-1">
@@ -50,11 +75,11 @@ function KPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueUnificad
       <Card>
         <CardContent className="pt-5 pb-4">
           <div className="flex items-center gap-2 mb-1">
-            <ShoppingCart className="h-4 w-4 text-primary" />
-            <span className="text-sm text-muted-foreground">Gap de Compra</span>
+            <BoxIcon className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Cobertura Média</span>
           </div>
-          <div className="text-2xl font-bold text-primary">{metricas.totalOtb.toLocaleString('pt-BR')}</div>
-          <p className="text-xs text-muted-foreground">{metricas.totalOtbValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+          <div className="text-2xl font-bold">{coberturaMedia > 0 ? `${coberturaMedia}d` : '—'}</div>
+          <p className="text-xs text-muted-foreground">no ritmo atual de venda</p>
         </CardContent>
       </Card>
       <Card>
@@ -63,7 +88,7 @@ function KPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueUnificad
             <DollarSign className="h-4 w-4 text-destructive" />
             <span className="text-sm text-muted-foreground">Capital em Risco</span>
           </div>
-          <div className="text-2xl font-bold text-destructive">{metricas.deadStockValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
+          <div className="text-2xl font-bold text-destructive">{metricas.deadStockValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}</div>
           <p className="text-xs text-muted-foreground">{metricas.deadStockPecas} peças doentes ({metricas.deadStockPercentual.toFixed(1)}%)</p>
         </CardContent>
       </Card>
