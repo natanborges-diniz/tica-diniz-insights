@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { OtbFornecedorMarcaConfig } from "@/components/otb/OtbFornecedorMarcaConfig";
+import { PlanoCompraFiltros } from "@/components/otb/PlanoCompraFiltros";
+import { ListaCompraTable } from "@/components/otb/ListaCompraTable";
 import { EstoqueLoadStatus } from "@/components/estoque/EstoqueLoadStatus";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { formatters, ExportColumn } from "@/utils/exportData";
