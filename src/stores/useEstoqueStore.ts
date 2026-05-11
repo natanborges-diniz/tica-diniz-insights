@@ -42,10 +42,12 @@ interface EstoqueState {
 const defaultFilters: EstoqueFilters = {
   empresa: null,
   categoria: "TODOS",
+  subcategoria: "TODAS",
   curvaABC: null,
   fornecedor: "TODOS",
   marca: "TODAS",
   acao: "TODAS",
+  decisaoMarca: "TODAS",
   busca: "",
 };
 
