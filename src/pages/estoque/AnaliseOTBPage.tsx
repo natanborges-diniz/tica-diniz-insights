@@ -397,13 +397,32 @@ export default function AnaliseOTBPage() {
     marcasSemFornecedor,
     mixIdealCategoria,
     resumoPorMarca,
+    listaCompraFlat,
+    listaMarcas,
+    listaFornecedores,
     carregarDados,
   } = useEstoqueUnificado();
 
-  const empresaSelecionada = empresas.find(e => 
-    filters.empresa !== null && 
+  const empresaSelecionada = empresas.find(e =>
+    filters.empresa !== null &&
     (e.codEmpresa === filters.empresa || String(e.codEmpresa) === String(filters.empresa))
   );
+
+  // Contagens por subcategoria (totais, antes do filtro de subcategoria)
+  const contSub = useMemo(() => ({
+    rx: itensProcessados.filter(i => i.subcategoria === 'AR_RX').length,
+    solar: itensProcessados.filter(i => i.subcategoria === 'AR_SOLAR').length,
+    lentes: itensProcessados.filter(i => i.subcategoria === 'LENTES').length,
+    acessorios: itensProcessados.filter(i => i.subcategoria === 'ACESSORIOS').length,
+    outros: itensProcessados.filter(i => i.subcategoria === 'OUTROS').length,
+  }), [itensProcessados]);
+
+  const comprarKpi = useMemo(() => ({
+    pecas: listaCompraFlat.reduce((a, i) => a + i.qtdAComprar, 0),
+    valor: listaCompraFlat.reduce((a, i) => a + i.valorCompra, 0),
+    urgentes: listaCompraFlat.filter(i => i.prioridade === 'URGENTE').length,
+    skus: listaCompraFlat.length,
+  }), [listaCompraFlat]);
 
   return (
     <div className="space-y-6">
@@ -429,10 +448,11 @@ export default function AnaliseOTBPage() {
               <label className="text-sm font-medium mb-2 block">Empresa</label>
               <Select
                 value={filters.empresa !== null ? String(filters.empresa) : ""}
-                onValueChange={(value) => setFilters(prev => ({ 
-                  ...prev, 
+                onValueChange={(value) => setFilters(prev => ({
+                  ...prev,
                   empresa: Number(value),
                   fornecedor: 'TODOS', marca: 'TODAS', acao: 'TODAS', categoria: 'TODOS', curvaABC: null, busca: '',
+                  subcategoria: 'AR_RX', decisaoMarca: 'TODAS',
                 }))}
                 disabled={loadingEmpresas}
               >
@@ -471,8 +491,8 @@ export default function AnaliseOTBPage() {
       {/* Loading */}
       {loading && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24" />)}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-24" />)}
           </div>
           <Skeleton className="h-[200px]" />
           <Skeleton className="h-[400px]" />
@@ -495,13 +515,30 @@ export default function AnaliseOTBPage() {
                 <div className="text-xs mt-1">
                   Estoque: {metricas.totalPecas.toLocaleString('pt-BR')} peças • {metricas.totalSkusComEstoque.toLocaleString('pt-BR')} SKUs <span className="text-muted-foreground">(posição agora)</span>
                 </div>
-                <div className="text-xs">Vendas / giro: últimos 180 dias</div>
+                <div className="text-xs">
+                  Vendas / giro: últimos 180 dias
+                  {filters.subcategoria !== 'TODAS' && (
+                    <span> • Filtro: {filters.subcategoria === 'AR_RX' ? 'Armações RX' : filters.subcategoria === 'AR_SOLAR' ? 'Solar / OC' : filters.subcategoria}</span>
+                  )}
+                </div>
               </AlertDescription>
             </Alert>
           )}
 
+          {/* Filtros do Plano de Compra */}
+          <PlanoCompraFiltros
+            filters={filters}
+            setFilters={setFilters}
+            listaMarcas={listaMarcas}
+            listaFornecedores={listaFornecedores}
+            contagens={contSub}
+          />
+
           {/* KPIs */}
-          <KPICards metricas={metricas} />
+          <KPICards metricas={metricas} comprar={comprarKpi} />
+
+          {/* Lista de Compra Executável */}
+          <ListaCompraTable itens={listaCompraFlat} />
 
           {/* Mix Ideal por Subcategoria */}
           <MixIdealSection mix={mixIdealCategoria} />
