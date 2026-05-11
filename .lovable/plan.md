@@ -1,81 +1,114 @@
-## Objetivo
+## Contexto
 
-Responder às 3 dúvidas levantadas e entregar um checklist de QA para validar que itens `SEM CADASTRO` não poluem mais os KPIs de liquidação. Inclui correções pequenas de UI/dados onde a ambiguidade vem do código.
+Hoje as 3 páginas de estoque (Visão, Plano de Compra, O que Fazer) já compartilham dados via store global e o Bridge `/estoque/completo` está rápido (≤14s). Falta agora **transformar o Plano de Compra em ferramenta de execução** — saber o que comprar, em que quantidade, focado em armações (RX e Solar) — e **deixar Visão Estoque acionável** (o que fazer com cada peça).
+
+Subcategorias `AR_RX` e `AR_SOLAR` já existem em `categorizarProduto.ts` e estão sendo calculadas em `useEstoqueUnificado.ts` (linhas 261, 309, 431-442 do mix ideal), mas **não são expostas como filtro nas páginas**. Aproveitamos.
 
 ---
 
-## 1) Respostas às dúvidas
+## 1) Plano de Compra — virar lista executável "O que comprar agora"
 
-### a) "DINIZ BARUERI • 1.388 peças em estoque • 1174 SKUs • Período: 180 dias" — ambíguo
-Concordo. O endpoint `/estoque/completo` retorna **inventário físico atual** (snapshot agora). Os 180 dias só se aplicam às métricas de **vendas/giro** que vêm de `/vendas/analise-sku` (mesclado por `cod_sku`).
+### 1.1 Filtros novos (foco do dia-a-dia em armações)
+Adicionar barra de filtros no topo da página `AnaliseOTBPage`, persistida no `useEstoqueStore`:
 
-**Correção proposta (UI only, em `VisaoEstoquePage.tsx` e `AnaliseOTBPage.tsx`):**
-Trocar a linha única atual por duas informações separadas:
+- **Categoria/Subcategoria** (botões): Todas · Armações RX · Solar/OC · Lentes · Acessórios · Outros
+  - default: **Armações RX** quando carrega (foco do negócio)
+- **Marca** (select com busca) — usa `listaMarcas` já existente
+- **Fornecedor** (select) — usa `listaFornecedores` já existente
+- **Curva ABC** (chips A · B · C · Todas)
+- **Decisão da marca** (chips Repor · Renovar · Descontinuar · Todas) — filtra `resumoPorMarca`
+
+KPIs e Mix Ideal recalculam respeitando esses filtros (já que o hook expõe `itensFiltrados`).
+
+### 1.2 Nova seção "Lista de Compra" (acima do Relatório por Marca)
+Tabela única com **uma linha por SKU a comprar**, ordenada por prioridade:
+
+| Coluna | Origem |
+|---|---|
+| Cód. Barras | `codigoBarra` |
+| Descrição | `descricao` |
+| Marca / Fornecedor | já existe |
+| Subcategoria | AR_RX / AR_SOLAR / etc |
+| Vendas 6m | `qtdVendidos` |
+| Estoque atual | `estoqueAtual` |
+| Velocidade (pç/dia) | `vendaDiaria` |
+| Cobertura atual (dias) | `estoqueAtual / vendaDiaria` |
+| **Comprar (qtd)** | `qtdAComprar` (já calculado em `skusARepor`) |
+| Curva | `curvaABC` |
+| Prioridade | URGENTE se cobertura < 15d, ALTA < 30d, MÉDIA < 60d |
+
+- **Toolbar:** total de peças a comprar, valor estimado, exportar CSV/PDF.
+- **Multi-seleção:** checkbox por linha → "Exportar pedido selecionado" (CSV pronto para enviar a fornecedor).
+- **Agrupamento opcional:** toggle "Agrupar por fornecedor" — vira sub-tabelas com subtotal por fornecedor (facilita fechar pedido).
+
+### 1.3 KPIs ajustados
+Trocar o KPI genérico "Capital em Risco" por **dois cards**:
+- **A comprar agora** — peças + valor estimado (custo)
+- **Capital em risco** — dead stock valor (mantém)
+
+Adicionar:
+- **Cobertura média da loja** (dias) — `estoque total / venda diária total`
+- **Marcas com gap** — quantas marcas têm `skusARepor.length > 0`
+
+### 1.4 Header com contexto comercial
+Header em duas linhas (já planejado em `.lovable/plan.md`, ainda pendente):
 ```
 DINIZ BARUERI
 Estoque: 1.388 peças • 1.174 SKUs (posição agora)
-Vendas: últimos 180 dias
+Vendas: últimos 180 dias • Filtro: Armações RX
 ```
-Sem mudar nenhuma lógica de cálculo.
-
-### b) Mesmo SKU repetido (1761149 aparecendo duas vezes com fornecedores diferentes)
-Origem confirmada: o Firebird Bridge `/estoque/completo` está retornando **uma linha por vínculo SKU↔fornecedor** (no print: `AVODAH ACESSORIO EIRELI` e `A-ACESSORIOS OPTICAL LTDA` para o mesmo `cod_sku=1761149`). Hoje o frontend não deduplica — cada linha vira uma row independente, o que **infla peças, valor e contagem de "LIQUIDA 30%"**.
-
-**Correção proposta (`estoqueCompletoService.ts`):** deduplicar por `cod_sku` mantendo o fornecedor "preferencial" (regra: o que tem `data_ultima_entrada` mais recente; empate → ordem alfabética). Logar quantas linhas foram colapsadas para auditoria.
-
-Impacto esperado: 1.388 peças continua igual (já está somando estoque do SKU, não do vínculo, no Bridge — confirmar) **ou** cai para o número correto após dedupe. O QA abaixo cobre os dois cenários.
-
-### c) O que é "Dead Stock"?
-Definido em `estoqueCompletoService.ts` linha 178: **`isDeadStock = diasEmEstoque > 180`** (mais de 180 dias desde a última entrada na loja, sem giro). É independente da `acaoSugerida`. O card "Dead Stock" mostra peças e % do estoque com `diasEmEstoque > 180`.
-
-**Correção proposta (UI only):** adicionar tooltip no card explicando "Peças paradas há mais de 180 dias desde a última entrada".
 
 ---
 
-## 2) Checklist de QA — `SEM CADASTRO` não polui KPIs de liquidação
+## 2) Visão Estoque — "o que fazer com este estoque"
 
-Loja recomendada: **DINIZ BARUERI**. Repetir em pelo menos 1 outra loja (ex.: RJ1062) para garantir.
+A página hoje lista SKUs com `acaoSugerida`, mas não diz **o que fazer agora**. Adições:
 
-### Pré-condição
-- [ ] Limpar cache do estoque (botão "Carregar Dados" em Visão Estoque)
-- [ ] Confirmar que `acaoSugerida = 'SEM CADASTRO'` está sendo gerado pelo backend ou pelo fallback do `estoqueCompletoService.ts` (linhas 117–127)
+### 2.1 Painel "Ações Recomendadas" (novo bloco entre KPIs e tabela)
+4 cards clicáveis (filtram a tabela ao clicar):
 
-### KPIs (Visão Estoque → card "Peças p/ Liquidar")
-- [ ] Número do card = soma de `estoqueAtual` apenas de itens com `acaoSugerida` contendo `LIQUIDA` (`LIQUIDA 20%`, `LIQUIDA 30%`, `LIQUIDA 50%`)
-- [ ] Itens com `acaoSugerida = 'SEM CADASTRO'` **NÃO** entram nesse total
-- [ ] Aplicar filtro Categoria=Armações → KPI recalcula e ainda exclui SEM CADASTRO
+| Card | Critério | Ação |
+|---|---|---|
+| **Liquidar** | `acaoSugerida` ∈ LIQUIDA 20/30/50% | Exportar lista p/ marketing precificar |
+| **Transferir entre lojas** | dead stock + alta cobertura, mas vende em outra loja (placeholder, requer dado multi-loja na fase 2) | Marcar como "estudar" |
+| **Devolver ao fornecedor** | dead stock > 365d + sem venda 6m | Exportar pedido de devolução |
+| **Sem cadastro** | `acaoSugerida = SEM CADASTRO` | Exportar p/ corrigir no ERP |
 
-### Tabela detalhada (Visão Estoque)
-- [ ] Filtrar coluna "Ação" por `SEM CADASTRO` retorna lista esperada
-- [ ] Filtrar por `LIQUIDA 50%` não traz nenhum item com `precoCusto = 0` E `diasEmEstoque = 0` E `qtdVendidos = 0`
-- [ ] Exportar CSV → abrir e confirmar que nenhuma linha `LIQUIDA *` tem os 3 zeros simultâneos
+### 2.2 Coluna "Próxima ação" na tabela
+Já existe `acaoSugerida`. Adicionar tooltip explicando o porquê de cada classificação (ex.: "LIQUIDA 30% — 220 dias parado, curva C, 0 vendas").
 
-### Plano de Compra (`AnaliseOTBPage`)
-- [ ] Card "Capital em Risco" (dead stock valor) exclui itens SEM CADASTRO
-- [ ] Bloco "Estoque doente" por marca não mostra itens SEM CADASTRO
-- [ ] Mix Ideal por subcategoria continua somando os SEM CADASTRO no estoque (eles existem fisicamente) mas não como ação de liquidação
-
-### Persistência entre páginas
-- [ ] Carregar Barueri em Visão Estoque → ir para Plano de Compra → mesma loja, mesmos números, sem reload
-- [ ] Indicador `EstoqueLoadStatus` mostra "carregado há Xmin" nas duas páginas
-
-### Logs / Backend
-- [ ] Console: `[estoqueCompletoService] Contagem por tipo` deve listar quantos SEM CADASTRO existem
-- [ ] Documentar em `docs/estoque-fase-1.md` quantos SKUs Barueri caíram em SEM CADASTRO e listar 5 exemplos para investigação no ERP
-
-### Regressão
-- [ ] Total em Estoque (peças e SKUs) **não** mudou após o patch defensivo
-- [ ] Dead Stock continua usando `diasEmEstoque > 180` (independente da ação)
+### 2.3 Botão "Ir para Plano de Compra com este filtro"
+Quando o usuário filtra por marca/categoria em Visão Estoque, oferecer um botão que leva ao Plano de Compra **mantendo os filtros aplicados** (já dá pra fazer com store global).
 
 ---
 
-## 3) Mudanças de código propostas (pequenas, UI + 1 service)
+## 3) Mudanças técnicas
 
-| Arquivo | Mudança |
+| Arquivo | O que muda |
 |---|---|
-| `src/pages/estoque/VisaoEstoquePage.tsx` | Header em duas linhas: "Estoque (posição agora)" vs "Vendas (180d)"; tooltip no card Dead Stock |
-| `src/pages/estoque/AnaliseOTBPage.tsx` | Mesmo header reescrito |
-| `src/services/estoqueCompletoService.ts` | Dedupe por `cod_sku` mantendo fornecedor preferencial + log de colapsos |
-| `docs/estoque-fase-1.md` | Anexar este checklist + resultado do QA em Barueri |
+| `src/stores/useEstoqueStore.ts` | Adicionar `subcategoria: 'TODAS' \| 'AR_RX' \| 'AR_SOLAR' \| 'LENTES' \| 'ACESSORIOS' \| 'OUTROS'` e `decisaoMarca: 'TODAS' \| 'REPOR' \| 'RENOVAR' \| 'DESCONTINUAR'` aos filtros |
+| `src/hooks/useEstoqueUnificado.ts` | Aplicar filtro de subcategoria em `itensFiltrados`; expor `listaCompraFlat` (achatamento de `resumoPorMarca[].skusARepor` com prioridade calculada) |
+| `src/pages/estoque/AnaliseOTBPage.tsx` | Nova barra de filtros; nova seção "Lista de Compra"; KPIs ajustados; header em duas linhas |
+| `src/components/otb/OtbFilters.tsx` | Reaproveitar/estender — adicionar chips RX/Solar |
+| `src/pages/estoque/VisaoEstoquePage.tsx` | Painel "Ações Recomendadas" + tooltip explicativo + botão "Ir para Plano de Compra" |
 
-Sem mudanças de schema, sem mudanças no Bridge, sem mexer em lógica de classificação além do que já foi feito.
+Sem mudanças no Bridge, sem mudanças de schema, sem nova edge function. Só camada de apresentação + um cálculo a mais de prioridade no hook.
+
+---
+
+## 4) Fora de escopo (Fase 2 separada)
+
+- Transferência entre lojas (precisa de dado consolidado multi-loja)
+- Estoque mínimo configurável por marca/loja na UI (hoje vem do `estoque_minimo_loja` que está vazio)
+- Reposição automática integrada com pedido Hoya/Zeiss/Haytek
+- Mix ideal customizável manualmente (hoje é só "vendas 6m define o mix")
+
+---
+
+## 5) Pergunta aberta antes de implementar
+
+**Prioridade de comprar (cobertura mínima):** hoje o cálculo de `qtdAComprar` no hook usa um alvo padrão. Confirmar com você:
+- **Armações RX:** alvo de quantos dias de cobertura? (sugestão: 60 dias)
+- **Solar/OC:** mesmo número ou menor por sazonalidade? (sugestão: 45 dias fora do verão)
+
+Se você não quiser configurar agora, mantemos o default que já está no hook e ajustamos depois.

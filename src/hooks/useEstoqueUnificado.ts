@@ -68,6 +68,14 @@ export interface SkuARepor {
   estoqueAtual: number;
   qtdAComprar: number;
   curvaABC: 'A' | 'B' | 'C';
+  marca: string;
+  fornecedor: string;
+  subcategoria: SubcategoriaProduto;
+  vendaDiaria: number;
+  coberturaDias: number;
+  precoCusto: number;
+  valorCompra: number;
+  prioridade: 'URGENTE' | 'ALTA' | 'MEDIA' | 'BAIXA';
 }
 
 // Item doente de uma marca
@@ -345,6 +353,9 @@ export function useEstoqueUnificado() {
   const itensFiltrados = useMemo(() => {
     let resultado = itensProcessados;
     if (filters.categoria !== 'TODOS') resultado = resultado.filter(item => item.categoria === filters.categoria);
+    if (filters.subcategoria && filters.subcategoria !== 'TODAS') {
+      resultado = resultado.filter(item => item.subcategoria === filters.subcategoria);
+    }
     if (filters.curvaABC) resultado = resultado.filter(item => item.curvaABC === filters.curvaABC);
     if (filters.fornecedor !== 'TODOS') resultado = resultado.filter(item => item.fornecedor === filters.fornecedor);
     if (filters.marca !== 'TODAS') resultado = resultado.filter(item => item.marca === filters.marca);
@@ -476,10 +487,10 @@ export function useEstoqueUnificado() {
   };
 
   const resumoPorMarca = useMemo((): ResumoMarca[] => {
-    if (itensProcessados.length === 0) return [];
+    if (itensFiltrados.length === 0) return [];
 
     const porMarca = new Map<string, ItemEstoque[]>();
-    itensProcessados.forEach(item => {
+    itensFiltrados.forEach(item => {
       const key = item.marca || 'SEM MARCA';
       if (!porMarca.has(key)) porMarca.set(key, []);
       porMarca.get(key)!.push(item);
@@ -519,6 +530,13 @@ export function useEstoqueUnificado() {
           // Qtd a comprar: projeção de vendas para ~90 dias menos estoque atual
           const projecao90d = Math.ceil(s.vendaDiaria * 90);
           const qtdAComprar = Math.max(0, projecao90d - s.estoqueAtual);
+          const coberturaDias = s.vendaDiaria > 0 ? Math.round(s.estoqueAtual / s.vendaDiaria) : 999;
+          const valorCompra = qtdAComprar * s.precoCusto;
+          let prioridade: SkuARepor['prioridade'];
+          if (coberturaDias < 15) prioridade = 'URGENTE';
+          else if (coberturaDias < 30) prioridade = 'ALTA';
+          else if (coberturaDias < 60) prioridade = 'MEDIA';
+          else prioridade = 'BAIXA';
           return {
             codSku: s.codSku,
             codigoBarra: s.codigoBarra,
@@ -527,6 +545,14 @@ export function useEstoqueUnificado() {
             estoqueAtual: s.estoqueAtual,
             qtdAComprar,
             curvaABC: s.curvaABC,
+            marca: s.marca,
+            fornecedor: s.fornecedor,
+            subcategoria: s.subcategoria,
+            vendaDiaria: s.vendaDiaria,
+            coberturaDias,
+            precoCusto: s.precoCusto,
+            valorCompra,
+            prioridade,
           };
         })
         .filter(s => s.qtdAComprar > 0)
@@ -571,7 +597,22 @@ export function useEstoqueUnificado() {
       const ordem: Record<DecisaoMarca, number> = { REPOR_REFERENCIA: 0, RENOVAR_COLECAO: 1, AVALIAR_DESCONTINUACAO: 2 };
       return ordem[a.decisao] - ordem[b.decisao] || b.totalVendido6m - a.totalVendido6m;
     });
-  }, [itensProcessados]);
+  }, [itensFiltrados]);
+
+  // Lista achatada de SKUs a comprar — ordenada por prioridade
+  const listaCompraFlat = useMemo((): SkuARepor[] => {
+    const ordemPrio: Record<SkuARepor['prioridade'], number> = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAIXA: 3 };
+    const flat: SkuARepor[] = [];
+    resumoPorMarca.forEach(m => {
+      if (filters.decisaoMarca && filters.decisaoMarca !== 'TODAS' && m.decisao !== filters.decisaoMarca) return;
+      flat.push(...m.skusARepor);
+    });
+    return flat.sort((a, b) => {
+      const pa = ordemPrio[a.prioridade] - ordemPrio[b.prioridade];
+      if (pa !== 0) return pa;
+      return b.qtdVendidos - a.qtdVendidos;
+    });
+  }, [resumoPorMarca, filters.decisaoMarca]);
 
   // Estoque doente global (mantido para compatibilidade com Visão Estoque)
   const estoqueDoenteAgrupado = useMemo((): GrupoEstoqueDoente[] => {
@@ -675,7 +716,7 @@ export function useEstoqueUnificado() {
     metricas, contagemPorCategoria, diasPeriodo: DIAS_PERIODO,
     listaFornecedores, listaMarcas, listaAcoes, marcasSemFornecedor,
     mixIdealCategoria, mixIdealMarca,
-    resumoPorMarca, estoqueDoenteAgrupado,
+    resumoPorMarca, estoqueDoenteAgrupado, listaCompraFlat,
     carregarDados,
     carregadoEm, empresaCarregada,
   };

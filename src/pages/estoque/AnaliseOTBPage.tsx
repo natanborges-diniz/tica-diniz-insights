@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { OtbFornecedorMarcaConfig } from "@/components/otb/OtbFornecedorMarcaConfig";
+import { PlanoCompraFiltros } from "@/components/otb/PlanoCompraFiltros";
+import { ListaCompraTable } from "@/components/otb/ListaCompraTable";
 import { EstoqueLoadStatus } from "@/components/estoque/EstoqueLoadStatus";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { formatters, ExportColumn } from "@/utils/exportData";
@@ -24,9 +26,34 @@ import {
 // KPIs
 // ============================================
 
-function KPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueUnificado>['metricas'] }) {
+function KPICards({
+  metricas,
+  comprar,
+}: {
+  metricas: ReturnType<typeof useEstoqueUnificado>['metricas'];
+  comprar: { pecas: number; valor: number; skus: number; urgentes: number };
+}) {
+  const coberturaMedia = useMemo(() => {
+    const vendaDiariaTotal = metricas.totalVendido6mPecas / Math.max(1, metricas.diasPeriodo);
+    if (vendaDiariaTotal <= 0) return 0;
+    return Math.round(metricas.totalPecas / vendaDiariaTotal);
+  }, [metricas]);
+
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <Card>
+        <CardContent className="pt-5 pb-4">
+          <div className="flex items-center gap-2 mb-1">
+            <ShoppingCart className="h-4 w-4 text-primary" />
+            <span className="text-sm text-muted-foreground">A Comprar Agora</span>
+          </div>
+          <div className="text-2xl font-bold text-primary">{comprar.pecas.toLocaleString('pt-BR')}</div>
+          <p className="text-xs text-muted-foreground">
+            {comprar.skus} SKUs • {comprar.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
+            {comprar.urgentes > 0 && <span className="block text-destructive font-medium">{comprar.urgentes} urgentes</span>}
+          </p>
+        </CardContent>
+      </Card>
       <Card>
         <CardContent className="pt-5 pb-4">
           <div className="flex items-center gap-2 mb-1">
@@ -50,11 +77,11 @@ function KPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueUnificad
       <Card>
         <CardContent className="pt-5 pb-4">
           <div className="flex items-center gap-2 mb-1">
-            <ShoppingCart className="h-4 w-4 text-primary" />
-            <span className="text-sm text-muted-foreground">Gap de Compra</span>
+            <BoxIcon className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Cobertura Média</span>
           </div>
-          <div className="text-2xl font-bold text-primary">{metricas.totalOtb.toLocaleString('pt-BR')}</div>
-          <p className="text-xs text-muted-foreground">{metricas.totalOtbValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+          <div className="text-2xl font-bold">{coberturaMedia > 0 ? `${coberturaMedia}d` : '—'}</div>
+          <p className="text-xs text-muted-foreground">no ritmo atual de venda</p>
         </CardContent>
       </Card>
       <Card>
@@ -63,7 +90,7 @@ function KPICards({ metricas }: { metricas: ReturnType<typeof useEstoqueUnificad
             <DollarSign className="h-4 w-4 text-destructive" />
             <span className="text-sm text-muted-foreground">Capital em Risco</span>
           </div>
-          <div className="text-2xl font-bold text-destructive">{metricas.deadStockValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
+          <div className="text-2xl font-bold text-destructive">{metricas.deadStockValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}</div>
           <p className="text-xs text-muted-foreground">{metricas.deadStockPecas} peças doentes ({metricas.deadStockPercentual.toFixed(1)}%)</p>
         </CardContent>
       </Card>
@@ -372,13 +399,32 @@ export default function AnaliseOTBPage() {
     marcasSemFornecedor,
     mixIdealCategoria,
     resumoPorMarca,
+    listaCompraFlat,
+    listaMarcas,
+    listaFornecedores,
     carregarDados,
   } = useEstoqueUnificado();
 
-  const empresaSelecionada = empresas.find(e => 
-    filters.empresa !== null && 
+  const empresaSelecionada = empresas.find(e =>
+    filters.empresa !== null &&
     (e.codEmpresa === filters.empresa || String(e.codEmpresa) === String(filters.empresa))
   );
+
+  // Contagens por subcategoria (totais, antes do filtro de subcategoria)
+  const contSub = useMemo(() => ({
+    rx: itensProcessados.filter(i => i.subcategoria === 'AR_RX').length,
+    solar: itensProcessados.filter(i => i.subcategoria === 'AR_SOLAR').length,
+    lentes: itensProcessados.filter(i => i.subcategoria === 'LENTES').length,
+    acessorios: itensProcessados.filter(i => i.subcategoria === 'ACESSORIOS').length,
+    outros: itensProcessados.filter(i => i.subcategoria === 'OUTROS').length,
+  }), [itensProcessados]);
+
+  const comprarKpi = useMemo(() => ({
+    pecas: listaCompraFlat.reduce((a, i) => a + i.qtdAComprar, 0),
+    valor: listaCompraFlat.reduce((a, i) => a + i.valorCompra, 0),
+    urgentes: listaCompraFlat.filter(i => i.prioridade === 'URGENTE').length,
+    skus: listaCompraFlat.length,
+  }), [listaCompraFlat]);
 
   return (
     <div className="space-y-6">
@@ -404,10 +450,11 @@ export default function AnaliseOTBPage() {
               <label className="text-sm font-medium mb-2 block">Empresa</label>
               <Select
                 value={filters.empresa !== null ? String(filters.empresa) : ""}
-                onValueChange={(value) => setFilters(prev => ({ 
-                  ...prev, 
+                onValueChange={(value) => setFilters(prev => ({
+                  ...prev,
                   empresa: Number(value),
                   fornecedor: 'TODOS', marca: 'TODAS', acao: 'TODAS', categoria: 'TODOS', curvaABC: null, busca: '',
+                  subcategoria: 'AR_RX', decisaoMarca: 'TODAS',
                 }))}
                 disabled={loadingEmpresas}
               >
@@ -446,8 +493,8 @@ export default function AnaliseOTBPage() {
       {/* Loading */}
       {loading && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24" />)}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-24" />)}
           </div>
           <Skeleton className="h-[200px]" />
           <Skeleton className="h-[400px]" />
@@ -470,13 +517,30 @@ export default function AnaliseOTBPage() {
                 <div className="text-xs mt-1">
                   Estoque: {metricas.totalPecas.toLocaleString('pt-BR')} peças • {metricas.totalSkusComEstoque.toLocaleString('pt-BR')} SKUs <span className="text-muted-foreground">(posição agora)</span>
                 </div>
-                <div className="text-xs">Vendas / giro: últimos 180 dias</div>
+                <div className="text-xs">
+                  Vendas / giro: últimos 180 dias
+                  {filters.subcategoria !== 'TODAS' && (
+                    <span> • Filtro: {filters.subcategoria === 'AR_RX' ? 'Armações RX' : filters.subcategoria === 'AR_SOLAR' ? 'Solar / OC' : filters.subcategoria}</span>
+                  )}
+                </div>
               </AlertDescription>
             </Alert>
           )}
 
+          {/* Filtros do Plano de Compra */}
+          <PlanoCompraFiltros
+            filters={filters}
+            setFilters={setFilters}
+            listaMarcas={listaMarcas}
+            listaFornecedores={listaFornecedores}
+            contagens={contSub}
+          />
+
           {/* KPIs */}
-          <KPICards metricas={metricas} />
+          <KPICards metricas={metricas} comprar={comprarKpi} />
+
+          {/* Lista de Compra Executável */}
+          <ListaCompraTable itens={listaCompraFlat} />
 
           {/* Mix Ideal por Subcategoria */}
           <MixIdealSection mix={mixIdealCategoria} />
