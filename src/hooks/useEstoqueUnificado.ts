@@ -345,6 +345,9 @@ export function useEstoqueUnificado() {
   const itensFiltrados = useMemo(() => {
     let resultado = itensProcessados;
     if (filters.categoria !== 'TODOS') resultado = resultado.filter(item => item.categoria === filters.categoria);
+    if (filters.subcategoria && filters.subcategoria !== 'TODAS') {
+      resultado = resultado.filter(item => item.subcategoria === filters.subcategoria);
+    }
     if (filters.curvaABC) resultado = resultado.filter(item => item.curvaABC === filters.curvaABC);
     if (filters.fornecedor !== 'TODOS') resultado = resultado.filter(item => item.fornecedor === filters.fornecedor);
     if (filters.marca !== 'TODAS') resultado = resultado.filter(item => item.marca === filters.marca);
