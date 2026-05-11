@@ -68,6 +68,14 @@ export interface SkuARepor {
   estoqueAtual: number;
   qtdAComprar: number;
   curvaABC: 'A' | 'B' | 'C';
+  marca: string;
+  fornecedor: string;
+  subcategoria: SubcategoriaProduto;
+  vendaDiaria: number;
+  coberturaDias: number;
+  precoCusto: number;
+  valorCompra: number;
+  prioridade: 'URGENTE' | 'ALTA' | 'MEDIA' | 'BAIXA';
 }
 
 // Item doente de uma marca
