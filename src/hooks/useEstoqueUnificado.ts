@@ -716,7 +716,7 @@ export function useEstoqueUnificado() {
     metricas, contagemPorCategoria, diasPeriodo: DIAS_PERIODO,
     listaFornecedores, listaMarcas, listaAcoes, marcasSemFornecedor,
     mixIdealCategoria, mixIdealMarca,
-    resumoPorMarca, estoqueDoenteAgrupado,
+    resumoPorMarca, estoqueDoenteAgrupado, listaCompraFlat,
     carregarDados,
     carregadoEm, empresaCarregada,
   };
