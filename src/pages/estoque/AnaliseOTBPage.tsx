@@ -363,6 +363,7 @@ function RelatorioMarcas({ resumo }: { resumo: ResumoMarca[] }) {
     repor: resumo.filter(r => r.decisao === 'REPOR_REFERENCIA').length,
     renovar: resumo.filter(r => r.decisao === 'RENOVAR_COLECAO').length,
     descontinuar: resumo.filter(r => r.decisao === 'AVALIAR_DESCONTINUACAO').length,
+    semHistorico: resumo.filter(r => r.decisao === 'SEM_HISTORICO').length,
   }), [resumo]);
 
   return (
@@ -375,7 +376,7 @@ function RelatorioMarcas({ resumo }: { resumo: ResumoMarca[] }) {
               Relatório por Marca
             </CardTitle>
             <CardDescription>
-              {resumo.length} marcas • {totais.repor} repor, {totais.renovar} renovar, {totais.descontinuar} descontinuar
+              {resumo.length} marcas • {totais.repor} repor · {totais.renovar} renovar · {totais.descontinuar} descontinuar{totais.semHistorico > 0 && <> · {totais.semHistorico} sem histórico</>}
             </CardDescription>
           </div>
           <DataTableToolbar
