@@ -73,7 +73,8 @@ export function ListaCompraTable({ itens }: Props) {
     { key: 'curvaABC', header: 'Curva' },
     { key: 'qtdVendidos', header: 'Vendas 6m', format: formatters.number },
     { key: 'estoqueAtual', header: 'Estoque', format: formatters.number },
-    { key: 'vendaDiaria', header: 'Vel. (pç/dia)', format: (v) => Number(v).toFixed(2) },
+    { key: 'diasGiroMediano', header: 'Giro mediano (d)', format: (v) => v == null ? '—' : `${Math.round(Number(v))}d` },
+    { key: 'diasGiroUltimaPeca', header: 'Última peça (d)', format: (v) => v == null ? '—' : `${Math.round(Number(v))}d` },
     { key: 'coberturaDias', header: 'Cobertura (d)', format: formatters.number },
     { key: 'qtdAComprar', header: 'Comprar', format: formatters.number },
     { key: 'valorCompra', header: 'Valor estimado', format: formatters.currency },
@@ -127,7 +128,12 @@ export function ListaCompraTable({ itens }: Props) {
         <td className="p-2"><Badge variant="outline" className="text-[10px]">{subLabel[s.subcategoria] ?? '—'}</Badge></td>
         <td className="p-2 text-right text-xs">{s.qtdVendidos}</td>
         <td className="p-2 text-right text-xs">{s.estoqueAtual}</td>
-        <td className="p-2 text-right text-xs">{s.vendaDiaria.toFixed(2)}</td>
+        <td className="p-2 text-right text-xs" title={`Amostra: ${s.pecasGiroConsideradas} peça(s)`}>
+          {s.diasGiroMediano != null ? `${Math.round(s.diasGiroMediano)}d` : '—'}
+        </td>
+        <td className="p-2 text-right text-xs text-muted-foreground" title="Dias entre entrada e venda da última peça">
+          {s.diasGiroUltimaPeca != null ? `${Math.round(s.diasGiroUltimaPeca)}d` : '—'}
+        </td>
         <td className="p-2 text-right text-xs">{s.coberturaDias >= 999 ? '—' : `${s.coberturaDias}d`}</td>
         <td className="p-2 text-right font-bold text-emerald-700 dark:text-emerald-400">{s.qtdAComprar}</td>
         <td className="p-2 text-right text-xs text-muted-foreground">{moedaCompacta(s.valorCompra)}</td>
