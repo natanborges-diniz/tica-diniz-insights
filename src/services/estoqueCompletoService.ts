@@ -3,7 +3,7 @@
 // Diferente de /vendas/analise-sku que retorna apenas SKUs com vendas no período
 
 import { apiGet, EmpresaParam, formatEmpresaParam, ApiGetOptions } from './firebirdBridge';
-import { categorizarPorDescricao } from '@/utils/categorizarProduto';
+import { categorizarPorDescricao, subcategorizarProduto, subcategorizarPorDescricao, type SubcategoriaProduto } from '@/utils/categorizarProduto';
 
 // ============================================
 // INTERFACES - Campos do backend (snake_case)
@@ -29,6 +29,12 @@ interface EstoqueCompletoRaw {
   // Campos calculados pelo backend (quando disponíveis)
   dias_estoque?: number | null;
   acao_sugerida?: string | null;
+  // Novos campos (Bridge af64a42): subcategoria + giro real
+  subcategoria?: string | null;
+  dias_giro_medio?: number | null;
+  dias_giro_mediano?: number | null;
+  dias_giro_ultima_peca?: number | null;
+  pecas_vendidas_consideradas?: number | null;
 }
 
 // Categorização de tipo agora é feita por categorizarPorDescricao de @/utils/categorizarProduto
@@ -53,6 +59,13 @@ export interface EstoqueCompleto {
   diasEmEstoque: number; // calculado pelo backend (dias desde última entrada)
   acaoSugerida: string; // calculado pelo backend baseado em dias_estoque
   isDeadStock: boolean; // dias_estoque > 180
+  // Subcategoria do Bridge (fallback regex)
+  subcategoria: SubcategoriaProduto;
+  // Métricas de giro real (Bridge). null quando não há vendas no período
+  diasGiroMedio: number | null;
+  diasGiroMediano: number | null;
+  diasGiroUltimaPeca: number | null;
+  pecasGiroConsideradas: number;
 }
 
 export interface GetEstoqueCompletoParams {
@@ -176,6 +189,19 @@ export async function getEstoqueCompleto(
       acaoSugerida,
       // Dead stock: mais de 180 dias em estoque
       isDeadStock: diasEmEstoque > 180,
+      // Subcategoria: prefere o backend; fallback regex em tipo, depois descrição
+      subcategoria: (() => {
+        const sub = (r.subcategoria ?? '').toString().toUpperCase().trim();
+        const valid: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'ACESSORIOS', 'OUTROS'];
+        if (valid.includes(sub as SubcategoriaProduto)) return sub as SubcategoriaProduto;
+        const fromTipo = subcategorizarProduto(tipo);
+        if (fromTipo !== 'OUTROS') return fromTipo;
+        return subcategorizarPorDescricao(descricao);
+      })(),
+      diasGiroMedio: r.dias_giro_medio ?? null,
+      diasGiroMediano: r.dias_giro_mediano ?? null,
+      diasGiroUltimaPeca: r.dias_giro_ultima_peca ?? null,
+      pecasGiroConsideradas: r.pecas_vendidas_consideradas ?? 0,
     };
   });
   
@@ -206,6 +232,11 @@ export async function getEstoqueCompleto(
   });
   console.log('[estoqueCompletoService] Contagem por tipo:', contagemTipos);
   console.log('[estoqueCompletoService] Contagem por ação:', contagemAcoes);
+
+  // Contagem por subcategoria (esperar AR_SOLAR > 0 quando há óculos OC)
+  const contagemSubcat: Record<string, number> = {};
+  resultado.forEach(r => { contagemSubcat[r.subcategoria] = (contagemSubcat[r.subcategoria] || 0) + 1; });
+  console.log('[estoqueCompletoService] Contagem por subcategoria:', contagemSubcat);
 
   return resultado;
 }
