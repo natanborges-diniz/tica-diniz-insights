@@ -223,7 +223,8 @@ function MarcaExpandida({ r }: { r: ResumoMarca }) {
                 <th className="text-left p-1">Descrição</th>
                 <th className="text-right p-1">Vendas 6m</th>
                 <th className="text-right p-1">Estoque</th>
-                <th className="text-right p-1">Vel/dia</th>
+                <th className="text-right p-1" title="Mediana de dias entre entrada e venda">Giro med.</th>
+                <th className="text-right p-1" title="Dias da última peça vendida (entrada → saída)">Últ. peça</th>
                 <th className="text-right p-1">Cobert.</th>
                 <th className="text-right p-1 font-bold">Comprar</th>
                 <th className="text-left p-1">Curva</th>
@@ -236,7 +237,8 @@ function MarcaExpandida({ r }: { r: ResumoMarca }) {
                   <td className="p-1 truncate max-w-[200px]" title={s.descricao}>{s.descricao}</td>
                   <td className="p-1 text-right">{s.qtdVendidos}</td>
                   <td className="p-1 text-right">{s.estoqueAtual}</td>
-                  <td className="p-1 text-right">{s.vendaDiaria.toFixed(2)}</td>
+                  <td className="p-1 text-right" title={`Amostra: ${s.pecasGiroConsideradas} peça(s)`}>{s.diasGiroMediano != null ? `${Math.round(s.diasGiroMediano)}d` : '—'}</td>
+                  <td className="p-1 text-right text-muted-foreground">{s.diasGiroUltimaPeca != null ? `${Math.round(s.diasGiroUltimaPeca)}d` : '—'}</td>
                   <td className="p-1 text-right">{s.coberturaDias >= 999 ? '—' : `${s.coberturaDias}d`}</td>
                   <td className="p-1 text-right font-bold text-emerald-700 dark:text-emerald-400">{s.qtdAComprar}</td>
                   <td className="p-1">
