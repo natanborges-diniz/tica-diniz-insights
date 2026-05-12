@@ -147,7 +147,7 @@ export function ListaCompraTable({ itens }: Props) {
     );
   };
 
-  const colCount = agruparFornecedor ? 13 : 14;
+  const colCount = agruparFornecedor ? 14 : 15;
 
   return (
     <Card>
@@ -198,7 +198,8 @@ export function ListaCompraTable({ itens }: Props) {
                 <th className="text-left p-2">Cat.</th>
                 <th className="text-right p-2">Vendas 6m</th>
                 <th className="text-right p-2">Estoque</th>
-                <th className="text-right p-2">Vel./dia</th>
+                <th className="text-right p-2" title="Mediana de dias entre entrada e venda das peças no período">Giro mediano</th>
+                <th className="text-right p-2" title="Dias que a última peça vendida levou da entrada até a saída">Última peça</th>
                 <th className="text-right p-2">Cobert.</th>
                 <th className="text-right p-2 font-bold">Comprar</th>
                 <th className="text-right p-2">Valor</th>
