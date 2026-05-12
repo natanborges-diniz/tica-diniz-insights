@@ -41,6 +41,12 @@ export interface ItemEstoque {
   coberturaDias: number;
   diasAlvo: number;
 
+  // Giro real (Bridge af64a42)
+  diasGiroMedio: number | null;
+  diasGiroMediano: number | null;
+  diasGiroUltimaPeca: number | null;
+  pecasGiroConsideradas: number;
+
   precoCusto: number;
   precoVenda: number;
   margemBruta: number;
@@ -80,6 +86,9 @@ export interface SkuARepor {
   vendaDiaria: number;
   coberturaDias: number;
   diasEmEstoque: number;
+  diasGiroMediano: number | null;
+  diasGiroUltimaPeca: number | null;
+  pecasGiroConsideradas: number;
   precoCusto: number;
   valorCompra: number;
   prioridade: 'URGENTE' | 'ALTA' | 'MEDIA' | 'BAIXA';
