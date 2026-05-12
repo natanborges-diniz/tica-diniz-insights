@@ -385,15 +385,23 @@ export function useEstoqueUnificado() {
         if (fornecedorMapeado) fornecedorFinal = fornecedorMapeado;
       }
 
-      // Decisão por SKU (Etapa 2 da inteligência)
+      // Decisão por SKU (Etapa 2 da inteligência) — agora usa giro REAL
+      // Princípios:
+      //  - Peças que vendem rápido (diasGiroMediano baixo) com pelo menos 1 venda → REPOR
+      //  - Estoque parado >= 180d sem venda → TROCAR; >= 270d → LIQUIDAR
+      //  - Vendeu pouco mas giro lento (cobertura > alvo) → OBSERVAR
       let decisaoSku: DecisaoSku;
+      const temGiroReal = diasGiroMediano !== null && diasGiroMediano > 0;
       if (precoCusto === 0) {
         decisaoSku = 'SEM_CADASTRO';
       } else if (estoqueAtual > 0 && qtdVendidos === 0 && diasEmEstoque >= 270) {
         decisaoSku = 'LIQUIDAR';
       } else if (estoqueAtual > 0 && qtdVendidos === 0 && diasEmEstoque >= 180) {
         decisaoSku = 'TROCAR';
-      } else if (vendaDiaria > 0 && coberturaDias < diasAlvo) {
+      } else if (temGiroReal && pecasGiroConsideradas >= 1 && coberturaDias < diasAlvo) {
+        decisaoSku = 'REPOR';
+      } else if (!temGiroReal && vendaDiaria > 0 && coberturaDias < diasAlvo) {
+        // Fallback: sem giro real do Bridge mas há venda — usa proxy antigo
         decisaoSku = 'REPOR';
       } else {
         decisaoSku = 'OBSERVAR';
@@ -417,6 +425,10 @@ export function useEstoqueUnificado() {
         vendaDiaria,
         coberturaDias,
         diasAlvo,
+        diasGiroMedio,
+        diasGiroMediano,
+        diasGiroUltimaPeca,
+        pecasGiroConsideradas,
         precoCusto,
         precoVenda,
         margemBruta,
