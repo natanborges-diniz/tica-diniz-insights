@@ -596,8 +596,16 @@ export function useEstoqueUnificado() {
 
   // Helper: monta um SkuARepor a partir de um ItemEstoque
   const buildSkuView = (s: ItemEstoque, decisaoSkuOverride?: DecisaoSku): SkuARepor => {
-    // Quantidade a comprar baseada na cobertura-alvo da subcategoria
-    const projecaoAlvo = Math.ceil(s.vendaDiaria * s.diasAlvo);
+    // Quantidade a comprar:
+    //  - Se há giro real (dias por peça): no horizonte diasAlvo, vão sair ceil(diasAlvo / diasGiroMediano) peças
+    //    → comprar a diferença para repor o estoque ao final do horizonte.
+    //  - Fallback: usar vendaDiaria (proxy antigo).
+    let projecaoAlvo: number;
+    if (s.diasGiroMediano && s.diasGiroMediano > 0) {
+      projecaoAlvo = Math.ceil(s.diasAlvo / s.diasGiroMediano);
+    } else {
+      projecaoAlvo = Math.ceil(s.vendaDiaria * s.diasAlvo);
+    }
     const qtdAComprar = Math.max(0, projecaoAlvo - s.estoqueAtual);
     const valorCompra = qtdAComprar * s.precoCusto;
     let prioridade: SkuARepor['prioridade'];
@@ -619,6 +627,9 @@ export function useEstoqueUnificado() {
       vendaDiaria: s.vendaDiaria,
       coberturaDias: s.coberturaDias,
       diasEmEstoque: s.diasEmEstoque,
+      diasGiroMediano: s.diasGiroMediano,
+      diasGiroUltimaPeca: s.diasGiroUltimaPeca,
+      pecasGiroConsideradas: s.pecasGiroConsideradas,
       precoCusto: s.precoCusto,
       valorCompra,
       prioridade,
