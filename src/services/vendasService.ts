@@ -261,6 +261,12 @@ interface AnaliseSkuRaw {
   preco_venda_final: number;
   qtd_produtos: number;
   total_vendido: number;
+  // Bridge af64a42
+  subcategoria?: string | null;
+  dias_giro_medio?: number | null;
+  dias_giro_mediano?: number | null;
+  dias_giro_ultima_peca?: number | null;
+  pecas_vendidas_consideradas?: number | null;
 }
 
 export interface AnaliseSku {
@@ -280,6 +286,12 @@ export interface AnaliseSku {
   // Calculados
   margemBruta: number;
   giroEstoque: number;
+  // Bridge af64a42
+  subcategoria: string | null;
+  diasGiroMedio: number | null;
+  diasGiroMediano: number | null;
+  diasGiroUltimaPeca: number | null;
+  pecasGiroConsideradas: number;
 }
 
 export interface GetAnaliseSkuParams {
@@ -345,6 +357,11 @@ export async function getAnaliseSku(
       totalVendido: r.total_vendido ?? 0,
       margemBruta,
       giroEstoque,
+      subcategoria: r.subcategoria ? String(r.subcategoria).toUpperCase().trim() : null,
+      diasGiroMedio: r.dias_giro_medio ?? null,
+      diasGiroMediano: r.dias_giro_mediano ?? null,
+      diasGiroUltimaPeca: r.dias_giro_ultima_peca ?? null,
+      pecasGiroConsideradas: r.pecas_vendidas_consideradas ?? 0,
     };
   });
 }
