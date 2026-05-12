@@ -29,37 +29,43 @@ export interface ItemEstoque {
   tipo: string;
   categoria: 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS';
   subcategoria: SubcategoriaProduto;
-  
+
   estoqueAtual: number;
   estoqueMinimo: number;
   valorEstoqueCusto: number;
-  
+
   qtdVendidos: number;
   totalVendido: number;
   diasEmEstoque: number;
   vendaDiaria: number;
-  
+  coberturaDias: number;
+  diasAlvo: number;
+
   precoCusto: number;
   precoVenda: number;
   margemBruta: number;
-  
+
   otb: number;
   otbValor: number;
   curvaABC: 'A' | 'B' | 'C';
   classificacao: 'COMPRAR_URGENTE' | 'COMPRAR' | 'ESTOQUE_OK' | 'EXCESSO';
   acaoSugerida: string;
   giroEstoque: number;
-  
+
   isDeadStock: boolean;
+  decisaoSku: DecisaoSku;
 }
 
 // Decisão por marca para Plano de Compra
-export type DecisaoMarca = 'REPOR_REFERENCIA' | 'RENOVAR_COLECAO' | 'AVALIAR_DESCONTINUACAO';
+export type DecisaoMarca = 'REPOR_REFERENCIA' | 'RENOVAR_COLECAO' | 'AVALIAR_DESCONTINUACAO' | 'SEM_HISTORICO';
+
+// Decisão por SKU dentro de uma marca aprovada (REPOR ou RENOVAR)
+export type DecisaoSku = 'REPOR' | 'TROCAR' | 'OBSERVAR' | 'LIQUIDAR' | 'SEM_CADASTRO';
 
 // Faixa de estoque doente
 export type FaixaDoente = 'PROMOCAO_20' | 'LIQUIDACAO_30' | 'LIQUIDACAO_50' | 'DESCARTE' | 'REVISAO_URGENTE';
 
-// SKU específico a repor
+// SKU específico a repor / trocar / observar
 export interface SkuARepor {
   codSku: number;
   codigoBarra: string;
@@ -73,9 +79,11 @@ export interface SkuARepor {
   subcategoria: SubcategoriaProduto;
   vendaDiaria: number;
   coberturaDias: number;
+  diasEmEstoque: number;
   precoCusto: number;
   valorCompra: number;
   prioridade: 'URGENTE' | 'ALTA' | 'MEDIA' | 'BAIXA';
+  decisaoSku: DecisaoSku;
 }
 
 // Item doente de uma marca
@@ -100,15 +108,20 @@ export interface ResumoMarca {
   mediaDiasEmEstoque: number;
   temCurvaA: boolean;
   decisao: DecisaoMarca;
-  // Bloco 1 — Repor referências (SKUs específicos curva A/B com giro rápido)
+  // Métricas da grade (Etapa 1)
+  skusAtivos: number;
+  skusComVenda: number;
+  taxaPerformance: number; // 0..1
+  pctCurvaAB: number;      // 0..1
+  mediaDiasParado: number;
+  // Etapa 2 — partição
   skusARepor: SkuARepor[];
-  // Bloco 2 — Novos modelos (qtd de peças de coleção nova)
-  pecasARenovar: number;
-  // Bloco 3 — Estoque doente desta marca
+  skusATrocar: SkuARepor[];
+  skusObservar: SkuARepor[];
+  pecasARenovar: number; // = skusATrocar.length
   itensDoentes: ItemDoenteMarca[];
   totalDoenteValor: number;
   totalDoentePecas: number;
-  // Todos os SKUs da marca (para export/detalhe)
   skus: ItemEstoque[];
 }
 
@@ -170,6 +183,16 @@ interface MapeamentoFornecedor {
 
 // Período fixo: 180 dias
 const DIAS_PERIODO = 180;
+
+// Cobertura-alvo (dias) por subcategoria — quanto de estoque queremos manter
+// para não rupturar dado o lead time típico de cada categoria
+const COBERTURA_ALVO_DIAS: Record<SubcategoriaProduto, number> = {
+  AR_RX: 60,
+  AR_SOLAR: 45,
+  LENTES: 30,
+  ACESSORIOS: 60,
+  OUTROS: 60,
+};
 
 // ============================================
 // HOOK PRINCIPAL
@@ -243,14 +266,21 @@ export function useEstoqueUnificado() {
     carregarMinimos();
   }, []);
 
-  // Mescla dados de ambos endpoints por cod_sku
+  // Mescla dados de ambos endpoints por cod_sku — UNIÃO (estoque ∪ vendas)
+  // Inclui SKUs sem estoque mas com venda nos 180d, para que "Vendas 6m" não fique subcontado
   const itensProcessados = useMemo((): ItemEstoque[] => {
-    if (!dadosEstoqueCompleto || dadosEstoqueCompleto.length === 0) return [];
+    if (
+      (!dadosEstoqueCompleto || dadosEstoqueCompleto.length === 0) &&
+      (!dadosVendasSku || dadosVendasSku.length === 0)
+    ) return [];
+
+    const estoqueMap = new Map<number, EstoqueCompleto>();
+    dadosEstoqueCompleto.forEach(e => estoqueMap.set(e.codSku, e));
 
     const vendasMap = new Map<number, AnaliseSku>();
     dadosVendasSku.forEach(sku => vendasMap.set(sku.codSku, sku));
-    
-    // Curva ABC
+
+    // Curva ABC sobre o universo de vendas
     const totalVendasGeral = dadosVendasSku.reduce((acc, sku) => acc + sku.totalVendido, 0);
     const ordenadosPorVenda = [...dadosVendasSku].sort((a, b) => b.totalVendido - a.totalVendido);
     let acumulado = 0;
@@ -263,18 +293,41 @@ export function useEstoqueUnificado() {
       else curvaMap.set(sku.codSku, 'C');
     });
 
-    return dadosEstoqueCompleto.map(estoqueItem => {
-      const vendas = vendasMap.get(estoqueItem.codSku);
-      const categoria = categorizarProduto(estoqueItem.tipo);
-      const subcategoria = subcategorizarProduto(estoqueItem.tipo);
-      const curvaABC = curvaMap.get(estoqueItem.codSku) || 'C';
-      
+    // União dos códigos de SKU
+    const codSkus = new Set<number>();
+    estoqueMap.forEach((_, k) => codSkus.add(k));
+    vendasMap.forEach((_, k) => codSkus.add(k));
+
+    return Array.from(codSkus).map(codSku => {
+      const estoqueItem = estoqueMap.get(codSku);
+      const vendas = vendasMap.get(codSku);
+
+      const descricao = estoqueItem?.descricao ?? vendas?.descricaoItem ?? '';
+      const marca = (estoqueItem?.marca ?? vendas?.marca ?? '').trim();
+      const fornecedorBruto = estoqueItem?.fornecedor ?? vendas?.fornecedor ?? '';
+      const tipo = estoqueItem?.tipo ?? vendas?.tipo ?? '';
+      const codigoBarra = estoqueItem?.codigoBarra ?? '';
+      const estoqueAtual = estoqueItem?.quantidadeEstoque ?? 0;
+      const precoCusto = estoqueItem?.precoCusto ?? vendas?.precoCusto ?? 0;
+      const precoVenda = estoqueItem?.precoVenda ?? vendas?.precoVendaFinal ?? 0;
+      const valorEstoqueCusto = estoqueItem?.valorEstoqueCusto ?? (estoqueAtual * precoCusto);
+      const diasEmEstoque = estoqueItem?.diasEmEstoque ?? (vendas?.diasDesdeUltimaVenda ?? 0);
+      const acaoSugerida = estoqueItem?.acaoSugerida ?? '';
+      const isDeadStock = estoqueItem?.isDeadStock ?? false;
+
+      const categoria = categorizarProduto(tipo);
+      const subcategoria = subcategorizarProduto(tipo);
+      const curvaABC = curvaMap.get(codSku) || 'C';
+
       const qtdVendidos = vendas?.qtdProdutos ?? 0;
       const totalVendido = vendas?.totalVendido ?? 0;
       const vendaDiaria = DIAS_PERIODO > 0 ? qtdVendidos / DIAS_PERIODO : 0;
       const giroEstoque = vendas?.giroEstoque ?? 0;
       const margemBruta = vendas?.margemBruta ?? 0;
-      
+
+      const coberturaDias = vendaDiaria > 0 ? Math.round(estoqueAtual / vendaDiaria) : 999;
+      const diasAlvo = COBERTURA_ALVO_DIAS[subcategoria] ?? 60;
+
       let estoqueMinimo = 0;
       if (filters.empresa !== null && filters.empresa !== 'ALL') {
         const codEmpresa = typeof filters.empresa === 'number' ? filters.empresa : parseInt(String(filters.empresa));
@@ -282,56 +335,73 @@ export function useEstoqueUnificado() {
         const configGenerica = configMinimos.find(c => c.cod_empresa === codEmpresa && c.categoria === 'TODOS' && c.curva_abc === curvaABC);
         estoqueMinimo = configEspecifica?.quantidade_minima || configGenerica?.quantidade_minima || 0;
       }
-      
-      const otb = Math.max(0, Math.ceil(estoqueMinimo - estoqueItem.quantidadeEstoque));
-      const otbValor = otb * estoqueItem.precoCusto;
-      
+
+      const otb = Math.max(0, Math.ceil(estoqueMinimo - estoqueAtual));
+      const otbValor = otb * precoCusto;
+
       let classificacao: ItemEstoque['classificacao'];
       if (estoqueMinimo > 0) {
-        const percentualDoMinimo = (estoqueItem.quantidadeEstoque / estoqueMinimo) * 100;
+        const percentualDoMinimo = (estoqueAtual / estoqueMinimo) * 100;
         if (percentualDoMinimo < 30) classificacao = 'COMPRAR_URGENTE';
         else if (percentualDoMinimo < 100) classificacao = 'COMPRAR';
         else if (percentualDoMinimo > 200) classificacao = 'EXCESSO';
         else classificacao = 'ESTOQUE_OK';
       } else {
-        if (qtdVendidos > 0 && estoqueItem.quantidadeEstoque === 0) classificacao = 'COMPRAR_URGENTE';
-        else if (estoqueItem.isDeadStock) classificacao = 'EXCESSO';
+        if (qtdVendidos > 0 && estoqueAtual === 0) classificacao = 'COMPRAR_URGENTE';
+        else if (isDeadStock) classificacao = 'EXCESSO';
         else classificacao = 'ESTOQUE_OK';
       }
-      
-      let fornecedorFinal = estoqueItem.fornecedor;
+
+      let fornecedorFinal = fornecedorBruto;
       if (!fornecedorFinal || fornecedorFinal === 'SEM FORNECEDOR' || fornecedorFinal === 'N/D') {
-        const marcaUpper = (estoqueItem.marca || '').toUpperCase();
+        const marcaUpper = marca.toUpperCase();
         const fornecedorMapeado = mapeamentoFornecedor.get(marcaUpper);
         if (fornecedorMapeado) fornecedorFinal = fornecedorMapeado;
       }
 
+      // Decisão por SKU (Etapa 2 da inteligência)
+      let decisaoSku: DecisaoSku;
+      if (precoCusto === 0) {
+        decisaoSku = 'SEM_CADASTRO';
+      } else if (estoqueAtual > 0 && qtdVendidos === 0 && diasEmEstoque >= 270) {
+        decisaoSku = 'LIQUIDAR';
+      } else if (estoqueAtual > 0 && qtdVendidos === 0 && diasEmEstoque >= 180) {
+        decisaoSku = 'TROCAR';
+      } else if (vendaDiaria > 0 && coberturaDias < diasAlvo) {
+        decisaoSku = 'REPOR';
+      } else {
+        decisaoSku = 'OBSERVAR';
+      }
+
       return {
-        codSku: estoqueItem.codSku,
-        codigoBarra: estoqueItem.codigoBarra,
-        descricao: estoqueItem.descricao,
-        marca: estoqueItem.marca,
+        codSku,
+        codigoBarra,
+        descricao,
+        marca,
         fornecedor: fornecedorFinal,
-        tipo: estoqueItem.tipo,
+        tipo,
         categoria,
         subcategoria,
-        estoqueAtual: estoqueItem.quantidadeEstoque,
+        estoqueAtual,
         estoqueMinimo,
-        valorEstoqueCusto: estoqueItem.valorEstoqueCusto,
+        valorEstoqueCusto,
         qtdVendidos,
         totalVendido,
-        diasEmEstoque: estoqueItem.diasEmEstoque,
+        diasEmEstoque,
         vendaDiaria,
-        precoCusto: estoqueItem.precoCusto,
-        precoVenda: estoqueItem.precoVenda,
+        coberturaDias,
+        diasAlvo,
+        precoCusto,
+        precoVenda,
         margemBruta,
         otb,
         otbValor,
         curvaABC,
         classificacao,
-        acaoSugerida: estoqueItem.acaoSugerida,
+        acaoSugerida,
         giroEstoque,
-        isDeadStock: estoqueItem.isDeadStock,
+        isDeadStock,
+        decisaoSku,
       };
     });
   }, [dadosEstoqueCompleto, dadosVendasSku, filters.empresa, mapeamentoFornecedor, configMinimos]);
@@ -486,6 +556,38 @@ export function useEstoqueUnificado() {
     return { faixa: 'PROMOCAO_20', desconto: '20%' };
   };
 
+  // Helper: monta um SkuARepor a partir de um ItemEstoque
+  const buildSkuView = (s: ItemEstoque, decisaoSkuOverride?: DecisaoSku): SkuARepor => {
+    // Quantidade a comprar baseada na cobertura-alvo da subcategoria
+    const projecaoAlvo = Math.ceil(s.vendaDiaria * s.diasAlvo);
+    const qtdAComprar = Math.max(0, projecaoAlvo - s.estoqueAtual);
+    const valorCompra = qtdAComprar * s.precoCusto;
+    let prioridade: SkuARepor['prioridade'];
+    if (s.coberturaDias < 15) prioridade = 'URGENTE';
+    else if (s.coberturaDias < 30) prioridade = 'ALTA';
+    else if (s.coberturaDias < 60) prioridade = 'MEDIA';
+    else prioridade = 'BAIXA';
+    return {
+      codSku: s.codSku,
+      codigoBarra: s.codigoBarra,
+      descricao: s.descricao,
+      qtdVendidos: s.qtdVendidos,
+      estoqueAtual: s.estoqueAtual,
+      qtdAComprar,
+      curvaABC: s.curvaABC,
+      marca: s.marca,
+      fornecedor: s.fornecedor,
+      subcategoria: s.subcategoria,
+      vendaDiaria: s.vendaDiaria,
+      coberturaDias: s.coberturaDias,
+      diasEmEstoque: s.diasEmEstoque,
+      precoCusto: s.precoCusto,
+      valorCompra,
+      prioridade,
+      decisaoSku: decisaoSkuOverride ?? s.decisaoSku,
+    };
+  };
+
   const resumoPorMarca = useMemo((): ResumoMarca[] => {
     if (itensFiltrados.length === 0) return [];
 
@@ -504,68 +606,62 @@ export function useEstoqueUnificado() {
       const totalVendido6m = skus.reduce((acc, s) => acc + s.totalVendido, 0);
       const otbTotal = skus.reduce((acc, s) => acc + s.otb, 0);
       const temCurvaA = skus.some(s => s.curvaABC === 'A');
-      
-      const vendidos = skus.filter(s => s.qtdVendidos > 0);
-      const mediaDiasEmEstoque = vendidos.length > 0
-        ? vendidos.reduce((acc, s) => acc + s.diasEmEstoque, 0) / vendidos.length
+
+      // ETAPA 1 — métricas da grade
+      const skusAtivosArr = skus.filter(s => s.estoqueAtual > 0 || s.qtdVendidos > 0);
+      const skusComVendaArr = skus.filter(s => s.qtdVendidos > 0);
+      const skusAtivos = skusAtivosArr.length;
+      const skusComVenda = skusComVendaArr.length;
+      const taxaPerformance = skusAtivos > 0 ? skusComVenda / skusAtivos : 0;
+      const skusAB = skusAtivosArr.filter(s => s.curvaABC === 'A' || s.curvaABC === 'B').length;
+      const pctCurvaAB = skusAtivos > 0 ? skusAB / skusAtivos : 0;
+      const semVenda = skusAtivosArr.filter(s => s.qtdVendidos === 0);
+      const mediaDiasParado = semVenda.length > 0
+        ? semVenda.reduce((acc, s) => acc + s.diasEmEstoque, 0) / semVenda.length
+        : 0;
+      const mediaDiasEmEstoque = skusComVendaArr.length > 0
+        ? skusComVendaArr.reduce((acc, s) => acc + s.diasEmEstoque, 0) / skusComVendaArr.length
         : 999;
+      const todosNovos = skusAtivosArr.length > 0 && skusAtivosArr.every(s => s.diasEmEstoque < 90);
 
-      // Decisão
+      // Decisão da MARCA
       let decisao: DecisaoMarca;
-      const soTemCurvaC = skus.every(s => s.curvaABC === 'C');
-      const todosDeadStock = comEstoque.length > 0 && comEstoque.every(s => s.isDeadStock);
-
-      if (soTemCurvaC && (todosDeadStock || qtdVendidos6m === 0)) {
+      if (skusComVenda === 0 && (todosNovos || skusAtivos === 0)) {
+        decisao = 'SEM_HISTORICO';
+      } else if (taxaPerformance < 0.20 && !temCurvaA && valorEstoque > 0) {
         decisao = 'AVALIAR_DESCONTINUACAO';
-      } else if (temCurvaA || mediaDiasEmEstoque < 90) {
+      } else if (taxaPerformance >= 0.50 && pctCurvaAB >= 0.30) {
         decisao = 'REPOR_REFERENCIA';
       } else {
         decisao = 'RENOVAR_COLECAO';
       }
 
-      // Bloco 1 — SKUs a repor (Curva A/B com giro rápido, venderam nos últimos 6m)
-      const skusARepor: SkuARepor[] = skus
-        .filter(s => s.qtdVendidos > 0 && (s.curvaABC === 'A' || s.curvaABC === 'B') && s.diasEmEstoque < 90)
-        .map(s => {
-          // Qtd a comprar: projeção de vendas para ~90 dias menos estoque atual
-          const projecao90d = Math.ceil(s.vendaDiaria * 90);
-          const qtdAComprar = Math.max(0, projecao90d - s.estoqueAtual);
-          const coberturaDias = s.vendaDiaria > 0 ? Math.round(s.estoqueAtual / s.vendaDiaria) : 999;
-          const valorCompra = qtdAComprar * s.precoCusto;
-          let prioridade: SkuARepor['prioridade'];
-          if (coberturaDias < 15) prioridade = 'URGENTE';
-          else if (coberturaDias < 30) prioridade = 'ALTA';
-          else if (coberturaDias < 60) prioridade = 'MEDIA';
-          else prioridade = 'BAIXA';
-          return {
-            codSku: s.codSku,
-            codigoBarra: s.codigoBarra,
-            descricao: s.descricao,
-            qtdVendidos: s.qtdVendidos,
-            estoqueAtual: s.estoqueAtual,
-            qtdAComprar,
-            curvaABC: s.curvaABC,
-            marca: s.marca,
-            fornecedor: s.fornecedor,
-            subcategoria: s.subcategoria,
-            vendaDiaria: s.vendaDiaria,
-            coberturaDias,
-            precoCusto: s.precoCusto,
-            valorCompra,
-            prioridade,
-          };
-        })
-        .filter(s => s.qtdAComprar > 0)
-        .sort((a, b) => b.qtdVendidos - a.qtdVendidos);
+      // ETAPA 2 — partição dos SKUs (só faz sentido em marcas REPOR ou RENOVAR)
+      const marcaAprovada = decisao === 'REPOR_REFERENCIA' || decisao === 'RENOVAR_COLECAO';
 
-      // Bloco 2 — Peças a renovar (gap de compra menos SKUs a repor)
-      const totalReporPecas = skusARepor.reduce((acc, s) => acc + s.qtdAComprar, 0);
-      const gapTotal = Math.max(0, qtdVendidos6m - pecasEstoque);
-      const pecasARenovar = Math.max(0, gapTotal - totalReporPecas);
+      const skusARepor: SkuARepor[] = marcaAprovada
+        ? skus
+            .filter(s => s.decisaoSku === 'REPOR')
+            .map(s => buildSkuView(s))
+            .filter(s => s.qtdAComprar > 0)
+            .sort((a, b) => {
+              const ordemPrio = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAIXA: 3 } as const;
+              return ordemPrio[a.prioridade] - ordemPrio[b.prioridade] || b.qtdVendidos - a.qtdVendidos;
+            })
+        : [];
 
-      // Bloco 3 — Estoque doente desta marca
+      // TROCAR só faz sentido em marca RENOVAR (em marca REPOR esses viram OBSERVAR)
+      const skusATrocar: SkuARepor[] = decisao === 'RENOVAR_COLECAO'
+        ? skus.filter(s => s.decisaoSku === 'TROCAR').map(s => buildSkuView(s)).sort((a, b) => b.diasEmEstoque - a.diasEmEstoque)
+        : [];
+
+      const skusObservar: SkuARepor[] = marcaAprovada
+        ? skus.filter(s => s.decisaoSku === 'OBSERVAR' && s.qtdVendidos > 0).map(s => buildSkuView(s)).sort((a, b) => b.qtdVendidos - a.qtdVendidos)
+        : [];
+
+      // Estoque doente — SKUs LIQUIDAR (e qualquer parado >=180 para visibilidade em marcas DESCONTINUAR)
       const itensDoentes: ItemDoenteMarca[] = comEstoque
-        .filter(s => s.diasEmEstoque >= 180)
+        .filter(s => s.diasEmEstoque >= 180 && s.qtdVendidos === 0)
         .map(s => {
           const { faixa, desconto } = classificarFaixaDoente(s.diasEmEstoque);
           return {
@@ -579,22 +675,30 @@ export function useEstoqueUnificado() {
           };
         })
         .sort((a, b) => b.diasEmEstoque - a.diasEmEstoque);
-      
+
       const totalDoentePecas = itensDoentes.reduce((acc, i) => acc + i.estoqueAtual, 0);
       const totalDoenteValor = itensDoentes.reduce((acc, i) => acc + i.valorCusto, 0);
 
+      const pecasARenovar = skusATrocar.length;
       const categoria = skus[0]?.categoria || 'OUTROS';
 
       return {
         marca, categoria, pecasEstoque, valorEstoque,
         qtdVendidos6m, totalVendido6m, otbTotal,
         mediaDiasEmEstoque, temCurvaA, decisao,
-        skusARepor, pecasARenovar,
+        skusAtivos, skusComVenda, taxaPerformance, pctCurvaAB, mediaDiasParado,
+        skusARepor, skusATrocar, skusObservar,
+        pecasARenovar,
         itensDoentes, totalDoenteValor, totalDoentePecas,
         skus,
       };
     }).sort((a, b) => {
-      const ordem: Record<DecisaoMarca, number> = { REPOR_REFERENCIA: 0, RENOVAR_COLECAO: 1, AVALIAR_DESCONTINUACAO: 2 };
+      const ordem: Record<DecisaoMarca, number> = {
+        REPOR_REFERENCIA: 0,
+        RENOVAR_COLECAO: 1,
+        SEM_HISTORICO: 2,
+        AVALIAR_DESCONTINUACAO: 3,
+      };
       return ordem[a.decisao] - ordem[b.decisao] || b.totalVendido6m - a.totalVendido6m;
     });
   }, [itensFiltrados]);

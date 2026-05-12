@@ -19,7 +19,8 @@ import { formatters, ExportColumn } from "@/utils/exportData";
 import { 
   ShoppingCart, AlertCircle, Info, RefreshCw, BoxIcon,
   ChevronDown, ChevronRight, Target, Download,
-  Repeat, Sparkles, XCircle, AlertTriangle, Package, TrendingUp, DollarSign
+  Repeat, Sparkles, XCircle, AlertTriangle, Package, TrendingUp, DollarSign,
+  Eye, HelpCircle, Replace
 } from "lucide-react";
 
 // ============================================
@@ -146,37 +147,74 @@ function MixIdealSection({ mix }: { mix: MixComparativo[] }) {
 // DECISÃO CONFIG
 // ============================================
 
-const decisaoConfig: Record<DecisaoMarca, { label: string; icon: React.ReactNode; className: string }> = {
+const decisaoConfig: Record<DecisaoMarca, { label: string; icon: React.ReactNode; className: string; descricao: string }> = {
   REPOR_REFERENCIA: {
     label: 'Repor',
     icon: <Repeat className="h-3.5 w-3.5" />,
     className: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700',
+    descricao: 'Marca saudável — recomprar mesmas referências',
   },
   RENOVAR_COLECAO: {
     label: 'Renovar',
     icon: <Sparkles className="h-3.5 w-3.5" />,
     className: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700',
+    descricao: 'Marca relevante mas grade envelhecida — trocar referências',
   },
   AVALIAR_DESCONTINUACAO: {
     label: 'Descontinuar',
     icon: <XCircle className="h-3.5 w-3.5" />,
     className: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700',
+    descricao: 'Marca não justifica espaço — sair gradualmente',
+  },
+  SEM_HISTORICO: {
+    label: 'Sem histórico',
+    icon: <HelpCircle className="h-3.5 w-3.5" />,
+    className: 'bg-muted text-muted-foreground border-border',
+    descricao: 'Marca nova — aguardar mais 60d antes de julgar',
   },
 };
 
 // ============================================
-// MARCA EXPANDIDA
+// MARCA EXPANDIDA — 4 blocos: REPOR / TROCAR / OBSERVAR / LIQUIDAR
 // ============================================
 
 function MarcaExpandida({ r }: { r: ResumoMarca }) {
+  const taxaPct = (r.taxaPerformance * 100).toFixed(0);
+  const ctxAvaliar = r.decisao === 'AVALIAR_DESCONTINUACAO';
+  const ctxSemHist = r.decisao === 'SEM_HISTORICO';
+
   return (
-    <div className="p-4 space-y-4 bg-muted/10">
-      {/* Bloco 1 — Repor referências */}
+    <div className="p-4 space-y-3 bg-muted/10">
+      {/* Header de performance da marca */}
+      <div className="text-xs text-muted-foreground border-b pb-2">
+        <span className="font-medium text-foreground">{r.skusComVenda} de {r.skusAtivos} SKUs giraram ({taxaPct}%)</span>
+        {' · '}{(r.pctCurvaAB * 100).toFixed(0)}% em curva A/B
+        {r.skusComVenda > 0 && <> · cobertura média {Math.round(r.mediaDiasEmEstoque)}d</>}
+        {r.mediaDiasParado > 0 && <> · média {Math.round(r.mediaDiasParado)}d parados (sem venda)</>}
+      </div>
+
+      {ctxSemHist && (
+        <p className="text-sm text-muted-foreground text-center py-2">
+          Marca nova / sem histórico de venda nos últimos 180 dias. Aguardar antes de classificar.
+        </p>
+      )}
+
+      {ctxAvaliar && r.itensDoentes.length > 0 && (
+        <div className="rounded-lg border border-destructive/30 p-3">
+          <h5 className="text-sm font-semibold text-destructive mb-2 flex items-center gap-1.5">
+            <AlertTriangle className="h-4 w-4" />
+            Liquidar / desmobilizar ({r.totalDoentePecas} pçs • {r.totalDoenteValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})
+          </h5>
+          <p className="text-xs text-muted-foreground mb-2">Marca marcada para descontinuar — sair com promoção/devolução.</p>
+        </div>
+      )}
+
+      {/* Bloco REPOR */}
       {r.skusARepor.length > 0 && (
         <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 p-3">
           <h5 className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mb-2 flex items-center gap-1.5">
             <Repeat className="h-4 w-4" />
-            Repor estas referências ({r.skusARepor.reduce((a, s) => a + s.qtdAComprar, 0)} pçs)
+            REPOR ({r.skusARepor.length} SKUs · {r.skusARepor.reduce((a, s) => a + s.qtdAComprar, 0)} pçs · {r.skusARepor.reduce((a,s) => a + s.valorCompra, 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })})
           </h5>
           <table className="w-full text-xs">
             <thead>
@@ -185,6 +223,8 @@ function MarcaExpandida({ r }: { r: ResumoMarca }) {
                 <th className="text-left p-1">Descrição</th>
                 <th className="text-right p-1">Vendas 6m</th>
                 <th className="text-right p-1">Estoque</th>
+                <th className="text-right p-1">Vel/dia</th>
+                <th className="text-right p-1">Cobert.</th>
                 <th className="text-right p-1 font-bold">Comprar</th>
                 <th className="text-left p-1">Curva</th>
               </tr>
@@ -196,6 +236,8 @@ function MarcaExpandida({ r }: { r: ResumoMarca }) {
                   <td className="p-1 truncate max-w-[200px]" title={s.descricao}>{s.descricao}</td>
                   <td className="p-1 text-right">{s.qtdVendidos}</td>
                   <td className="p-1 text-right">{s.estoqueAtual}</td>
+                  <td className="p-1 text-right">{s.vendaDiaria.toFixed(2)}</td>
+                  <td className="p-1 text-right">{s.coberturaDias >= 999 ? '—' : `${s.coberturaDias}d`}</td>
                   <td className="p-1 text-right font-bold text-emerald-700 dark:text-emerald-400">{s.qtdAComprar}</td>
                   <td className="p-1">
                     <Badge variant={s.curvaABC === 'A' ? 'default' : 'secondary'} className="text-[10px]">{s.curvaABC}</Badge>
@@ -207,25 +249,58 @@ function MarcaExpandida({ r }: { r: ResumoMarca }) {
         </div>
       )}
 
-      {/* Bloco 2 — Novos modelos */}
-      {r.pecasARenovar > 0 && (
+      {/* Bloco TROCAR (só em marca RENOVAR) */}
+      {r.skusATrocar.length > 0 && (
         <div className="rounded-lg border border-blue-200 dark:border-blue-800 p-3">
-          <h5 className="text-sm font-semibold text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4" />
-            Escolher {r.pecasARenovar} novos modelos da coleção
+          <h5 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2 flex items-center gap-1.5">
+            <Replace className="h-4 w-4" />
+            TROCAR ({r.skusATrocar.length} SKUs · liberar exposição)
           </h5>
-          <p className="text-xs text-muted-foreground mt-1">
-            Referências vendidas tinham giro lento — substituir por novidades para manter relevância.
+          <p className="text-xs text-muted-foreground mb-2">
+            Referências sem venda há ≥180d numa marca que ainda performa — substituir por novo modelo no próximo pedido.
           </p>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-muted-foreground">
+                <th className="text-left p-1">Código</th>
+                <th className="text-left p-1">Descrição</th>
+                <th className="text-right p-1">Estoque</th>
+                <th className="text-right p-1">Dias parado</th>
+                <th className="text-left p-1">Sugestão</th>
+              </tr>
+            </thead>
+            <tbody>
+              {r.skusATrocar.slice(0, 10).map(s => (
+                <tr key={s.codSku} className="border-t border-muted">
+                  <td className="p-1 font-mono">{s.codigoBarra || s.codSku}</td>
+                  <td className="p-1 truncate max-w-[200px]" title={s.descricao}>{s.descricao}</td>
+                  <td className="p-1 text-right">{s.estoqueAtual}</td>
+                  <td className="p-1 text-right text-muted-foreground">{s.diasEmEstoque}d</td>
+                  <td className="p-1 text-blue-700 dark:text-blue-400">substituir por novo modelo</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {r.skusATrocar.length > 10 && (
+            <p className="text-xs text-muted-foreground text-center mt-2">+{r.skusATrocar.length - 10} itens</p>
+          )}
         </div>
       )}
 
-      {/* Bloco 3 — Estoque doente */}
-      {r.itensDoentes.length > 0 && (
+      {/* Bloco OBSERVAR — só contador */}
+      {r.skusObservar.length > 0 && (
+        <div className="rounded-lg border p-2 flex items-center gap-2 text-xs text-muted-foreground">
+          <Eye className="h-4 w-4" />
+          OBSERVAR ({r.skusObservar.length} SKUs · estoque saudável, sem ação imediata)
+        </div>
+      )}
+
+      {/* Bloco LIQUIDAR (em marcas REPOR/RENOVAR também) */}
+      {!ctxAvaliar && r.itensDoentes.length > 0 && (
         <div className="rounded-lg border border-destructive/30 p-3">
           <h5 className="text-sm font-semibold text-destructive mb-2 flex items-center gap-1.5">
             <AlertTriangle className="h-4 w-4" />
-            Estoque doente ({r.totalDoentePecas} pçs • {r.totalDoenteValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})
+            LIQUIDAR ({r.totalDoentePecas} pçs · {r.totalDoenteValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})
           </h5>
           <table className="w-full text-xs">
             <thead>
@@ -255,9 +330,11 @@ function MarcaExpandida({ r }: { r: ResumoMarca }) {
         </div>
       )}
 
-      {/* Sem ações */}
-      {r.skusARepor.length === 0 && r.pecasARenovar === 0 && r.itensDoentes.length === 0 && (
-        <p className="text-sm text-muted-foreground text-center py-2">Nenhuma ação pendente para esta marca</p>
+      {/* Sem ações — mensagem clara */}
+      {!ctxSemHist && r.skusARepor.length === 0 && r.skusATrocar.length === 0 && r.itensDoentes.length === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-2">
+          Estoque saudável — sem reposição, troca ou liquidação pendentes nos últimos 180 dias.
+        </p>
       )}
     </div>
   );
@@ -286,6 +363,7 @@ function RelatorioMarcas({ resumo }: { resumo: ResumoMarca[] }) {
     repor: resumo.filter(r => r.decisao === 'REPOR_REFERENCIA').length,
     renovar: resumo.filter(r => r.decisao === 'RENOVAR_COLECAO').length,
     descontinuar: resumo.filter(r => r.decisao === 'AVALIAR_DESCONTINUACAO').length,
+    semHistorico: resumo.filter(r => r.decisao === 'SEM_HISTORICO').length,
   }), [resumo]);
 
   return (
@@ -298,7 +376,7 @@ function RelatorioMarcas({ resumo }: { resumo: ResumoMarca[] }) {
               Relatório por Marca
             </CardTitle>
             <CardDescription>
-              {resumo.length} marcas • {totais.repor} repor, {totais.renovar} renovar, {totais.descontinuar} descontinuar
+              {resumo.length} marcas • {totais.repor} repor · {totais.renovar} renovar · {totais.descontinuar} descontinuar{totais.semHistorico > 0 && <> · {totais.semHistorico} sem histórico</>}
             </CardDescription>
           </div>
           <DataTableToolbar

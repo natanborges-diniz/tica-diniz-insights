@@ -1,114 +1,145 @@
-## Contexto
 
-Hoje as 3 páginas de estoque (Visão, Plano de Compra, O que Fazer) já compartilham dados via store global e o Bridge `/estoque/completo` está rápido (≤14s). Falta agora **transformar o Plano de Compra em ferramenta de execução** — saber o que comprar, em que quantidade, focado em armações (RX e Solar) — e **deixar Visão Estoque acionável** (o que fazer com cada peça).
+## Inteligência de Compra em 2 níveis: Marca → SKU
 
-Subcategorias `AR_RX` e `AR_SOLAR` já existem em `categorizarProduto.ts` e estão sendo calculadas em `useEstoqueUnificado.ts` (linhas 261, 309, 431-442 do mix ideal), mas **não são expostas como filtro nas páginas**. Aproveitamos.
+A lógica passa a ter **duas etapas obrigatórias**, sempre nessa ordem:
+
+```text
+ETAPA 1 — A MARCA FAZ SENTIDO?
+   ↓ (rótulo: REPOR / RENOVAR / DESCONTINUAR)
+ETAPA 2 — Se faz, o que fazer com cada SKU dela?
+   ↓ (rótulo por SKU: REPOR / TROCAR / OBSERVAR / LIQUIDAR)
+```
+
+Hoje o código mistura as duas — a marca recebe rótulo amplo mas os SKUs são filtrados com regra estreita, e por isso "REPOR" sem nenhum SKU listado. Vamos separar.
 
 ---
 
-## 1) Plano de Compra — virar lista executável "O que comprar agora"
+## ETAPA 1 — Avaliação da marca (contexto de abrangência)
 
-### 1.1 Filtros novos (foco do dia-a-dia em armações)
-Adicionar barra de filtros no topo da página `AnaliseOTBPage`, persistida no `useEstoqueStore`:
+A marca é julgada pelo **conjunto**, não por uma peça isolada. Variáveis:
 
-- **Categoria/Subcategoria** (botões): Todas · Armações RX · Solar/OC · Lentes · Acessórios · Outros
-  - default: **Armações RX** quando carrega (foco do negócio)
-- **Marca** (select com busca) — usa `listaMarcas` já existente
-- **Fornecedor** (select) — usa `listaFornecedores` já existente
-- **Curva ABC** (chips A · B · C · Todas)
-- **Decisão da marca** (chips Repor · Renovar · Descontinuar · Todas) — filtra `resumoPorMarca`
-
-KPIs e Mix Ideal recalculam respeitando esses filtros (já que o hook expõe `itensFiltrados`).
-
-### 1.2 Nova seção "Lista de Compra" (acima do Relatório por Marca)
-Tabela única com **uma linha por SKU a comprar**, ordenada por prioridade:
-
-| Coluna | Origem |
+| Variável | Como calcular |
 |---|---|
-| Cód. Barras | `codigoBarra` |
-| Descrição | `descricao` |
-| Marca / Fornecedor | já existe |
-| Subcategoria | AR_RX / AR_SOLAR / etc |
-| Vendas 6m | `qtdVendidos` |
-| Estoque atual | `estoqueAtual` |
-| Velocidade (pç/dia) | `vendaDiaria` |
-| Cobertura atual (dias) | `estoqueAtual / vendaDiaria` |
-| **Comprar (qtd)** | `qtdAComprar` (já calculado em `skusARepor`) |
-| Curva | `curvaABC` |
-| Prioridade | URGENTE se cobertura < 15d, ALTA < 30d, MÉDIA < 60d |
+| `skusAtivos` | nº de SKUs distintos da marca com estoque > 0 OU venda > 0 nos 180d |
+| `skusComVenda` | nº desses SKUs que venderam ≥ 1 unidade em 180d |
+| `taxaPerformance` | `skusComVenda / skusAtivos` (% da grade que performa) |
+| `pctCurvaAB` | % de SKUs em curva A ou B |
+| `giroMedio` | média de `vendaDiaria` ponderada por valor |
+| `coberturaMedia` | dias de cobertura média dos SKUs ativos |
+| `mediaDiasParado` | média de `diasEmEstoque` dos SKUs sem venda |
+| `valorEstoque` | total imobilizado na marca |
 
-- **Toolbar:** total de peças a comprar, valor estimado, exportar CSV/PDF.
-- **Multi-seleção:** checkbox por linha → "Exportar pedido selecionado" (CSV pronto para enviar a fornecedor).
-- **Agrupamento opcional:** toggle "Agrupar por fornecedor" — vira sub-tabelas com subtotal por fornecedor (facilita fechar pedido).
+### Regras de classificação da marca
 
-### 1.3 KPIs ajustados
-Trocar o KPI genérico "Capital em Risco" por **dois cards**:
-- **A comprar agora** — peças + valor estimado (custo)
-- **Capital em risco** — dead stock valor (mantém)
+```text
+REPOR_REFERENCIA  ← marca saudável, recomprar os mesmos SKUs
+   condição: taxaPerformance ≥ 50%  E  pctCurvaAB ≥ 30%
+   significado: "a grade dela funciona — pelo menos metade gira"
 
-Adicionar:
-- **Cobertura média da loja** (dias) — `estoque total / venda diária total`
-- **Marcas com gap** — quantas marcas têm `skusARepor.length > 0`
+RENOVAR_COLECAO   ← marca relevante mas grade envelhecida
+   condição: (taxaPerformance entre 20% e 50%)
+             OU (existe ≥1 SKU curva A mas mediaDiasParado > 180)
+   significado: "a marca vende, mas as referências em estoque cansaram"
 
-### 1.4 Header com contexto comercial
-Header em duas linhas (já planejado em `.lovable/plan.md`, ainda pendente):
+AVALIAR_DESCONTINUACAO ← marca não justifica espaço
+   condição: taxaPerformance < 20%  E  sem curva A  E  valorEstoque > 0
+   significado: "poucos SKUs vendendo, maioria parada — sair gradualmente"
+
+SEM_HISTORICO     ← marca nova, sem dado suficiente
+   condição: skusComVenda = 0 E todos SKUs com diasEmEstoque < 90
+   significado: "aguardar mais 60d antes de julgar"
 ```
-DINIZ BARUERI
-Estoque: 1.388 peças • 1.174 SKUs (posição agora)
-Vendas: últimos 180 dias • Filtro: Armações RX
-```
+
+Os limiares (50%, 30%, 20%) são **propostos por mim** com base em prática óptica — uma grade saudável tem ao menos metade da exposição girando. Pedirei sua validação no fim.
 
 ---
 
-## 2) Visão Estoque — "o que fazer com este estoque"
+## ETAPA 2 — Decisão por SKU (só para marcas REPOR ou RENOVAR)
 
-A página hoje lista SKUs com `acaoSugerida`, mas não diz **o que fazer agora**. Adições:
+Marcas DESCONTINUAR não entram no Plano de Compra — vão para a aba "Liquidar/Devolver" da Visão Estoque.
 
-### 2.1 Painel "Ações Recomendadas" (novo bloco entre KPIs e tabela)
-4 cards clicáveis (filtram a tabela ao clicar):
+Para cada SKU da marca aprovada:
 
-| Card | Critério | Ação |
+| Rótulo SKU | Condição | Ação no plano |
 |---|---|---|
-| **Liquidar** | `acaoSugerida` ∈ LIQUIDA 20/30/50% | Exportar lista p/ marketing precificar |
-| **Transferir entre lojas** | dead stock + alta cobertura, mas vende em outra loja (placeholder, requer dado multi-loja na fase 2) | Marcar como "estudar" |
-| **Devolver ao fornecedor** | dead stock > 365d + sem venda 6m | Exportar pedido de devolução |
-| **Sem cadastro** | `acaoSugerida = SEM CADASTRO` | Exportar p/ corrigir no ERP |
+| **REPOR** | `vendaDiaria > 0` E `coberturaDias < diasAlvo` | calcula `qtdAComprar = vendaDiaria × diasAlvo − estoqueAtual`; entra na lista de compra |
+| **TROCAR** | `qtdVendidos = 0` E `diasEmEstoque ≥ 180` E marca = RENOVAR | sinaliza "substituir referência no próximo pedido" — sai da exposição, entra outro modelo |
+| **OBSERVAR** | `qtdVendidos > 0` mas `coberturaDias ≥ diasAlvo` | sem ação imediata; monitorar |
+| **LIQUIDAR** | `diasEmEstoque ≥ 270` E `qtdVendidos = 0` | vai para fila de promoção (tabela de desconto por idade) |
+| **SEM CADASTRO** | `precoCusto = 0` ou dados ausentes | corrigir no ERP antes de qualquer ação |
 
-### 2.2 Coluna "Próxima ação" na tabela
-Já existe `acaoSugerida`. Adicionar tooltip explicando o porquê de cada classificação (ex.: "LIQUIDA 30% — 220 dias parado, curva C, 0 vendas").
+### Saída na UI da marca expandida
 
-### 2.3 Botão "Ir para Plano de Compra com este filtro"
-Quando o usuário filtra por marca/categoria em Visão Estoque, oferecer um botão que leva ao Plano de Compra **mantendo os filtros aplicados** (já dá pra fazer com store global).
+Quando o usuário expande a linha da marca no Plano de Compra, vê **três blocos sempre visíveis** (mesmo que vazios, com contagem):
+
+```text
+[Marca: RAY-BAN] — REPOR_REFERENCIA
+Performance: 14 de 22 SKUs giraram (64%) · 5 em curva A · cobertura média 38d
+─────────────────────────────────────────────
+▸ REPOR (8 SKUs · 47 peças · R$ 18.420)
+   tabela: cód, descrição, vendas 6m, estoque, vel/dia, cobertura, comprar
+▸ TROCAR (3 SKUs · liberar exposição)
+   tabela: cód, descrição, dias parado, sugestão "substituir por novo modelo"
+▸ OBSERVAR (11 SKUs · estoque saudável)
+   contador clicável → expande
+```
+
+Para marcas **RENOVAR**, o foco visual é o bloco TROCAR.
+Para marcas **DESCONTINUAR**, a expansão mostra apenas LIQUIDAR + total a desmobilizar.
 
 ---
 
-## 3) Mudanças técnicas
+## Mudanças técnicas
 
 | Arquivo | O que muda |
 |---|---|
-| `src/stores/useEstoqueStore.ts` | Adicionar `subcategoria: 'TODAS' \| 'AR_RX' \| 'AR_SOLAR' \| 'LENTES' \| 'ACESSORIOS' \| 'OUTROS'` e `decisaoMarca: 'TODAS' \| 'REPOR' \| 'RENOVAR' \| 'DESCONTINUAR'` aos filtros |
-| `src/hooks/useEstoqueUnificado.ts` | Aplicar filtro de subcategoria em `itensFiltrados`; expor `listaCompraFlat` (achatamento de `resumoPorMarca[].skusARepor` com prioridade calculada) |
-| `src/pages/estoque/AnaliseOTBPage.tsx` | Nova barra de filtros; nova seção "Lista de Compra"; KPIs ajustados; header em duas linhas |
-| `src/components/otb/OtbFilters.tsx` | Reaproveitar/estender — adicionar chips RX/Solar |
-| `src/pages/estoque/VisaoEstoquePage.tsx` | Painel "Ações Recomendadas" + tooltip explicativo + botão "Ir para Plano de Compra" |
+| `src/hooks/useEstoqueUnificado.ts` | (1) merge estoque ∪ vendas (corrige "vendas 6m" subcontadas); (2) novos campos por marca: `taxaPerformance`, `pctCurvaAB`, `skusComVenda`, `skusAtivos`, `mediaDiasParado`; (3) nova função `classificarMarca()` com as 4 regras; (4) novo campo `decisaoSku: 'REPOR' \| 'TROCAR' \| 'OBSERVAR' \| 'LIQUIDAR' \| 'SEM_CADASTRO'` por item; (5) constante `COBERTURA_ALVO_DIAS` por subcategoria |
+| `src/pages/estoque/AnaliseOTBPage.tsx` | Expansão da marca passa a renderizar 3 blocos (REPOR/TROCAR/OBSERVAR) com contadores; header da marca mostra "X de Y SKUs giraram (Z%)"; mensagem clara quando bloco está vazio |
+| `src/components/otb/ListaCompraTable.tsx` | Já existe — passa a consumir só itens com `decisaoSku = REPOR` |
+| `src/stores/useEstoqueStore.ts` | Filtro `decisaoMarca` já existe; nada a mudar |
 
-Sem mudanças no Bridge, sem mudanças de schema, sem nova edge function. Só camada de apresentação + um cálculo a mais de prioridade no hook.
-
----
-
-## 4) Fora de escopo (Fase 2 separada)
-
-- Transferência entre lojas (precisa de dado consolidado multi-loja)
-- Estoque mínimo configurável por marca/loja na UI (hoje vem do `estoque_minimo_loja` que está vazio)
-- Reposição automática integrada com pedido Hoya/Zeiss/Haytek
-- Mix ideal customizável manualmente (hoje é só "vendas 6m define o mix")
+Sem alteração no Bridge, schema ou edge functions.
 
 ---
 
-## 5) Pergunta aberta antes de implementar
+## Racional da inteligência (por que esses critérios)
 
-**Prioridade de comprar (cobertura mínima):** hoje o cálculo de `qtdAComprar` no hook usa um alvo padrão. Confirmar com você:
-- **Armações RX:** alvo de quantos dias de cobertura? (sugestão: 60 dias)
-- **Solar/OC:** mesmo número ou menor por sazonalidade? (sugestão: 45 dias fora do verão)
+### Por que avaliar a marca antes do SKU
+Comprar SKU isolado sem olhar a marca leva a recomprar uma peça que vende, quando na verdade a marca toda está morrendo (você reabastece um cemitério). Inversamente, descartar um SKU parado de uma marca premium pode tirar uma peça-vitrine que sustenta a percepção da grade.
 
-Se você não quiser configurar agora, mantemos o default que já está no hook e ajustamos depois.
+### Por que `taxaPerformance ≥ 50%` para REPOR
+Em loja óptica, exposição costuma ter 6-12 peças por marca. Se metade não vende em 6 meses, a marca está ocupando prateleira sem retorno. 50% é o ponto onde "vale recomprar igual" passa a ser "precisa repensar". Conservador — pode ser ajustado para 40% se você quiser reter mais marcas.
+
+### Por que `pctCurvaAB ≥ 30%` junto
+Sozinha, a taxa de performance pode mascarar marca que vende muito barato (gira mas não fatura). Exigir 30% em A/B garante que quem está girando contribui para resultado, não só para volume.
+
+### Por que `taxaPerformance < 20%` para DESCONTINUAR
+Abaixo de 1 em 5 SKUs girando, a marca é passivo. Mesmo que tenha 1 SKU "campeão", a perda de espaço dos outros 4 não compensa. Esse SKU campeão pode migrar para outra marca correlata (decisão humana).
+
+### Por que separar TROCAR de LIQUIDAR
+TROCAR acontece em marca **viva** (o cliente quer aquela grife, mas o modelo cansou) → trocar referência mantendo marca. LIQUIDAR acontece em marca **morta** ou em SKU velho demais (≥270d) → tirar do estoque a qualquer custo. Ações comerciais diferentes (compra vs promoção).
+
+### Por que cobertura-alvo (60d RX / 45d Solar / 30d Lentes)
+Chute baseado em prática genérica:
+- **60d RX**: lead time típico de armação (15-30d) + ciclo de pedido mensal (30d) ≈ 60d para não rupturar.
+- **45d Solar**: você não quer comprar fora de janela sazonal — cobertura menor evita encalhe pós-verão.
+- **30d Lentes**: giro alto, lead curto, peça sob demanda — estoque de prateleira menor.
+
+**Não tenho seu lead time real**. Se você comprar quinzenal ou tiver fornecedor de 60d, esses números mudam. No fim do plano peço para validar.
+
+### Limitações honestas
+- Não considera **sazonalidade explícita** (Solar pesa mais ago-fev)
+- Não considera **lead time específico por fornecedor**
+- Não considera **transferência entre lojas** como alternativa à compra/liquidação
+- Usa média simples de 180d (sem peso para vendas recentes)
+- Não tem **mínimo de exposição** (ex.: "Ray-Ban precisa ≥ 10 peças expostas mesmo se uma loja só vende 5")
+
+Tudo isso fica para Fase 2.
+
+---
+
+## Perguntas antes de implementar
+
+1. **Limiares da marca** — aceita 50% / 30% / 20% como propostos, ou quer mais conservador (ex.: REPOR só com 60%)?
+2. **Cobertura-alvo** — confirma 60/45/30 dias, ou me passa seu lead time real?
+3. **Marcas DESCONTINUAR** — devem sumir do Plano de Compra ou aparecer cinza com aviso "saída em curso"?
