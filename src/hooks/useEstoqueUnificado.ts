@@ -184,6 +184,16 @@ interface MapeamentoFornecedor {
 // Período fixo: 180 dias
 const DIAS_PERIODO = 180;
 
+// Cobertura-alvo (dias) por subcategoria — quanto de estoque queremos manter
+// para não rupturar dado o lead time típico de cada categoria
+const COBERTURA_ALVO_DIAS: Record<SubcategoriaProduto, number> = {
+  AR_RX: 60,
+  AR_SOLAR: 45,
+  LENTES: 30,
+  ACESSORIOS: 60,
+  OUTROS: 60,
+};
+
 // ============================================
 // HOOK PRINCIPAL
 // ============================================
