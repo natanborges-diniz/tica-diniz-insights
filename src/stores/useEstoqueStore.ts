@@ -15,7 +15,7 @@ export interface EstoqueFilters {
   fornecedor: string;
   marca: string;
   acao: string;
-  decisaoMarca: "TODAS" | "REPOR_REFERENCIA" | "RENOVAR_COLECAO" | "AVALIAR_DESCONTINUACAO";
+  decisaoMarca: "TODAS" | "REPOR_REFERENCIA" | "RENOVAR_COLECAO" | "AVALIAR_DESCONTINUACAO" | "SEM_HISTORICO";
   busca: string;
 }
 
