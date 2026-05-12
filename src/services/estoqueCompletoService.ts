@@ -189,6 +189,19 @@ export async function getEstoqueCompleto(
       acaoSugerida,
       // Dead stock: mais de 180 dias em estoque
       isDeadStock: diasEmEstoque > 180,
+      // Subcategoria: prefere o backend; fallback regex em tipo, depois descrição
+      subcategoria: (() => {
+        const sub = (r.subcategoria ?? '').toString().toUpperCase().trim();
+        const valid: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'ACESSORIOS', 'OUTROS'];
+        if (valid.includes(sub as SubcategoriaProduto)) return sub as SubcategoriaProduto;
+        const fromTipo = subcategorizarProduto(tipo);
+        if (fromTipo !== 'OUTROS') return fromTipo;
+        return subcategorizarPorDescricao(descricao);
+      })(),
+      diasGiroMedio: r.dias_giro_medio ?? null,
+      diasGiroMediano: r.dias_giro_mediano ?? null,
+      diasGiroUltimaPeca: r.dias_giro_ultima_peca ?? null,
+      pecasGiroConsideradas: r.pecas_vendidas_consideradas ?? 0,
     };
   });
   
@@ -219,6 +232,11 @@ export async function getEstoqueCompleto(
   });
   console.log('[estoqueCompletoService] Contagem por tipo:', contagemTipos);
   console.log('[estoqueCompletoService] Contagem por ação:', contagemAcoes);
+
+  // Contagem por subcategoria (esperar AR_SOLAR > 0 quando há óculos OC)
+  const contagemSubcat: Record<string, number> = {};
+  resultado.forEach(r => { contagemSubcat[r.subcategoria] = (contagemSubcat[r.subcategoria] || 0) + 1; });
+  console.log('[estoqueCompletoService] Contagem por subcategoria:', contagemSubcat);
 
   return resultado;
 }
