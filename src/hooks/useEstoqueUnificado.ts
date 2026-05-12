@@ -29,37 +29,43 @@ export interface ItemEstoque {
   tipo: string;
   categoria: 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS';
   subcategoria: SubcategoriaProduto;
-  
+
   estoqueAtual: number;
   estoqueMinimo: number;
   valorEstoqueCusto: number;
-  
+
   qtdVendidos: number;
   totalVendido: number;
   diasEmEstoque: number;
   vendaDiaria: number;
-  
+  coberturaDias: number;
+  diasAlvo: number;
+
   precoCusto: number;
   precoVenda: number;
   margemBruta: number;
-  
+
   otb: number;
   otbValor: number;
   curvaABC: 'A' | 'B' | 'C';
   classificacao: 'COMPRAR_URGENTE' | 'COMPRAR' | 'ESTOQUE_OK' | 'EXCESSO';
   acaoSugerida: string;
   giroEstoque: number;
-  
+
   isDeadStock: boolean;
+  decisaoSku: DecisaoSku;
 }
 
 // Decisão por marca para Plano de Compra
-export type DecisaoMarca = 'REPOR_REFERENCIA' | 'RENOVAR_COLECAO' | 'AVALIAR_DESCONTINUACAO';
+export type DecisaoMarca = 'REPOR_REFERENCIA' | 'RENOVAR_COLECAO' | 'AVALIAR_DESCONTINUACAO' | 'SEM_HISTORICO';
+
+// Decisão por SKU dentro de uma marca aprovada (REPOR ou RENOVAR)
+export type DecisaoSku = 'REPOR' | 'TROCAR' | 'OBSERVAR' | 'LIQUIDAR' | 'SEM_CADASTRO';
 
 // Faixa de estoque doente
 export type FaixaDoente = 'PROMOCAO_20' | 'LIQUIDACAO_30' | 'LIQUIDACAO_50' | 'DESCARTE' | 'REVISAO_URGENTE';
 
-// SKU específico a repor
+// SKU específico a repor / trocar / observar
 export interface SkuARepor {
   codSku: number;
   codigoBarra: string;
@@ -73,9 +79,11 @@ export interface SkuARepor {
   subcategoria: SubcategoriaProduto;
   vendaDiaria: number;
   coberturaDias: number;
+  diasEmEstoque: number;
   precoCusto: number;
   valorCompra: number;
   prioridade: 'URGENTE' | 'ALTA' | 'MEDIA' | 'BAIXA';
+  decisaoSku: DecisaoSku;
 }
 
 // Item doente de uma marca
@@ -100,15 +108,20 @@ export interface ResumoMarca {
   mediaDiasEmEstoque: number;
   temCurvaA: boolean;
   decisao: DecisaoMarca;
-  // Bloco 1 — Repor referências (SKUs específicos curva A/B com giro rápido)
+  // Métricas da grade (Etapa 1)
+  skusAtivos: number;
+  skusComVenda: number;
+  taxaPerformance: number; // 0..1
+  pctCurvaAB: number;      // 0..1
+  mediaDiasParado: number;
+  // Etapa 2 — partição
   skusARepor: SkuARepor[];
-  // Bloco 2 — Novos modelos (qtd de peças de coleção nova)
-  pecasARenovar: number;
-  // Bloco 3 — Estoque doente desta marca
+  skusATrocar: SkuARepor[];
+  skusObservar: SkuARepor[];
+  pecasARenovar: number; // = skusATrocar.length
   itensDoentes: ItemDoenteMarca[];
   totalDoenteValor: number;
   totalDoentePecas: number;
-  // Todos os SKUs da marca (para export/detalhe)
   skus: ItemEstoque[];
 }
 
