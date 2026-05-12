@@ -556,6 +556,38 @@ export function useEstoqueUnificado() {
     return { faixa: 'PROMOCAO_20', desconto: '20%' };
   };
 
+  // Helper: monta um SkuARepor a partir de um ItemEstoque
+  const buildSkuView = (s: ItemEstoque, decisaoSkuOverride?: DecisaoSku): SkuARepor => {
+    // Quantidade a comprar baseada na cobertura-alvo da subcategoria
+    const projecaoAlvo = Math.ceil(s.vendaDiaria * s.diasAlvo);
+    const qtdAComprar = Math.max(0, projecaoAlvo - s.estoqueAtual);
+    const valorCompra = qtdAComprar * s.precoCusto;
+    let prioridade: SkuARepor['prioridade'];
+    if (s.coberturaDias < 15) prioridade = 'URGENTE';
+    else if (s.coberturaDias < 30) prioridade = 'ALTA';
+    else if (s.coberturaDias < 60) prioridade = 'MEDIA';
+    else prioridade = 'BAIXA';
+    return {
+      codSku: s.codSku,
+      codigoBarra: s.codigoBarra,
+      descricao: s.descricao,
+      qtdVendidos: s.qtdVendidos,
+      estoqueAtual: s.estoqueAtual,
+      qtdAComprar,
+      curvaABC: s.curvaABC,
+      marca: s.marca,
+      fornecedor: s.fornecedor,
+      subcategoria: s.subcategoria,
+      vendaDiaria: s.vendaDiaria,
+      coberturaDias: s.coberturaDias,
+      diasEmEstoque: s.diasEmEstoque,
+      precoCusto: s.precoCusto,
+      valorCompra,
+      prioridade,
+      decisaoSku: decisaoSkuOverride ?? s.decisaoSku,
+    };
+  };
+
   const resumoPorMarca = useMemo((): ResumoMarca[] => {
     if (itensFiltrados.length === 0) return [];
 
@@ -574,68 +606,62 @@ export function useEstoqueUnificado() {
       const totalVendido6m = skus.reduce((acc, s) => acc + s.totalVendido, 0);
       const otbTotal = skus.reduce((acc, s) => acc + s.otb, 0);
       const temCurvaA = skus.some(s => s.curvaABC === 'A');
-      
-      const vendidos = skus.filter(s => s.qtdVendidos > 0);
-      const mediaDiasEmEstoque = vendidos.length > 0
-        ? vendidos.reduce((acc, s) => acc + s.diasEmEstoque, 0) / vendidos.length
+
+      // ETAPA 1 — métricas da grade
+      const skusAtivosArr = skus.filter(s => s.estoqueAtual > 0 || s.qtdVendidos > 0);
+      const skusComVendaArr = skus.filter(s => s.qtdVendidos > 0);
+      const skusAtivos = skusAtivosArr.length;
+      const skusComVenda = skusComVendaArr.length;
+      const taxaPerformance = skusAtivos > 0 ? skusComVenda / skusAtivos : 0;
+      const skusAB = skusAtivosArr.filter(s => s.curvaABC === 'A' || s.curvaABC === 'B').length;
+      const pctCurvaAB = skusAtivos > 0 ? skusAB / skusAtivos : 0;
+      const semVenda = skusAtivosArr.filter(s => s.qtdVendidos === 0);
+      const mediaDiasParado = semVenda.length > 0
+        ? semVenda.reduce((acc, s) => acc + s.diasEmEstoque, 0) / semVenda.length
+        : 0;
+      const mediaDiasEmEstoque = skusComVendaArr.length > 0
+        ? skusComVendaArr.reduce((acc, s) => acc + s.diasEmEstoque, 0) / skusComVendaArr.length
         : 999;
+      const todosNovos = skusAtivosArr.length > 0 && skusAtivosArr.every(s => s.diasEmEstoque < 90);
 
-      // Decisão
+      // Decisão da MARCA
       let decisao: DecisaoMarca;
-      const soTemCurvaC = skus.every(s => s.curvaABC === 'C');
-      const todosDeadStock = comEstoque.length > 0 && comEstoque.every(s => s.isDeadStock);
-
-      if (soTemCurvaC && (todosDeadStock || qtdVendidos6m === 0)) {
+      if (skusComVenda === 0 && (todosNovos || skusAtivos === 0)) {
+        decisao = 'SEM_HISTORICO';
+      } else if (taxaPerformance < 0.20 && !temCurvaA && valorEstoque > 0) {
         decisao = 'AVALIAR_DESCONTINUACAO';
-      } else if (temCurvaA || mediaDiasEmEstoque < 90) {
+      } else if (taxaPerformance >= 0.50 && pctCurvaAB >= 0.30) {
         decisao = 'REPOR_REFERENCIA';
       } else {
         decisao = 'RENOVAR_COLECAO';
       }
 
-      // Bloco 1 — SKUs a repor (Curva A/B com giro rápido, venderam nos últimos 6m)
-      const skusARepor: SkuARepor[] = skus
-        .filter(s => s.qtdVendidos > 0 && (s.curvaABC === 'A' || s.curvaABC === 'B') && s.diasEmEstoque < 90)
-        .map(s => {
-          // Qtd a comprar: projeção de vendas para ~90 dias menos estoque atual
-          const projecao90d = Math.ceil(s.vendaDiaria * 90);
-          const qtdAComprar = Math.max(0, projecao90d - s.estoqueAtual);
-          const coberturaDias = s.vendaDiaria > 0 ? Math.round(s.estoqueAtual / s.vendaDiaria) : 999;
-          const valorCompra = qtdAComprar * s.precoCusto;
-          let prioridade: SkuARepor['prioridade'];
-          if (coberturaDias < 15) prioridade = 'URGENTE';
-          else if (coberturaDias < 30) prioridade = 'ALTA';
-          else if (coberturaDias < 60) prioridade = 'MEDIA';
-          else prioridade = 'BAIXA';
-          return {
-            codSku: s.codSku,
-            codigoBarra: s.codigoBarra,
-            descricao: s.descricao,
-            qtdVendidos: s.qtdVendidos,
-            estoqueAtual: s.estoqueAtual,
-            qtdAComprar,
-            curvaABC: s.curvaABC,
-            marca: s.marca,
-            fornecedor: s.fornecedor,
-            subcategoria: s.subcategoria,
-            vendaDiaria: s.vendaDiaria,
-            coberturaDias,
-            precoCusto: s.precoCusto,
-            valorCompra,
-            prioridade,
-          };
-        })
-        .filter(s => s.qtdAComprar > 0)
-        .sort((a, b) => b.qtdVendidos - a.qtdVendidos);
+      // ETAPA 2 — partição dos SKUs (só faz sentido em marcas REPOR ou RENOVAR)
+      const marcaAprovada = decisao === 'REPOR_REFERENCIA' || decisao === 'RENOVAR_COLECAO';
 
-      // Bloco 2 — Peças a renovar (gap de compra menos SKUs a repor)
-      const totalReporPecas = skusARepor.reduce((acc, s) => acc + s.qtdAComprar, 0);
-      const gapTotal = Math.max(0, qtdVendidos6m - pecasEstoque);
-      const pecasARenovar = Math.max(0, gapTotal - totalReporPecas);
+      const skusARepor: SkuARepor[] = marcaAprovada
+        ? skus
+            .filter(s => s.decisaoSku === 'REPOR')
+            .map(s => buildSkuView(s))
+            .filter(s => s.qtdAComprar > 0)
+            .sort((a, b) => {
+              const ordemPrio = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAIXA: 3 } as const;
+              return ordemPrio[a.prioridade] - ordemPrio[b.prioridade] || b.qtdVendidos - a.qtdVendidos;
+            })
+        : [];
 
-      // Bloco 3 — Estoque doente desta marca
+      // TROCAR só faz sentido em marca RENOVAR (em marca REPOR esses viram OBSERVAR)
+      const skusATrocar: SkuARepor[] = decisao === 'RENOVAR_COLECAO'
+        ? skus.filter(s => s.decisaoSku === 'TROCAR').map(s => buildSkuView(s)).sort((a, b) => b.diasEmEstoque - a.diasEmEstoque)
+        : [];
+
+      const skusObservar: SkuARepor[] = marcaAprovada
+        ? skus.filter(s => s.decisaoSku === 'OBSERVAR' && s.qtdVendidos > 0).map(s => buildSkuView(s)).sort((a, b) => b.qtdVendidos - a.qtdVendidos)
+        : [];
+
+      // Estoque doente — SKUs LIQUIDAR (e qualquer parado >=180 para visibilidade em marcas DESCONTINUAR)
       const itensDoentes: ItemDoenteMarca[] = comEstoque
-        .filter(s => s.diasEmEstoque >= 180)
+        .filter(s => s.diasEmEstoque >= 180 && s.qtdVendidos === 0)
         .map(s => {
           const { faixa, desconto } = classificarFaixaDoente(s.diasEmEstoque);
           return {
@@ -649,22 +675,30 @@ export function useEstoqueUnificado() {
           };
         })
         .sort((a, b) => b.diasEmEstoque - a.diasEmEstoque);
-      
+
       const totalDoentePecas = itensDoentes.reduce((acc, i) => acc + i.estoqueAtual, 0);
       const totalDoenteValor = itensDoentes.reduce((acc, i) => acc + i.valorCusto, 0);
 
+      const pecasARenovar = skusATrocar.length;
       const categoria = skus[0]?.categoria || 'OUTROS';
 
       return {
         marca, categoria, pecasEstoque, valorEstoque,
         qtdVendidos6m, totalVendido6m, otbTotal,
         mediaDiasEmEstoque, temCurvaA, decisao,
-        skusARepor, pecasARenovar,
+        skusAtivos, skusComVenda, taxaPerformance, pctCurvaAB, mediaDiasParado,
+        skusARepor, skusATrocar, skusObservar,
+        pecasARenovar,
         itensDoentes, totalDoenteValor, totalDoentePecas,
         skus,
       };
     }).sort((a, b) => {
-      const ordem: Record<DecisaoMarca, number> = { REPOR_REFERENCIA: 0, RENOVAR_COLECAO: 1, AVALIAR_DESCONTINUACAO: 2 };
+      const ordem: Record<DecisaoMarca, number> = {
+        REPOR_REFERENCIA: 0,
+        RENOVAR_COLECAO: 1,
+        SEM_HISTORICO: 2,
+        AVALIAR_DESCONTINUACAO: 3,
+      };
       return ordem[a.decisao] - ordem[b.decisao] || b.totalVendido6m - a.totalVendido6m;
     });
   }, [itensFiltrados]);
