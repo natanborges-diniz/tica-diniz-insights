@@ -19,7 +19,8 @@ import { formatters, ExportColumn } from "@/utils/exportData";
 import { 
   ShoppingCart, AlertCircle, Info, RefreshCw, BoxIcon,
   ChevronDown, ChevronRight, Target, Download,
-  Repeat, Sparkles, XCircle, AlertTriangle, Package, TrendingUp, DollarSign
+  Repeat, Sparkles, XCircle, AlertTriangle, Package, TrendingUp, DollarSign,
+  Eye, HelpCircle, Replace
 } from "lucide-react";
 
 // ============================================
