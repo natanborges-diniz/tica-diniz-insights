@@ -325,7 +325,14 @@ export function useEstoqueUnificado() {
       const isDeadStock = estoqueItem?.isDeadStock ?? false;
 
       const categoria = categorizarProduto(tipo);
-      const subcategoria = subcategorizarProduto(tipo);
+      // Subcategoria: prefere o que veio do Bridge (estoque ou vendas), fallback regex
+      const subBackend = (estoqueItem?.subcategoria
+        ?? (vendas?.subcategoria as SubcategoriaProduto | null | undefined)
+        ?? null) as SubcategoriaProduto | null;
+      const subValid: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'ACESSORIOS', 'OUTROS'];
+      const subcategoria: SubcategoriaProduto = (subBackend && subValid.includes(subBackend))
+        ? subBackend
+        : subcategorizarProduto(tipo);
       const curvaABC = curvaMap.get(codSku) || 'C';
 
       const qtdVendidos = vendas?.qtdProdutos ?? 0;
@@ -334,8 +341,18 @@ export function useEstoqueUnificado() {
       const giroEstoque = vendas?.giroEstoque ?? 0;
       const margemBruta = vendas?.margemBruta ?? 0;
 
-      const coberturaDias = vendaDiaria > 0 ? Math.round(estoqueAtual / vendaDiaria) : 999;
+      // Giro real (Bridge): prefere estoque/completo (mais abrangente), fallback vendas/analise-sku
+      const diasGiroMedio = estoqueItem?.diasGiroMedio ?? vendas?.diasGiroMedio ?? null;
+      const diasGiroMediano = estoqueItem?.diasGiroMediano ?? vendas?.diasGiroMediano ?? null;
+      const diasGiroUltimaPeca = estoqueItem?.diasGiroUltimaPeca ?? vendas?.diasGiroUltimaPeca ?? null;
+      const pecasGiroConsideradas = estoqueItem?.pecasGiroConsideradas ?? vendas?.pecasGiroConsideradas ?? 0;
+
+      // Cobertura: se há giro mediano (dias por peça) → estoque atual * dias por peça = dias até esgotar.
+      // Caso contrário, fallback no método antigo (qtd/180).
       const diasAlvo = COBERTURA_ALVO_DIAS[subcategoria] ?? 60;
+      const coberturaDias = diasGiroMediano && diasGiroMediano > 0
+        ? Math.round(estoqueAtual * diasGiroMediano)
+        : (vendaDiaria > 0 ? Math.round(estoqueAtual / vendaDiaria) : 999);
 
       let estoqueMinimo = 0;
       if (filters.empresa !== null && filters.empresa !== 'ALL') {
