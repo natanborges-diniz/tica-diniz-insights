@@ -1113,7 +1113,7 @@ export function useEstoqueUnificado() {
     itensProcessados, itensFiltrados, itensComEstoque,
     metricas, contagemPorCategoria, diasPeriodo: DIAS_PERIODO,
     listaFornecedores, listaMarcas, listaAcoes, marcasSemFornecedor,
-    mixIdealCategoria, mixIdealMarca,
+    mixIdealCategoria, mixIdealMarca, mixIdealMarcas, lacunasNaoPreenchiveis,
     resumoPorMarca, estoqueDoenteAgrupado, listaCompraFlat,
     carregarDados,
     carregadoEm, empresaCarregada,
