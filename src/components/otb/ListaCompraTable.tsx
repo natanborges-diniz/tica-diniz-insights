@@ -130,11 +130,15 @@ export function ListaCompraTable({ itens }: Props) {
         <td className="p-2"><Badge variant="outline" className="text-[10px]">{subLabel[s.subcategoria] ?? '—'}</Badge></td>
         <td className="p-2 text-right text-xs">{s.qtdVendidos}</td>
         <td className="p-2 text-right text-xs">{s.estoqueAtual}</td>
-        <td className="p-2 text-right text-xs" title={`Amostra: ${s.pecasGiroConsideradas} peça(s)`}>
-          {s.diasGiroMediano != null ? `${Math.round(s.diasGiroMediano)}d` : '—'}
+        <td className="p-2 text-right text-xs" title={s.diasGiroMediano != null ? `Amostra: ${s.pecasGiroConsideradas} peça(s)` : 'Estimado pela velocidade média (giro real indisponível no backend)'}>
+          {s.diasGiroMediano != null
+            ? `${Math.round(s.diasGiroMediano)}d`
+            : (s.vendaDiaria > 0 ? <span className="text-muted-foreground italic">~{Math.round(1 / s.vendaDiaria)}d</span> : '—')}
         </td>
-        <td className="p-2 text-right text-xs text-muted-foreground" title="Dias entre entrada e venda da última peça">
-          {s.diasGiroUltimaPeca != null ? `${Math.round(s.diasGiroUltimaPeca)}d` : '—'}
+        <td className="p-2 text-right text-xs text-muted-foreground" title={s.diasGiroUltimaPeca != null ? 'Dias entre entrada e venda da última peça' : 'Aproximação: dias em estoque atual (giro real indisponível)'}>
+          {s.diasGiroUltimaPeca != null
+            ? `${Math.round(s.diasGiroUltimaPeca)}d`
+            : (s.diasEmEstoque > 0 ? <span className="italic">~{s.diasEmEstoque}d</span> : '—')}
         </td>
         <td className="p-2 text-right text-xs">{s.coberturaDias >= 999 ? '—' : `${s.coberturaDias}d`}</td>
         <td className="p-2 text-right font-bold text-emerald-700 dark:text-emerald-400">{s.qtdAComprar}</td>
