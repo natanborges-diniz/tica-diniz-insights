@@ -71,6 +71,9 @@ export type DecisaoSku = 'REPOR' | 'TROCAR' | 'OBSERVAR' | 'LIQUIDAR' | 'SEM_CAD
 // Faixa de estoque doente
 export type FaixaDoente = 'PROMOCAO_20' | 'LIQUIDACAO_30' | 'LIQUIDACAO_50' | 'DESCARTE' | 'REVISAO_URGENTE';
 
+// Motivo da quantidade alocada (passes da distribuição de lacuna)
+export type MotivoQtd = 'BASE' | 'GIRO_RAPIDO' | 'GIRO_MUITO_RAPIDO';
+
 // SKU específico a repor / trocar / observar
 export interface SkuARepor {
   codSku: number;
@@ -94,6 +97,29 @@ export interface SkuARepor {
   valorCompra: number;
   prioridade: 'URGENTE' | 'ALTA' | 'MEDIA' | 'BAIXA';
   decisaoSku: DecisaoSku;
+  motivoQtd?: MotivoQtd;
+}
+
+// Mix ideal por marca (Fase 1 — top-down)
+export interface MixMarca {
+  marca: string;
+  curvaMarca: 'A' | 'B' | 'C';
+  pecasVendidas6m: number;
+  faturamento6m: number;
+  vendaDiaria: number;
+  pecasIdeais: number;
+  pecasAtuais: number;
+  lacuna: number;
+  incluidaNoMix: boolean;
+  decisao: DecisaoMarca;
+  taxaPerformance: number;
+}
+
+// Lacuna que sobrou após esgotar o pool de SKUs bons
+export interface LacunaNaoPreenchivel {
+  marca: string;
+  faltam: number;
+  poolSize: number;
 }
 
 // Item doente de uma marca
@@ -124,7 +150,12 @@ export interface ResumoMarca {
   taxaPerformance: number; // 0..1
   pctCurvaAB: number;      // 0..1
   mediaDiasParado: number;
-  // Etapa 2 — partição
+  // Fase 1 — mix ideal
+  curvaMarca: 'A' | 'B' | 'C';
+  pecasIdeais: number;
+  lacuna: number;
+  incluidaNoMix: boolean;
+  // Fase 2 — partição
   skusARepor: SkuARepor[];
   skusATrocar: SkuARepor[];
   skusObservar: SkuARepor[];
@@ -132,6 +163,8 @@ export interface ResumoMarca {
   itensDoentes: ItemDoenteMarca[];
   totalDoenteValor: number;
   totalDoentePecas: number;
+  lacunaNaoPreenchivel: number;
+  poolSkusBons: number;
   skus: ItemEstoque[];
 }
 
@@ -204,6 +237,30 @@ const COBERTURA_ALVO_DIAS: Record<SubcategoriaProduto, number> = {
   LENTES_CONTATO: 30,
   ACESSORIOS: 60,
   OUTROS: 60,
+};
+
+// ============================================
+// PARÂMETROS DA INTELIGÊNCIA DE COMPRA (Fase 1 + Fase 2)
+// ============================================
+
+// Giro máximo (dias) para considerar uma peça "boa" — dentro deste limite ela
+// gira rápido o suficiente para entrar no pool de recompra.
+// Acima disso o SKU é excluído do plano (vai para Observar / Avaliar troca).
+const GIRO_BOM_MAX_DIAS = 90;
+
+// Cobertura-alvo (dias) por curva da MARCA — quanto de estoque a marca deve manter.
+// Marcas A merecem maior giro (cobertura menor); marcas C maior cobertura (menos compra).
+const COBERTURA_ALVO_MARCA: Record<'A' | 'B' | 'C', number> = {
+  A: 60,
+  B: 75,
+  C: 90,
+};
+
+// Peso da curva ABC do SKU no score de prioridade dentro do pool da marca.
+const PESO_CURVA: Record<'A' | 'B' | 'C', number> = {
+  A: 3,
+  B: 2,
+  C: 1,
 };
 
 // ============================================
@@ -592,7 +649,89 @@ export function useEstoqueUnificado() {
   }, [itensProcessados]);
 
   // ============================================
-  // RESUMO POR MARCA — com blocos acionáveis
+  // FASE 1 — MIX IDEAL POR MARCA (top-down)
+  // ============================================
+  // Decide quais marcas compõem o mix e quanto de estoque cada uma deve ter.
+  // SKU não entra aqui. A saída alimenta a Fase 2 (distribuição da lacuna).
+
+  const mixIdealMarcas = useMemo((): MixMarca[] => {
+    if (itensFiltrados.length === 0) return [];
+
+    type Agg = {
+      pecasVendidas: number;
+      faturamento: number;
+      pecasAtuais: number;
+      skusComVenda: number;
+      skusAtivos: number;
+    };
+    const aggByMarca = new Map<string, Agg>();
+    itensFiltrados.forEach(it => {
+      const k = it.marca || 'SEM MARCA';
+      const a = aggByMarca.get(k) ?? { pecasVendidas: 0, faturamento: 0, pecasAtuais: 0, skusComVenda: 0, skusAtivos: 0 };
+      a.pecasVendidas += it.qtdVendidos;
+      a.faturamento += it.totalVendido;
+      a.pecasAtuais += Math.max(0, it.estoqueAtual);
+      if (it.qtdVendidos > 0) a.skusComVenda += 1;
+      if (it.estoqueAtual > 0 || it.qtdVendidos > 0) a.skusAtivos += 1;
+      aggByMarca.set(k, a);
+    });
+
+    // Curva ABC por marca (faturamento)
+    const totalFat = Array.from(aggByMarca.values()).reduce((s, a) => s + a.faturamento, 0);
+    const ordenadas = Array.from(aggByMarca.entries()).sort((a, b) => b[1].faturamento - a[1].faturamento);
+    let acum = 0;
+    const curvaPorMarca = new Map<string, 'A' | 'B' | 'C'>();
+    ordenadas.forEach(([marca, agg]) => {
+      acum += agg.faturamento;
+      const pct = totalFat > 0 ? (acum / totalFat) * 100 : 100;
+      if (pct <= 80) curvaPorMarca.set(marca, 'A');
+      else if (pct <= 95) curvaPorMarca.set(marca, 'B');
+      else curvaPorMarca.set(marca, 'C');
+    });
+
+    return Array.from(aggByMarca.entries()).map(([marca, agg]) => {
+      const curvaMarca = curvaPorMarca.get(marca) || 'C';
+      const vendaDiaria = agg.pecasVendidas / DIAS_PERIODO;
+      const taxaPerformance = agg.skusAtivos > 0 ? agg.skusComVenda / agg.skusAtivos : 0;
+
+      // Decisão da marca + se entra no mix
+      let decisao: DecisaoMarca;
+      let incluidaNoMix: boolean;
+      if (agg.skusComVenda === 0) {
+        decisao = 'SEM_HISTORICO';
+        incluidaNoMix = false;
+      } else if (curvaMarca === 'C' && taxaPerformance < 0.5) {
+        decisao = 'AVALIAR_DESCONTINUACAO';
+        incluidaNoMix = false;
+      } else {
+        // Entra no mix; se a maioria gira → REPOR; senão → RENOVAR (mas ainda no mix)
+        decisao = taxaPerformance >= 0.5 ? 'REPOR_REFERENCIA' : 'RENOVAR_COLECAO';
+        incluidaNoMix = true;
+      }
+
+      const pecasIdeais = incluidaNoMix
+        ? Math.ceil(vendaDiaria * COBERTURA_ALVO_MARCA[curvaMarca])
+        : 0;
+      const lacuna = Math.max(0, pecasIdeais - agg.pecasAtuais);
+
+      return {
+        marca,
+        curvaMarca,
+        pecasVendidas6m: agg.pecasVendidas,
+        faturamento6m: agg.faturamento,
+        vendaDiaria,
+        pecasIdeais,
+        pecasAtuais: agg.pecasAtuais,
+        lacuna,
+        incluidaNoMix,
+        decisao,
+        taxaPerformance,
+      };
+    }).sort((a, b) => b.faturamento6m - a.faturamento6m);
+  }, [itensFiltrados]);
+
+  // ============================================
+  // RESUMO POR MARCA — com blocos acionáveis (Fase 2)
   // ============================================
 
   const classificarFaixaDoente = (dias: number): { faixa: FaixaDoente; desconto: string } => {
@@ -602,26 +741,21 @@ export function useEstoqueUnificado() {
     return { faixa: 'PROMOCAO_20', desconto: '20%' };
   };
 
-  // Helper: monta um SkuARepor a partir de um ItemEstoque
-  const buildSkuView = (s: ItemEstoque, decisaoSkuOverride?: DecisaoSku): SkuARepor => {
-    // Quantidade a comprar:
-    //  - Se há giro real (dias por peça): no horizonte diasAlvo, vão sair ceil(diasAlvo / diasGiroEfetivo) peças
-    //    → comprar a diferença para repor o estoque ao final do horizonte.
-    //  - Fallback: usar vendaDiaria (proxy antigo).
-    //  Backend orienta priorizar dias_giro_ultima_peca, com fallback em dias_giro_medio.
-    const diasGiroEfetivo = s.diasGiroUltimaPeca ?? s.diasGiroMedio ?? null;
-    let projecaoAlvo: number;
-    if (diasGiroEfetivo && diasGiroEfetivo > 0) {
-      projecaoAlvo = Math.ceil(s.diasAlvo / diasGiroEfetivo);
-    } else {
-      projecaoAlvo = Math.ceil(s.vendaDiaria * s.diasAlvo);
-    }
-    const qtdAComprar = Math.max(0, projecaoAlvo - s.estoqueAtual);
+  // Helper: monta um SkuARepor a partir de um ItemEstoque.
+  // qtdAComprar e motivoQtd são IMPOSTOS pela distribuição da lacuna (Fase 2)
+  // — não calculados aqui. Quando não há qtd (ex: TROCAR/OBSERVAR), passa 0.
+  const buildSkuView = (
+    s: ItemEstoque,
+    decisaoSkuOverride: DecisaoSku | undefined,
+    qtdAComprar: number,
+    motivoQtd: MotivoQtd | undefined,
+  ): SkuARepor => {
     const valorCompra = qtdAComprar * s.precoCusto;
+    // Prioridade derivada do motivo do passe da distribuição.
     let prioridade: SkuARepor['prioridade'];
-    if (s.coberturaDias < 15) prioridade = 'URGENTE';
-    else if (s.coberturaDias < 30) prioridade = 'ALTA';
-    else if (s.coberturaDias < 60) prioridade = 'MEDIA';
+    if (motivoQtd === 'GIRO_MUITO_RAPIDO') prioridade = 'URGENTE';
+    else if (motivoQtd === 'GIRO_RAPIDO') prioridade = 'ALTA';
+    else if (motivoQtd === 'BASE') prioridade = 'MEDIA';
     else prioridade = 'BAIXA';
     return {
       codSku: s.codSku,
@@ -645,11 +779,14 @@ export function useEstoqueUnificado() {
       valorCompra,
       prioridade,
       decisaoSku: decisaoSkuOverride ?? s.decisaoSku,
+      motivoQtd,
     };
   };
 
   const resumoPorMarca = useMemo((): ResumoMarca[] => {
     if (itensFiltrados.length === 0) return [];
+
+    const mixMap = new Map(mixIdealMarcas.map(m => [m.marca, m]));
 
     const porMarca = new Map<string, ItemEstoque[]>();
     itensFiltrados.forEach(item => {
@@ -659,6 +796,7 @@ export function useEstoqueUnificado() {
     });
 
     return Array.from(porMarca.entries()).map(([marca, skus]) => {
+      const mix = mixMap.get(marca);
       const comEstoque = skus.filter(s => s.estoqueAtual > 0);
       const pecasEstoque = comEstoque.reduce((acc, s) => acc + s.estoqueAtual, 0);
       const valorEstoque = comEstoque.reduce((acc, s) => acc + s.valorEstoqueCusto, 0);
@@ -667,7 +805,7 @@ export function useEstoqueUnificado() {
       const otbTotal = skus.reduce((acc, s) => acc + s.otb, 0);
       const temCurvaA = skus.some(s => s.curvaABC === 'A');
 
-      // ETAPA 1 — métricas da grade
+      // Métricas da grade (mantidas)
       const skusAtivosArr = skus.filter(s => s.estoqueAtual > 0 || s.qtdVendidos > 0);
       const skusComVendaArr = skus.filter(s => s.qtdVendidos > 0);
       const skusAtivos = skusAtivosArr.length;
@@ -682,44 +820,130 @@ export function useEstoqueUnificado() {
       const mediaDiasEmEstoque = skusComVendaArr.length > 0
         ? skusComVendaArr.reduce((acc, s) => acc + s.diasEmEstoque, 0) / skusComVendaArr.length
         : 999;
-      const todosNovos = skusAtivosArr.length > 0 && skusAtivosArr.every(s => s.diasEmEstoque < 90);
 
-      // Decisão da MARCA
-      let decisao: DecisaoMarca;
-      if (skusComVenda === 0 && (todosNovos || skusAtivos === 0)) {
-        decisao = 'SEM_HISTORICO';
-      } else if (taxaPerformance < 0.20 && !temCurvaA && valorEstoque > 0) {
-        decisao = 'AVALIAR_DESCONTINUACAO';
-      } else if (taxaPerformance >= 0.50 && pctCurvaAB >= 0.30) {
-        decisao = 'REPOR_REFERENCIA';
-      } else {
-        decisao = 'RENOVAR_COLECAO';
+      // Decisão e mix vêm da Fase 1 (autoridade única)
+      const decisao: DecisaoMarca = mix?.decisao ?? 'SEM_HISTORICO';
+      const curvaMarca = mix?.curvaMarca ?? 'C';
+      const pecasIdeais = mix?.pecasIdeais ?? 0;
+      const lacuna = mix?.lacuna ?? 0;
+      const incluidaNoMix = mix?.incluidaNoMix ?? false;
+
+      // ============= FASE 2 — DISTRIBUIÇÃO DA LACUNA =============
+      // Só rodamos se a marca está no mix E há lacuna (estoque < ideal).
+      // Caso contrário, skusARepor = [] mesmo que existam SKUs zerados.
+      let skusARepor: SkuARepor[] = [];
+      let lacunaNaoPreenchivel = 0;
+      let poolSkusBons = 0;
+
+      if (incluidaNoMix && lacuna > 0) {
+        // Pool de SKUs "bons": vendeu, tem custo cadastrado, e giro real ≤ 90 d.
+        // SKU sem giro real ou com giro > 90 → fora do plano (vai para Observar).
+        const pool = skus
+          .filter(s => {
+            const giroEf = s.diasGiroUltimaPeca ?? s.diasGiroMedio ?? null;
+            return s.precoCusto > 0
+              && s.qtdVendidos > 0
+              && giroEf !== null
+              && giroEf > 0
+              && giroEf <= GIRO_BOM_MAX_DIAS;
+          })
+          .map(s => {
+            const giroEf = (s.diasGiroUltimaPeca ?? s.diasGiroMedio) as number;
+            const peso = PESO_CURVA[s.curvaABC];
+            const amostra = Math.max(1, s.pecasGiroConsideradas);
+            const score = (1 / giroEf) * amostra * peso;
+            // Teto: não pedir mais que histórico de venda + 20% (mínimo 1).
+            const tetoCompra = Math.max(1, Math.ceil(s.qtdVendidos * 1.2));
+            return {
+              item: s,
+              giroEf,
+              score,
+              tetoCompra,
+              qtd: 0,
+              motivo: undefined as MotivoQtd | undefined,
+            };
+          })
+          .sort((a, b) => b.score - a.score);
+
+        poolSkusBons = pool.length;
+        let restante = lacuna;
+
+        // Passe 1 — base: 1 peça por SKU do pool, do melhor para o pior.
+        for (const p of pool) {
+          if (restante <= 0) break;
+          if (p.qtd < p.tetoCompra) {
+            p.qtd += 1;
+            restante -= 1;
+            p.motivo = 'BASE';
+          }
+        }
+
+        // Passe 2 — escalonamento: +1 nos giros ≤ 45 d.
+        if (restante > 0) {
+          for (const p of pool) {
+            if (restante <= 0) break;
+            if (p.giroEf <= 45 && p.qtd < p.tetoCompra) {
+              p.qtd += 1;
+              restante -= 1;
+              p.motivo = 'GIRO_RAPIDO';
+            }
+          }
+        }
+
+        // Passe 3 — escalonamento: +1 nos giros ≤ 30 d.
+        if (restante > 0) {
+          for (const p of pool) {
+            if (restante <= 0) break;
+            if (p.giroEf <= 30 && p.qtd < p.tetoCompra) {
+              p.qtd += 1;
+              restante -= 1;
+              p.motivo = 'GIRO_MUITO_RAPIDO';
+            }
+          }
+        }
+
+        // Passes 4+ — continua descendo o limite até esgotar tetos ou lacuna.
+        const limites = [21, 15, 10, 7];
+        for (const lim of limites) {
+          if (restante <= 0) break;
+          let alocou = false;
+          for (const p of pool) {
+            if (restante <= 0) break;
+            if (p.giroEf <= lim && p.qtd < p.tetoCompra) {
+              p.qtd += 1;
+              restante -= 1;
+              p.motivo = 'GIRO_MUITO_RAPIDO';
+              alocou = true;
+            }
+          }
+          if (!alocou) break;
+        }
+
+        lacunaNaoPreenchivel = restante;
+
+        skusARepor = pool
+          .filter(p => p.qtd > 0)
+          .map(p => buildSkuView(p.item, 'REPOR', p.qtd, p.motivo))
+          .sort((a, b) => {
+            const ordemPrio = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAIXA: 3 } as const;
+            return ordemPrio[a.prioridade] - ordemPrio[b.prioridade] || b.qtdAComprar - a.qtdAComprar;
+          });
       }
 
-      // ETAPA 2 — partição dos SKUs (só faz sentido em marcas REPOR ou RENOVAR)
-      const marcaAprovada = decisao === 'REPOR_REFERENCIA' || decisao === 'RENOVAR_COLECAO';
-
-      const skusARepor: SkuARepor[] = marcaAprovada
-        ? skus
-            .filter(s => s.decisaoSku === 'REPOR')
-            .map(s => buildSkuView(s))
-            .filter(s => s.qtdAComprar > 0)
-            .sort((a, b) => {
-              const ordemPrio = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAIXA: 3 } as const;
-              return ordemPrio[a.prioridade] - ordemPrio[b.prioridade] || b.qtdVendidos - a.qtdVendidos;
-            })
-        : [];
-
-      // TROCAR só faz sentido em marca RENOVAR (em marca REPOR esses viram OBSERVAR)
+      // TROCAR só faz sentido em marca RENOVAR
       const skusATrocar: SkuARepor[] = decisao === 'RENOVAR_COLECAO'
-        ? skus.filter(s => s.decisaoSku === 'TROCAR').map(s => buildSkuView(s)).sort((a, b) => b.diasEmEstoque - a.diasEmEstoque)
+        ? skus.filter(s => s.decisaoSku === 'TROCAR').map(s => buildSkuView(s, undefined, 0, undefined)).sort((a, b) => b.diasEmEstoque - a.diasEmEstoque)
         : [];
 
-      const skusObservar: SkuARepor[] = marcaAprovada
-        ? skus.filter(s => s.decisaoSku === 'OBSERVAR' && s.qtdVendidos > 0).map(s => buildSkuView(s)).sort((a, b) => b.qtdVendidos - a.qtdVendidos)
+      // OBSERVAR: SKUs com venda mas que ficaram fora do plano (giro >90, sem giro real, ou marca sem lacuna)
+      const skusObservar: SkuARepor[] = incluidaNoMix
+        ? skus
+            .filter(s => s.qtdVendidos > 0 && !skusARepor.some(r => r.codSku === s.codSku))
+            .map(s => buildSkuView(s, 'OBSERVAR', 0, undefined))
+            .sort((a, b) => b.qtdVendidos - a.qtdVendidos)
         : [];
 
-      // Estoque doente — SKUs LIQUIDAR (e qualquer parado >=180 para visibilidade em marcas DESCONTINUAR)
+      // Estoque doente
       const itensDoentes: ItemDoenteMarca[] = comEstoque
         .filter(s => s.diasEmEstoque >= 180 && s.qtdVendidos === 0)
         .map(s => {
@@ -747,9 +971,11 @@ export function useEstoqueUnificado() {
         qtdVendidos6m, totalVendido6m, otbTotal,
         mediaDiasEmEstoque, temCurvaA, decisao,
         skusAtivos, skusComVenda, taxaPerformance, pctCurvaAB, mediaDiasParado,
+        curvaMarca, pecasIdeais, lacuna, incluidaNoMix,
         skusARepor, skusATrocar, skusObservar,
         pecasARenovar,
         itensDoentes, totalDoenteValor, totalDoentePecas,
+        lacunaNaoPreenchivel, poolSkusBons,
         skus,
       };
     }).sort((a, b) => {
@@ -761,7 +987,15 @@ export function useEstoqueUnificado() {
       };
       return ordem[a.decisao] - ordem[b.decisao] || b.totalVendido6m - a.totalVendido6m;
     });
-  }, [itensFiltrados]);
+  }, [itensFiltrados, mixIdealMarcas]);
+
+  // Lacunas que sobraram após esgotar o pool de SKUs bons (Fase 2)
+  const lacunasNaoPreenchiveis = useMemo((): LacunaNaoPreenchivel[] => {
+    return resumoPorMarca
+      .filter(m => m.lacunaNaoPreenchivel > 0)
+      .map(m => ({ marca: m.marca, faltam: m.lacunaNaoPreenchivel, poolSize: m.poolSkusBons }))
+      .sort((a, b) => b.faltam - a.faltam);
+  }, [resumoPorMarca]);
 
   // Lista achatada de SKUs a comprar — ordenada por prioridade
   const listaCompraFlat = useMemo((): SkuARepor[] => {
@@ -879,7 +1113,7 @@ export function useEstoqueUnificado() {
     itensProcessados, itensFiltrados, itensComEstoque,
     metricas, contagemPorCategoria, diasPeriodo: DIAS_PERIODO,
     listaFornecedores, listaMarcas, listaAcoes, marcasSemFornecedor,
-    mixIdealCategoria, mixIdealMarca,
+    mixIdealCategoria, mixIdealMarca, mixIdealMarcas, lacunasNaoPreenchiveis,
     resumoPorMarca, estoqueDoenteAgrupado, listaCompraFlat,
     carregarDados,
     carregadoEm, empresaCarregada,

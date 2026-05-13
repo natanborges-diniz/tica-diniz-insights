@@ -478,6 +478,8 @@ export default function AnaliseOTBPage() {
     metricas,
     marcasSemFornecedor,
     mixIdealCategoria,
+    mixIdealMarcas,
+    lacunasNaoPreenchiveis,
     resumoPorMarca,
     listaCompraFlat,
     listaMarcas,
@@ -620,6 +622,78 @@ export default function AnaliseOTBPage() {
 
           {/* KPIs */}
           <KPICards metricas={metricas} comprar={comprarKpi} />
+
+          {/* Mix Ideal por Marca (Fase 1) */}
+          {mixIdealMarcas.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Target className="h-5 w-5 text-primary" />
+                  Mix Ideal por Marca
+                </CardTitle>
+                <CardDescription>
+                  Define quanto de estoque cada marca deve ter (antes de olhar SKU). Marcas com lacuna = 0 não geram compra, mesmo com SKUs zerados.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-xs">
+                      <tr>
+                        <th className="text-left p-2">Marca</th>
+                        <th className="text-left p-2">Curva</th>
+                        <th className="text-right p-2">Vendas 6m</th>
+                        <th className="text-right p-2">Estoque ideal</th>
+                        <th className="text-right p-2">Estoque atual</th>
+                        <th className="text-right p-2 font-bold">Lacuna</th>
+                        <th className="text-left p-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mixIdealMarcas.slice(0, 30).map(m => (
+                        <tr key={m.marca} className="border-t hover:bg-muted/30">
+                          <td className="p-2 font-medium">{m.marca}</td>
+                          <td className="p-2"><Badge variant={m.curvaMarca === 'A' ? 'default' : 'secondary'} className="text-[10px]">{m.curvaMarca}</Badge></td>
+                          <td className="p-2 text-right">{m.pecasVendidas6m}</td>
+                          <td className="p-2 text-right">{m.incluidaNoMix ? m.pecasIdeais : '—'}</td>
+                          <td className="p-2 text-right">{m.pecasAtuais}</td>
+                          <td className="p-2 text-right font-bold">
+                            {!m.incluidaNoMix ? <span className="text-muted-foreground">fora do mix</span>
+                              : m.lacuna > 0 ? <span className="text-primary">+{m.lacuna}</span>
+                              : <span className="text-emerald-600">0</span>}
+                          </td>
+                          <td className="p-2 text-xs">
+                            {!m.incluidaNoMix ? <span className="text-muted-foreground">não compõe mix</span>
+                              : m.lacuna === 0 ? <span className="text-emerald-700 dark:text-emerald-400">estoque suficiente — sem compra</span>
+                              : <span className="text-primary">comprar até {m.lacuna} pç</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {mixIdealMarcas.length > 30 && (
+                  <p className="text-xs text-muted-foreground text-center mt-2">+{mixIdealMarcas.length - 30} marcas</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Lacunas não preenchíveis (Fase 2) */}
+          {lacunasNaoPreenchiveis.length > 0 && (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="font-medium mb-1">Lacunas não preenchíveis — falta curadoria de novos modelos</div>
+                <div className="text-xs text-muted-foreground">
+                  {lacunasNaoPreenchiveis.length} marca{lacunasNaoPreenchiveis.length > 1 ? 's' : ''} com pool de SKUs bons (giro ≤ 90 d) insuficiente para preencher a lacuna do mix:
+                  {' '}
+                  {lacunasNaoPreenchiveis.slice(0, 5).map(l => `${l.marca} (faltam ${l.faltam})`).join(' • ')}
+                  {lacunasNaoPreenchiveis.length > 5 && ` • +${lacunasNaoPreenchiveis.length - 5}`}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Lista de Compra Executável */}
           <ListaCompraTable itens={listaCompraFlat} />
