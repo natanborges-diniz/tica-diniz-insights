@@ -213,8 +213,8 @@ export function ListaCompraTable({ itens }: Props) {
                 <th className="text-left p-2">Cat.</th>
                 <th className="text-right p-2">Vendas 6m</th>
                 <th className="text-right p-2">Estoque</th>
-                <th className="text-right p-2" title="Mediana de dias entre entrada e venda das peças no período">Giro mediano</th>
-                <th className="text-right p-2" title="Dias que a última peça vendida levou da entrada até a saída">Última peça</th>
+                <th className="text-right p-2" title="Dias entre última entrada e venda da última peça (preferencial). Cai para giro médio se indisponível.">Giro última peça</th>
+                <th className="text-right p-2" title="Giro médio do SKU (fallback)">Giro médio</th>
                 <th className="text-right p-2">Cobert.</th>
                 <th className="text-right p-2 font-bold">Comprar</th>
                 <th className="text-right p-2">Valor</th>
