@@ -987,7 +987,15 @@ export function useEstoqueUnificado() {
       };
       return ordem[a.decisao] - ordem[b.decisao] || b.totalVendido6m - a.totalVendido6m;
     });
-  }, [itensFiltrados]);
+  }, [itensFiltrados, mixIdealMarcas]);
+
+  // Lacunas que sobraram após esgotar o pool de SKUs bons (Fase 2)
+  const lacunasNaoPreenchiveis = useMemo((): LacunaNaoPreenchivel[] => {
+    return resumoPorMarca
+      .filter(m => m.lacunaNaoPreenchivel > 0)
+      .map(m => ({ marca: m.marca, faltam: m.lacunaNaoPreenchivel, poolSize: m.poolSkusBons }))
+      .sort((a, b) => b.faltam - a.faltam);
+  }, [resumoPorMarca]);
 
   // Lista achatada de SKUs a comprar — ordenada por prioridade
   const listaCompraFlat = useMemo((): SkuARepor[] => {
