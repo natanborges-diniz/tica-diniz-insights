@@ -1,54 +1,119 @@
 
-## Contexto
+## Racional correto (duas fases)
 
-Pedido de teste em produção HiTech foi enviado com sucesso (`POST /orders/lab → 201`, log confirma payload sem serviços), mas:
+**Fase 1 — Mix ideal por marca (top-down)**
+A inteligência olha 180 dias e decide *quais marcas* compõem o mix e *quanto de estoque* cada uma deve ter. SKU não entra aqui.
 
-1. Tracking só exibe os dados do **payload enviado**, não a confirmação que a Haytek retorna.
-2. "Consultar Haytek" e a "consulta ao vivo" do card mostram apenas JSON cru (`<pre>{...}</pre>`).
-3. Pedido foi cancelado pela Haytek alegando que foi solicitado **serviço de corte e montagem** — porém nenhum lugar da nossa UI envia `services.assembly` ou `services.remoteCut`. O log do proxy comprova: o body enviado terminou em `"corridor":18}}` sem bloco `services`.
+**Fase 2 — Seleção de peças (bottom-up, condicionada)**
+Só se a marca tem **lacuna** (estoque atual < ideal definido na Fase 1), aí olho dentro dela quais SKUs são "bons" (giro ≤ 90 d) e distribuo a lacuna entre eles, escalonando pela performance.
 
-## O que vou fazer
+A regra-chave que falta hoje: **se a marca está no mix mas já tem estoque ≥ ideal, não compra nada — independente de haver SKUs zerados ou rápidos**.
 
-### 1. Tracking — exibir confirmação da Haytek de forma estruturada
-Em `HaytekTrackingPage.tsx`, no bloco "Status ao Vivo (API Haytek)" e no resultado da consulta avulsa, substituir o `<pre>JSON</pre>` por um card estruturado com:
-- Nº pedido / Order ID / Status (badge colorido)
-- **Produto confirmado pela Haytek** (productId, treatment, descrição se vier)
-- Prescrição confirmada OD/OE (lado a lado com a do payload, para comparar)
-- Armação confirmada (code, material, ponte, altura, largura)
-- Coloração / Corredor
-- Lista de **entregas** (`deliveries[]`) com data prevista, status e tracking
-- Bloco de **pagamento** (`payment`) se vier
-- Bloco de **serviços** (`services` ou similar) — destacando se houver `assembly`/`remoteCut`, justamente para diagnosticar o caso #3
-- Botão "Ver JSON bruto" colapsável (mantém o JSON disponível para debug, mas escondido por padrão)
+---
 
-### 2. Consulta avulsa — mesmo visual estruturado
-Reaproveitar o mesmo componente de detalhe (extrair em `HaytekTrackingDetail.tsx`) para o card de consulta avulsa, eliminando o `<pre>` atual.
+## Fase 1 — Mix Ideal de Marcas
 
-### 3. Investigação do cancelamento por corte+montagem
+Em `useEstoqueUnificado.ts`, criar `mixIdealMarcas`:
 
-Não vou alterar a lógica de envio sem confirmar a causa. O plano é diagnosticar:
+1. **Universo elegível**: marcas com vendas nos 180 d (ignora marcas zeradas/sem histórico → categoria à parte "Sem histórico").
+2. **Curva ABC por marca** (faturamento 6 m): A = 80%, B = 95%, C = 100%.
+3. **Pertence ao mix?** Critério padrão: marcas A e B entram; C entra apenas se `taxaPerformance ≥ 0.5` (≥50% dos SKUs ativos venderam) — caso contrário cai em "Avaliar descontinuação".
+4. **Estoque ideal por marca**:
+    - `pecasIdeaisMarca = ceil(vendaMediaDiariaMarca × COBERTURA_ALVO_MARCA[curva])`
+    - Cobertura padrão por curva: A = 60 d, B = 75 d, C = 90 d (configurável depois).
+5. **Lacuna**: `lacunaMarca = max(0, pecasIdeaisMarca - pecasEstoqueAtualMarca)`
+6. **Output por marca**:
+    ```
+    { marca, curvaMarca, pecasVendidas6m, vendaDiaria,
+      pecasIdeais, pecasAtuais, lacuna,
+      decisao: REPOR | RENOVAR | AVALIAR | SEM_HISTORICO,
+      noMix: boolean }
+    ```
 
-- **Verificar no detalhe estruturado** (item 1) se o tracking retornado pela Haytek lista `services.assembly` / `services.remoteCut`. Se sim, é forte indício de que a Haytek está **adicionando o serviço por configuração da conta do laboratório** (não veio do nosso payload — o log prova que enviamos sem `services`).
-- **Adicionar no card um aviso explícito**: se o tracking ao vivo trouxer `services` que não estavam no payload original, exibir badge amarelo "Serviços adicionados pela Haytek: corte/montagem" — com link para abrir chamado.
-- **Caso de origem oposta**: investigar se o `frameCode = ARF` (Aro Fechado) está fazendo a Haytek inferir montagem automaticamente. Documentar no card.
+**Regra dura**: `lacuna === 0` ⇒ marca não gera nenhuma compra, mesmo com SKUs zerados.
 
-Como a causa é externa (configuração na Haytek), o plano técnico nosso é **mostrar a evidência** no tracking. A ação concreta com a Haytek fica como recomendação ao final (abrir chamado anexando a evidência que o card vai exibir).
+---
 
-### 4. Histórico — exibir Service flag também na lista
-Na lista colapsada (header do card de pedido), adicionar um pequeno badge "C+M" se a resposta da Haytek incluir serviços, para visibilidade rápida.
+## Fase 2 — Seleção de SKUs dentro da Lacuna
 
-## Arquivos a alterar
+Para cada marca com `lacuna > 0`:
 
-- `src/components/haytek/HaytekTrackingDetail.tsx` (novo) — componente reutilizável com a apresentação estruturada
-- `src/pages/HaytekTrackingPage.tsx` — substituir os blocos `<pre>` (consulta avulsa + status ao vivo) pelo novo componente; adicionar aviso de serviços inesperados
+1. **Pool de SKUs "bons"**: SKUs vendidos da marca com `diasGiroEfetivo ≤ 90` (`diasGiroUltimaPeca ?? diasGiroMedio`). SKUs sem giro real ou com giro > 90 → **excluídos** do plano de compra (entram em "Observar / Avaliar").
+2. **Score por SKU**: `score = (1 / diasGiroEfetivo) × pecasGiroConsideradas × pesoCurvaABC` (A=3, B=2, C=1). Ordenar desc.
+3. **Distribuir a lacuna** percorrendo o pool ordenado:
+    - Cada SKU recebe ao menos 1 peça até a lacuna acabar.
+    - Sobrou lacuna depois de dar 1 a todos? Segundo passe: dar +1 aos SKUs com giro ≤ 45 d, terceiro passe ≤ 30 d, e assim por diante (escalonamento pela velocidade).
+    - Limite por SKU: `min(lacunaRestante, ceil(qtdVendidos180d × 1.2))` — não pede mais que o histórico de venda da peça +20%.
+4. **Esgotou o pool antes de zerar a lacuna?** Compra só o que tem qualidade; o restante da lacuna é reportado como **"Lacuna não preenchível — pool de SKUs bons insuficiente"** (sinal para curadoria/novos modelos via TROCAR/RENOVAR).
 
-## Detalhes técnicos
+---
 
-- Nenhuma mudança em edge function (`haytek-proxy`) — ele já retorna o JSON completo da Haytek.
-- Nenhuma mudança no fluxo de envio em `PedidoHaytekPage.tsx` até confirmarmos a origem dos serviços.
-- O tipo `HaytekOrderTracking` já tem `deliveries`, `payment` e `[key: string]: unknown` — vou ler campos comuns (`products`, `services`, `prescription`) defensivamente.
-- O design segue o padrão do tracking Zeiss (badges, cards aninhados, tipografia mono para números).
+## Constantes (topo do hook)
 
-## Próximo passo após esta entrega
+```ts
+const GIRO_BOM_MAX_DIAS = 90;
+const COBERTURA_ALVO_MARCA: Record<'A'|'B'|'C', number> = { A: 60, B: 75, C: 90 };
+const PESO_CURVA: Record<'A'|'B'|'C', number> = { A: 3, B: 2, C: 1 };
+```
 
-Com o tracking estruturado mostrando a presença/ausência de `services` na resposta, abrir chamado com a Haytek anexando o screenshot do card — confirmando que o pedido foi enviado sem serviços e a Haytek agregou.
+(Padrão por enquanto; depois movemos para tabela Supabase como já é convenção do projeto.)
+
+---
+
+## Estruturas alteradas
+
+**`useEstoqueUnificado.ts`**
+
+- Novo memo `mixIdealMarcas: MixMarca[]` (Fase 1).
+- `resumoPorMarca`: passa a consumir `mixIdealMarcas` para preencher `pecasIdeais`, `lacuna`, `noMix`.
+- Substituir o cálculo atual de `skusARepor` (que hoje decide SKU-a-SKU) pelo algoritmo de **distribuição da lacuna** descrito na Fase 2. Marcas com `lacuna = 0` retornam `skusARepor: []`.
+- Manter `skusATrocar` / `itensDoentes` / `skusObservar` como estão — são ortogonais ao plano de compra.
+- Eliminar a regra antiga "qtdAComprar = projeção via giro" do `buildSkuView` — agora a quantidade vem **imposta pela distribuição da lacuna**, não pelo SKU.
+- Novo retorno `lacunasNaoPreenchiveis: { marca, faltam, motivo }[]` para a UI.
+
+**`SkuARepor`** ganha:
+- `qtdAComprar` (vinda da distribuição, não mais projeção)
+- `motivoQtd: 'PASSE_1_BASE' | 'PASSE_2_GIRO_RAPIDO' | 'PASSE_3_GIRO_MUITO_RAPIDO'` (para tooltip explicativo)
+- `prioridade` recalibrada: deriva da posição no pool ordenado por score, não mais da cobertura.
+
+---
+
+## UI
+
+**`ListaCompraTable.tsx`**
+- Cabeçalho passa a mostrar lacuna total e nº de marcas com lacuna.
+- Coluna "Comprar" exibe a qtd alocada + tooltip com o motivo do passe.
+- Rodapé: bloco "Lacunas não preenchíveis — falta curadoria" com link/expansão.
+
+**`AnaliseOTBPage.tsx`**
+- Nova seção no topo: **"Mix Ideal por Marca"** (tabela enxuta: marca, curva, vendas 6m, ideal, atual, lacuna, decisão). Marcas com `lacuna = 0` aparecem com badge "estoque suficiente — sem compra".
+- O `MarcaExpandida` atual continua, mas o bloco REPOR só renderiza se a marca tem lacuna; caso contrário mostra "Estoque dentro do ideal — nenhuma reposição planejada".
+
+---
+
+## Casos de validação
+
+1. **Ray-Ban — 50 ideal, 20 atual, 10 SKUs bons no pool**
+   → Lacuna 30. Distribui 1 a cada um dos 10 (=10). Sobram 20. Segundo passe nos com giro ≤ 45 d (digamos 4) → +4. Terceiro passe ≤ 30 d (1) → +1. Total 15 peças compradas. Reporta lacuna não preenchível: 15 peças.
+2. **Marca X — 30 ideal, 35 atual, vários SKUs zerados**
+   → Lacuna 0. **Nenhum SKU entra na lista de compra**, mesmo zerados. UI mostra "Estoque acima do ideal — não comprar".
+3. **Marca Y — SKU com 1200 dias de giro e estoque 0**
+   → SKU fica fora do pool (giro > 90). Não vira URGENTE. Aparece em "Observar / Avaliar troca".
+
+---
+
+## Não muda
+
+- Endpoints e Bridge — todo o cálculo é frontend.
+- Mix ideal por subcategoria, dead stock, curva ABC de SKU — preservados.
+- Fluxo de marcas SEM_HISTORICO / AVALIAR_DESCONTINUACAO — continua igual.
+
+---
+
+## Arquivos
+
+- `src/hooks/useEstoqueUnificado.ts` — Fase 1 + Fase 2 + novos retornos.
+- `src/components/otb/ListaCompraTable.tsx` — coluna de motivo, rodapé de lacuna.
+- `src/pages/estoque/AnaliseOTBPage.tsx` — seção "Mix Ideal por Marca" no topo, ajuste de `MarcaExpandida`.
+
+(Memória de Inventory Health será atualizada após confirmação para registrar este racional como padrão.)
