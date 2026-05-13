@@ -18,6 +18,7 @@ import { toast } from "@/hooks/use-toast";
 import { usePedidoAlertas } from "@/hooks/usePedidoAlertas";
 import { PendingAlertsCard } from "@/components/tracking/PendingAlertsCard";
 import { Card, CardContent } from "@/components/ui/card";
+import HaytekTrackingDetail from "@/components/haytek/HaytekTrackingDetail";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
