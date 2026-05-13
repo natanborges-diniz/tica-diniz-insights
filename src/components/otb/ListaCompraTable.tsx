@@ -27,6 +27,8 @@ const subLabel: Record<string, string> = {
   AR_RX: 'RX',
   AR_SOLAR: 'Solar',
   LENTES: 'Lente',
+  LENTES_GRAU: 'L. grau',
+  LENTES_CONTATO: 'L. contato',
   ACESSORIOS: 'Acess.',
   OUTROS: '—',
 };
