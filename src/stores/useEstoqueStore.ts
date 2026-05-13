@@ -10,7 +10,7 @@ import type { AnaliseSku } from "@/services/vendasService";
 export interface EstoqueFilters {
   empresa: EmpresaParam;
   categoria: "TODOS" | "ARMACOES" | "LENTES" | "ACESSORIOS" | "OUTROS";
-  subcategoria: "TODAS" | "AR_RX" | "AR_SOLAR" | "LENTES" | "ACESSORIOS" | "OUTROS";
+  subcategoria: "TODAS" | "AR_RX" | "AR_SOLAR" | "LENTES" | "LENTES_GRAU" | "LENTES_CONTATO" | "ACESSORIOS" | "OUTROS";
   curvaABC: "A" | "B" | "C" | null;
   fornecedor: string;
   marca: string;
