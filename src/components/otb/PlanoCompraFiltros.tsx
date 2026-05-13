@@ -12,7 +12,7 @@ interface Props {
   setFilters: (updater: EstoqueFilters | ((p: EstoqueFilters) => EstoqueFilters)) => void;
   listaMarcas: string[];
   listaFornecedores: string[];
-  contagens: { rx: number; solar: number; lentes: number; acessorios: number; outros: number };
+  contagens: { rx: number; solar: number; lentes: number; lentesGrau: number; lentesContato: number; acessorios: number; outros: number };
 }
 
 const subOpcoes = [
