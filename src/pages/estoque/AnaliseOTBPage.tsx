@@ -602,7 +602,7 @@ export default function AnaliseOTBPage() {
                 <div className="text-xs">
                   Vendas / giro: últimos 180 dias
                   {filters.subcategoria !== 'TODAS' && (
-                    <span> • Filtro: {filters.subcategoria === 'AR_RX' ? 'Armações RX' : filters.subcategoria === 'AR_SOLAR' ? 'Solar / OC' : filters.subcategoria}</span>
+                    <span> • Filtro: {({ AR_RX: 'Armações RX', AR_SOLAR: 'Solar / OC', LENTES: 'Lentes', LENTES_GRAU: 'Lentes de grau', LENTES_CONTATO: 'Lentes de contato', ACESSORIOS: 'Acessórios', OUTROS: 'Outros' } as Record<string, string>)[filters.subcategoria] ?? filters.subcategoria}</span>
                   )}
                 </div>
               </AlertDescription>
