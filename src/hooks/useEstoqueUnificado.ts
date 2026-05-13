@@ -240,6 +240,30 @@ const COBERTURA_ALVO_DIAS: Record<SubcategoriaProduto, number> = {
 };
 
 // ============================================
+// PARÂMETROS DA INTELIGÊNCIA DE COMPRA (Fase 1 + Fase 2)
+// ============================================
+
+// Giro máximo (dias) para considerar uma peça "boa" — dentro deste limite ela
+// gira rápido o suficiente para entrar no pool de recompra.
+// Acima disso o SKU é excluído do plano (vai para Observar / Avaliar troca).
+const GIRO_BOM_MAX_DIAS = 90;
+
+// Cobertura-alvo (dias) por curva da MARCA — quanto de estoque a marca deve manter.
+// Marcas A merecem maior giro (cobertura menor); marcas C maior cobertura (menos compra).
+const COBERTURA_ALVO_MARCA: Record<'A' | 'B' | 'C', number> = {
+  A: 60,
+  B: 75,
+  C: 90,
+};
+
+// Peso da curva ABC do SKU no score de prioridade dentro do pool da marca.
+const PESO_CURVA: Record<'A' | 'B' | 'C', number> = {
+  A: 3,
+  B: 2,
+  C: 1,
+};
+
+// ============================================
 // HOOK PRINCIPAL
 // ============================================
 
