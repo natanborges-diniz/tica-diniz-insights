@@ -325,19 +325,10 @@ const HaytekTrackingPage: React.FC = () => {
                 </div>
               )}
               {consultaAvulsaResult && (
-                <div className="space-y-3 text-xs">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-success" />
-                    <span className="font-semibold text-sm font-mono">Pedido #{search}</span>
-                    <Badge variant="outline" className={statusBadge(consultaAvulsaResult.status as string || "").color + " text-xs"}>
-                      {String(consultaAvulsaResult.status || "Desconhecido")}
-                    </Badge>
-                    <span className="text-muted-foreground text-[10px]">(consulta avulsa)</span>
-                  </div>
-                  <pre className="text-xs bg-muted/50 rounded p-3 overflow-x-auto whitespace-pre-wrap max-h-60">
-                    {JSON.stringify(consultaAvulsaResult, null, 2)}
-                  </pre>
-                </div>
+                <HaytekTrackingDetail
+                  tracking={consultaAvulsaResult}
+                  title={`Pedido #${search} (consulta avulsa)`}
+                />
               )}
             </CardContent>
           </Card>
