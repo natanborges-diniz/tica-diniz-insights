@@ -396,7 +396,7 @@ export function useEstoqueUnificado() {
       //  - Estoque parado >= 180d sem venda → TROCAR; >= 270d → LIQUIDAR
       //  - Vendeu pouco mas giro lento (cobertura > alvo) → OBSERVAR
       let decisaoSku: DecisaoSku;
-      const temGiroReal = diasGiroMediano !== null && diasGiroMediano > 0;
+      const temGiroReal = diasGiroEfetivo !== null && diasGiroEfetivo > 0;
       if (precoCusto === 0) {
         decisaoSku = 'SEM_CADASTRO';
       } else if (estoqueAtual > 0 && qtdVendidos === 0 && diasEmEstoque >= 270) {
