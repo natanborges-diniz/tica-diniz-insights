@@ -61,6 +61,8 @@ export function PlanoCompraFiltros({ filters, setFilters, listaMarcas, listaForn
     AR_RX: contagens.rx,
     AR_SOLAR: contagens.solar,
     LENTES: contagens.lentes,
+    LENTES_GRAU: contagens.lentesGrau,
+    LENTES_CONTATO: contagens.lentesContato,
     ACESSORIOS: contagens.acessorios,
     OUTROS: contagens.outros,
   };
