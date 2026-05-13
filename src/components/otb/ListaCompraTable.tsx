@@ -75,8 +75,8 @@ export function ListaCompraTable({ itens }: Props) {
     { key: 'curvaABC', header: 'Curva' },
     { key: 'qtdVendidos', header: 'Vendas 6m', format: formatters.number },
     { key: 'estoqueAtual', header: 'Estoque', format: formatters.number },
-    { key: 'diasGiroMediano', header: 'Giro mediano (d)', format: (v) => v == null ? '—' : `${Math.round(Number(v))}d` },
-    { key: 'diasGiroUltimaPeca', header: 'Última peça (d)', format: (v) => v == null ? '—' : `${Math.round(Number(v))}d` },
+    { key: 'diasGiroUltimaPeca', header: 'Giro última peça (d)', format: (v) => v == null ? '—' : `${Math.round(Number(v))}d` },
+    { key: 'diasGiroMedio', header: 'Giro médio (d)', format: (v) => v == null ? '—' : `${Math.round(Number(v))}d` },
     { key: 'coberturaDias', header: 'Cobertura (d)', format: formatters.number },
     { key: 'qtdAComprar', header: 'Comprar', format: formatters.number },
     { key: 'valorCompra', header: 'Valor estimado', format: formatters.currency },
@@ -130,15 +130,24 @@ export function ListaCompraTable({ itens }: Props) {
         <td className="p-2"><Badge variant="outline" className="text-[10px]">{subLabel[s.subcategoria] ?? '—'}</Badge></td>
         <td className="p-2 text-right text-xs">{s.qtdVendidos}</td>
         <td className="p-2 text-right text-xs">{s.estoqueAtual}</td>
-        <td className="p-2 text-right text-xs" title={s.diasGiroMediano != null ? `Amostra: ${s.pecasGiroConsideradas} peça(s)` : 'Estimado pela velocidade média (giro real indisponível no backend)'}>
-          {s.diasGiroMediano != null
-            ? `${Math.round(s.diasGiroMediano)}d`
-            : (s.vendaDiaria > 0 ? <span className="text-muted-foreground italic">~{Math.round(1 / s.vendaDiaria)}d</span> : '—')}
-        </td>
-        <td className="p-2 text-right text-xs text-muted-foreground" title={s.diasGiroUltimaPeca != null ? 'Dias entre entrada e venda da última peça' : 'Aproximação: dias em estoque atual (giro real indisponível)'}>
+        <td
+          className="p-2 text-right text-xs"
+          title={
+            s.diasGiroUltimaPeca != null
+              ? `Dias entre última entrada e venda da última peça (amostra: ${s.pecasGiroConsideradas})`
+              : s.diasGiroMedio != null
+                ? `Fallback: giro médio do SKU (amostra: ${s.pecasGiroConsideradas})`
+                : 'Sem entrada/venda suficiente para calcular giro real (estimado pela velocidade média)'
+          }
+        >
           {s.diasGiroUltimaPeca != null
             ? `${Math.round(s.diasGiroUltimaPeca)}d`
-            : (s.diasEmEstoque > 0 ? <span className="italic">~{s.diasEmEstoque}d</span> : '—')}
+            : s.diasGiroMedio != null
+              ? <span className="text-muted-foreground">{Math.round(s.diasGiroMedio)}d</span>
+              : (s.vendaDiaria > 0 ? <span className="text-muted-foreground italic">~{Math.round(1 / s.vendaDiaria)}d</span> : '—')}
+        </td>
+        <td className="p-2 text-right text-xs text-muted-foreground" title="Giro médio do SKU (dias). Null quando não há base de cálculo válida.">
+          {s.diasGiroMedio != null ? `${Math.round(s.diasGiroMedio)}d` : '—'}
         </td>
         <td className="p-2 text-right text-xs">{s.coberturaDias >= 999 ? '—' : `${s.coberturaDias}d`}</td>
         <td className="p-2 text-right font-bold text-emerald-700 dark:text-emerald-400">{s.qtdAComprar}</td>
@@ -204,8 +213,8 @@ export function ListaCompraTable({ itens }: Props) {
                 <th className="text-left p-2">Cat.</th>
                 <th className="text-right p-2">Vendas 6m</th>
                 <th className="text-right p-2">Estoque</th>
-                <th className="text-right p-2" title="Mediana de dias entre entrada e venda das peças no período">Giro mediano</th>
-                <th className="text-right p-2" title="Dias que a última peça vendida levou da entrada até a saída">Última peça</th>
+                <th className="text-right p-2" title="Dias entre última entrada e venda da última peça (preferencial). Cai para giro médio se indisponível.">Giro última peça</th>
+                <th className="text-right p-2" title="Giro médio do SKU (fallback)">Giro médio</th>
                 <th className="text-right p-2">Cobert.</th>
                 <th className="text-right p-2 font-bold">Comprar</th>
                 <th className="text-right p-2">Valor</th>
