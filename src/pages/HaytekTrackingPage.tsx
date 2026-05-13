@@ -524,7 +524,7 @@ const HaytekTrackingPage: React.FC = () => {
                     <Separator />
                     <div>
                       <p className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
-                        Status ao Vivo (API Haytek)
+                        Confirmação da Haytek (API ao vivo)
                         {liveApiLoading[pedido.id] && <Loader2 className="h-3 w-3 animate-spin" />}
                       </p>
                       {liveApiLoading[pedido.id] && (
@@ -536,17 +536,10 @@ const HaytekTrackingPage: React.FC = () => {
                         </div>
                       )}
                       {liveApiData[pedido.id] && !liveApiLoading[pedido.id] && (
-                        <div className="rounded border p-2 bg-background text-xs space-y-1">
-                          {liveApiData[pedido.id]!.status && (
-                            <div><span className="text-muted-foreground">Status:</span> <Badge variant="outline" className={statusBadge(liveApiData[pedido.id]!.status as string).color + " text-[10px] ml-1"}>{String(liveApiData[pedido.id]!.status)}</Badge></div>
-                          )}
-                          {liveApiData[pedido.id]!.orderId && (
-                            <div><span className="text-muted-foreground">Order ID:</span> <span className="font-mono">{String(liveApiData[pedido.id]!.orderId)}</span></div>
-                          )}
-                          {Array.isArray(liveApiData[pedido.id]!.deliveries) && (liveApiData[pedido.id]!.deliveries as any[]).length > 0 && (
-                            <div><span className="text-muted-foreground">Entregas:</span> {(liveApiData[pedido.id]!.deliveries as any[]).length} registro(s)</div>
-                          )}
-                        </div>
+                        <HaytekTrackingDetail
+                          tracking={liveApiData[pedido.id]!}
+                          sentPayload={pedido.payload}
+                        />
                       )}
                       {!liveApiLoading[pedido.id] && !liveApiError[pedido.id] && !liveApiData[pedido.id] && !pedido.numero_pedido && (
                         <p className="text-xs text-muted-foreground">Sem número de pedido para consultar.</p>
