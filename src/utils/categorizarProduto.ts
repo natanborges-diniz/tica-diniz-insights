@@ -8,7 +8,7 @@
 //   LC = Lentes de Contato, AC = Acessórios, SOL = Solar, OC = Óculos Solar
 
 export type CategoriaProduto = 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS';
-export type SubcategoriaProduto = 'AR_RX' | 'AR_SOLAR' | 'LENTES' | 'ACESSORIOS' | 'OUTROS';
+export type SubcategoriaProduto = 'AR_RX' | 'AR_SOLAR' | 'LENTES' | 'LENTES_GRAU' | 'LENTES_CONTATO' | 'ACESSORIOS' | 'OUTROS';
 
 /**
  * Categoriza um produto com base no campo "tipo" retornado pelo ERP.
