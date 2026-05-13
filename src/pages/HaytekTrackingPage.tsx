@@ -18,6 +18,7 @@ import { toast } from "@/hooks/use-toast";
 import { usePedidoAlertas } from "@/hooks/usePedidoAlertas";
 import { PendingAlertsCard } from "@/components/tracking/PendingAlertsCard";
 import { Card, CardContent } from "@/components/ui/card";
+import HaytekTrackingDetail from "@/components/haytek/HaytekTrackingDetail";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -324,19 +325,10 @@ const HaytekTrackingPage: React.FC = () => {
                 </div>
               )}
               {consultaAvulsaResult && (
-                <div className="space-y-3 text-xs">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-success" />
-                    <span className="font-semibold text-sm font-mono">Pedido #{search}</span>
-                    <Badge variant="outline" className={statusBadge(consultaAvulsaResult.status as string || "").color + " text-xs"}>
-                      {String(consultaAvulsaResult.status || "Desconhecido")}
-                    </Badge>
-                    <span className="text-muted-foreground text-[10px]">(consulta avulsa)</span>
-                  </div>
-                  <pre className="text-xs bg-muted/50 rounded p-3 overflow-x-auto whitespace-pre-wrap max-h-60">
-                    {JSON.stringify(consultaAvulsaResult, null, 2)}
-                  </pre>
-                </div>
+                <HaytekTrackingDetail
+                  tracking={consultaAvulsaResult}
+                  title={`Pedido #${search} (consulta avulsa)`}
+                />
               )}
             </CardContent>
           </Card>
@@ -532,7 +524,7 @@ const HaytekTrackingPage: React.FC = () => {
                     <Separator />
                     <div>
                       <p className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
-                        Status ao Vivo (API Haytek)
+                        Confirmação da Haytek (API ao vivo)
                         {liveApiLoading[pedido.id] && <Loader2 className="h-3 w-3 animate-spin" />}
                       </p>
                       {liveApiLoading[pedido.id] && (
@@ -544,17 +536,10 @@ const HaytekTrackingPage: React.FC = () => {
                         </div>
                       )}
                       {liveApiData[pedido.id] && !liveApiLoading[pedido.id] && (
-                        <div className="rounded border p-2 bg-background text-xs space-y-1">
-                          {liveApiData[pedido.id]!.status && (
-                            <div><span className="text-muted-foreground">Status:</span> <Badge variant="outline" className={statusBadge(liveApiData[pedido.id]!.status as string).color + " text-[10px] ml-1"}>{String(liveApiData[pedido.id]!.status)}</Badge></div>
-                          )}
-                          {liveApiData[pedido.id]!.orderId && (
-                            <div><span className="text-muted-foreground">Order ID:</span> <span className="font-mono">{String(liveApiData[pedido.id]!.orderId)}</span></div>
-                          )}
-                          {Array.isArray(liveApiData[pedido.id]!.deliveries) && (liveApiData[pedido.id]!.deliveries as any[]).length > 0 && (
-                            <div><span className="text-muted-foreground">Entregas:</span> {(liveApiData[pedido.id]!.deliveries as any[]).length} registro(s)</div>
-                          )}
-                        </div>
+                        <HaytekTrackingDetail
+                          tracking={liveApiData[pedido.id]!}
+                          sentPayload={pedido.payload}
+                        />
                       )}
                       {!liveApiLoading[pedido.id] && !liveApiError[pedido.id] && !liveApiData[pedido.id] && !pedido.numero_pedido && (
                         <p className="text-xs text-muted-foreground">Sem número de pedido para consultar.</p>

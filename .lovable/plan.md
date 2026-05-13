@@ -1,98 +1,54 @@
+
 ## Contexto
 
-O Bridge entregou (commit `af64a42`):
+Pedido de teste em produção HiTech foi enviado com sucesso (`POST /orders/lab → 201`, log confirma payload sem serviços), mas:
 
-- `/api/v1/estoque/completo` agora retorna `tipo` (código real do ERP: `AR`, `OC`, `LG`, etc.), `subcategoria` (`AR_RX | AR_SOLAR | LENTES | ACESSORIOS | OUTROS`) e métricas de giro real:
-  - `dias_giro_medio`
-  - `dias_giro_mediano`
-  - `dias_giro_ultima_peca`
-  - `pecas_vendidas_consideradas`
-- `/api/v1/vendas/analise-sku` recebeu os mesmos campos (subcategoria + giro real), calculados sobre a janela consultada.
-- Novo alias `GET /api/v1/estoque/analise-sku` (mesmo controller de `/vendas/analise-sku`).
-- Regra mantida: 1 linha por `cod_sku`, estoque consolidado.
-- Aproximação documentada: o giro usa "última entrada anterior/igual à venda" quando não há lote/serial.
+1. Tracking só exibe os dados do **payload enviado**, não a confirmação que a Haytek retorna.
+2. "Consultar Haytek" e a "consulta ao vivo" do card mostram apenas JSON cru (`<pre>{...}</pre>`).
+3. Pedido foi cancelado pela Haytek alegando que foi solicitado **serviço de corte e montagem** — porém nenhum lugar da nossa UI envia `services.assembly` ou `services.remoteCut`. O log do proxy comprova: o body enviado terminou em `"corridor":18}}` sem bloco `services`.
 
-Hoje o frontend deriva subcategoria por regex em `tipo`/descrição e calcula `vendaDiaria = qtdVendidos / 180`, o que penaliza injustamente itens novos e mascara peças lentas. É isso que vamos corrigir.
+## O que vou fazer
 
-## Objetivo
+### 1. Tracking — exibir confirmação da Haytek de forma estruturada
+Em `HaytekTrackingPage.tsx`, no bloco "Status ao Vivo (API Haytek)" e no resultado da consulta avulsa, substituir o `<pre>JSON</pre>` por um card estruturado com:
+- Nº pedido / Order ID / Status (badge colorido)
+- **Produto confirmado pela Haytek** (productId, treatment, descrição se vier)
+- Prescrição confirmada OD/OE (lado a lado com a do payload, para comparar)
+- Armação confirmada (code, material, ponte, altura, largura)
+- Coloração / Corredor
+- Lista de **entregas** (`deliveries[]`) com data prevista, status e tracking
+- Bloco de **pagamento** (`payment`) se vier
+- Bloco de **serviços** (`services` ou similar) — destacando se houver `assembly`/`remoteCut`, justamente para diagnosticar o caso #3
+- Botão "Ver JSON bruto" colapsável (mantém o JSON disponível para debug, mas escondido por padrão)
 
-1. Trocar a derivação local de subcategoria pelo campo enviado pelo Bridge (com fallback ao regex como rede de segurança).
-2. Substituir a métrica "velocidade por dia" por **dias reais de giro** (médio, mediano e última peça).
-3. Refazer Curva ABC e decisões do Plano de Compra (`REPOR / TROCAR / OBSERVAR / LIQUIDAR`) usando o giro real, não a média diluída.
-4. Destravar o filtro Solar (subcategoria `AR_SOLAR`) que hoje vem vazio.
+### 2. Consulta avulsa — mesmo visual estruturado
+Reaproveitar o mesmo componente de detalhe (extrair em `HaytekTrackingDetail.tsx`) para o card de consulta avulsa, eliminando o `<pre>` atual.
 
-## Escopo de alterações (todas frontend)
+### 3. Investigação do cancelamento por corte+montagem
 
-### 1. `src/services/estoqueCompletoService.ts`
-- Adicionar ao `EstoqueCompletoRaw` e `EstoqueCompleto`: `subcategoria`, `dias_giro_medio`, `dias_giro_mediano`, `dias_giro_ultima_peca`, `pecas_vendidas_consideradas`.
-- Mapear `tipo` direto do ERP (`AR`, `OC`, `LG`, …) sem reagrupar para `ARMACOES/LENTES/OUTROS`.
-- Manter `categorizarPorDescricao` apenas como fallback se `tipo` vier vazio.
-- Logs: contagem por `subcategoria` (esperar `AR_SOLAR > 0` em Barueri).
+Não vou alterar a lógica de envio sem confirmar a causa. O plano é diagnosticar:
 
-### 2. `src/services/vendasService.ts` (`AnaliseSku`)
-- Mesmos campos novos: `subcategoria`, `dias_giro_medio`, `dias_giro_mediano`, `dias_giro_ultima_peca`, `pecas_vendidas_consideradas`.
-- Não mexer no `giroEstoque` atual (proporção qtd/estoque) — vira métrica complementar.
+- **Verificar no detalhe estruturado** (item 1) se o tracking retornado pela Haytek lista `services.assembly` / `services.remoteCut`. Se sim, é forte indício de que a Haytek está **adicionando o serviço por configuração da conta do laboratório** (não veio do nosso payload — o log prova que enviamos sem `services`).
+- **Adicionar no card um aviso explícito**: se o tracking ao vivo trouxer `services` que não estavam no payload original, exibir badge amarelo "Serviços adicionados pela Haytek: corte/montagem" — com link para abrir chamado.
+- **Caso de origem oposta**: investigar se o `frameCode = ARF` (Aro Fechado) está fazendo a Haytek inferir montagem automaticamente. Documentar no card.
 
-### 3. `src/utils/categorizarProduto.ts`
-- Aceitar a `subcategoria` vinda do backend como fonte canônica.
-- Manter `subcategorizarProduto`/`subcategorizarPorDescricao` como **fallback** rotulado nos comentários.
+Como a causa é externa (configuração na Haytek), o plano técnico nosso é **mostrar a evidência** no tracking. A ação concreta com a Haytek fica como recomendação ao final (abrir chamado anexando a evidência que o card vai exibir).
 
-### 4. `src/hooks/useEstoqueUnificado.ts` (núcleo da inteligência)
-- `ItemEstoque`: novos campos `diasGiroMedio`, `diasGiroMediano`, `diasGiroUltimaPeca`, `pecasGiroConsideradas`.
-- Preferir `subcategoria` enviada pelo Bridge (estoque OU vendas), fallback para `subcategorizarProduto(tipo)`.
-- Substituir `vendaDiaria = qtdVendidos / 180` pela exibição/uso de `diasGiroMediano` (mais robusto que a média).
-- Recalcular `coberturaDias`:
-  - Se `diasGiroMediano > 0`: `cobertura ≈ estoqueAtual * diasGiroMediano` (dias até esgotar mantendo o ritmo real).
-  - Se sem giro: marcar como `Sem giro` (não 999 numérico mascarado).
-- Repensar `decisaoSku`:
-  - `REPOR`: `pecasGiroConsideradas ≥ N` E `diasGiroMediano ≤ alvo` E `coberturaDias < diasAlvo`.
-  - `TROCAR`: estoque > 0, `pecasGiroConsideradas == 0`, `diasEmEstoque ≥ 180`.
-  - `LIQUIDAR`: idem, mas `diasEmEstoque ≥ 270`.
-  - `OBSERVAR`: vendeu pouco mas `diasGiroMediano > alvo` (peça lenta — não é prioridade de recompra).
-- `qtdAComprar` na lista de SKUs a repor passa a usar `diasGiroMediano` para projetar quantidade no horizonte do `diasAlvo`.
+### 4. Histórico — exibir Service flag também na lista
+Na lista colapsada (header do card de pedido), adicionar um pequeno badge "C+M" se a resposta da Haytek incluir serviços, para visibilidade rápida.
 
-### 5. UI — `VisaoEstoquePage` / `AnaliseOTBPage` / `OQueFazerPage` + tabela de SKUs
-- Coluna "Velocidade/dia (0,01)" vira **"Giro mediano"** com sufixo `dias` e tooltip explicando a fonte (`MAX(data_venda - data_entrada)` aproximado).
-- Adicionar coluna secundária "Última peça (dias)" para mostrar se a última saída foi rápida ou lenta.
-- Filtro `Subcategoria` agora populará `AR_SOLAR` corretamente (chip "Solar" deve trazer dados).
-- Chip de `decisaoSku` ganha tooltip com `dias_giro_mediano` + `pecas_vendidas_consideradas` para justificar a sugestão.
+## Arquivos a alterar
 
-### 6. `firebird-bridge/CONTRACT.md`
-- Atualizar a documentação local com os novos campos e o alias `/estoque/analise-sku`, espelhando o que o Bridge publicou. Sem mudança de código no Bridge — é só sincronizar contrato.
+- `src/components/haytek/HaytekTrackingDetail.tsx` (novo) — componente reutilizável com a apresentação estruturada
+- `src/pages/HaytekTrackingPage.tsx` — substituir os blocos `<pre>` (consulta avulsa + status ao vivo) pelo novo componente; adicionar aviso de serviços inesperados
 
 ## Detalhes técnicos
 
-```text
-Pipeline atualizado por SKU
-─────────────────────────────
-Bridge → tipo (AR/OC/LG/…) + subcategoria (AR_RX/AR_SOLAR/…)
-       → dias_giro_medio / mediano / ultima_peca
-       → pecas_vendidas_consideradas
+- Nenhuma mudança em edge function (`haytek-proxy`) — ele já retorna o JSON completo da Haytek.
+- Nenhuma mudança no fluxo de envio em `PedidoHaytekPage.tsx` até confirmarmos a origem dos serviços.
+- O tipo `HaytekOrderTracking` já tem `deliveries`, `payment` e `[key: string]: unknown` — vou ler campos comuns (`products`, `services`, `prescription`) defensivamente.
+- O design segue o padrão do tracking Zeiss (badges, cards aninhados, tipografia mono para números).
 
-Frontend (useEstoqueUnificado)
-       → categoria/subcategoria do backend (fallback regex)
-       → diasGiroMediano substitui vendaDiaria como medida principal
-       → coberturaDias = estoqueAtual × diasGiroMediano
-       → decisaoSku considera giro real + amostra (pecasGiroConsideradas)
-       → qtdAComprar = ceil(diasAlvo / diasGiroMediano) − estoqueAtual
-```
+## Próximo passo após esta entrega
 
-Edge cases:
-- `pecas_vendidas_consideradas = 0` → não classifica como `REPOR`; cai para `OBSERVAR`/`TROCAR`/`LIQUIDAR` conforme `diasEmEstoque`.
-- `diasGiroMediano` ausente (peça nova sem venda) → mostrar `—` na UI.
-- Subcategoria ausente → fallback `subcategorizarProduto(tipo)` continua valendo (mantém compatibilidade caso o Bridge regrida).
-
-## Fora do escopo
-
-- Mudanças de business rules de mix ideal e cobertura-alvo (planeja-se para fase seguinte).
-- Persistência de novas configurações em Supabase.
-- Alterações no Bridge (já entregues).
-
-## QA
-
-Loja recomendada: **DINIZ BARUERI**.
-- Filtro `Solar` deve trazer SKUs (chave `AR_SOLAR`).
-- Tabela mostra `Giro mediano (dias)` em vez de `Velocidade 0,01`.
-- SKU campeão (vendeu rápido logo após entrada) deve aparecer como `REPOR` mesmo com poucas vendas absolutas.
-- SKU enganoso (vendeu só no fim dos 180d) deve cair em `OBSERVAR`/`TROCAR`, não em `REPOR`.
-- Nenhuma regressão em "Peças p/ Liquidar" e "SEM CADASTRO".
+Com o tracking estruturado mostrando a presença/ausência de `services` na resposta, abrir chamado com a Haytek anexando o screenshot do card — confirmando que o pedido foi enviado sem serviços e a Haytek agregou.
