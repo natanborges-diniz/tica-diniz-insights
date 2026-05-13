@@ -604,12 +604,14 @@ export function useEstoqueUnificado() {
   // Helper: monta um SkuARepor a partir de um ItemEstoque
   const buildSkuView = (s: ItemEstoque, decisaoSkuOverride?: DecisaoSku): SkuARepor => {
     // Quantidade a comprar:
-    //  - Se há giro real (dias por peça): no horizonte diasAlvo, vão sair ceil(diasAlvo / diasGiroMediano) peças
+    //  - Se há giro real (dias por peça): no horizonte diasAlvo, vão sair ceil(diasAlvo / diasGiroEfetivo) peças
     //    → comprar a diferença para repor o estoque ao final do horizonte.
     //  - Fallback: usar vendaDiaria (proxy antigo).
+    //  Backend orienta priorizar dias_giro_ultima_peca, com fallback em dias_giro_medio.
+    const diasGiroEfetivo = s.diasGiroUltimaPeca ?? s.diasGiroMedio ?? null;
     let projecaoAlvo: number;
-    if (s.diasGiroMediano && s.diasGiroMediano > 0) {
-      projecaoAlvo = Math.ceil(s.diasAlvo / s.diasGiroMediano);
+    if (diasGiroEfetivo && diasGiroEfetivo > 0) {
+      projecaoAlvo = Math.ceil(s.diasAlvo / diasGiroEfetivo);
     } else {
       projecaoAlvo = Math.ceil(s.vendaDiaria * s.diasAlvo);
     }
@@ -634,6 +636,7 @@ export function useEstoqueUnificado() {
       vendaDiaria: s.vendaDiaria,
       coberturaDias: s.coberturaDias,
       diasEmEstoque: s.diasEmEstoque,
+      diasGiroMedio: s.diasGiroMedio,
       diasGiroMediano: s.diasGiroMediano,
       diasGiroUltimaPeca: s.diasGiroUltimaPeca,
       pecasGiroConsideradas: s.pecasGiroConsideradas,
