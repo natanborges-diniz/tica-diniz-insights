@@ -71,6 +71,9 @@ export type DecisaoSku = 'REPOR' | 'TROCAR' | 'OBSERVAR' | 'LIQUIDAR' | 'SEM_CAD
 // Faixa de estoque doente
 export type FaixaDoente = 'PROMOCAO_20' | 'LIQUIDACAO_30' | 'LIQUIDACAO_50' | 'DESCARTE' | 'REVISAO_URGENTE';
 
+// Motivo da quantidade alocada (passes da distribuição de lacuna)
+export type MotivoQtd = 'BASE' | 'GIRO_RAPIDO' | 'GIRO_MUITO_RAPIDO';
+
 // SKU específico a repor / trocar / observar
 export interface SkuARepor {
   codSku: number;
@@ -94,6 +97,29 @@ export interface SkuARepor {
   valorCompra: number;
   prioridade: 'URGENTE' | 'ALTA' | 'MEDIA' | 'BAIXA';
   decisaoSku: DecisaoSku;
+  motivoQtd?: MotivoQtd;
+}
+
+// Mix ideal por marca (Fase 1 — top-down)
+export interface MixMarca {
+  marca: string;
+  curvaMarca: 'A' | 'B' | 'C';
+  pecasVendidas6m: number;
+  faturamento6m: number;
+  vendaDiaria: number;
+  pecasIdeais: number;
+  pecasAtuais: number;
+  lacuna: number;
+  incluidaNoMix: boolean;
+  decisao: DecisaoMarca;
+  taxaPerformance: number;
+}
+
+// Lacuna que sobrou após esgotar o pool de SKUs bons
+export interface LacunaNaoPreenchivel {
+  marca: string;
+  faltam: number;
+  poolSize: number;
 }
 
 // Item doente de uma marca
