@@ -349,11 +349,14 @@ export function useEstoqueUnificado() {
       const diasGiroUltimaPeca = estoqueItem?.diasGiroUltimaPeca ?? vendas?.diasGiroUltimaPeca ?? null;
       const pecasGiroConsideradas = estoqueItem?.pecasGiroConsideradas ?? vendas?.pecasGiroConsideradas ?? 0;
 
-      // Cobertura: se há giro mediano (dias por peça) → estoque atual * dias por peça = dias até esgotar.
-      // Caso contrário, fallback no método antigo (qtd/180).
+      // Giro efetivo: orientação do backend → preferir dias_giro_ultima_peca, fallback dias_giro_medio.
+      const diasGiroEfetivo = diasGiroUltimaPeca ?? diasGiroMedio ?? null;
+
+      // Cobertura: se há giro real (dias por peça) → estoque atual * dias por peça = dias até esgotar.
+      // Caso contrário, fallback no método antigo (estoque / venda diária).
       const diasAlvo = COBERTURA_ALVO_DIAS[subcategoria] ?? 60;
-      const coberturaDias = diasGiroMediano && diasGiroMediano > 0
-        ? Math.round(estoqueAtual * diasGiroMediano)
+      const coberturaDias = diasGiroEfetivo && diasGiroEfetivo > 0
+        ? Math.round(estoqueAtual * diasGiroEfetivo)
         : (vendaDiaria > 0 ? Math.round(estoqueAtual / vendaDiaria) : 999);
 
       let estoqueMinimo = 0;
