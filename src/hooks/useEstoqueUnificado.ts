@@ -86,6 +86,7 @@ export interface SkuARepor {
   vendaDiaria: number;
   coberturaDias: number;
   diasEmEstoque: number;
+  diasGiroMedio: number | null;
   diasGiroMediano: number | null;
   diasGiroUltimaPeca: number | null;
   pecasGiroConsideradas: number;
