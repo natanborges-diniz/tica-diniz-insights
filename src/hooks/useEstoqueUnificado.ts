@@ -331,7 +331,7 @@ export function useEstoqueUnificado() {
       const subBackend = (estoqueItem?.subcategoria
         ?? (vendas?.subcategoria as SubcategoriaProduto | null | undefined)
         ?? null) as SubcategoriaProduto | null;
-      const subValid: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'ACESSORIOS', 'OUTROS'];
+      const subValid: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'LENTES_GRAU', 'LENTES_CONTATO', 'ACESSORIOS', 'OUTROS'];
       const subcategoria: SubcategoriaProduto = (subBackend && subValid.includes(subBackend))
         ? subBackend
         : subcategorizarProduto(tipo);
