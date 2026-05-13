@@ -150,7 +150,12 @@ export interface ResumoMarca {
   taxaPerformance: number; // 0..1
   pctCurvaAB: number;      // 0..1
   mediaDiasParado: number;
-  // Etapa 2 — partição
+  // Fase 1 — mix ideal
+  curvaMarca: 'A' | 'B' | 'C';
+  pecasIdeais: number;
+  lacuna: number;
+  incluidaNoMix: boolean;
+  // Fase 2 — partição
   skusARepor: SkuARepor[];
   skusATrocar: SkuARepor[];
   skusObservar: SkuARepor[];
@@ -158,6 +163,8 @@ export interface ResumoMarca {
   itensDoentes: ItemDoenteMarca[];
   totalDoenteValor: number;
   totalDoentePecas: number;
+  lacunaNaoPreenchivel: number;
+  poolSkusBons: number;
   skus: ItemEstoque[];
 }
 
