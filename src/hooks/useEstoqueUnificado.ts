@@ -199,6 +199,8 @@ const COBERTURA_ALVO_DIAS: Record<SubcategoriaProduto, number> = {
   AR_RX: 60,
   AR_SOLAR: 45,
   LENTES: 30,
+  LENTES_GRAU: 30,
+  LENTES_CONTATO: 30,
   ACESSORIOS: 60,
   OUTROS: 60,
 };
