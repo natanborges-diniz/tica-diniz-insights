@@ -549,11 +549,13 @@ export function useEstoqueUnificado() {
     const totalVendas = itensProcessados.reduce((acc, i) => acc + i.qtdVendidos, 0);
     if (totalEstoque === 0 && totalVendas === 0) return [];
 
-    const subcats: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'ACESSORIOS', 'OUTROS'];
+    const subcats: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'LENTES_GRAU', 'LENTES_CONTATO', 'ACESSORIOS', 'OUTROS'];
     const labels: Record<SubcategoriaProduto, string> = {
       AR_RX: 'Armações RX',
       AR_SOLAR: 'Solar / OC',
       LENTES: 'Lentes',
+      LENTES_GRAU: 'Lentes de grau',
+      LENTES_CONTATO: 'Lentes de contato',
       ACESSORIOS: 'Acessórios',
       OUTROS: 'Outros',
     };
