@@ -495,6 +495,8 @@ export default function AnaliseOTBPage() {
     rx: itensProcessados.filter(i => i.subcategoria === 'AR_RX').length,
     solar: itensProcessados.filter(i => i.subcategoria === 'AR_SOLAR').length,
     lentes: itensProcessados.filter(i => i.subcategoria === 'LENTES').length,
+    lentesGrau: itensProcessados.filter(i => i.subcategoria === 'LENTES_GRAU').length,
+    lentesContato: itensProcessados.filter(i => i.subcategoria === 'LENTES_CONTATO').length,
     acessorios: itensProcessados.filter(i => i.subcategoria === 'ACESSORIOS').length,
     outros: itensProcessados.filter(i => i.subcategoria === 'OUTROS').length,
   }), [itensProcessados]);
