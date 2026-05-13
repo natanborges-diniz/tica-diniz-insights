@@ -495,6 +495,8 @@ export default function AnaliseOTBPage() {
     rx: itensProcessados.filter(i => i.subcategoria === 'AR_RX').length,
     solar: itensProcessados.filter(i => i.subcategoria === 'AR_SOLAR').length,
     lentes: itensProcessados.filter(i => i.subcategoria === 'LENTES').length,
+    lentesGrau: itensProcessados.filter(i => i.subcategoria === 'LENTES_GRAU').length,
+    lentesContato: itensProcessados.filter(i => i.subcategoria === 'LENTES_CONTATO').length,
     acessorios: itensProcessados.filter(i => i.subcategoria === 'ACESSORIOS').length,
     outros: itensProcessados.filter(i => i.subcategoria === 'OUTROS').length,
   }), [itensProcessados]);
@@ -600,7 +602,7 @@ export default function AnaliseOTBPage() {
                 <div className="text-xs">
                   Vendas / giro: últimos 180 dias
                   {filters.subcategoria !== 'TODAS' && (
-                    <span> • Filtro: {filters.subcategoria === 'AR_RX' ? 'Armações RX' : filters.subcategoria === 'AR_SOLAR' ? 'Solar / OC' : filters.subcategoria}</span>
+                    <span> • Filtro: {({ AR_RX: 'Armações RX', AR_SOLAR: 'Solar / OC', LENTES: 'Lentes', LENTES_GRAU: 'Lentes de grau', LENTES_CONTATO: 'Lentes de contato', ACESSORIOS: 'Acessórios', OUTROS: 'Outros' } as Record<string, string>)[filters.subcategoria] ?? filters.subcategoria}</span>
                   )}
                 </div>
               </AlertDescription>

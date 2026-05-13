@@ -192,7 +192,7 @@ export async function getEstoqueCompleto(
       // Subcategoria: prefere o backend; fallback regex em tipo, depois descrição
       subcategoria: (() => {
         const sub = (r.subcategoria ?? '').toString().toUpperCase().trim();
-        const valid: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'ACESSORIOS', 'OUTROS'];
+        const valid: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'LENTES_GRAU', 'LENTES_CONTATO', 'ACESSORIOS', 'OUTROS'];
         if (valid.includes(sub as SubcategoriaProduto)) return sub as SubcategoriaProduto;
         const fromTipo = subcategorizarProduto(tipo);
         if (fromTipo !== 'OUTROS') return fromTipo;

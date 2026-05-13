@@ -12,7 +12,7 @@ interface Props {
   setFilters: (updater: EstoqueFilters | ((p: EstoqueFilters) => EstoqueFilters)) => void;
   listaMarcas: string[];
   listaFornecedores: string[];
-  contagens: { rx: number; solar: number; lentes: number; acessorios: number; outros: number };
+  contagens: { rx: number; solar: number; lentes: number; lentesGrau: number; lentesContato: number; acessorios: number; outros: number };
 }
 
 const subOpcoes = [
@@ -20,6 +20,8 @@ const subOpcoes = [
   { key: 'AR_RX' as const, label: 'Armações RX', destaque: true },
   { key: 'AR_SOLAR' as const, label: 'Solar / OC', destaque: true },
   { key: 'LENTES' as const, label: 'Lentes' },
+  { key: 'LENTES_GRAU' as const, label: 'Lentes de grau' },
+  { key: 'LENTES_CONTATO' as const, label: 'Lentes de contato' },
   { key: 'ACESSORIOS' as const, label: 'Acessórios' },
   { key: 'OUTROS' as const, label: 'Outros' },
 ];
@@ -59,6 +61,8 @@ export function PlanoCompraFiltros({ filters, setFilters, listaMarcas, listaForn
     AR_RX: contagens.rx,
     AR_SOLAR: contagens.solar,
     LENTES: contagens.lentes,
+    LENTES_GRAU: contagens.lentesGrau,
+    LENTES_CONTATO: contagens.lentesContato,
     ACESSORIOS: contagens.acessorios,
     OUTROS: contagens.outros,
   };

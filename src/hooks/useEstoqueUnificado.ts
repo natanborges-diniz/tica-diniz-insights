@@ -199,6 +199,8 @@ const COBERTURA_ALVO_DIAS: Record<SubcategoriaProduto, number> = {
   AR_RX: 60,
   AR_SOLAR: 45,
   LENTES: 30,
+  LENTES_GRAU: 30,
+  LENTES_CONTATO: 30,
   ACESSORIOS: 60,
   OUTROS: 60,
 };
@@ -329,7 +331,7 @@ export function useEstoqueUnificado() {
       const subBackend = (estoqueItem?.subcategoria
         ?? (vendas?.subcategoria as SubcategoriaProduto | null | undefined)
         ?? null) as SubcategoriaProduto | null;
-      const subValid: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'ACESSORIOS', 'OUTROS'];
+      const subValid: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'LENTES_GRAU', 'LENTES_CONTATO', 'ACESSORIOS', 'OUTROS'];
       const subcategoria: SubcategoriaProduto = (subBackend && subValid.includes(subBackend))
         ? subBackend
         : subcategorizarProduto(tipo);
@@ -547,11 +549,13 @@ export function useEstoqueUnificado() {
     const totalVendas = itensProcessados.reduce((acc, i) => acc + i.qtdVendidos, 0);
     if (totalEstoque === 0 && totalVendas === 0) return [];
 
-    const subcats: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'ACESSORIOS', 'OUTROS'];
+    const subcats: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'LENTES_GRAU', 'LENTES_CONTATO', 'ACESSORIOS', 'OUTROS'];
     const labels: Record<SubcategoriaProduto, string> = {
       AR_RX: 'Armações RX',
       AR_SOLAR: 'Solar / OC',
       LENTES: 'Lentes',
+      LENTES_GRAU: 'Lentes de grau',
+      LENTES_CONTATO: 'Lentes de contato',
       ACESSORIOS: 'Acessórios',
       OUTROS: 'Outros',
     };
