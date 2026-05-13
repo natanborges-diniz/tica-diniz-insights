@@ -478,6 +478,8 @@ export default function AnaliseOTBPage() {
     metricas,
     marcasSemFornecedor,
     mixIdealCategoria,
+    mixIdealMarcas,
+    lacunasNaoPreenchiveis,
     resumoPorMarca,
     listaCompraFlat,
     listaMarcas,
