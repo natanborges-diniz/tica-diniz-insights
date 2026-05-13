@@ -20,6 +20,8 @@ const subOpcoes = [
   { key: 'AR_RX' as const, label: 'Armações RX', destaque: true },
   { key: 'AR_SOLAR' as const, label: 'Solar / OC', destaque: true },
   { key: 'LENTES' as const, label: 'Lentes' },
+  { key: 'LENTES_GRAU' as const, label: 'Lentes de grau' },
+  { key: 'LENTES_CONTATO' as const, label: 'Lentes de contato' },
   { key: 'ACESSORIOS' as const, label: 'Acessórios' },
   { key: 'OUTROS' as const, label: 'Outros' },
 ];
