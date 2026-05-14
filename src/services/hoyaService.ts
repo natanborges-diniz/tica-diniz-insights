@@ -162,32 +162,48 @@ async function callHoyaProxy<T>(action: string, params: Record<string, unknown> 
   const { data: sessionData } = await supabase.auth.getSession();
   const accessToken = sessionData?.session?.access_token;
 
-  const headers: Record<string, string> = {};
-  if (accessToken) {
-    headers["Authorization"] = `Bearer ${accessToken}`;
+  if (!accessToken) {
+    const proxyError: HoyaProxyError = {
+      code: "NO_SESSION",
+      message: "Sessão expirada. Faça login novamente.",
+    };
+    throw proxyError;
   }
 
-  const { data, error } = await supabase.functions.invoke("hoya-proxy", {
-    body: { action, ...params },
-    headers,
-  });
+  // Use explicit fetch instead of supabase.functions.invoke to guarantee
+  // the user JWT is sent as Authorization (invoke can override it with anon key,
+  // which authGuard rejects since aud !== "authenticated").
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-  if (error) {
-    console.error("[hoyaService] Edge function error:", error);
+  let response: Response;
+  try {
+    response = await fetch(`${supabaseUrl}/functions/v1/hoya-proxy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        apikey: anonKey,
+      },
+      body: JSON.stringify({ action, ...params }),
+    });
+  } catch (networkErr) {
+    console.error("[hoyaService] Network error:", networkErr);
+    throw new Error("Erro de rede ao chamar proxy Hoya");
+  }
 
-    // Try to extract structured Hoya error from the response body
-    let errorBody: Record<string, unknown> | null = null;
-    try {
-      if (error.context && typeof error.context.json === "function") {
-        errorBody = await error.context.json();
-      } else if (typeof error.context === "object" && error.context !== null) {
-        errorBody = error.context as Record<string, unknown>;
-      }
-    } catch {
-      // ignore parse errors
-    }
+  let data: any = null;
+  try {
+    data = await response.json();
+  } catch {
+    // ignore parse errors
+  }
 
-    if (errorBody) {
+  if (!response.ok) {
+    console.error("[hoyaService] Edge function error:", response.status, data);
+    const errorBody = (data ?? {}) as Record<string, unknown>;
+
+    {
       // Hoya API structured error: { erros: [{ mensagem: "..." }] }
       const erros = (errorBody as { erros?: { mensagem?: string }[] }).erros;
       if (erros && erros.length > 0 && erros[0].mensagem) {
