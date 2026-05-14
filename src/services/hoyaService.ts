@@ -227,7 +227,7 @@ async function callHoyaProxy<T>(action: string, params: Record<string, unknown> 
       }
     }
 
-    throw new Error(error.message || "Erro ao chamar proxy Hoya");
+    throw new Error(`Erro ao chamar proxy Hoya (HTTP ${response.status})`);
   }
 
   // F4.1: Handle standardized error codes from hoya-proxy
