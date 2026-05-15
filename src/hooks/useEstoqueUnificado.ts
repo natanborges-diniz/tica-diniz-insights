@@ -16,6 +16,7 @@ import { categorizarProduto, subcategorizarProduto, type SubcategoriaProduto } f
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useEstoqueStore, type EstoqueFilters } from "@/stores/useEstoqueStore";
+import { classificarPorIdade, toFaixaDoente, type FaixaDoente } from "@/lib/estoque/faixas-saneamento";
 
 // Re-export para compatibilidade com imports existentes
 export type { EstoqueFilters };
@@ -68,8 +69,8 @@ export type DecisaoMarca = 'REPOR_REFERENCIA' | 'RENOVAR_COLECAO' | 'AVALIAR_DES
 // Decisão por SKU dentro de uma marca aprovada (REPOR ou RENOVAR)
 export type DecisaoSku = 'REPOR' | 'TROCAR' | 'OBSERVAR' | 'LIQUIDAR' | 'SEM_CADASTRO';
 
-// Faixa de estoque doente
-export type FaixaDoente = 'PROMOCAO_20' | 'LIQUIDACAO_30' | 'LIQUIDACAO_50' | 'DESCARTE' | 'REVISAO_URGENTE';
+// FaixaDoente is defined in @/lib/estoque/faixas-saneamento and re-exported here for consumers
+export type { FaixaDoente };
 
 // Motivo da quantidade alocada (passes da distribuição de lacuna)
 export type MotivoQtd = 'BASE' | 'GIRO_RAPIDO' | 'GIRO_MUITO_RAPIDO';
@@ -734,13 +735,6 @@ export function useEstoqueUnificado() {
   // RESUMO POR MARCA — com blocos acionáveis (Fase 2)
   // ============================================
 
-  const classificarFaixaDoente = (dias: number): { faixa: FaixaDoente; desconto: string } => {
-    if (dias >= 720) return { faixa: 'DESCARTE', desconto: '100%' };
-    if (dias >= 360) return { faixa: 'LIQUIDACAO_50', desconto: '50%' };
-    if (dias >= 270) return { faixa: 'LIQUIDACAO_30', desconto: '30%' };
-    return { faixa: 'PROMOCAO_20', desconto: '20%' };
-  };
-
   // Helper: monta um SkuARepor a partir de um ItemEstoque.
   // qtdAComprar e motivoQtd são IMPOSTOS pela distribuição da lacuna (Fase 2)
   // — não calculados aqui. Quando não há qtd (ex: TROCAR/OBSERVAR), passa 0.
@@ -945,17 +939,17 @@ export function useEstoqueUnificado() {
 
       // Estoque doente
       const itensDoentes: ItemDoenteMarca[] = comEstoque
-        .filter(s => s.diasEmEstoque >= 180 && s.qtdVendidos === 0)
+        .filter(s => classificarPorIdade(s.diasEmEstoque).desconto > 0 && s.qtdVendidos === 0)
         .map(s => {
-          const { faixa, desconto } = classificarFaixaDoente(s.diasEmEstoque);
+          const entry = classificarPorIdade(s.diasEmEstoque);
           return {
             codSku: s.codSku,
             descricao: s.descricao,
             estoqueAtual: s.estoqueAtual,
             valorCusto: s.valorEstoqueCusto,
             diasEmEstoque: s.diasEmEstoque,
-            faixa,
-            desconto,
+            faixa: toFaixaDoente(entry),
+            desconto: `${entry.desconto}%`,
           };
         })
         .sort((a, b) => b.diasEmEstoque - a.diasEmEstoque);
@@ -1014,7 +1008,7 @@ export function useEstoqueUnificado() {
 
   // Estoque doente global (mantido para compatibilidade com Visão Estoque)
   const estoqueDoenteAgrupado = useMemo((): GrupoEstoqueDoente[] => {
-    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0 && i.diasEmEstoque >= 180);
+    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0 && classificarPorIdade(i.diasEmEstoque).desconto > 0);
     if (comEstoque.length === 0) return [];
 
     const faixasConfig: Record<FaixaDoente, { label: string; desconto: string; cor: string }> = {
@@ -1027,7 +1021,7 @@ export function useEstoqueUnificado() {
 
     const grupos = new Map<FaixaDoente, ItemEstoque[]>();
     comEstoque.forEach(item => {
-      const { faixa } = classificarFaixaDoente(item.diasEmEstoque);
+      const faixa = toFaixaDoente(classificarPorIdade(item.diasEmEstoque));
       if (!grupos.has(faixa)) grupos.set(faixa, []);
       grupos.get(faixa)!.push(item);
     });

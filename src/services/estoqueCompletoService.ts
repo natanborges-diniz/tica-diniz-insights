@@ -4,6 +4,7 @@
 
 import { apiGet, EmpresaParam, formatEmpresaParam, ApiGetOptions } from './firebirdBridge';
 import { categorizarPorDescricao, subcategorizarProduto, subcategorizarPorDescricao, type SubcategoriaProduto } from '@/utils/categorizarProduto';
+import { classificarPorIdade } from '@/lib/estoque/faixas-saneamento';
 
 // ============================================
 // INTERFACES - Campos do backend (snake_case)
@@ -135,21 +136,11 @@ export async function getEstoqueCompleto(
       
       if (!temInfoTempo) {
         // Defensivo: itens sem NENHUM registro de tempo (precoCusto e dias zerados)
-        // não devem cair em LIQUIDA 50% — provavelmente é cadastro incompleto.
+        // não devem cair em DESCARTE 100% — provavelmente é cadastro incompleto.
         // Marcamos como SEM CADASTRO para tratamento separado na UI.
         acaoSugerida = 'SEM CADASTRO';
-      } else if (diasEmEstoque <= 90) {
-        acaoSugerida = 'ANALISE PARA RECOMPRA';
-      } else if (diasEmEstoque <= 180) {
-        acaoSugerida = 'ACOMPANHAMENTO';
-      } else if (diasEmEstoque <= 270) {
-        acaoSugerida = 'SINAL DE ALERTA';
-      } else if (diasEmEstoque <= 360) {
-        acaoSugerida = 'LIQUIDA 20%';
-      } else if (diasEmEstoque <= 720) {
-        acaoSugerida = 'LIQUIDA 30%';
       } else {
-        acaoSugerida = 'LIQUIDA 50%';
+        acaoSugerida = classificarPorIdade(diasEmEstoque).rotulo;
       }
     }
     
