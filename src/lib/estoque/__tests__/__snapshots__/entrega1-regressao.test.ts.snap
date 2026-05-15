@@ -1,0 +1,73 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`snapshot dos valores absolutos (para referência) > NEW metrics snapshot 1`] = `
+{
+  "deadStockPecas": 39,
+  "deadStockValor": 12340,
+  "pecasLiquidar": 19,
+  "skusPorFaixa": {
+    "ACOMPANHAMENTO": {
+      "pecas": 10,
+      "skus": 3,
+    },
+    "ANALISE PARA RECOMPRA": {
+      "pecas": 11,
+      "skus": 4,
+    },
+    "AÇÃO ESPECIAL": {
+      "pecas": 5,
+      "skus": 3,
+    },
+    "LIQUIDA 30%": {
+      "pecas": 9,
+      "skus": 3,
+    },
+    "LIQUIDA 50%": {
+      "pecas": 10,
+      "skus": 4,
+    },
+    "PROMOCAO 20%": {
+      "pecas": 15,
+      "skus": 4,
+    },
+  },
+  "totalPecas": 60,
+  "valorTotalCusto": 16390,
+}
+`;
+
+exports[`snapshot dos valores absolutos (para referência) > OLD metrics snapshot 1`] = `
+{
+  "deadStockPecas": 39,
+  "deadStockValor": 12340,
+  "pecasLiquidar": 24,
+  "skusPorFaixa": {
+    "ACOMPANHAMENTO": {
+      "pecas": 10,
+      "skus": 3,
+    },
+    "ANALISE PARA RECOMPRA": {
+      "pecas": 11,
+      "skus": 4,
+    },
+    "LIQUIDA 20%": {
+      "pecas": 9,
+      "skus": 3,
+    },
+    "LIQUIDA 30%": {
+      "pecas": 10,
+      "skus": 4,
+    },
+    "LIQUIDA 50%": {
+      "pecas": 5,
+      "skus": 3,
+    },
+    "SINAL DE ALERTA": {
+      "pecas": 15,
+      "skus": 4,
+    },
+  },
+  "totalPecas": 60,
+  "valorTotalCusto": 16390,
+}
+`;

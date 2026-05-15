@@ -38,9 +38,9 @@ describe('classificarPorIdade', () => {
     [361,  'LIQUIDA 50%',           50,  'liquidar'  ],
     [719,  'LIQUIDA 50%',           50,  'liquidar'  ],
     [720,  'LIQUIDA 50%',           50,  'liquidar'  ],
-    [721,  'DESCARTE 100%',         100, 'descartar' ],
-    [999,  'DESCARTE 100%',         100, 'descartar' ],
-    [9999, 'DESCARTE 100%',         100, 'descartar' ],
+    [721,  'AÇÃO ESPECIAL', 0, 'destinar' ],
+    [999,  'AÇÃO ESPECIAL', 0, 'destinar' ],
+    [9999, 'AÇÃO ESPECIAL', 0, 'destinar' ],
   ];
 
   it.each(casos)('%id → rotulo=%s desconto=%i acao=%s', (dias, rotulo, desconto, acao) => {
@@ -52,7 +52,7 @@ describe('classificarPorIdade', () => {
 
   it('returns last entry for very large values', () => {
     const result = classificarPorIdade(Number.MAX_SAFE_INTEGER);
-    expect(result.rotulo).toBe('DESCARTE 100%');
+    expect(result.rotulo).toBe('AÇÃO ESPECIAL');
   });
 });
 
@@ -69,8 +69,8 @@ describe('toFaixaDoente', () => {
     expect(toFaixaDoente(classificarPorIdade(720))).toBe('LIQUIDACAO_50');
   });
 
-  it('maps desconto 100 → DESCARTE', () => {
-    expect(toFaixaDoente(classificarPorIdade(721))).toBe('DESCARTE');
+  it('maps AÇÃO ESPECIAL → ACAO_ESPECIAL (dia 721, desconto 0)', () => {
+    expect(toFaixaDoente(classificarPorIdade(721))).toBe('ACAO_ESPECIAL');
   });
 
   it('faixa boundary: dia 181 is first day in PROMOCAO_20', () => {

@@ -2,7 +2,7 @@ export type FaixaDoente =
   | 'PROMOCAO_20'
   | 'LIQUIDACAO_30'
   | 'LIQUIDACAO_50'
-  | 'DESCARTE'
+  | 'ACAO_ESPECIAL'
   | 'REVISAO_URGENTE';
 
 export const FAIXAS_SANEAMENTO = [
@@ -11,7 +11,7 @@ export const FAIXAS_SANEAMENTO = [
   { ate: 270,      rotulo: 'PROMOCAO 20%',          desconto: 20,  acao: 'promover'  },
   { ate: 360,      rotulo: 'LIQUIDA 30%',           desconto: 30,  acao: 'liquidar'  },
   { ate: 720,      rotulo: 'LIQUIDA 50%',           desconto: 50,  acao: 'liquidar'  },
-  { ate: Infinity, rotulo: 'DESCARTE 100%',         desconto: 100, acao: 'descartar' },
+  { ate: Infinity, rotulo: 'AÇÃO ESPECIAL',          desconto: 0,   acao: 'destinar'  },
 ] as const;
 
 export type FaixaSaneamento = typeof FAIXAS_SANEAMENTO[number];
@@ -23,13 +23,13 @@ export function classificarPorIdade(diasEmEstoque: number): FaixaSaneamento {
   );
 }
 
-// Maps a saneamento entry (desconto > 0) to its FaixaDoente enum value.
-// Only call for entries where desconto > 0 (i.e. diasEmEstoque > 180).
+// Maps a saneamento entry to its FaixaDoente enum value.
+// Switch on rotulo (unique per entry) to avoid ambiguity from shared desconto values.
 export function toFaixaDoente(entry: FaixaSaneamento): Exclude<FaixaDoente, 'REVISAO_URGENTE'> {
-  switch (entry.desconto as number) {
-    case 100: return 'DESCARTE';
-    case 50:  return 'LIQUIDACAO_50';
-    case 30:  return 'LIQUIDACAO_30';
-    default:  return 'PROMOCAO_20';
+  switch (entry.rotulo) {
+    case 'LIQUIDA 50%':  return 'LIQUIDACAO_50';
+    case 'LIQUIDA 30%':  return 'LIQUIDACAO_30';
+    case 'AÇÃO ESPECIAL': return 'ACAO_ESPECIAL';
+    default:             return 'PROMOCAO_20';
   }
 }

@@ -1012,10 +1012,10 @@ export function useEstoqueUnificado() {
     if (comEstoque.length === 0) return [];
 
     const faixasConfig: Record<FaixaDoente, { label: string; desconto: string; cor: string }> = {
-      PROMOCAO_20: { label: 'Promoção 20%', desconto: '20%', cor: 'text-yellow-600' },
-      LIQUIDACAO_30: { label: 'Liquidação 30%', desconto: '30%', cor: 'text-orange-600' },
-      LIQUIDACAO_50: { label: 'Liquidação 50%', desconto: '50%', cor: 'text-destructive' },
-      DESCARTE: { label: 'Descarte / Doação', desconto: '100%', cor: 'text-destructive' },
+      PROMOCAO_20:    { label: 'Promoção 20%',  desconto: '20%', cor: 'text-yellow-600'  },
+      LIQUIDACAO_30:  { label: 'Liquidação 30%', desconto: '30%', cor: 'text-orange-600'  },
+      LIQUIDACAO_50:  { label: 'Liquidação 50%', desconto: '50%', cor: 'text-destructive' },
+      ACAO_ESPECIAL:  { label: 'Ação Especial',  desconto: '-',   cor: 'text-destructive' },
       REVISAO_URGENTE: { label: 'Revisão Urgente', desconto: '-', cor: 'text-destructive' },
     };
 
@@ -1032,7 +1032,7 @@ export function useEstoqueUnificado() {
       grupos.get('REVISAO_URGENTE')!.push(...semMovimento);
     }
 
-    const ordemFaixas: FaixaDoente[] = ['PROMOCAO_20', 'LIQUIDACAO_30', 'LIQUIDACAO_50', 'DESCARTE', 'REVISAO_URGENTE'];
+    const ordemFaixas: FaixaDoente[] = ['PROMOCAO_20', 'LIQUIDACAO_30', 'LIQUIDACAO_50', 'ACAO_ESPECIAL', 'REVISAO_URGENTE'];
     return ordemFaixas
       .filter(f => grupos.has(f))
       .map(faixa => {
