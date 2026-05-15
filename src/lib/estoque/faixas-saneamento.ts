@@ -14,9 +14,19 @@ export const FAIXAS_SANEAMENTO = [
   { ate: Infinity, rotulo: 'AÇÃO ESPECIAL',          desconto: 0,   acao: 'destinar'  },
 ] as const;
 
-export type FaixaSaneamento = typeof FAIXAS_SANEAMENTO[number];
+// Special entry returned for items with no valid time data (null, undefined, or negative).
+// Never stored in FAIXAS_SANEAMENTO to keep the array clean and ordered.
+const SEM_CADASTRO = {
+  ate: -1 as const,
+  rotulo: 'SEM CADASTRO' as const,
+  desconto: 0 as const,
+  acao: 'cadastrar' as const,
+};
 
-export function classificarPorIdade(diasEmEstoque: number): FaixaSaneamento {
+export type FaixaSaneamento = typeof FAIXAS_SANEAMENTO[number] | typeof SEM_CADASTRO;
+
+export function classificarPorIdade(diasEmEstoque: number | null | undefined): FaixaSaneamento {
+  if (diasEmEstoque == null || diasEmEstoque < 0) return SEM_CADASTRO;
   return (
     FAIXAS_SANEAMENTO.find(f => diasEmEstoque <= f.ate) ??
     FAIXAS_SANEAMENTO[FAIXAS_SANEAMENTO.length - 1]

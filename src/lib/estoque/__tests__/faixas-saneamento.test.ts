@@ -93,3 +93,30 @@ describe('doente boundary — desconto > 0 check', () => {
     expect(classificarPorIdade(181).desconto).toBeGreaterThan(0);
   });
 });
+
+describe('classificarPorIdade — casos especiais (Part C)', () => {
+  it('null → SEM CADASTRO', () => {
+    const r = classificarPorIdade(null);
+    expect(r.rotulo).toBe('SEM CADASTRO');
+    expect(r.desconto).toBe(0);
+    expect(r.acao).toBe('cadastrar');
+  });
+
+  it('undefined → SEM CADASTRO', () => {
+    const r = classificarPorIdade(undefined);
+    expect(r.rotulo).toBe('SEM CADASTRO');
+    expect(r.desconto).toBe(0);
+  });
+
+  it('negativo (-1) → SEM CADASTRO', () => {
+    expect(classificarPorIdade(-1).rotulo).toBe('SEM CADASTRO');
+  });
+
+  it('0 → ANALISE PARA RECOMPRA (zero é válido: item recém chegado)', () => {
+    expect(classificarPorIdade(0).rotulo).toBe('ANALISE PARA RECOMPRA');
+  });
+
+  it('SEM CADASTRO tem desconto 0 (nunca entra no grupo de doentes)', () => {
+    expect(classificarPorIdade(null).desconto).toBe(0);
+  });
+});

@@ -126,23 +126,16 @@ export async function getEstoqueCompleto(
       diasEmEstoque = r.dias_sem_venda;
     }
     
-    // Ação sugerida: preferir do backend, senão calcular baseado em dias
-    let acaoSugerida = r.acao_sugerida;
-    if (!acaoSugerida) {
-      // Se não temos NENHUMA informação de tempo, classificar como SEM MOVIMENTO
-      const temInfoTempo = r.data_ultima_entrada !== null || 
-                           (r.dias_sem_venda !== undefined && r.dias_sem_venda !== null) ||
-                           (r.dias_estoque !== undefined && r.dias_estoque !== null);
-      
-      if (!temInfoTempo) {
-        // Defensivo: itens sem NENHUM registro de tempo (precoCusto e dias zerados)
-        // não devem cair em DESCARTE 100% — provavelmente é cadastro incompleto.
-        // Marcamos como SEM CADASTRO para tratamento separado na UI.
-        acaoSugerida = 'SEM CADASTRO';
-      } else {
-        acaoSugerida = classificarPorIdade(diasEmEstoque).rotulo;
-      }
-    }
+    // Frontend é a fonte de verdade para acaoSugerida.
+    // r.acao_sugerida do bridge é intencionalmente ignorado — alinhamento SQL pendente
+    // (ver FASE_1.5_RELATORIO.md). Quando o bridge entregar os mesmos rótulos,
+    // os dois concordarão; até lá o frontend calcula localmente.
+    const temInfoTempo = r.data_ultima_entrada !== null ||
+                         (r.dias_sem_venda !== undefined && r.dias_sem_venda !== null) ||
+                         (r.dias_estoque !== undefined && r.dias_estoque !== null);
+    const acaoSugerida = temInfoTempo
+      ? classificarPorIdade(diasEmEstoque).rotulo
+      : 'SEM CADASTRO';
     
     // cod_sku: backend pode enviar como cod_sku OU cod_armacao (fallback)
     const rawCodSku = r.cod_sku ?? r.cod_armacao ?? 0;
