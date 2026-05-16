@@ -513,28 +513,28 @@ export type Database = {
       }
       capacidade_expositor: {
         Row: {
-          capacidade: number
-          categoria: string
+          capacidade_total: number
           cod_empresa: number
-          created_at: string | null
+          created_at: string
           id: string
-          updated_at: string | null
+          percentual_solar: number
+          updated_at: string
         }
         Insert: {
-          capacidade?: number
-          categoria?: string
+          capacidade_total: number
           cod_empresa: number
-          created_at?: string | null
+          created_at?: string
           id?: string
-          updated_at?: string | null
+          percentual_solar: number
+          updated_at?: string
         }
         Update: {
-          capacidade?: number
-          categoria?: string
+          capacidade_total?: number
           cod_empresa?: number
-          created_at?: string | null
+          created_at?: string
           id?: string
-          updated_at?: string | null
+          percentual_solar?: number
+          updated_at?: string
         }
         Relationships: []
       }
