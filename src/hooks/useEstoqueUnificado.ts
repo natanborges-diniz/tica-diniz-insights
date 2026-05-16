@@ -20,6 +20,7 @@ import { classificarPorIdade, toFaixaDoente, type FaixaDoente } from "@/lib/esto
 import { calcularCurvaABC } from "@/lib/estoque/curva-abc";
 import { calcularMixIdealCategoria, calcularMixIdealMarcas, type DecisaoMarca as DecisaoMarcaType, type MixMarca as MixMarcaType, type MixComparativo as MixComparativoType } from "@/lib/estoque/mix-ideal";
 import { calcularDecisaoSku, type DecisaoSku as DecisaoSkuType } from "@/lib/estoque/decisao-sku";
+import { distribuirLacuna, type MotivoQtd as MotivoQtdType, type SkuParaPool } from "@/lib/estoque/lacuna";
 
 // Re-export para compatibilidade com imports existentes
 export type { EstoqueFilters };
@@ -75,8 +76,8 @@ export type DecisaoSku = DecisaoSkuType;
 // FaixaDoente is defined in @/lib/estoque/faixas-saneamento and re-exported here for consumers
 export type { FaixaDoente };
 
-// Motivo da quantidade alocada (passes da distribuição de lacuna)
-export type MotivoQtd = 'BASE' | 'GIRO_RAPIDO' | 'GIRO_MUITO_RAPIDO';
+// MotivoQtd defined in @/lib/estoque/lacuna and re-exported here for consumers
+export type MotivoQtd = MotivoQtdType;
 
 // SKU específico a repor / trocar / observar
 export interface SkuARepor {
@@ -705,94 +706,28 @@ export function useEstoqueUnificado() {
       let poolSkusBons = 0;
 
       if (incluidaNoMix && lacuna > 0) {
-        // Pool de SKUs "bons": vendeu, tem custo cadastrado, e giro real ≤ 90 d.
-        // SKU sem giro real ou com giro > 90 → fora do plano (vai para Observar).
-        const pool = skus
-          .filter(s => {
-            const giroEf = s.diasGiroUltimaPeca ?? s.diasGiroMedio ?? null;
-            return s.precoCusto > 0
-              && s.qtdVendidos > 0
-              && giroEf !== null
-              && giroEf > 0
-              && giroEf <= GIRO_BOM_MAX_DIAS;
-          })
-          .map(s => {
-            const giroEf = (s.diasGiroUltimaPeca ?? s.diasGiroMedio) as number;
-            const peso = PESO_CURVA[s.curvaABC];
-            const amostra = Math.max(1, s.pecasGiroConsideradas);
-            const score = (1 / giroEf) * amostra * peso;
-            // Teto: não pedir mais que histórico de venda + 20% (mínimo 1).
-            const tetoCompra = Math.max(1, Math.ceil(s.qtdVendidos * 1.2));
-            return {
-              item: s,
-              giroEf,
-              score,
-              tetoCompra,
-              qtd: 0,
-              motivo: undefined as MotivoQtd | undefined,
-            };
-          })
-          .sort((a, b) => b.score - a.score);
+        const poolInput: SkuParaPool[] = skus.map(s => ({
+          codSku: s.codSku,
+          qtdVendidos: s.qtdVendidos,
+          precoCusto: s.precoCusto,
+          diasGiroUltimaPeca: s.diasGiroUltimaPeca,
+          diasGiroMedio: s.diasGiroMedio,
+          pecasGiroConsideradas: s.pecasGiroConsideradas,
+          curvaABC: s.curvaABC,
+        }));
+        const skuMap = new Map(skus.map(s => [s.codSku, s]));
 
-        poolSkusBons = pool.length;
-        let restante = lacuna;
+        const { alocados, naoPreenchivel, poolSize } = distribuirLacuna(
+          poolInput, lacuna, { limitesGiro: { maxGiro: GIRO_BOM_MAX_DIAS } }
+        );
 
-        // Passe 1 — base: 1 peça por SKU do pool, do melhor para o pior.
-        for (const p of pool) {
-          if (restante <= 0) break;
-          if (p.qtd < p.tetoCompra) {
-            p.qtd += 1;
-            restante -= 1;
-            p.motivo = 'BASE';
-          }
-        }
+        poolSkusBons = poolSize;
+        lacunaNaoPreenchivel = naoPreenchivel;
 
-        // Passe 2 — escalonamento: +1 nos giros ≤ 45 d.
-        if (restante > 0) {
-          for (const p of pool) {
-            if (restante <= 0) break;
-            if (p.giroEf <= 45 && p.qtd < p.tetoCompra) {
-              p.qtd += 1;
-              restante -= 1;
-              p.motivo = 'GIRO_RAPIDO';
-            }
-          }
-        }
-
-        // Passe 3 — escalonamento: +1 nos giros ≤ 30 d.
-        if (restante > 0) {
-          for (const p of pool) {
-            if (restante <= 0) break;
-            if (p.giroEf <= 30 && p.qtd < p.tetoCompra) {
-              p.qtd += 1;
-              restante -= 1;
-              p.motivo = 'GIRO_MUITO_RAPIDO';
-            }
-          }
-        }
-
-        // Passes 4+ — continua descendo o limite até esgotar tetos ou lacuna.
-        const limites = [21, 15, 10, 7];
-        for (const lim of limites) {
-          if (restante <= 0) break;
-          let alocou = false;
-          for (const p of pool) {
-            if (restante <= 0) break;
-            if (p.giroEf <= lim && p.qtd < p.tetoCompra) {
-              p.qtd += 1;
-              restante -= 1;
-              p.motivo = 'GIRO_MUITO_RAPIDO';
-              alocou = true;
-            }
-          }
-          if (!alocou) break;
-        }
-
-        lacunaNaoPreenchivel = restante;
-
-        skusARepor = pool
-          .filter(p => p.qtd > 0)
-          .map(p => buildSkuView(p.item, 'REPOR', p.qtd, p.motivo))
+        skusARepor = alocados
+          .map(({ codSku, qtdAComprar, motivo }) =>
+            buildSkuView(skuMap.get(codSku)!, 'REPOR', qtdAComprar, motivo)
+          )
           .sort((a, b) => {
             const ordemPrio = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAIXA: 3 } as const;
             return ordemPrio[a.prioridade] - ordemPrio[b.prioridade] || b.qtdAComprar - a.qtdAComprar;

@@ -56,7 +56,24 @@ Commits:
 - Defaults dos cortes: `diasAtencao=LIMITES.ATENCAO` (180), `diasAcao=LIMITES.ACAO_SUAVE` (270)
 - Hook reduz ~18 linhas; bloco inline substituído por 4 linhas
 - 28 testes (fronteiras, prioridade de regras, cortes customizados, regressão) em `decisao-sku.test.ts`
-#### lacuna.ts ⏳ próximo
+#### lacuna.ts ✅
+- Criado `src/lib/estoque/lacuna.ts` com `SkuParaPool` (7 campos), `MotivoQtd`, `distribuirLacuna`
+- 4 passes documentados com JSDoc; `maxGiro` configurável via opts
+- Hook reduz ~60 linhas; bloco inline substituído por chamada + mapa de volta para SkuARepor
+- 35 testes (edge cases, passes, scoring, teto, invariantes, regressão 3 marcas) em `lacuna.test.ts`
+- Snapshots OLD vs NEW idênticos para RAYBAN/OAKLEY/GENÉRICA
+
+---
+
+### Entrega 3 — Migração estoque_minimo_loja → capacidade_expositor ⏳ próximo
+
+- Nova tabela `capacidade_expositor` com granularidade loja × categoria (sem curva ABC)
+- Migração agressiva: soma das 3 curvas por (cod_empresa, categoria) → 1 valor consolidado
+- Atualizar `OtbEstoqueMinimoConfig.tsx` → `CapacidadeExpositorConfig.tsx`
+- Manter `estoque_minimo_loja` no banco como backup (não deletar)
+- DDL + script de migração + lista de arquivos devem ser aprovados ANTES de tocar no Supabase
+
+### Entrega 4 — Deletar OQueFazerPage.tsx ⏳ pendente
 
 ---
 
