@@ -44,8 +44,13 @@ Commits:
 - 9 testes unitários + regressão OLD vs NEW em `curva-abc.test.ts`
 - Commit: `refactor(estoque): extrai calcularCurvaABC para módulo puro testável`
 
-#### mix-ideal.ts ⏳ próximo
-#### decisao-sku.ts ⏳ pendente
+#### mix-ideal.ts ✅
+- Criado `src/lib/estoque/mix-ideal.ts` com `DecisaoMarca`, `MixMarca`, `MixComparativo`, `calcularMixIdealCategoria`, `calcularMixIdealMarcas`
+- `calcularMixIdealMarcas` parametrizado: `coberturaAlvo`, `thresholdPerformance`, `diasPeriodo`
+- Hook reduz ~80 linhas; 3 useMemo inline substituídos; tipos migrados e re-exportados
+- 22 testes unitários + regressão OLD vs NEW em `mix-ideal.test.ts`
+
+#### decisao-sku.ts ⏳ próximo
 #### lacuna.ts ⏳ pendente
 
 ---

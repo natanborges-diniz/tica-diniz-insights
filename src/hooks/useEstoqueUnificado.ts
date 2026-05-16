@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEstoqueStore, type EstoqueFilters } from "@/stores/useEstoqueStore";
 import { classificarPorIdade, toFaixaDoente, type FaixaDoente } from "@/lib/estoque/faixas-saneamento";
 import { calcularCurvaABC } from "@/lib/estoque/curva-abc";
+import { calcularMixIdealCategoria, calcularMixIdealMarcas, type DecisaoMarca as DecisaoMarcaType, type MixMarca as MixMarcaType, type MixComparativo as MixComparativoType } from "@/lib/estoque/mix-ideal";
 
 // Re-export para compatibilidade com imports existentes
 export type { EstoqueFilters };
@@ -64,8 +65,8 @@ export interface ItemEstoque {
   decisaoSku: DecisaoSku;
 }
 
-// Decisão por marca para Plano de Compra
-export type DecisaoMarca = 'REPOR_REFERENCIA' | 'RENOVAR_COLECAO' | 'AVALIAR_DESCONTINUACAO' | 'SEM_HISTORICO';
+// DecisaoMarca defined in @/lib/estoque/mix-ideal and re-exported here for consumers
+export type DecisaoMarca = DecisaoMarcaType;
 
 // Decisão por SKU dentro de uma marca aprovada (REPOR ou RENOVAR)
 export type DecisaoSku = 'REPOR' | 'TROCAR' | 'OBSERVAR' | 'LIQUIDAR' | 'SEM_CADASTRO';
@@ -102,20 +103,8 @@ export interface SkuARepor {
   motivoQtd?: MotivoQtd;
 }
 
-// Mix ideal por marca (Fase 1 — top-down)
-export interface MixMarca {
-  marca: string;
-  curvaMarca: 'A' | 'B' | 'C';
-  pecasVendidas6m: number;
-  faturamento6m: number;
-  vendaDiaria: number;
-  pecasIdeais: number;
-  pecasAtuais: number;
-  lacuna: number;
-  incluidaNoMix: boolean;
-  decisao: DecisaoMarca;
-  taxaPerformance: number;
-}
+// MixMarca defined in @/lib/estoque/mix-ideal and re-exported here for consumers
+export type MixMarca = MixMarcaType;
 
 // Lacuna que sobrou após esgotar o pool de SKUs bons
 export interface LacunaNaoPreenchivel {
@@ -170,13 +159,8 @@ export interface ResumoMarca {
   skus: ItemEstoque[];
 }
 
-// Mix ideal por subcategoria
-export interface MixComparativo {
-  chave: string;
-  percentualIdeal: number;
-  percentualAtual: number;
-  gap: number;
-}
+// MixComparativo defined in @/lib/estoque/mix-ideal and re-exported here for consumers
+export type MixComparativo = MixComparativoType;
 
 // Estoque doente global (mantido para compatibilidade)
 export interface GrupoEstoqueDoente {
@@ -597,11 +581,6 @@ export function useEstoqueUnificado() {
   // MIX IDEAL POR SUBCATEGORIA (AR RX / Solar / Lentes / Acessórios)
   // ============================================
   const mixIdealCategoria = useMemo((): MixComparativo[] => {
-    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0);
-    const totalEstoque = comEstoque.reduce((acc, i) => acc + i.estoqueAtual, 0);
-    const totalVendas = itensProcessados.reduce((acc, i) => acc + i.qtdVendidos, 0);
-    if (totalEstoque === 0 && totalVendas === 0) return [];
-
     const subcats: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'LENTES_GRAU', 'LENTES_CONTATO', 'ACESSORIOS', 'OUTROS'];
     const labels: Record<SubcategoriaProduto, string> = {
       AR_RX: 'Armações RX',
@@ -612,32 +591,25 @@ export function useEstoqueUnificado() {
       ACESSORIOS: 'Acessórios',
       OUTROS: 'Outros',
     };
-
-    return subcats.map(sub => {
-      const vendasSub = itensProcessados.filter(i => i.subcategoria === sub).reduce((acc, i) => acc + i.qtdVendidos, 0);
-      const estoqueSub = comEstoque.filter(i => i.subcategoria === sub).reduce((acc, i) => acc + i.estoqueAtual, 0);
-      const percentualIdeal = totalVendas > 0 ? (vendasSub / totalVendas) * 100 : 0;
-      const percentualAtual = totalEstoque > 0 ? (estoqueSub / totalEstoque) * 100 : 0;
-      return { chave: labels[sub], percentualIdeal, percentualAtual, gap: percentualIdeal - percentualAtual };
-    }).filter(m => m.percentualIdeal > 0 || m.percentualAtual > 0);
+    const projected = itensProcessados.map(i => ({
+      chave: labels[i.subcategoria] ?? i.subcategoria,
+      estoqueAtual: i.estoqueAtual,
+      qtdVendidos: i.qtdVendidos,
+    }));
+    const resultMap = new Map(calcularMixIdealCategoria(projected).map(m => [m.chave, m]));
+    return subcats
+      .map(sub => resultMap.get(labels[sub]))
+      .filter((m): m is MixComparativo => m !== undefined);
   }, [itensProcessados]);
 
   const mixIdealMarca = useMemo((): MixComparativo[] => {
-    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0);
-    const totalEstoque = comEstoque.reduce((acc, i) => acc + i.estoqueAtual, 0);
-    const totalVendas = itensProcessados.reduce((acc, i) => acc + i.qtdVendidos, 0);
-    if (totalEstoque === 0 && totalVendas === 0) return [];
-
-    const marcasSet = new Set(itensProcessados.map(i => i.marca).filter(Boolean));
-    return Array.from(marcasSet).map(marca => {
-      const vendasMarca = itensProcessados.filter(i => i.marca === marca).reduce((acc, i) => acc + i.qtdVendidos, 0);
-      const estoqueMarca = comEstoque.filter(i => i.marca === marca).reduce((acc, i) => acc + i.estoqueAtual, 0);
-      const percentualIdeal = totalVendas > 0 ? (vendasMarca / totalVendas) * 100 : 0;
-      const percentualAtual = totalEstoque > 0 ? (estoqueMarca / totalEstoque) * 100 : 0;
-      return { chave: marca, percentualIdeal, percentualAtual, gap: percentualIdeal - percentualAtual };
-    })
-    .filter(m => m.percentualIdeal > 0 || m.percentualAtual > 0)
-    .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+    const projected = itensProcessados.map(i => ({
+      chave: i.marca || 'SEM MARCA',
+      estoqueAtual: i.estoqueAtual,
+      qtdVendidos: i.qtdVendidos,
+    }));
+    return calcularMixIdealCategoria(projected)
+      .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
   }, [itensProcessados]);
 
   // ============================================
@@ -647,79 +619,7 @@ export function useEstoqueUnificado() {
   // SKU não entra aqui. A saída alimenta a Fase 2 (distribuição da lacuna).
 
   const mixIdealMarcas = useMemo((): MixMarca[] => {
-    if (itensFiltrados.length === 0) return [];
-
-    type Agg = {
-      pecasVendidas: number;
-      faturamento: number;
-      pecasAtuais: number;
-      skusComVenda: number;
-      skusAtivos: number;
-    };
-    const aggByMarca = new Map<string, Agg>();
-    itensFiltrados.forEach(it => {
-      const k = it.marca || 'SEM MARCA';
-      const a = aggByMarca.get(k) ?? { pecasVendidas: 0, faturamento: 0, pecasAtuais: 0, skusComVenda: 0, skusAtivos: 0 };
-      a.pecasVendidas += it.qtdVendidos;
-      a.faturamento += it.totalVendido;
-      a.pecasAtuais += Math.max(0, it.estoqueAtual);
-      if (it.qtdVendidos > 0) a.skusComVenda += 1;
-      if (it.estoqueAtual > 0 || it.qtdVendidos > 0) a.skusAtivos += 1;
-      aggByMarca.set(k, a);
-    });
-
-    // Curva ABC por marca (faturamento)
-    const totalFat = Array.from(aggByMarca.values()).reduce((s, a) => s + a.faturamento, 0);
-    const ordenadas = Array.from(aggByMarca.entries()).sort((a, b) => b[1].faturamento - a[1].faturamento);
-    let acum = 0;
-    const curvaPorMarca = new Map<string, 'A' | 'B' | 'C'>();
-    ordenadas.forEach(([marca, agg]) => {
-      acum += agg.faturamento;
-      const pct = totalFat > 0 ? (acum / totalFat) * 100 : 100;
-      if (pct <= 80) curvaPorMarca.set(marca, 'A');
-      else if (pct <= 95) curvaPorMarca.set(marca, 'B');
-      else curvaPorMarca.set(marca, 'C');
-    });
-
-    return Array.from(aggByMarca.entries()).map(([marca, agg]) => {
-      const curvaMarca = curvaPorMarca.get(marca) || 'C';
-      const vendaDiaria = agg.pecasVendidas / DIAS_PERIODO;
-      const taxaPerformance = agg.skusAtivos > 0 ? agg.skusComVenda / agg.skusAtivos : 0;
-
-      // Decisão da marca + se entra no mix
-      let decisao: DecisaoMarca;
-      let incluidaNoMix: boolean;
-      if (agg.skusComVenda === 0) {
-        decisao = 'SEM_HISTORICO';
-        incluidaNoMix = false;
-      } else if (curvaMarca === 'C' && taxaPerformance < 0.5) {
-        decisao = 'AVALIAR_DESCONTINUACAO';
-        incluidaNoMix = false;
-      } else {
-        // Entra no mix; se a maioria gira → REPOR; senão → RENOVAR (mas ainda no mix)
-        decisao = taxaPerformance >= 0.5 ? 'REPOR_REFERENCIA' : 'RENOVAR_COLECAO';
-        incluidaNoMix = true;
-      }
-
-      const pecasIdeais = incluidaNoMix
-        ? Math.ceil(vendaDiaria * COBERTURA_ALVO_MARCA[curvaMarca])
-        : 0;
-      const lacuna = Math.max(0, pecasIdeais - agg.pecasAtuais);
-
-      return {
-        marca,
-        curvaMarca,
-        pecasVendidas6m: agg.pecasVendidas,
-        faturamento6m: agg.faturamento,
-        vendaDiaria,
-        pecasIdeais,
-        pecasAtuais: agg.pecasAtuais,
-        lacuna,
-        incluidaNoMix,
-        decisao,
-        taxaPerformance,
-      };
-    }).sort((a, b) => b.faturamento6m - a.faturamento6m);
+    return calcularMixIdealMarcas(itensFiltrados, { diasPeriodo: DIAS_PERIODO, coberturaAlvo: COBERTURA_ALVO_MARCA });
   }, [itensFiltrados]);
 
   // ============================================
