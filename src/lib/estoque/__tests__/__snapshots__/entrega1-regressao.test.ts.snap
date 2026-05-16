@@ -1,5 +1,21 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`Entrega 2 — regressão curva-abc > snapshot distribuição NEW (deve ser idêntica) 1`] = `
+{
+  "A": 2,
+  "B": 2,
+  "C": 6,
+}
+`;
+
+exports[`Entrega 2 — regressão curva-abc > snapshot distribuição OLD 1`] = `
+{
+  "A": 2,
+  "B": 2,
+  "C": 6,
+}
+`;
+
 exports[`snapshot dos valores absolutos (para referência) > NEW metrics snapshot 1`] = `
 {
   "deadStockPecas": 39,

@@ -1,11 +1,11 @@
 /**
- * Teste de regressão numérica — Entrega 1
+ * Teste de regressão numérica — Entregas 1 e 2 (curva-abc)
  *
- * Replica a lógica OLD (inline) e compara com a NEW (faixas-saneamento.ts)
- * usando os mesmos dados de entrada. Documenta o que muda e o que não muda.
+ * Replica a lógica OLD (inline) e compara com a NEW usando os mesmos dados.
  */
 import { describe, it, expect } from 'vitest';
 import { classificarPorIdade } from '../faixas-saneamento';
+import { calcularCurvaABC } from '../curva-abc';
 
 // ──────────────────────────────────────────────
 // OLD logic (exato como estava antes da Entrega 1)
@@ -170,5 +170,68 @@ describe('snapshot dos valores absolutos (para referência)', () => {
 
   it('NEW metrics snapshot', () => {
     expect(NEW).toMatchSnapshot();
+  });
+});
+
+// ──────────────────────────────────────────────
+// Entrega 2 — regressão curva-abc
+// ──────────────────────────────────────────────
+// Dataset com vendas variadas para testar distribuição ABC
+const MOCK_VENDAS = [
+  { codSku: 1, totalVendido: 5000 },
+  { codSku: 2, totalVendido: 3000 },
+  { codSku: 3, totalVendido: 1500 },
+  { codSku: 4, totalVendido: 800  },
+  { codSku: 5, totalVendido: 400  },
+  { codSku: 6, totalVendido: 200  },
+  { codSku: 7, totalVendido: 100  },
+  { codSku: 8, totalVendido:  50  },
+  { codSku: 9, totalVendido:  25  },
+  { codSku: 10, totalVendido: 10  },
+];
+// Total = 11085
+// Cumulative: 1→45%, 2→72%, 3→85.5% ← corte A/B em 80%
+// Continuando: 4→92.7%, 5→96.3% ← corte B/C em 95%
+// Esperado: A={1,2}, B={3,4,5}, C={6,7,8,9,10}
+
+function oldCurvaABCInline(
+  itens: ReadonlyArray<{ codSku: number; totalVendido: number }>
+): Map<number, 'A' | 'B' | 'C'> {
+  const total = itens.reduce((acc, s) => acc + s.totalVendido, 0);
+  const ord = [...itens].sort((a, b) => b.totalVendido - a.totalVendido);
+  let acum = 0;
+  const m = new Map<number, 'A' | 'B' | 'C'>();
+  ord.forEach(s => {
+    acum += s.totalVendido;
+    const pct = total > 0 ? (acum / total) * 100 : 0;
+    if (pct <= 80)      m.set(s.codSku, 'A');
+    else if (pct <= 95) m.set(s.codSku, 'B');
+    else                m.set(s.codSku, 'C');
+  });
+  return m;
+}
+
+describe('Entrega 2 — regressão curva-abc', () => {
+  it('NEW calcularCurvaABC idêntico ao OLD inline para cada SKU', () => {
+    const oldMap = oldCurvaABCInline(MOCK_VENDAS);
+    const newMap = calcularCurvaABC(MOCK_VENDAS);
+    expect(newMap.size).toBe(oldMap.size);
+    oldMap.forEach((curva, codSku) => {
+      expect(newMap.get(codSku)).toBe(curva);
+    });
+  });
+
+  it('snapshot distribuição OLD', () => {
+    const m = oldCurvaABCInline(MOCK_VENDAS);
+    const dist = { A: 0, B: 0, C: 0 };
+    m.forEach(c => dist[c]++);
+    expect(dist).toMatchSnapshot();
+  });
+
+  it('snapshot distribuição NEW (deve ser idêntica)', () => {
+    const m = calcularCurvaABC(MOCK_VENDAS);
+    const dist = { A: 0, B: 0, C: 0 };
+    m.forEach(c => dist[c]++);
+    expect(dist).toMatchSnapshot();
   });
 });

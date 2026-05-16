@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`regressão OLD vs NEW — calcularCurvaABC > snapshot da distribuição ABC 1`] = `
+{
+  "A": 3,
+  "B": 2,
+  "C": 2,
+}
+`;

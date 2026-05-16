@@ -17,6 +17,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useEstoqueStore, type EstoqueFilters } from "@/stores/useEstoqueStore";
 import { classificarPorIdade, toFaixaDoente, type FaixaDoente } from "@/lib/estoque/faixas-saneamento";
+import { calcularCurvaABC } from "@/lib/estoque/curva-abc";
 
 // Re-export para compatibilidade com imports existentes
 export type { EstoqueFilters };
@@ -351,17 +352,7 @@ export function useEstoqueUnificado() {
     dadosVendasSku.forEach(sku => vendasMap.set(sku.codSku, sku));
 
     // Curva ABC sobre o universo de vendas
-    const totalVendasGeral = dadosVendasSku.reduce((acc, sku) => acc + sku.totalVendido, 0);
-    const ordenadosPorVenda = [...dadosVendasSku].sort((a, b) => b.totalVendido - a.totalVendido);
-    let acumulado = 0;
-    const curvaMap = new Map<number, 'A' | 'B' | 'C'>();
-    ordenadosPorVenda.forEach(sku => {
-      acumulado += sku.totalVendido;
-      const percentual = totalVendasGeral > 0 ? (acumulado / totalVendasGeral) * 100 : 0;
-      if (percentual <= 80) curvaMap.set(sku.codSku, 'A');
-      else if (percentual <= 95) curvaMap.set(sku.codSku, 'B');
-      else curvaMap.set(sku.codSku, 'C');
-    });
+    const curvaMap = calcularCurvaABC(dadosVendasSku);
 
     // União dos códigos de SKU
     const codSkus = new Set<number>();
