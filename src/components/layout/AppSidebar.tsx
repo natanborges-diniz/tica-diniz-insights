@@ -60,6 +60,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       items: [
         { title: "Visão Estoque", url: "/estoque", icon: Package },
         { title: "Plano de Compra", url: "/estoque/otb", icon: Layers },
+        { title: "Capacidade Expositor", url: "/estoque/capacidades", icon: Settings2 },
       ],
     },
   ],

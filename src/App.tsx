@@ -13,6 +13,7 @@ import HomePage from "./pages/HomePage";
 import SalesDashboard from "./pages/SalesDashboard";
 import VisaoEstoquePage from "./pages/estoque/VisaoEstoquePage";
 import AnaliseOTBPage from "./pages/estoque/AnaliseOTBPage";
+import CapacidadesExpositorPage from "./pages/estoque/CapacidadesExpositorPage";
 import SalesFamilyDashboard from "./pages/SalesFamilyDashboard";
 import OsDashboard from "./pages/OsDashboard";
 import PedidoFornecedorPage from "./pages/PedidoFornecedorPage";
@@ -84,6 +85,7 @@ const App = () => (
                   <Route path="/estoque" element={<VisaoEstoquePage />} />
                   <Route path="/estoque/acoes" element={<Navigate to="/estoque/otb" replace />} />
                   <Route path="/estoque/otb" element={<AnaliseOTBPage />} />
+                  <Route path="/estoque/capacidades" element={<CapacidadesExpositorPage />} />
                 </Route>
 
                 {/* Monitor */}
