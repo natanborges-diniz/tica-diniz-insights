@@ -21,6 +21,7 @@ import { calcularCurvaABC } from "@/lib/estoque/curva-abc";
 import { calcularMixIdealCategoria, calcularMixIdealMarcas, type DecisaoMarca as DecisaoMarcaType, type MixMarca as MixMarcaType, type MixComparativo as MixComparativoType } from "@/lib/estoque/mix-ideal";
 import { calcularDecisaoSku, type DecisaoSku as DecisaoSkuType } from "@/lib/estoque/decisao-sku";
 import { distribuirLacuna, type MotivoQtd as MotivoQtdType, type SkuParaPool } from "@/lib/estoque/lacuna";
+import { calcularCapacidadePorCategoria, type CapacidadeConfig } from "@/lib/estoque/capacidade";
 
 // Re-export para compatibilidade com imports existentes
 export type { EstoqueFilters };
@@ -200,11 +201,8 @@ export interface MetricasEstoque {
   diasPeriodo: number;
 }
 
-interface EstoqueMinimoConfig {
+interface CapacidadeExpositorRow extends CapacidadeConfig {
   cod_empresa: number;
-  categoria: string;
-  curva_abc: string;
-  quantidade_minima: number;
 }
 
 interface MapeamentoFornecedor {
@@ -285,7 +283,7 @@ export function useEstoqueUnificado() {
 
   // Estado local apenas para mapeamentos (são globais e não dependem de empresa)
   const [mapeamentoFornecedor, setMapeamentoFornecedor] = useState<Map<string, string>>(new Map());
-  const [configMinimos, setConfigMinimos] = useState<EstoqueMinimoConfig[]>([]);
+  const [configCapacidade, setConfigCapacidade] = useState<CapacidadeExpositorRow[]>([]);
 
   useEffect(() => {
     const carregarMapeamentos = async () => {
@@ -309,18 +307,18 @@ export function useEstoqueUnificado() {
   }, []);
 
   useEffect(() => {
-    const carregarMinimos = async () => {
+    const carregarCapacidades = async () => {
       try {
         const { data, error } = await supabase
-          .from('estoque_minimo_loja')
-          .select('cod_empresa, categoria, curva_abc, quantidade_minima');
+          .from('capacidade_expositor')
+          .select('cod_empresa, capacidade_total, percentual_solar');
         if (error) throw error;
-        if (data) setConfigMinimos(data);
+        if (data) setConfigCapacidade(data as CapacidadeExpositorRow[]);
       } catch (err) {
-        console.error('[useEstoqueUnificado] Erro ao carregar mínimos:', err);
+        console.error('[useEstoqueUnificado] Erro ao carregar capacidades:', err);
       }
     };
-    carregarMinimos();
+    carregarCapacidades();
   }, []);
 
   // Mescla dados de ambos endpoints por cod_sku — UNIÃO (estoque ∪ vendas)
@@ -398,9 +396,8 @@ export function useEstoqueUnificado() {
       let estoqueMinimo = 0;
       if (filters.empresa !== null && filters.empresa !== 'ALL') {
         const codEmpresa = typeof filters.empresa === 'number' ? filters.empresa : parseInt(String(filters.empresa));
-        const configEspecifica = configMinimos.find(c => c.cod_empresa === codEmpresa && c.categoria === categoria && c.curva_abc === curvaABC);
-        const configGenerica = configMinimos.find(c => c.cod_empresa === codEmpresa && c.categoria === 'TODOS' && c.curva_abc === curvaABC);
-        estoqueMinimo = configEspecifica?.quantidade_minima || configGenerica?.quantidade_minima || 0;
+        const config = configCapacidade.find(c => c.cod_empresa === codEmpresa) ?? null;
+        estoqueMinimo = calcularCapacidadePorCategoria(config, subcategoria);
       }
 
       const otb = Math.max(0, Math.ceil(estoqueMinimo - estoqueAtual));
@@ -466,7 +463,7 @@ export function useEstoqueUnificado() {
         decisaoSku,
       };
     });
-  }, [dadosEstoqueCompleto, dadosVendasSku, filters.empresa, mapeamentoFornecedor, configMinimos]);
+  }, [dadosEstoqueCompleto, dadosVendasSku, filters.empresa, mapeamentoFornecedor, configCapacidade]);
 
   // Contagem por categoria
   const contagemPorCategoria = useMemo(() => {
