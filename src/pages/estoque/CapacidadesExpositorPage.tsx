@@ -8,6 +8,7 @@ import { useDirtyGuard } from "@/components/system/dirty/useDirtyGuard";
 import { LoadingState, ErrorState } from "@/components/system/states";
 import { toastPatterns } from "@/lib/toastPatterns";
 import { Package } from "lucide-react";
+import { calcularCapacidadePorCategoria } from "@/lib/estoque/capacidade";
 
 interface CapacidadeRow {
   id: string;
@@ -145,8 +146,8 @@ export default function CapacidadesExpositorPage() {
               const o = origMap.get(r.id);
               const isChanged =
                 o && (o.capacidade_total !== r.capacidade_total || o.percentual_solar !== r.percentual_solar);
-              const solar = Math.round((r.capacidade_total * r.percentual_solar) / 100);
-              const rx = r.capacidade_total - solar;
+              const solar = calcularCapacidadePorCategoria(r, 'AR_SOLAR');
+              const rx = calcularCapacidadePorCategoria(r, 'AR_RX');
               const invalidPct = r.percentual_solar < 0 || r.percentual_solar > 100;
               const invalidTot = !Number.isFinite(r.capacidade_total) || r.capacidade_total < 0;
 
