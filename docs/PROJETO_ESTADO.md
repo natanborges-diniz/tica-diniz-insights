@@ -50,8 +50,13 @@ Commits:
 - Hook reduz ~80 linhas; 3 useMemo inline substituídos; tipos migrados e re-exportados
 - 22 testes unitários + regressão OLD vs NEW em `mix-ideal.test.ts`
 
-#### decisao-sku.ts ⏳ próximo
-#### lacuna.ts ⏳ pendente
+#### decisao-sku.ts ✅
+- Criado `src/lib/estoque/decisao-sku.ts` com `DecisaoSku` e `calcularDecisaoSku`
+- Adicionado `LIMITES` a `faixas-saneamento.ts` via `limitePor(rotulo)` — keyed por rótulo
+- Defaults dos cortes: `diasAtencao=LIMITES.ATENCAO` (180), `diasAcao=LIMITES.ACAO_SUAVE` (270)
+- Hook reduz ~18 linhas; bloco inline substituído por 4 linhas
+- 28 testes (fronteiras, prioridade de regras, cortes customizados, regressão) em `decisao-sku.test.ts`
+#### lacuna.ts ⏳ próximo
 
 ---
 

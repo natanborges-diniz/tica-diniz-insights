@@ -19,6 +19,7 @@ import { useEstoqueStore, type EstoqueFilters } from "@/stores/useEstoqueStore";
 import { classificarPorIdade, toFaixaDoente, type FaixaDoente } from "@/lib/estoque/faixas-saneamento";
 import { calcularCurvaABC } from "@/lib/estoque/curva-abc";
 import { calcularMixIdealCategoria, calcularMixIdealMarcas, type DecisaoMarca as DecisaoMarcaType, type MixMarca as MixMarcaType, type MixComparativo as MixComparativoType } from "@/lib/estoque/mix-ideal";
+import { calcularDecisaoSku, type DecisaoSku as DecisaoSkuType } from "@/lib/estoque/decisao-sku";
 
 // Re-export para compatibilidade com imports existentes
 export type { EstoqueFilters };
@@ -68,8 +69,8 @@ export interface ItemEstoque {
 // DecisaoMarca defined in @/lib/estoque/mix-ideal and re-exported here for consumers
 export type DecisaoMarca = DecisaoMarcaType;
 
-// Decisão por SKU dentro de uma marca aprovada (REPOR ou RENOVAR)
-export type DecisaoSku = 'REPOR' | 'TROCAR' | 'OBSERVAR' | 'LIQUIDAR' | 'SEM_CADASTRO';
+// DecisaoSku defined in @/lib/estoque/decisao-sku and re-exported here for consumers
+export type DecisaoSku = DecisaoSkuType;
 
 // FaixaDoente is defined in @/lib/estoque/faixas-saneamento and re-exported here for consumers
 export type { FaixaDoente };
@@ -424,27 +425,10 @@ export function useEstoqueUnificado() {
         if (fornecedorMapeado) fornecedorFinal = fornecedorMapeado;
       }
 
-      // Decisão por SKU (Etapa 2 da inteligência) — agora usa giro REAL
-      // Princípios:
-      //  - Peças que vendem rápido (diasGiroMediano baixo) com pelo menos 1 venda → REPOR
-      //  - Estoque parado >= 180d sem venda → TROCAR; >= 270d → LIQUIDAR
-      //  - Vendeu pouco mas giro lento (cobertura > alvo) → OBSERVAR
-      let decisaoSku: DecisaoSku;
-      const temGiroReal = diasGiroEfetivo !== null && diasGiroEfetivo > 0;
-      if (precoCusto === 0) {
-        decisaoSku = 'SEM_CADASTRO';
-      } else if (estoqueAtual > 0 && qtdVendidos === 0 && diasEmEstoque >= 270) {
-        decisaoSku = 'LIQUIDAR';
-      } else if (estoqueAtual > 0 && qtdVendidos === 0 && diasEmEstoque >= 180) {
-        decisaoSku = 'TROCAR';
-      } else if (temGiroReal && pecasGiroConsideradas >= 1 && coberturaDias < diasAlvo) {
-        decisaoSku = 'REPOR';
-      } else if (!temGiroReal && vendaDiaria > 0 && coberturaDias < diasAlvo) {
-        // Fallback: sem giro real do Bridge mas há venda — usa proxy antigo
-        decisaoSku = 'REPOR';
-      } else {
-        decisaoSku = 'OBSERVAR';
-      }
+      const decisaoSku = calcularDecisaoSku({
+        precoCusto, estoqueAtual, qtdVendidos, diasEmEstoque,
+        diasGiroEfetivo, pecasGiroConsideradas, coberturaDias, diasAlvo, vendaDiaria,
+      });
 
       return {
         codSku,

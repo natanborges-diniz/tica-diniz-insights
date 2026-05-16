@@ -33,6 +33,21 @@ export function classificarPorIdade(diasEmEstoque: number | null | undefined): F
   );
 }
 
+// Derives the upper-bound (days) for a faixa by rotulo — keyed lookup prevents
+// silent breakage if the table is ever reordered.
+function limitePor(rotulo: string): number {
+  const f = FAIXAS_SANEAMENTO.find(f => f.rotulo === rotulo);
+  if (!f || !Number.isFinite(f.ate)) throw new Error(`Limite não encontrado: ${rotulo}`);
+  return f.ate;
+}
+
+export const LIMITES = {
+  ATENCAO:      limitePor('ACOMPANHAMENTO'), // 180
+  ACAO_SUAVE:   limitePor('PROMOCAO 20%'),   // 270
+  ACAO_URGENTE: limitePor('LIQUIDA 30%'),    // 360
+  ACAO_CRITICA: limitePor('LIQUIDA 50%'),    // 720
+} as const;
+
 // Maps a saneamento entry to its FaixaDoente enum value.
 // Switch on rotulo (unique per entry) to avoid ambiguity from shared desconto values.
 export function toFaixaDoente(entry: FaixaSaneamento): Exclude<FaixaDoente, 'REVISAO_URGENTE'> {
