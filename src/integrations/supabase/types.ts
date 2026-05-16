@@ -511,6 +511,33 @@ export type Database = {
         }
         Relationships: []
       }
+      capacidade_expositor: {
+        Row: {
+          capacidade: number
+          categoria: string
+          cod_empresa: number
+          created_at: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          capacidade?: number
+          categoria?: string
+          cod_empresa: number
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          capacidade?: number
+          categoria?: string
+          cod_empresa?: number
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       conciliacao_vendas: {
         Row: {
           cod_empresa: number
