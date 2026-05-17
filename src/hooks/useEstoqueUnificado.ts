@@ -16,6 +16,12 @@ import { categorizarProduto, subcategorizarProduto, type SubcategoriaProduto } f
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useEstoqueStore, type EstoqueFilters } from "@/stores/useEstoqueStore";
+import { classificarPorIdade, toFaixaDoente, type FaixaDoente } from "@/lib/estoque/faixas-saneamento";
+import { calcularCurvaABC } from "@/lib/estoque/curva-abc";
+import { calcularMixIdealCategoria, calcularMixIdealMarcas, type DecisaoMarca as DecisaoMarcaType, type MixMarca as MixMarcaType, type MixComparativo as MixComparativoType } from "@/lib/estoque/mix-ideal";
+import { calcularDecisaoSku, type DecisaoSku as DecisaoSkuType } from "@/lib/estoque/decisao-sku";
+import { distribuirLacuna, type MotivoQtd as MotivoQtdType, type SkuParaPool } from "@/lib/estoque/lacuna";
+import { calcularCapacidadePorCategoria, type CapacidadeConfig } from "@/lib/estoque/capacidade";
 
 // Re-export para compatibilidade com imports existentes
 export type { EstoqueFilters };
@@ -62,17 +68,17 @@ export interface ItemEstoque {
   decisaoSku: DecisaoSku;
 }
 
-// Decisão por marca para Plano de Compra
-export type DecisaoMarca = 'REPOR_REFERENCIA' | 'RENOVAR_COLECAO' | 'AVALIAR_DESCONTINUACAO' | 'SEM_HISTORICO';
+// DecisaoMarca defined in @/lib/estoque/mix-ideal and re-exported here for consumers
+export type DecisaoMarca = DecisaoMarcaType;
 
-// Decisão por SKU dentro de uma marca aprovada (REPOR ou RENOVAR)
-export type DecisaoSku = 'REPOR' | 'TROCAR' | 'OBSERVAR' | 'LIQUIDAR' | 'SEM_CADASTRO';
+// DecisaoSku defined in @/lib/estoque/decisao-sku and re-exported here for consumers
+export type DecisaoSku = DecisaoSkuType;
 
-// Faixa de estoque doente
-export type FaixaDoente = 'PROMOCAO_20' | 'LIQUIDACAO_30' | 'LIQUIDACAO_50' | 'DESCARTE' | 'REVISAO_URGENTE';
+// FaixaDoente is defined in @/lib/estoque/faixas-saneamento and re-exported here for consumers
+export type { FaixaDoente };
 
-// Motivo da quantidade alocada (passes da distribuição de lacuna)
-export type MotivoQtd = 'BASE' | 'GIRO_RAPIDO' | 'GIRO_MUITO_RAPIDO';
+// MotivoQtd defined in @/lib/estoque/lacuna and re-exported here for consumers
+export type MotivoQtd = MotivoQtdType;
 
 // SKU específico a repor / trocar / observar
 export interface SkuARepor {
@@ -100,20 +106,8 @@ export interface SkuARepor {
   motivoQtd?: MotivoQtd;
 }
 
-// Mix ideal por marca (Fase 1 — top-down)
-export interface MixMarca {
-  marca: string;
-  curvaMarca: 'A' | 'B' | 'C';
-  pecasVendidas6m: number;
-  faturamento6m: number;
-  vendaDiaria: number;
-  pecasIdeais: number;
-  pecasAtuais: number;
-  lacuna: number;
-  incluidaNoMix: boolean;
-  decisao: DecisaoMarca;
-  taxaPerformance: number;
-}
+// MixMarca defined in @/lib/estoque/mix-ideal and re-exported here for consumers
+export type MixMarca = MixMarcaType;
 
 // Lacuna que sobrou após esgotar o pool de SKUs bons
 export interface LacunaNaoPreenchivel {
@@ -168,13 +162,8 @@ export interface ResumoMarca {
   skus: ItemEstoque[];
 }
 
-// Mix ideal por subcategoria
-export interface MixComparativo {
-  chave: string;
-  percentualIdeal: number;
-  percentualAtual: number;
-  gap: number;
-}
+// MixComparativo defined in @/lib/estoque/mix-ideal and re-exported here for consumers
+export type MixComparativo = MixComparativoType;
 
 // Estoque doente global (mantido para compatibilidade)
 export interface GrupoEstoqueDoente {
@@ -212,11 +201,8 @@ export interface MetricasEstoque {
   diasPeriodo: number;
 }
 
-interface EstoqueMinimoConfig {
+interface CapacidadeExpositorRow extends CapacidadeConfig {
   cod_empresa: number;
-  categoria: string;
-  curva_abc: string;
-  quantidade_minima: number;
 }
 
 interface MapeamentoFornecedor {
@@ -297,7 +283,7 @@ export function useEstoqueUnificado() {
 
   // Estado local apenas para mapeamentos (são globais e não dependem de empresa)
   const [mapeamentoFornecedor, setMapeamentoFornecedor] = useState<Map<string, string>>(new Map());
-  const [configMinimos, setConfigMinimos] = useState<EstoqueMinimoConfig[]>([]);
+  const [configCapacidade, setConfigCapacidade] = useState<CapacidadeExpositorRow[]>([]);
 
   useEffect(() => {
     const carregarMapeamentos = async () => {
@@ -321,18 +307,18 @@ export function useEstoqueUnificado() {
   }, []);
 
   useEffect(() => {
-    const carregarMinimos = async () => {
+    const carregarCapacidades = async () => {
       try {
         const { data, error } = await supabase
-          .from('estoque_minimo_loja')
-          .select('cod_empresa, categoria, curva_abc, quantidade_minima');
+          .from('capacidade_expositor')
+          .select('cod_empresa, capacidade_total, percentual_solar');
         if (error) throw error;
-        if (data) setConfigMinimos(data);
+        if (data) setConfigCapacidade(data as CapacidadeExpositorRow[]);
       } catch (err) {
-        console.error('[useEstoqueUnificado] Erro ao carregar mínimos:', err);
+        console.error('[useEstoqueUnificado] Erro ao carregar capacidades:', err);
       }
     };
-    carregarMinimos();
+    carregarCapacidades();
   }, []);
 
   // Mescla dados de ambos endpoints por cod_sku — UNIÃO (estoque ∪ vendas)
@@ -350,17 +336,7 @@ export function useEstoqueUnificado() {
     dadosVendasSku.forEach(sku => vendasMap.set(sku.codSku, sku));
 
     // Curva ABC sobre o universo de vendas
-    const totalVendasGeral = dadosVendasSku.reduce((acc, sku) => acc + sku.totalVendido, 0);
-    const ordenadosPorVenda = [...dadosVendasSku].sort((a, b) => b.totalVendido - a.totalVendido);
-    let acumulado = 0;
-    const curvaMap = new Map<number, 'A' | 'B' | 'C'>();
-    ordenadosPorVenda.forEach(sku => {
-      acumulado += sku.totalVendido;
-      const percentual = totalVendasGeral > 0 ? (acumulado / totalVendasGeral) * 100 : 0;
-      if (percentual <= 80) curvaMap.set(sku.codSku, 'A');
-      else if (percentual <= 95) curvaMap.set(sku.codSku, 'B');
-      else curvaMap.set(sku.codSku, 'C');
-    });
+    const curvaMap = calcularCurvaABC(dadosVendasSku);
 
     // União dos códigos de SKU
     const codSkus = new Set<number>();
@@ -420,9 +396,8 @@ export function useEstoqueUnificado() {
       let estoqueMinimo = 0;
       if (filters.empresa !== null && filters.empresa !== 'ALL') {
         const codEmpresa = typeof filters.empresa === 'number' ? filters.empresa : parseInt(String(filters.empresa));
-        const configEspecifica = configMinimos.find(c => c.cod_empresa === codEmpresa && c.categoria === categoria && c.curva_abc === curvaABC);
-        const configGenerica = configMinimos.find(c => c.cod_empresa === codEmpresa && c.categoria === 'TODOS' && c.curva_abc === curvaABC);
-        estoqueMinimo = configEspecifica?.quantidade_minima || configGenerica?.quantidade_minima || 0;
+        const config = configCapacidade.find(c => c.cod_empresa === codEmpresa) ?? null;
+        estoqueMinimo = calcularCapacidadePorCategoria(config, subcategoria);
       }
 
       const otb = Math.max(0, Math.ceil(estoqueMinimo - estoqueAtual));
@@ -448,27 +423,10 @@ export function useEstoqueUnificado() {
         if (fornecedorMapeado) fornecedorFinal = fornecedorMapeado;
       }
 
-      // Decisão por SKU (Etapa 2 da inteligência) — agora usa giro REAL
-      // Princípios:
-      //  - Peças que vendem rápido (diasGiroMediano baixo) com pelo menos 1 venda → REPOR
-      //  - Estoque parado >= 180d sem venda → TROCAR; >= 270d → LIQUIDAR
-      //  - Vendeu pouco mas giro lento (cobertura > alvo) → OBSERVAR
-      let decisaoSku: DecisaoSku;
-      const temGiroReal = diasGiroEfetivo !== null && diasGiroEfetivo > 0;
-      if (precoCusto === 0) {
-        decisaoSku = 'SEM_CADASTRO';
-      } else if (estoqueAtual > 0 && qtdVendidos === 0 && diasEmEstoque >= 270) {
-        decisaoSku = 'LIQUIDAR';
-      } else if (estoqueAtual > 0 && qtdVendidos === 0 && diasEmEstoque >= 180) {
-        decisaoSku = 'TROCAR';
-      } else if (temGiroReal && pecasGiroConsideradas >= 1 && coberturaDias < diasAlvo) {
-        decisaoSku = 'REPOR';
-      } else if (!temGiroReal && vendaDiaria > 0 && coberturaDias < diasAlvo) {
-        // Fallback: sem giro real do Bridge mas há venda — usa proxy antigo
-        decisaoSku = 'REPOR';
-      } else {
-        decisaoSku = 'OBSERVAR';
-      }
+      const decisaoSku = calcularDecisaoSku({
+        precoCusto, estoqueAtual, qtdVendidos, diasEmEstoque,
+        diasGiroEfetivo, pecasGiroConsideradas, coberturaDias, diasAlvo, vendaDiaria,
+      });
 
       return {
         codSku,
@@ -505,7 +463,7 @@ export function useEstoqueUnificado() {
         decisaoSku,
       };
     });
-  }, [dadosEstoqueCompleto, dadosVendasSku, filters.empresa, mapeamentoFornecedor, configMinimos]);
+  }, [dadosEstoqueCompleto, dadosVendasSku, filters.empresa, mapeamentoFornecedor, configCapacidade]);
 
   // Contagem por categoria
   const contagemPorCategoria = useMemo(() => {
@@ -605,11 +563,6 @@ export function useEstoqueUnificado() {
   // MIX IDEAL POR SUBCATEGORIA (AR RX / Solar / Lentes / Acessórios)
   // ============================================
   const mixIdealCategoria = useMemo((): MixComparativo[] => {
-    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0);
-    const totalEstoque = comEstoque.reduce((acc, i) => acc + i.estoqueAtual, 0);
-    const totalVendas = itensProcessados.reduce((acc, i) => acc + i.qtdVendidos, 0);
-    if (totalEstoque === 0 && totalVendas === 0) return [];
-
     const subcats: SubcategoriaProduto[] = ['AR_RX', 'AR_SOLAR', 'LENTES', 'LENTES_GRAU', 'LENTES_CONTATO', 'ACESSORIOS', 'OUTROS'];
     const labels: Record<SubcategoriaProduto, string> = {
       AR_RX: 'Armações RX',
@@ -620,32 +573,25 @@ export function useEstoqueUnificado() {
       ACESSORIOS: 'Acessórios',
       OUTROS: 'Outros',
     };
-
-    return subcats.map(sub => {
-      const vendasSub = itensProcessados.filter(i => i.subcategoria === sub).reduce((acc, i) => acc + i.qtdVendidos, 0);
-      const estoqueSub = comEstoque.filter(i => i.subcategoria === sub).reduce((acc, i) => acc + i.estoqueAtual, 0);
-      const percentualIdeal = totalVendas > 0 ? (vendasSub / totalVendas) * 100 : 0;
-      const percentualAtual = totalEstoque > 0 ? (estoqueSub / totalEstoque) * 100 : 0;
-      return { chave: labels[sub], percentualIdeal, percentualAtual, gap: percentualIdeal - percentualAtual };
-    }).filter(m => m.percentualIdeal > 0 || m.percentualAtual > 0);
+    const projected = itensProcessados.map(i => ({
+      chave: labels[i.subcategoria] ?? i.subcategoria,
+      estoqueAtual: i.estoqueAtual,
+      qtdVendidos: i.qtdVendidos,
+    }));
+    const resultMap = new Map(calcularMixIdealCategoria(projected).map(m => [m.chave, m]));
+    return subcats
+      .map(sub => resultMap.get(labels[sub]))
+      .filter((m): m is MixComparativo => m !== undefined);
   }, [itensProcessados]);
 
   const mixIdealMarca = useMemo((): MixComparativo[] => {
-    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0);
-    const totalEstoque = comEstoque.reduce((acc, i) => acc + i.estoqueAtual, 0);
-    const totalVendas = itensProcessados.reduce((acc, i) => acc + i.qtdVendidos, 0);
-    if (totalEstoque === 0 && totalVendas === 0) return [];
-
-    const marcasSet = new Set(itensProcessados.map(i => i.marca).filter(Boolean));
-    return Array.from(marcasSet).map(marca => {
-      const vendasMarca = itensProcessados.filter(i => i.marca === marca).reduce((acc, i) => acc + i.qtdVendidos, 0);
-      const estoqueMarca = comEstoque.filter(i => i.marca === marca).reduce((acc, i) => acc + i.estoqueAtual, 0);
-      const percentualIdeal = totalVendas > 0 ? (vendasMarca / totalVendas) * 100 : 0;
-      const percentualAtual = totalEstoque > 0 ? (estoqueMarca / totalEstoque) * 100 : 0;
-      return { chave: marca, percentualIdeal, percentualAtual, gap: percentualIdeal - percentualAtual };
-    })
-    .filter(m => m.percentualIdeal > 0 || m.percentualAtual > 0)
-    .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+    const projected = itensProcessados.map(i => ({
+      chave: i.marca || 'SEM MARCA',
+      estoqueAtual: i.estoqueAtual,
+      qtdVendidos: i.qtdVendidos,
+    }));
+    return calcularMixIdealCategoria(projected)
+      .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
   }, [itensProcessados]);
 
   // ============================================
@@ -655,91 +601,12 @@ export function useEstoqueUnificado() {
   // SKU não entra aqui. A saída alimenta a Fase 2 (distribuição da lacuna).
 
   const mixIdealMarcas = useMemo((): MixMarca[] => {
-    if (itensFiltrados.length === 0) return [];
-
-    type Agg = {
-      pecasVendidas: number;
-      faturamento: number;
-      pecasAtuais: number;
-      skusComVenda: number;
-      skusAtivos: number;
-    };
-    const aggByMarca = new Map<string, Agg>();
-    itensFiltrados.forEach(it => {
-      const k = it.marca || 'SEM MARCA';
-      const a = aggByMarca.get(k) ?? { pecasVendidas: 0, faturamento: 0, pecasAtuais: 0, skusComVenda: 0, skusAtivos: 0 };
-      a.pecasVendidas += it.qtdVendidos;
-      a.faturamento += it.totalVendido;
-      a.pecasAtuais += Math.max(0, it.estoqueAtual);
-      if (it.qtdVendidos > 0) a.skusComVenda += 1;
-      if (it.estoqueAtual > 0 || it.qtdVendidos > 0) a.skusAtivos += 1;
-      aggByMarca.set(k, a);
-    });
-
-    // Curva ABC por marca (faturamento)
-    const totalFat = Array.from(aggByMarca.values()).reduce((s, a) => s + a.faturamento, 0);
-    const ordenadas = Array.from(aggByMarca.entries()).sort((a, b) => b[1].faturamento - a[1].faturamento);
-    let acum = 0;
-    const curvaPorMarca = new Map<string, 'A' | 'B' | 'C'>();
-    ordenadas.forEach(([marca, agg]) => {
-      acum += agg.faturamento;
-      const pct = totalFat > 0 ? (acum / totalFat) * 100 : 100;
-      if (pct <= 80) curvaPorMarca.set(marca, 'A');
-      else if (pct <= 95) curvaPorMarca.set(marca, 'B');
-      else curvaPorMarca.set(marca, 'C');
-    });
-
-    return Array.from(aggByMarca.entries()).map(([marca, agg]) => {
-      const curvaMarca = curvaPorMarca.get(marca) || 'C';
-      const vendaDiaria = agg.pecasVendidas / DIAS_PERIODO;
-      const taxaPerformance = agg.skusAtivos > 0 ? agg.skusComVenda / agg.skusAtivos : 0;
-
-      // Decisão da marca + se entra no mix
-      let decisao: DecisaoMarca;
-      let incluidaNoMix: boolean;
-      if (agg.skusComVenda === 0) {
-        decisao = 'SEM_HISTORICO';
-        incluidaNoMix = false;
-      } else if (curvaMarca === 'C' && taxaPerformance < 0.5) {
-        decisao = 'AVALIAR_DESCONTINUACAO';
-        incluidaNoMix = false;
-      } else {
-        // Entra no mix; se a maioria gira → REPOR; senão → RENOVAR (mas ainda no mix)
-        decisao = taxaPerformance >= 0.5 ? 'REPOR_REFERENCIA' : 'RENOVAR_COLECAO';
-        incluidaNoMix = true;
-      }
-
-      const pecasIdeais = incluidaNoMix
-        ? Math.ceil(vendaDiaria * COBERTURA_ALVO_MARCA[curvaMarca])
-        : 0;
-      const lacuna = Math.max(0, pecasIdeais - agg.pecasAtuais);
-
-      return {
-        marca,
-        curvaMarca,
-        pecasVendidas6m: agg.pecasVendidas,
-        faturamento6m: agg.faturamento,
-        vendaDiaria,
-        pecasIdeais,
-        pecasAtuais: agg.pecasAtuais,
-        lacuna,
-        incluidaNoMix,
-        decisao,
-        taxaPerformance,
-      };
-    }).sort((a, b) => b.faturamento6m - a.faturamento6m);
+    return calcularMixIdealMarcas(itensFiltrados, { diasPeriodo: DIAS_PERIODO, coberturaAlvo: COBERTURA_ALVO_MARCA });
   }, [itensFiltrados]);
 
   // ============================================
   // RESUMO POR MARCA — com blocos acionáveis (Fase 2)
   // ============================================
-
-  const classificarFaixaDoente = (dias: number): { faixa: FaixaDoente; desconto: string } => {
-    if (dias >= 720) return { faixa: 'DESCARTE', desconto: '100%' };
-    if (dias >= 360) return { faixa: 'LIQUIDACAO_50', desconto: '50%' };
-    if (dias >= 270) return { faixa: 'LIQUIDACAO_30', desconto: '30%' };
-    return { faixa: 'PROMOCAO_20', desconto: '20%' };
-  };
 
   // Helper: monta um SkuARepor a partir de um ItemEstoque.
   // qtdAComprar e motivoQtd são IMPOSTOS pela distribuição da lacuna (Fase 2)
@@ -836,94 +703,28 @@ export function useEstoqueUnificado() {
       let poolSkusBons = 0;
 
       if (incluidaNoMix && lacuna > 0) {
-        // Pool de SKUs "bons": vendeu, tem custo cadastrado, e giro real ≤ 90 d.
-        // SKU sem giro real ou com giro > 90 → fora do plano (vai para Observar).
-        const pool = skus
-          .filter(s => {
-            const giroEf = s.diasGiroUltimaPeca ?? s.diasGiroMedio ?? null;
-            return s.precoCusto > 0
-              && s.qtdVendidos > 0
-              && giroEf !== null
-              && giroEf > 0
-              && giroEf <= GIRO_BOM_MAX_DIAS;
-          })
-          .map(s => {
-            const giroEf = (s.diasGiroUltimaPeca ?? s.diasGiroMedio) as number;
-            const peso = PESO_CURVA[s.curvaABC];
-            const amostra = Math.max(1, s.pecasGiroConsideradas);
-            const score = (1 / giroEf) * amostra * peso;
-            // Teto: não pedir mais que histórico de venda + 20% (mínimo 1).
-            const tetoCompra = Math.max(1, Math.ceil(s.qtdVendidos * 1.2));
-            return {
-              item: s,
-              giroEf,
-              score,
-              tetoCompra,
-              qtd: 0,
-              motivo: undefined as MotivoQtd | undefined,
-            };
-          })
-          .sort((a, b) => b.score - a.score);
+        const poolInput: SkuParaPool[] = skus.map(s => ({
+          codSku: s.codSku,
+          qtdVendidos: s.qtdVendidos,
+          precoCusto: s.precoCusto,
+          diasGiroUltimaPeca: s.diasGiroUltimaPeca,
+          diasGiroMedio: s.diasGiroMedio,
+          pecasGiroConsideradas: s.pecasGiroConsideradas,
+          curvaABC: s.curvaABC,
+        }));
+        const skuMap = new Map(skus.map(s => [s.codSku, s]));
 
-        poolSkusBons = pool.length;
-        let restante = lacuna;
+        const { alocados, naoPreenchivel, poolSize } = distribuirLacuna(
+          poolInput, lacuna, { limitesGiro: { maxGiro: GIRO_BOM_MAX_DIAS } }
+        );
 
-        // Passe 1 — base: 1 peça por SKU do pool, do melhor para o pior.
-        for (const p of pool) {
-          if (restante <= 0) break;
-          if (p.qtd < p.tetoCompra) {
-            p.qtd += 1;
-            restante -= 1;
-            p.motivo = 'BASE';
-          }
-        }
+        poolSkusBons = poolSize;
+        lacunaNaoPreenchivel = naoPreenchivel;
 
-        // Passe 2 — escalonamento: +1 nos giros ≤ 45 d.
-        if (restante > 0) {
-          for (const p of pool) {
-            if (restante <= 0) break;
-            if (p.giroEf <= 45 && p.qtd < p.tetoCompra) {
-              p.qtd += 1;
-              restante -= 1;
-              p.motivo = 'GIRO_RAPIDO';
-            }
-          }
-        }
-
-        // Passe 3 — escalonamento: +1 nos giros ≤ 30 d.
-        if (restante > 0) {
-          for (const p of pool) {
-            if (restante <= 0) break;
-            if (p.giroEf <= 30 && p.qtd < p.tetoCompra) {
-              p.qtd += 1;
-              restante -= 1;
-              p.motivo = 'GIRO_MUITO_RAPIDO';
-            }
-          }
-        }
-
-        // Passes 4+ — continua descendo o limite até esgotar tetos ou lacuna.
-        const limites = [21, 15, 10, 7];
-        for (const lim of limites) {
-          if (restante <= 0) break;
-          let alocou = false;
-          for (const p of pool) {
-            if (restante <= 0) break;
-            if (p.giroEf <= lim && p.qtd < p.tetoCompra) {
-              p.qtd += 1;
-              restante -= 1;
-              p.motivo = 'GIRO_MUITO_RAPIDO';
-              alocou = true;
-            }
-          }
-          if (!alocou) break;
-        }
-
-        lacunaNaoPreenchivel = restante;
-
-        skusARepor = pool
-          .filter(p => p.qtd > 0)
-          .map(p => buildSkuView(p.item, 'REPOR', p.qtd, p.motivo))
+        skusARepor = alocados
+          .map(({ codSku, qtdAComprar, motivo }) =>
+            buildSkuView(skuMap.get(codSku)!, 'REPOR', qtdAComprar, motivo)
+          )
           .sort((a, b) => {
             const ordemPrio = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAIXA: 3 } as const;
             return ordemPrio[a.prioridade] - ordemPrio[b.prioridade] || b.qtdAComprar - a.qtdAComprar;
@@ -945,17 +746,17 @@ export function useEstoqueUnificado() {
 
       // Estoque doente
       const itensDoentes: ItemDoenteMarca[] = comEstoque
-        .filter(s => s.diasEmEstoque >= 180 && s.qtdVendidos === 0)
+        .filter(s => classificarPorIdade(s.diasEmEstoque).desconto > 0 && s.qtdVendidos === 0)
         .map(s => {
-          const { faixa, desconto } = classificarFaixaDoente(s.diasEmEstoque);
+          const entry = classificarPorIdade(s.diasEmEstoque);
           return {
             codSku: s.codSku,
             descricao: s.descricao,
             estoqueAtual: s.estoqueAtual,
             valorCusto: s.valorEstoqueCusto,
             diasEmEstoque: s.diasEmEstoque,
-            faixa,
-            desconto,
+            faixa: toFaixaDoente(entry),
+            desconto: `${entry.desconto}%`,
           };
         })
         .sort((a, b) => b.diasEmEstoque - a.diasEmEstoque);
@@ -1014,20 +815,20 @@ export function useEstoqueUnificado() {
 
   // Estoque doente global (mantido para compatibilidade com Visão Estoque)
   const estoqueDoenteAgrupado = useMemo((): GrupoEstoqueDoente[] => {
-    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0 && i.diasEmEstoque >= 180);
+    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0 && classificarPorIdade(i.diasEmEstoque).desconto > 0);
     if (comEstoque.length === 0) return [];
 
     const faixasConfig: Record<FaixaDoente, { label: string; desconto: string; cor: string }> = {
-      PROMOCAO_20: { label: 'Promoção 20%', desconto: '20%', cor: 'text-yellow-600' },
-      LIQUIDACAO_30: { label: 'Liquidação 30%', desconto: '30%', cor: 'text-orange-600' },
-      LIQUIDACAO_50: { label: 'Liquidação 50%', desconto: '50%', cor: 'text-destructive' },
-      DESCARTE: { label: 'Descarte / Doação', desconto: '100%', cor: 'text-destructive' },
+      PROMOCAO_20:    { label: 'Promoção 20%',  desconto: '20%', cor: 'text-yellow-600'  },
+      LIQUIDACAO_30:  { label: 'Liquidação 30%', desconto: '30%', cor: 'text-orange-600'  },
+      LIQUIDACAO_50:  { label: 'Liquidação 50%', desconto: '50%', cor: 'text-destructive' },
+      ACAO_ESPECIAL:  { label: 'Ação Especial',  desconto: '-',   cor: 'text-destructive' },
       REVISAO_URGENTE: { label: 'Revisão Urgente', desconto: '-', cor: 'text-destructive' },
     };
 
     const grupos = new Map<FaixaDoente, ItemEstoque[]>();
     comEstoque.forEach(item => {
-      const { faixa } = classificarFaixaDoente(item.diasEmEstoque);
+      const faixa = toFaixaDoente(classificarPorIdade(item.diasEmEstoque));
       if (!grupos.has(faixa)) grupos.set(faixa, []);
       grupos.get(faixa)!.push(item);
     });
@@ -1038,7 +839,7 @@ export function useEstoqueUnificado() {
       grupos.get('REVISAO_URGENTE')!.push(...semMovimento);
     }
 
-    const ordemFaixas: FaixaDoente[] = ['PROMOCAO_20', 'LIQUIDACAO_30', 'LIQUIDACAO_50', 'DESCARTE', 'REVISAO_URGENTE'];
+    const ordemFaixas: FaixaDoente[] = ['PROMOCAO_20', 'LIQUIDACAO_30', 'LIQUIDACAO_50', 'ACAO_ESPECIAL', 'REVISAO_URGENTE'];
     return ordemFaixas
       .filter(f => grupos.has(f))
       .map(faixa => {

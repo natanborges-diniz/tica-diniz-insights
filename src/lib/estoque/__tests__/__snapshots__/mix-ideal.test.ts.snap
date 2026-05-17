@@ -1,0 +1,112 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`calcularMixIdealCategoria > snapshot 1`] = `
+[
+  {
+    "chave": "Armações RX",
+    "gap": 11.458333333333343,
+    "percentualAtual": 66.66666666666666,
+    "percentualIdeal": 78.125,
+  },
+  {
+    "chave": "Solar / OC",
+    "gap": 1.875,
+    "percentualAtual": 20,
+    "percentualIdeal": 21.875,
+  },
+  {
+    "chave": "Acessórios",
+    "gap": -13.333333333333334,
+    "percentualAtual": 13.333333333333334,
+    "percentualIdeal": 0,
+  },
+]
+`;
+
+exports[`calcularMixIdealMarcas > snapshot com dados fixos 1`] = `
+[
+  {
+    "curvaMarca": "A",
+    "decisao": "REPOR_REFERENCIA",
+    "faturamento6m": 4000,
+    "incluidaNoMix": true,
+    "lacuna": 0,
+    "marca": "RAYBAN",
+    "pecasAtuais": 8,
+    "pecasIdeais": 7,
+    "pecasVendidas6m": 20,
+    "taxaPerformance": 1,
+    "vendaDiaria": 0.1111111111111111,
+  },
+  {
+    "curvaMarca": "C",
+    "decisao": "REPOR_REFERENCIA",
+    "faturamento6m": 2000,
+    "incluidaNoMix": true,
+    "lacuna": 0,
+    "marca": "OAKLEY",
+    "pecasAtuais": 5,
+    "pecasIdeais": 5,
+    "pecasVendidas6m": 10,
+    "taxaPerformance": 0.5,
+    "vendaDiaria": 0.05555555555555555,
+  },
+  {
+    "curvaMarca": "C",
+    "decisao": "SEM_HISTORICO",
+    "faturamento6m": 200,
+    "incluidaNoMix": false,
+    "lacuna": 0,
+    "marca": "GENÉRICA",
+    "pecasAtuais": 10,
+    "pecasIdeais": 0,
+    "pecasVendidas6m": 0,
+    "taxaPerformance": 0,
+    "vendaDiaria": 0,
+  },
+]
+`;
+
+exports[`regressão OLD vs NEW — calcularMixIdealMarcas > snapshot de regressão 1`] = `
+[
+  {
+    "curvaMarca": "A",
+    "decisao": "REPOR_REFERENCIA",
+    "faturamento6m": 4000,
+    "incluidaNoMix": true,
+    "lacuna": 0,
+    "marca": "RAYBAN",
+    "pecasAtuais": 8,
+    "pecasIdeais": 7,
+    "pecasVendidas6m": 20,
+    "taxaPerformance": 1,
+    "vendaDiaria": 0.1111111111111111,
+  },
+  {
+    "curvaMarca": "C",
+    "decisao": "REPOR_REFERENCIA",
+    "faturamento6m": 2000,
+    "incluidaNoMix": true,
+    "lacuna": 0,
+    "marca": "OAKLEY",
+    "pecasAtuais": 5,
+    "pecasIdeais": 5,
+    "pecasVendidas6m": 10,
+    "taxaPerformance": 0.5,
+    "vendaDiaria": 0.05555555555555555,
+  },
+  {
+    "curvaMarca": "C",
+    "decisao": "SEM_HISTORICO",
+    "faturamento6m": 200,
+    "incluidaNoMix": false,
+    "lacuna": 0,
+    "marca": "GENÉRICA",
+    "pecasAtuais": 10,
+    "pecasIdeais": 0,
+    "pecasVendidas6m": 0,
+    "taxaPerformance": 0,
+    "vendaDiaria": 0,
+  },
+]
+`;

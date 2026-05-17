@@ -87,13 +87,6 @@ export interface OtbMetrics {
   diasPeriodo: number;
 }
 
-interface EstoqueMinimoConfig {
-  cod_empresa: number;
-  categoria: string;
-  curva_abc: string;
-  quantidade_minima: number;
-}
-
 // ============================================
 // HOOK
 // ============================================
@@ -123,7 +116,6 @@ export function useOtb() {
   const [dadosBrutos, setDadosBrutos] = useState<AnaliseSku[]>([]);
   const [agrupamento, setAgrupamento] = useState<'fornecedor' | 'marca'>('fornecedor');
   const [mapeamentoFornecedor, setMapeamentoFornecedor] = useState<Map<string, string>>(new Map());
-  const [configMinimos, setConfigMinimos] = useState<EstoqueMinimoConfig[]>([]);
 
   // Carregar mapeamentos marca→fornecedor do Supabase
   useEffect(() => {
@@ -149,27 +141,6 @@ export function useOtb() {
     };
     
     carregarMapeamentos();
-  }, []);
-
-  // Carregar configurações de mínimo por loja
-  useEffect(() => {
-    const carregarMinimos = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('estoque_minimo_loja')
-          .select('cod_empresa, categoria, curva_abc, quantidade_minima');
-        
-        if (error) throw error;
-        if (data) {
-          setConfigMinimos(data);
-          console.log('[useOtb] Mínimos por loja carregados:', data.length);
-        }
-      } catch (err) {
-        console.error('[useOtb] Erro ao carregar mínimos:', err);
-      }
-    };
-    
-    carregarMinimos();
   }, []);
 
   /**
@@ -264,30 +235,8 @@ export function useOtb() {
       // Curva ABC do SKU
       const curvaABC = curvaMap.get(sku.codSku) || 'C';
       
-      // Buscar mínimo configurado para esta loja/categoria/curva
-      const categoria = categorizarProduto(sku.tipo);
-      
-      // Encontrar configuração de mínimo (prioridade: categoria específica > TODOS)
-      let estoqueMinimo = 0;
-      if (filters.empresa !== 'ALL') {
-        const codEmpresa = typeof filters.empresa === 'number' ? filters.empresa : parseInt(filters.empresa);
-        
-        // Buscar mínimo específico para categoria + curva
-        const configEspecifica = configMinimos.find(c => 
-          c.cod_empresa === codEmpresa && 
-          c.categoria === categoria && 
-          c.curva_abc === curvaABC
-        );
-        
-        // Buscar mínimo genérico (TODOS + curva)
-        const configGenerica = configMinimos.find(c => 
-          c.cod_empresa === codEmpresa && 
-          c.categoria === 'TODOS' && 
-          c.curva_abc === curvaABC
-        );
-        
-        estoqueMinimo = configEspecifica?.quantidade_minima || configGenerica?.quantidade_minima || 0;
-      }
+      /* TODO Fase 2: useOtb necessita re-auditoria após migração para capacidade_expositor */
+      const estoqueMinimo = 0;
       
       // OTB SIMPLIFICADO: OTB = Mínimo por Loja - Estoque Atual
       // Se não há mínimo configurado, usa 0 (não precisa comprar)
@@ -359,7 +308,7 @@ export function useOtb() {
         giroEstoque: sku.giroEstoque,
       };
     });
-  }, [dadosBrutos, diasPeriodo, filters.tipoFiltro, filters.empresa, mapeamentoFornecedor, configMinimos]);
+  }, [dadosBrutos, diasPeriodo, filters.tipoFiltro, mapeamentoFornecedor]);
 
   /**
    * Agrupa itens por fornecedor ou marca

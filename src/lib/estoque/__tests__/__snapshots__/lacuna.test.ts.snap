@@ -1,0 +1,103 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`regressão OLD vs NEW — 3 marcas (A, B, C) > snapshot GENÉRICA lacuna=3 (NEW — deve ser idêntico) 1`] = `
+{
+  "alocados": [],
+  "naoPreenchivel": 3,
+  "poolSize": 0,
+}
+`;
+
+exports[`regressão OLD vs NEW — 3 marcas (A, B, C) > snapshot GENÉRICA lacuna=3 (OLD — pool vazio) 1`] = `
+{
+  "alocados": [],
+  "naoPreenchivel": 3,
+  "poolSize": 0,
+}
+`;
+
+exports[`regressão OLD vs NEW — 3 marcas (A, B, C) > snapshot OAKLEY lacuna=5 (NEW — deve ser idêntico) 1`] = `
+{
+  "alocados": [
+    {
+      "codSku": 201,
+      "motivo": "GIRO_MUITO_RAPIDO",
+      "qtdAComprar": 4,
+    },
+    {
+      "codSku": 202,
+      "motivo": "BASE",
+      "qtdAComprar": 1,
+    },
+  ],
+  "naoPreenchivel": 0,
+  "poolSize": 2,
+}
+`;
+
+exports[`regressão OLD vs NEW — 3 marcas (A, B, C) > snapshot OAKLEY lacuna=5 (OLD) 1`] = `
+{
+  "alocados": [
+    {
+      "codSku": 201,
+      "motivo": "GIRO_MUITO_RAPIDO",
+      "qtdAComprar": 4,
+    },
+    {
+      "codSku": 202,
+      "motivo": "BASE",
+      "qtdAComprar": 1,
+    },
+  ],
+  "naoPreenchivel": 0,
+  "poolSize": 2,
+}
+`;
+
+exports[`regressão OLD vs NEW — 3 marcas (A, B, C) > snapshot RAYBAN lacuna=10 (NEW — deve ser idêntico) 1`] = `
+{
+  "alocados": [
+    {
+      "codSku": 101,
+      "motivo": "GIRO_MUITO_RAPIDO",
+      "qtdAComprar": 5,
+    },
+    {
+      "codSku": 102,
+      "motivo": "GIRO_MUITO_RAPIDO",
+      "qtdAComprar": 3,
+    },
+    {
+      "codSku": 103,
+      "motivo": "BASE",
+      "qtdAComprar": 1,
+    },
+  ],
+  "naoPreenchivel": 1,
+  "poolSize": 3,
+}
+`;
+
+exports[`regressão OLD vs NEW — 3 marcas (A, B, C) > snapshot RAYBAN lacuna=10 (OLD) 1`] = `
+{
+  "alocados": [
+    {
+      "codSku": 101,
+      "motivo": "GIRO_MUITO_RAPIDO",
+      "qtdAComprar": 5,
+    },
+    {
+      "codSku": 102,
+      "motivo": "GIRO_MUITO_RAPIDO",
+      "qtdAComprar": 3,
+    },
+    {
+      "codSku": 103,
+      "motivo": "BASE",
+      "qtdAComprar": 1,
+    },
+  ],
+  "naoPreenchivel": 1,
+  "poolSize": 3,
+}
+`;
