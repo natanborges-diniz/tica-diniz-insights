@@ -916,6 +916,23 @@ export function useEstoqueUnificado() {
     }
   }, [filters.empresa, dataInicio, dataFim, setLoading, setError, setDados]);
 
+  // Auto-load: se a empresa está definida mas os dados ainda não foram carregados
+  // para ela (ou estão vazios), dispara o fetch automaticamente.
+  // Isso garante que ao navegar entre Visão Estoque ↔ Plano de Compra o usuário
+  // não precise clicar em "Carregar Dados" novamente.
+  useEffect(() => {
+    if (filters.empresa === null || filters.empresa === undefined) return;
+    if (loading || autoLoadingRef.current) return;
+    const empresaMudou = String(empresaCarregada) !== String(filters.empresa);
+    const semDados = dadosEstoqueCompleto.length === 0 && dadosVendasSku.length === 0;
+    if (empresaMudou || semDados) {
+      autoLoadingRef.current = true;
+      carregarDados().finally(() => {
+        autoLoadingRef.current = false;
+      });
+    }
+  }, [filters.empresa, empresaCarregada, dadosEstoqueCompleto.length, dadosVendasSku.length, loading, carregarDados]);
+
   const dadosBrutos = dadosVendasSku;
 
   return {
