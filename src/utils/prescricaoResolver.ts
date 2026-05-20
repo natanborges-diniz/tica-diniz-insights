@@ -29,9 +29,14 @@ export interface PrescricaoOlhoResolved {
  * Resolve a prescrição de UM olho para o formato Hoya.
  */
 export function resolverPrescricaoOlho(input: PrescricaoOlhoInput): PrescricaoOlhoResolved {
-  const temLonge = input.longeEsf != null || input.longeCil != null;
-  const temPerto = input.pertoEsf != null || input.pertoCil != null;
-  const temAdicao = input.adicao != null && input.adicao !== 0;
+  // Tratar 0 como "não preenchido" — o ERP costuma devolver zeros em vez de NULL
+  // quando o operador não digitou nada. Sem isso a Regra 3 inventava
+  // adição = 0 − longe_esf (bug OS 96999).
+  const isFilled = (v: number | null | undefined) => v != null && v !== 0;
+
+  const temLonge = isFilled(input.longeEsf) || isFilled(input.longeCil);
+  const temPerto = isFilled(input.pertoEsf) || isFilled(input.pertoCil);
+  const temAdicao = isFilled(input.adicao);
 
   // Regra 1: Só perto preenchido → usar perto como esférico/cilíndrico para Hoya
   if (!temLonge && temPerto) {
@@ -39,7 +44,7 @@ export function resolverPrescricaoOlho(input: PrescricaoOlhoInput): PrescricaoOl
       esferico: input.pertoEsf,
       cilindrico: input.pertoCil,
       eixo: input.pertoEixo ?? input.longeEixo,
-      adicao: input.adicao,
+      adicao: temAdicao ? input.adicao : null,
       origem: "perto",
     };
   }
@@ -55,27 +60,33 @@ export function resolverPrescricaoOlho(input: PrescricaoOlhoInput): PrescricaoOl
     };
   }
 
-  // Regra 3: Longe + perto SEM adição → calcular adição algebraicamente
-  if (temLonge && temPerto && !temAdicao) {
-    const longeEsf = input.longeEsf ?? 0;
-    const pertoEsf = input.pertoEsf ?? 0;
-    const adicaoCalculada = +(pertoEsf - longeEsf).toFixed(2);
+  // Regra 3: Longe + perto SEM adição → só calcula adição se AMBOS esféricos
+  // estiverem efetivamente preenchidos (não-zero) E a diferença for clinicamente
+  // válida (≥ 0.5). Caso contrário cai no padrão "só longe" sem adição.
+  if (
+    temLonge &&
+    temPerto &&
+    !temAdicao &&
+    isFilled(input.longeEsf) &&
+    isFilled(input.pertoEsf)
+  ) {
+    const adicaoCalculada = +(input.pertoEsf! - input.longeEsf!).toFixed(2);
 
     return {
       esferico: input.longeEsf,
       cilindrico: input.longeCil,
       eixo: input.longeEixo,
-      adicao: adicaoCalculada > 0 ? adicaoCalculada : null,
+      adicao: adicaoCalculada >= 0.5 ? adicaoCalculada : null,
       origem: "calculado",
     };
   }
 
-  // Padrão: Só longe (sem perto)
+  // Padrão: Só longe (sem perto válido)
   return {
     esferico: input.longeEsf,
     cilindrico: input.longeCil,
     eixo: input.longeEixo,
-    adicao: input.adicao,
+    adicao: temAdicao ? input.adicao : null,
     origem: "longe",
   };
 }
