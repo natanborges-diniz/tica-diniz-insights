@@ -628,11 +628,26 @@ const ZeissTrackingPage: React.FC = () => {
                               {/* Serviços */}
                               {servicos && servicos.length > 0 && (
                                 <div className="bg-background/60 rounded p-2">
-                                  <span className="text-muted-foreground text-[10px] uppercase block mb-1">Serviços</span>
+                                  <span className="text-muted-foreground text-[10px] uppercase block mb-1">Serviços (Tratamentos)</span>
                                   <div className="flex flex-wrap gap-1">
                                     {servicos.map((s, i) => (
                                       <Badge key={i} variant="secondary" className="text-[10px]">{s.codigo}</Badge>
                                     ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Coloração */}
+                              {(pedidoData.corcoloracao || pedidoData.amostracoloracao) && (
+                                <div className="bg-background/60 rounded p-2">
+                                  <span className="text-muted-foreground text-[10px] uppercase block mb-1">Coloração</span>
+                                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
+                                    {pedidoData.corcoloracao ? (
+                                      <span className="font-mono">Cor: {String(pedidoData.corcoloracao)}</span>
+                                    ) : null}
+                                    {pedidoData.amostracoloracao ? (
+                                      <span>Amostra: {String(pedidoData.amostracoloracao)}</span>
+                                    ) : null}
                                   </div>
                                 </div>
                               )}
