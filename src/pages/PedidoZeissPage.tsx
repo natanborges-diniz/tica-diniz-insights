@@ -225,13 +225,18 @@ const PedidoZeissPage: React.FC = () => {
             found.oeLongeEsf != null || found.oeLongeCil != null;
           if (hasPrescData) setPrescAutoFilled(true);
 
+          // Só considera referência da armação se for diferente do número da OS
+          // (alguns registros do ERP gravam o nº da OS no campo referência por engano)
+          const osStr = String(found.numeroOs ?? found.codOs ?? "").trim();
+          const refRaw = (found.referenciaArmacao || "").trim();
+          const refArmacao = refRaw && refRaw !== osStr ? refRaw : "";
           setArmacao({
-            modelo: found.referenciaArmacao || "",
+            modelo: refArmacao,
             ponte: found.ponte != null ? String(found.ponte) : "",
             altura: found.aaVertical != null ? String(found.aaVertical) : "",
             largura: found.caHorizontal != null ? String(found.caHorizontal) : found.ta != null ? String(found.ta) : "",
             diagonalMaior: found.md != null ? String(found.md) : "",
-            tipo: detectTipoArmacaoFromRef(found.referenciaArmacao),
+            tipo: detectTipoArmacaoFromRef(refArmacao),
             formatoAro: "",
           });
           setOsNumero(String(found.numeroOs || found.codOs));
