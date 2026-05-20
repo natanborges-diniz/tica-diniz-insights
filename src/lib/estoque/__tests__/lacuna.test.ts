@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { distribuirLacuna, type SkuParaPool, type MotivoQtd, type LacunaResult } from '../lacuna';
+import { distribuirLacuna, type SkuParaPool, type MotivoQtd, type LacunaResult, type LacunaItemResult } from '../lacuna';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function sku(overrides: Partial<SkuParaPool> & { codSku: number }): SkuParaPool {
