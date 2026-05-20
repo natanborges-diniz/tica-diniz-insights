@@ -659,20 +659,7 @@ const PedidoZeissPage: React.FC = () => {
     }
   };
 
-  // ── RxField ──
-  function RxField({ label, value, onChange, readOnly }: { label: string; value: string; onChange: (v: string) => void; readOnly?: boolean }) {
-    return (
-      <div>
-        <Label className="text-[10px] uppercase text-muted-foreground">{label}</Label>
-        <Input
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          className={cn("h-8 text-sm font-mono", readOnly && "bg-muted")}
-          readOnly={readOnly}
-        />
-      </div>
-    );
-  }
+  // RxField moved to module scope (see below) to prevent input remount/focus loss on each keystroke.
 
   // ── ERP description info ──
   const erpDescOd = os?.lenteOdDescricao;
