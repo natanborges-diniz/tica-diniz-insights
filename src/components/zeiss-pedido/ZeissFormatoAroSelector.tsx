@@ -63,7 +63,7 @@ const ZeissFormatoAroSelector: React.FC<Props> = ({ value, onChange }) => {
         <Input
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Código do formato (ex: VIS01, 60P)"
+          placeholder="Código do formato (ex: VIS01, 6OP)"
           className="h-7 text-xs max-w-[200px]"
         />
         {value && (
