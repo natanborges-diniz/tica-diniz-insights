@@ -1,119 +1,73 @@
+## Bug confirmado
 
-## Racional correto (duas fases)
+Cruzando os prints da OS 96999:
 
-**Fase 1 — Mix ideal por marca (top-down)**
-A inteligência olha 180 dias e decide *quais marcas* compõem o mix e *quanto de estoque* cada uma deve ter. SKU não entra aqui.
+| Olho | Esf (origem) | Adição enviada à Zeiss |
+|------|--------------|------------------------|
+| OD   | -2.00        | 2.00 |
+| OE   | -2.50        | 2.50 |
 
-**Fase 2 — Seleção de peças (bottom-up, condicionada)**
-Só se a marca tem **lacuna** (estoque atual < ideal definido na Fase 1), aí olho dentro dela quais SKUs são "bons" (giro ≤ 90 d) e distribuo a lacuna entre eles, escalonando pela performance.
-
-A regra-chave que falta hoje: **se a marca está no mix mas já tem estoque ≥ ideal, não compra nada — independente de haver SKUs zerados ou rápidos**.
-
----
-
-## Fase 1 — Mix Ideal de Marcas
-
-Em `useEstoqueUnificado.ts`, criar `mixIdealMarcas`:
-
-1. **Universo elegível**: marcas com vendas nos 180 d (ignora marcas zeradas/sem histórico → categoria à parte "Sem histórico").
-2. **Curva ABC por marca** (faturamento 6 m): A = 80%, B = 95%, C = 100%.
-3. **Pertence ao mix?** Critério padrão: marcas A e B entram; C entra apenas se `taxaPerformance ≥ 0.5` (≥50% dos SKUs ativos venderam) — caso contrário cai em "Avaliar descontinuação".
-4. **Estoque ideal por marca**:
-    - `pecasIdeaisMarca = ceil(vendaMediaDiariaMarca × COBERTURA_ALVO_MARCA[curva])`
-    - Cobertura padrão por curva: A = 60 d, B = 75 d, C = 90 d (configurável depois).
-5. **Lacuna**: `lacunaMarca = max(0, pecasIdeaisMarca - pecasEstoqueAtualMarca)`
-6. **Output por marca**:
-    ```
-    { marca, curvaMarca, pecasVendidas6m, vendaDiaria,
-      pecasIdeais, pecasAtuais, lacuna,
-      decisao: REPOR | RENOVAR | AVALIAR | SEM_HISTORICO,
-      noMix: boolean }
-    ```
-
-**Regra dura**: `lacuna === 0` ⇒ marca não gera nenhuma compra, mesmo com SKUs zerados.
-
----
-
-## Fase 2 — Seleção de SKUs dentro da Lacuna
-
-Para cada marca com `lacuna > 0`:
-
-1. **Pool de SKUs "bons"**: SKUs vendidos da marca com `diasGiroEfetivo ≤ 90` (`diasGiroUltimaPeca ?? diasGiroMedio`). SKUs sem giro real ou com giro > 90 → **excluídos** do plano de compra (entram em "Observar / Avaliar").
-2. **Score por SKU**: `score = (1 / diasGiroEfetivo) × pecasGiroConsideradas × pesoCurvaABC` (A=3, B=2, C=1). Ordenar desc.
-3. **Distribuir a lacuna** percorrendo o pool ordenado:
-    - Cada SKU recebe ao menos 1 peça até a lacuna acabar.
-    - Sobrou lacuna depois de dar 1 a todos? Segundo passe: dar +1 aos SKUs com giro ≤ 45 d, terceiro passe ≤ 30 d, e assim por diante (escalonamento pela velocidade).
-    - Limite por SKU: `min(lacunaRestante, ceil(qtdVendidos180d × 1.2))` — não pede mais que o histórico de venda da peça +20%.
-4. **Esgotou o pool antes de zerar a lacuna?** Compra só o que tem qualidade; o restante da lacuna é reportado como **"Lacuna não preenchível — pool de SKUs bons insuficiente"** (sinal para curadoria/novos modelos via TROCAR/RENOVAR).
-
----
-
-## Constantes (topo do hook)
+A adição é exatamente `0 − esférico_longe`. Esse é o cálculo da **Regra 3** de `src/utils/prescricaoResolver.ts`:
 
 ```ts
-const GIRO_BOM_MAX_DIAS = 90;
-const COBERTURA_ALVO_MARCA: Record<'A'|'B'|'C', number> = { A: 60, B: 75, C: 90 };
-const PESO_CURVA: Record<'A'|'B'|'C', number> = { A: 3, B: 2, C: 1 };
+const adicaoCalculada = +(pertoEsf - longeEsf).toFixed(2);
 ```
 
-(Padrão por enquanto; depois movemos para tabela Supabase como já é convenção do projeto.)
+Quando o Firebird devolve `OD_PERTO_ESF = 0` (ou `OD_PERTO_CIL = 0`) em vez de `null`, o resolver entende que existe "perto preenchido" (`temPerto = true`), entra na Regra 3 e gera adição fantasma = `0 − (−2) = 2`. Caso clássico de **zero tratado como valor**.
 
----
+A receita verdadeira (print 1) mostra Adição = 0.00, ou seja, é monofocal de longe — não deveria ter adição alguma.
 
-## Estruturas alteradas
+## Causa raiz
 
-**`useEstoqueUnificado.ts`**
+```ts
+const temPerto = input.pertoEsf != null || input.pertoCil != null;
+```
+`0 != null` é `true`, então `temPerto` vira `true` mesmo quando o ERP só preencheu zeros. A Regra 3 dispara e inventa a adição.
 
-- Novo memo `mixIdealMarcas: MixMarca[]` (Fase 1).
-- `resumoPorMarca`: passa a consumir `mixIdealMarcas` para preencher `pecasIdeais`, `lacuna`, `noMix`.
-- Substituir o cálculo atual de `skusARepor` (que hoje decide SKU-a-SKU) pelo algoritmo de **distribuição da lacuna** descrito na Fase 2. Marcas com `lacuna = 0` retornam `skusARepor: []`.
-- Manter `skusATrocar` / `itensDoentes` / `skusObservar` como estão — são ortogonais ao plano de compra.
-- Eliminar a regra antiga "qtdAComprar = projeção via giro" do `buildSkuView` — agora a quantidade vem **imposta pela distribuição da lacuna**, não pelo SKU.
-- Novo retorno `lacunasNaoPreenchiveis: { marca, faltam, motivo }[]` para a UI.
+O mesmo problema afeta a Regra 1 ("só perto preenchido") sempre que perto vier zerado.
 
-**`SkuARepor`** ganha:
-- `qtdAComprar` (vinda da distribuição, não mais projeção)
-- `motivoQtd: 'PASSE_1_BASE' | 'PASSE_2_GIRO_RAPIDO' | 'PASSE_3_GIRO_MUITO_RAPIDO'` (para tooltip explicativo)
-- `prioridade` recalibrada: deriva da posição no pool ordenado por score, não mais da cobertura.
+## Fix proposto
 
----
+**Único arquivo: `src/utils/prescricaoResolver.ts`**
 
-## UI
+1. Tratar `0` como "não preenchido" nos detectores `temLonge` / `temPerto`:
+   ```ts
+   const isFilled = (v: number | null) => v != null && v !== 0;
+   const temLonge = isFilled(input.longeEsf) || isFilled(input.longeCil);
+   const temPerto = isFilled(input.pertoEsf) || isFilled(input.pertoCil);
+   ```
+2. Reforçar a Regra 3: só calcular adição quando **ambos** `longeEsf` e `pertoEsf` estiverem realmente preenchidos (não-zero) e o resultado for clinicamente válido (≥ 0.5):
+   ```ts
+   if (temLonge && temPerto && !temAdicao
+       && isFilled(input.longeEsf) && isFilled(input.pertoEsf)) {
+     const diff = +(input.pertoEsf! - input.longeEsf!).toFixed(2);
+     return {
+       esferico: input.longeEsf,
+       cilindrico: input.longeCil,
+       eixo: input.longeEixo,
+       adicao: diff >= 0.5 ? diff : null,
+       origem: "calculado",
+     };
+   }
+   ```
+3. Garantir que o caminho padrão "só longe" devolva `adicao: input.adicao || null` (sem `0` virando adição).
 
-**`ListaCompraTable.tsx`**
-- Cabeçalho passa a mostrar lacuna total e nº de marcas com lacuna.
-- Coluna "Comprar" exibe a qtd alocada + tooltip com o motivo do passe.
-- Rodapé: bloco "Lacunas não preenchíveis — falta curadoria" com link/expansão.
+## Validação
 
-**`AnaliseOTBPage.tsx`**
-- Nova seção no topo: **"Mix Ideal por Marca"** (tabela enxuta: marca, curva, vendas 6m, ideal, atual, lacuna, decisão). Marcas com `lacuna = 0` aparecem com badge "estoque suficiente — sem compra".
-- O `MarcaExpandida` atual continua, mas o bloco REPOR só renderiza se a marca tem lacuna; caso contrário mostra "Estoque dentro do ideal — nenhuma reposição planejada".
+1. Testes unitários em `src/utils/__tests__/prescricaoResolver.test.ts` (criar):
+   - Longe = −2, perto/adição = 0 → `adicao = null` (caso OS 96999)
+   - Longe = −2, perto = 0, adição = 2 → respeita adição informada
+   - Longe = −2, perto = 0, sem adição → `adicao = null`
+   - Longe = 0, perto = +2 → Regra 1, esférico = +2, sem adição
+   - Longe = −2, perto = 0, com perto_cil ≠ 0 → não inventa adição
+2. Recarregar `/pedido/zeiss/96999` no preview, confirmar que os campos Adição ficam vazios e a auto-validação não dispara warnings de adição.
+3. Subir para o usuário validar uma OS multifocal real (com adição de verdade) para garantir que não regrediu.
 
----
+## Escopo / fora do escopo
 
-## Casos de validação
+- **Dentro**: só `prescricaoResolver.ts` e o teste novo. O resolver é usado por Hoya, Zeiss e Haytek — o fix beneficia os três.
+- **Fora**: não mexer em `osHubService.ts` (o coalesce `cliente_adicao` é só fallback e não foi a causa aqui), nem na tela do pedido, nem no payload Zeiss.
 
-1. **Ray-Ban — 50 ideal, 20 atual, 10 SKUs bons no pool**
-   → Lacuna 30. Distribui 1 a cada um dos 10 (=10). Sobram 20. Segundo passe nos com giro ≤ 45 d (digamos 4) → +4. Terceiro passe ≤ 30 d (1) → +1. Total 15 peças compradas. Reporta lacuna não preenchível: 15 peças.
-2. **Marca X — 30 ideal, 35 atual, vários SKUs zerados**
-   → Lacuna 0. **Nenhum SKU entra na lista de compra**, mesmo zerados. UI mostra "Estoque acima do ideal — não comprar".
-3. **Marca Y — SKU com 1200 dias de giro e estoque 0**
-   → SKU fica fora do pool (giro > 90). Não vira URGENTE. Aparece em "Observar / Avaliar troca".
+## Pergunta
 
----
-
-## Não muda
-
-- Endpoints e Bridge — todo o cálculo é frontend.
-- Mix ideal por subcategoria, dead stock, curva ABC de SKU — preservados.
-- Fluxo de marcas SEM_HISTORICO / AVALIAR_DESCONTINUACAO — continua igual.
-
----
-
-## Arquivos
-
-- `src/hooks/useEstoqueUnificado.ts` — Fase 1 + Fase 2 + novos retornos.
-- `src/components/otb/ListaCompraTable.tsx` — coluna de motivo, rodapé de lacuna.
-- `src/pages/estoque/AnaliseOTBPage.tsx` — seção "Mix Ideal por Marca" no topo, ajuste de `MarcaExpandida`.
-
-(Memória de Inventory Health será atualizada após confirmação para registrar este racional como padrão.)
+Posso aplicar exatamente esse fix (tratar `0` como "não preenchido" + exigir adição calculada ≥ 0.5) ou você quer um limiar diferente (ex.: ≥ 0.25)?
