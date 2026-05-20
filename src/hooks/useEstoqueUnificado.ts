@@ -12,7 +12,7 @@ import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
 import { getAnaliseSku, AnaliseSku } from "@/services/vendasService";
 import { getEstoqueCompleto, EstoqueCompleto } from "@/services/estoqueCompletoService";
-import { categorizarProduto, subcategorizarProduto, type SubcategoriaProduto } from "@/utils/categorizarProduto";
+import { categorizarProduto, subcategorizarProduto, type CategoriaProduto, type SubcategoriaProduto } from "@/utils/categorizarProduto";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useEstoqueStore, type EstoqueFilters } from "@/stores/useEstoqueStore";
@@ -33,7 +33,7 @@ export interface ItemEstoque {
   marca: string;
   fornecedor: string;
   tipo: string;
-  categoria: 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS';
+  categoria: CategoriaProduto;
   subcategoria: SubcategoriaProduto;
 
   estoqueAtual: number;
@@ -468,17 +468,20 @@ export function useEstoqueUnificado() {
     });
   }, [dadosEstoqueCompleto, dadosVendasSku, filters.empresa, mapeamentoFornecedor, configCapacidade]);
 
-  // Contagem por categoria
+  // Contagem por categoria — apenas itens com estoque positivo (B.1)
+  // LENTES_GRAU: excluída da UI (oculta), não entra em nenhum contador
   const contagemPorCategoria = useMemo(() => {
-    if (!itensProcessados.length) return { armacoes: 0, lentes: 0, acessorios: 0, outros: 0 };
-    let armacoes = 0, lentes = 0, acessorios = 0, outros = 0;
-    itensProcessados.forEach(item => {
-      if (item.categoria === 'ARMACOES') armacoes++;
-      else if (item.categoria === 'LENTES') lentes++;
-      else if (item.categoria === 'ACESSORIOS') acessorios++;
-      else outros++;
+    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0);
+    const calc = (cat: CategoriaProduto) => ({
+      skus: comEstoque.filter(i => i.categoria === cat).length,
+      pecas: comEstoque.filter(i => i.categoria === cat).reduce((s, i) => s + i.estoqueAtual, 0),
     });
-    return { armacoes, lentes, acessorios, outros };
+    return {
+      armacoes: calc('ARMACOES'),
+      lentes_contato: calc('LENTES_CONTATO'),
+      produtos: calc('PRODUTOS'),
+      outros: calc('OUTROS'),
+    };
   }, [itensProcessados]);
 
   // Itens filtrados

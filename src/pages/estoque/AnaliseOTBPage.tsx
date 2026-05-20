@@ -537,7 +537,7 @@ export default function AnaliseOTBPage() {
                 onValueChange={(value) => setFilters(prev => ({
                   ...prev,
                   empresa: Number(value),
-                  fornecedor: 'TODOS', marca: 'TODAS', acao: 'TODAS', categoria: 'TODOS', curvaABC: null, busca: '',
+                  fornecedor: 'TODOS', marca: 'TODAS', acao: 'TODAS', categoria: 'ARMACOES', curvaABC: null, busca: '',
                   subcategoria: 'AR_RX', decisaoMarca: 'TODAS',
                 }))}
                 disabled={loadingEmpresas}

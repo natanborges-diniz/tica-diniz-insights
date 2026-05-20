@@ -9,7 +9,8 @@ import type { AnaliseSku } from "@/services/vendasService";
 
 export interface EstoqueFilters {
   empresa: EmpresaParam;
-  categoria: "TODOS" | "ARMACOES" | "LENTES" | "ACESSORIOS" | "OUTROS";
+  // TODOS = sem filtro de categoria (escape-hatch interno, não exposto na UI)
+  categoria: "TODOS" | "ARMACOES" | "LENTES_CONTATO" | "PRODUTOS" | "OUTROS";
   subcategoria: "TODAS" | "AR_RX" | "AR_SOLAR" | "LENTES" | "LENTES_GRAU" | "LENTES_CONTATO" | "ACESSORIOS" | "OUTROS";
   curvaABC: "A" | "B" | "C" | null;
   fornecedor: string;
@@ -41,7 +42,7 @@ interface EstoqueState {
 
 const defaultFilters: EstoqueFilters = {
   empresa: null,
-  categoria: "TODOS",
+  categoria: "ARMACOES",
   subcategoria: "TODAS",
   curvaABC: null,
   fornecedor: "TODOS",

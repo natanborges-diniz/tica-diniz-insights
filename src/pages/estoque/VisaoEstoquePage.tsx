@@ -42,23 +42,23 @@ function EstoqueKPICards({
   metricas: ReturnType<typeof useEstoqueUnificado>["metricas"];
   categoria: string;
 }) {
-  const filtroAtivo = categoria !== "TODOS";
+  const isArmacoes = categoria === "ARMACOES";
   const labelCategoria =
     categoria === "ARMACOES" ? "Armações" :
-    categoria === "LENTES" ? "Lentes" :
-    categoria === "ACESSORIOS" ? "Acessórios" :
-    categoria === "OUTROS" ? "Outros" : "Todas categorias";
+    categoria === "LENTES_CONTATO" ? "Lentes de Contato" :
+    categoria === "PRODUTOS" ? "Produtos" :
+    categoria === "OUTROS" ? "Outros" : "Estoque";
 
   return (
     <div className="space-y-2">
-      {filtroAtivo && (
+      {!isArmacoes && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Filter className="h-3 w-3" />
           <span>Métricas filtradas por categoria:</span>
           <Badge variant="secondary">{labelCategoria}</Badge>
         </div>
       )}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className={`grid gap-4 md:grid-cols-2 ${isArmacoes ? 'lg:grid-cols-5' : 'lg:grid-cols-3'}`}>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total em Estoque</CardTitle>
@@ -79,25 +79,27 @@ function EstoqueKPICards({
             <div className="text-2xl font-bold">
               {metricas.valorTotalCusto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </div>
-            <p className="text-xs text-muted-foreground">custo total{filtroAtivo ? ` • ${labelCategoria}` : ''}</p>
+            <p className="text-xs text-muted-foreground">custo total</p>
           </CardContent>
         </Card>
 
-        <Card title="Peças paradas há mais de 180 dias desde a última entrada na loja, independente da ação sugerida.">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Dead Stock</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-accent-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-accent-foreground">
-              {metricas.deadStockPecas.toLocaleString('pt-BR')}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {metricas.deadStockPercentual.toFixed(1)}% {filtroAtivo ? `de ${labelCategoria.toLowerCase()}` : 'do estoque'} • {metricas.deadStockValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </p>
-            <p className="text-[10px] text-muted-foreground mt-1">+180 dias sem entrada</p>
-          </CardContent>
-        </Card>
+        {isArmacoes && (
+          <Card title="Peças paradas há mais de 180 dias desde a última entrada na loja, independente da ação sugerida.">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Dead Stock</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-accent-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-accent-foreground">
+                {metricas.deadStockPecas.toLocaleString('pt-BR')}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {metricas.deadStockPercentual.toFixed(1)}% do estoque • {metricas.deadStockValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">+180 dias sem entrada</p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -110,16 +112,18 @@ function EstoqueKPICards({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Peças p/ Liquidar</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-destructive" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-destructive">{metricas.pecasLiquidar.toLocaleString('pt-BR')}</div>
-            <p className="text-xs text-muted-foreground">ação sugerida: liquidar</p>
-          </CardContent>
-        </Card>
+        {isArmacoes && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Peças p/ Liquidar</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-destructive">{metricas.pecasLiquidar.toLocaleString('pt-BR')}</div>
+              <p className="text-xs text-muted-foreground">ação sugerida: liquidar</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
@@ -178,7 +182,7 @@ const estoqueColumns: DataTableColumn<ItemEstoque>[] = [
     mobileVisible: false,
     cell: (row) => (
       <Badge variant="outline" className="text-xs">
-        {row.categoria === "ARMACOES" ? "AR" : row.categoria === "LENTES" ? "LT" : row.categoria === "ACESSORIOS" ? "AC" : "OU"}
+        {row.categoria === "ARMACOES" ? "AR" : row.categoria === "LENTES_CONTATO" ? "LC" : row.categoria === "LENTES_GRAU" ? "LG" : row.categoria === "PRODUTOS" ? "PR" : "OU"}
       </Badge>
     ),
   },
@@ -311,6 +315,7 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
 
 export default function VisaoEstoquePage() {
   const navigate = useNavigate();
+  const [mostrarOutras, setMostrarOutras] = useState(false);
   const {
     empresas,
     loadingEmpresas,
@@ -380,16 +385,19 @@ export default function VisaoEstoquePage() {
               <label className="text-sm font-medium mb-2 block">Empresa</label>
               <Select
                 value={filters.empresa !== null ? String(filters.empresa) : ""}
-                onValueChange={(value) => setFilters(prev => ({ 
-                  ...prev, 
-                  empresa: Number(value),
-                  fornecedor: 'TODOS',
-                  marca: 'TODAS',
-                  acao: 'TODAS',
-                  categoria: 'TODOS',
-                  curvaABC: null,
-                  busca: '',
-                }))}
+                onValueChange={(value) => {
+                  setFilters(prev => ({
+                    ...prev,
+                    empresa: Number(value),
+                    fornecedor: 'TODOS',
+                    marca: 'TODAS',
+                    acao: 'TODAS',
+                    categoria: 'ARMACOES',
+                    curvaABC: null,
+                    busca: '',
+                  }));
+                  setMostrarOutras(false);
+                }}
                 disabled={loadingEmpresas}
               >
                 <SelectTrigger className="w-full">
@@ -428,46 +436,93 @@ export default function VisaoEstoquePage() {
             </Button>
           </div>
 
-          {/* Filtros por Categoria */}
+          {/* Filtros por Categoria (B.3) */}
           {itensProcessados.length > 0 && (
-            <div className="flex flex-wrap gap-2 pt-2">
-              <span className="text-sm text-muted-foreground self-center mr-2">Categoria:</span>
-              <Button
-                variant={filters.categoria === 'TODOS' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilters(prev => ({ ...prev, categoria: 'TODOS' }))}
-              >
-                Todos ({itensProcessados.length})
-              </Button>
+            <div className="flex flex-wrap gap-2 pt-2 items-center">
+              <span className="text-sm text-muted-foreground mr-1">Categoria:</span>
+
+              {/* Armações — sempre visível, aba principal */}
               <Button
                 variant={filters.categoria === 'ARMACOES' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setFilters(prev => ({ ...prev, categoria: 'ARMACOES' }))}
+                className="flex flex-col h-auto py-1.5 px-3 items-center gap-0"
+                onClick={() => {
+                  setFilters(prev => ({ ...prev, categoria: 'ARMACOES' }));
+                  setMostrarOutras(false);
+                }}
               >
-                Armações ({contagemPorCategoria.armacoes})
+                <span className="text-xs font-medium">Armações</span>
+                <span className="text-[10px] font-normal opacity-70 leading-tight">
+                  {contagemPorCategoria.armacoes.skus.toLocaleString('pt-BR')} SKUs · {contagemPorCategoria.armacoes.pecas.toLocaleString('pt-BR')} peças
+                </span>
               </Button>
-              <Button
-                variant={filters.categoria === 'LENTES' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilters(prev => ({ ...prev, categoria: 'LENTES' }))}
-              >
-                Lentes ({contagemPorCategoria.lentes})
-              </Button>
-              <Button
-                variant={filters.categoria === 'ACESSORIOS' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilters(prev => ({ ...prev, categoria: 'ACESSORIOS' }))}
-              >
-                Acessórios ({contagemPorCategoria.acessorios})
-              </Button>
-              {contagemPorCategoria.outros > 0 && (
+
+              {/* Outras categorias — colapsadas por default */}
+              {!mostrarOutras ? (
                 <Button
-                  variant={filters.categoria === 'OUTROS' ? 'default' : 'outline'}
+                  variant="ghost"
                   size="sm"
-                  onClick={() => setFilters(prev => ({ ...prev, categoria: 'OUTROS' }))}
+                  className="text-muted-foreground text-xs"
+                  onClick={() => setMostrarOutras(true)}
                 >
-                  Outros ({contagemPorCategoria.outros})
+                  Ver outras categorias ›
                 </Button>
+              ) : (
+                <>
+                  {contagemPorCategoria.produtos.skus > 0 && (
+                    <Button
+                      variant={filters.categoria === 'PRODUTOS' ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex flex-col h-auto py-1.5 px-3 items-center gap-0"
+                      onClick={() => setFilters(prev => ({ ...prev, categoria: 'PRODUTOS' }))}
+                    >
+                      <span className="text-xs font-medium">Produtos</span>
+                      <span className="text-[10px] font-normal opacity-70 leading-tight">
+                        {contagemPorCategoria.produtos.skus.toLocaleString('pt-BR')} SKUs · {contagemPorCategoria.produtos.pecas.toLocaleString('pt-BR')} peças
+                      </span>
+                    </Button>
+                  )}
+
+                  {contagemPorCategoria.lentes_contato.skus > 0 && (
+                    <Button
+                      variant={filters.categoria === 'LENTES_CONTATO' ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex flex-col h-auto py-1.5 px-3 items-center gap-0"
+                      onClick={() => setFilters(prev => ({ ...prev, categoria: 'LENTES_CONTATO' }))}
+                    >
+                      <span className="text-xs font-medium">Lentes de Contato</span>
+                      <span className="text-[10px] font-normal opacity-70 leading-tight">
+                        {contagemPorCategoria.lentes_contato.skus.toLocaleString('pt-BR')} SKUs · {contagemPorCategoria.lentes_contato.pecas.toLocaleString('pt-BR')} peças
+                      </span>
+                    </Button>
+                  )}
+
+                  {contagemPorCategoria.outros.skus > 0 && (
+                    <Button
+                      variant={filters.categoria === 'OUTROS' ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex flex-col h-auto py-1.5 px-3 items-center gap-0"
+                      onClick={() => setFilters(prev => ({ ...prev, categoria: 'OUTROS' }))}
+                    >
+                      <span className="text-xs font-medium">Outros</span>
+                      <span className="text-[10px] font-normal opacity-70 leading-tight">
+                        {contagemPorCategoria.outros.skus.toLocaleString('pt-BR')} SKUs · {contagemPorCategoria.outros.pecas.toLocaleString('pt-BR')} peças
+                      </span>
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground text-xs"
+                    onClick={() => {
+                      setMostrarOutras(false);
+                      setFilters(prev => ({ ...prev, categoria: 'ARMACOES' }));
+                    }}
+                  >
+                    ‹ Ocultar
+                  </Button>
+                </>
               )}
             </div>
           )}
@@ -490,18 +545,28 @@ export default function VisaoEstoquePage() {
       {/* Conteúdo Principal */}
       {!loading && itensProcessados.length > 0 && (
         <>
-          {/* Info da Empresa */}
+          {/* Info da Empresa (B.2) */}
           {empresaSelecionada && (
             <Alert className="bg-primary/5 border-primary/20">
               <Info className="h-4 w-4 text-primary" />
               <AlertDescription>
                 <div><strong>{empresaSelecionada.nome}</strong></div>
                 <div className="text-xs mt-1">
-                  Estoque: {metricas.totalPecas.toLocaleString('pt-BR')} peças • {metricas.totalSkusComEstoque.toLocaleString('pt-BR')} SKUs <span className="text-muted-foreground">(posição agora)</span>
+                  Armações: {metricas.totalPecas.toLocaleString('pt-BR')} peças • {metricas.totalSkusComEstoque.toLocaleString('pt-BR')} SKUs <span className="text-muted-foreground">(posição agora)</span>
                 </div>
                 <div className="text-xs">
                   Vendas / giro: últimos {diasPeriodo} dias
                 </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Visão informativa — exibido quando categoria ≠ ARMACOES */}
+          {filters.categoria !== 'ARMACOES' && (
+            <Alert className="border-muted-foreground/20 bg-muted/40">
+              <Info className="h-4 w-4 text-muted-foreground" />
+              <AlertDescription className="text-muted-foreground text-sm">
+                Visão informativa — gestão de mix se aplica apenas a Armações
               </AlertDescription>
             </Alert>
           )}
@@ -591,13 +656,11 @@ export default function VisaoEstoquePage() {
             <CardHeader>
               <CardTitle className="text-lg">
                 Detalhamento do Estoque
-                {filters.categoria !== 'TODOS' && (
-                  <Badge variant="secondary" className="ml-2">
-                    {filters.categoria === 'ARMACOES' ? 'Armações' : 
-                     filters.categoria === 'LENTES' ? 'Lentes' : 
-                     filters.categoria === 'ACESSORIOS' ? 'Acessórios' : 'Outros'}
-                  </Badge>
-                )}
+                <Badge variant="secondary" className="ml-2">
+                  {filters.categoria === 'ARMACOES' ? 'Armações' :
+                   filters.categoria === 'LENTES_CONTATO' ? 'Lentes de Contato' :
+                   filters.categoria === 'PRODUTOS' ? 'Produtos' : 'Outros'}
+                </Badge>
               </CardTitle>
               <CardDescription>
                 {itensComEstoque.length} itens com estoque positivo
