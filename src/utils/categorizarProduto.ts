@@ -1,62 +1,80 @@
 // src/utils/categorizarProduto.ts
 // FONTE ÚNICA DE VERDADE para categorização de produtos por tipo ERP
 //
-// Categorias: ARMACOES | LENTES | ACESSORIOS | OUTROS
-// Subcategorias: AR_RX | AR_SOLAR | LENTES | ACESSORIOS | OUTROS
-// Baseado nos prefixos do ERP Firebird:
-//   AR = Armações, LG = Lentes de Grau, GC = Grau de Contato,
-//   LC = Lentes de Contato, AC = Acessórios, SOL = Solar, OC = Óculos Solar
+// Categorias (Bridge B.4.1+):
+//   ARMACOES      — AR (RX) + SOL/OC (Solar). Gestão ativa.
+//   LENTES_GRAU   — LG. Oculto da UI (informativo apenas, sem aba).
+//   LENTES_CONTATO — GC + LC. Informativo.
+//   PRODUTOS      — AC (era ACESSORIOS no ERP). Informativo.
+//   OUTROS        — sem correspondência ou sem movimentação em 360d. Informativo.
+//
+// Prefixos ERP: AR=Armações, SOL/OC=Solar, LG=Lentes de Grau,
+//               GC=Grau de Contato, LC=Lentes de Contato, AC=Acessórios
+//
+// Compatibilidade: Bridge pré-B.4.1 ainda pode enviar tipos legados
+//   (LENTES, ACESSORIOS). Mapeados para os novos tipos abaixo.
 
-export type CategoriaProduto = 'ARMACOES' | 'LENTES' | 'ACESSORIOS' | 'OUTROS';
+export type CategoriaProduto = 'ARMACOES' | 'LENTES_GRAU' | 'LENTES_CONTATO' | 'PRODUTOS' | 'OUTROS';
 export type SubcategoriaProduto = 'AR_RX' | 'AR_SOLAR' | 'LENTES' | 'LENTES_GRAU' | 'LENTES_CONTATO' | 'ACESSORIOS' | 'OUTROS';
 
 /**
- * Categoriza um produto com base no campo "tipo" retornado pelo ERP.
- * Aceita também descrição como fallback (para /estoque/completo que pode não ter tipo).
+ * Categoriza um produto com base no campo "tipo" retornado pelo Bridge.
+ * Suporta tipos novos (B.4.1) e legados (pré-B.4.1) e prefixos ERP brutos.
  */
 export function categorizarProduto(tipo: string | null | undefined): CategoriaProduto {
   const t = (tipo || '').toUpperCase().trim();
   if (!t) return 'OUTROS';
 
-  // SOLAR: SOL, OC — ANTES de armações para não ser capturado pelo AR genérico
+  // Bridge B.4.1 — mapeamento direto de tipo explícito
+  if (t === 'ARMACOES') return 'ARMACOES';
+  if (t === 'LENTES_GRAU') return 'LENTES_GRAU';
+  if (t === 'LENTES_CONTATO') return 'LENTES_CONTATO';
+  if (t === 'PRODUTOS') return 'PRODUTOS';
+  if (t === 'OUTROS') return 'OUTROS';
+
+  // Solar (SOL, OC) — antes de AR para não cair no match genérico de ARMA
   if (
     t === 'SOL' || t === 'OC' ||
     t.startsWith('SOL ') || t.startsWith('SOL-') ||
     t.startsWith('OC ') || t.startsWith('OC-') ||
     t.includes('SOLAR') || t.includes('OCULOS SOL')
-  ) {
-    return 'ARMACOES'; // Categoria macro continua ARMACOES
-  }
+  ) return 'ARMACOES';
 
-  // ARMAÇÕES: AR, ARM, ou contém ARMAC/ARMAÇÃO/ARMA
+  // Armações RX (AR, ARM)
   if (
     t === 'AR' || t === 'ARM' ||
     t.startsWith('AR ') || t.startsWith('AR-') ||
     t.startsWith('ARM ') || t.startsWith('ARM-') ||
     t.includes('ARMAC') || t.includes('ARMAÇÃO') || t.includes('ARMA')
-  ) {
-    return 'ARMACOES';
-  }
+  ) return 'ARMACOES';
 
-  // LENTES: LG, GC, LC
+  // Lentes de Grau (LG) — oculto da UI
   if (
-    t === 'LG' || t === 'GC' || t === 'LC' ||
+    t === 'LG' ||
     t.startsWith('LG ') || t.startsWith('LG-') ||
-    t.startsWith('GC ') || t.startsWith('GC-') ||
-    t.startsWith('LC ') || t.startsWith('LC-') ||
-    t.includes('LENT') || t.includes('GRAU') || t.includes('CONTATO')
-  ) {
-    return 'LENTES';
-  }
+    t.includes('GRAU')
+  ) return 'LENTES_GRAU';
 
-  // ACESSÓRIOS: AC
+  // Lentes de Contato / Grau de Contato (LC, GC)
+  if (
+    t === 'LC' || t === 'GC' ||
+    t.startsWith('LC ') || t.startsWith('LC-') ||
+    t.startsWith('GC ') || t.startsWith('GC-') ||
+    t.includes('CONTATO')
+  ) return 'LENTES_CONTATO';
+
+  // Bridge pré-B.4.1 tipo genérico 'LENTES' → fallback LENTES_CONTATO
+  if (t === 'LENTES' || t.includes('LENT')) return 'LENTES_CONTATO';
+
+  // Acessórios (AC) → PRODUTOS (vocabulário B.4.1)
   if (
     t === 'AC' ||
     t.startsWith('AC ') || t.startsWith('AC-') ||
     t.includes('ACESS') || t.includes('ACC')
-  ) {
-    return 'ACESSORIOS';
-  }
+  ) return 'PRODUTOS';
+
+  // Bridge pré-B.4.1 tipo genérico 'ACESSORIOS' → PRODUTOS
+  if (t === 'ACESSORIOS') return 'PRODUTOS';
 
   return 'OUTROS';
 }
