@@ -281,6 +281,9 @@ export function useEstoqueUnificado() {
     }
   }, [defaultEmpresa, filters.empresa, setFilters]);
 
+  // Ref para evitar disparos duplicados do auto-load
+  const autoLoadingRef = useRef(false);
+
   // Estado local apenas para mapeamentos (são globais e não dependem de empresa)
   const [mapeamentoFornecedor, setMapeamentoFornecedor] = useState<Map<string, string>>(new Map());
   const [configCapacidade, setConfigCapacidade] = useState<CapacidadeExpositorRow[]>([]);
