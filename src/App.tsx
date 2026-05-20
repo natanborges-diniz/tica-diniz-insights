@@ -14,6 +14,7 @@ import SalesDashboard from "./pages/SalesDashboard";
 import VisaoEstoquePage from "./pages/estoque/VisaoEstoquePage";
 import AnaliseOTBPage from "./pages/estoque/AnaliseOTBPage";
 import CapacidadesExpositorPage from "./pages/estoque/CapacidadesExpositorPage";
+import { EstoqueErrorBoundary } from "@/components/estoque/EstoqueErrorBoundary";
 import SalesFamilyDashboard from "./pages/SalesFamilyDashboard";
 import OsDashboard from "./pages/OsDashboard";
 import PedidoFornecedorPage from "./pages/PedidoFornecedorPage";
@@ -82,8 +83,8 @@ const App = () => (
 
                 {/* Estoque */}
                 <Route element={<ModuleGuard module="estoque" />}>
-                  <Route path="/estoque" element={<VisaoEstoquePage />} />
-                  <Route path="/estoque/otb" element={<AnaliseOTBPage />} />
+                  <Route path="/estoque" element={<EstoqueErrorBoundary><VisaoEstoquePage /></EstoqueErrorBoundary>} />
+                  <Route path="/estoque/otb" element={<EstoqueErrorBoundary><AnaliseOTBPage /></EstoqueErrorBoundary>} />
                   <Route path="/estoque/capacidades" element={<CapacidadesExpositorPage />} />
                 </Route>
 

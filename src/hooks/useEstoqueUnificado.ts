@@ -722,9 +722,18 @@ export function useEstoqueUnificado() {
         lacunaNaoPreenchivel = naoPreenchivel;
 
         skusARepor = alocados
-          .map(({ codSku, qtdAComprar, motivo }) =>
-            buildSkuView(skuMap.get(codSku)!, 'REPOR', qtdAComprar, motivo)
-          )
+          .map(({ codSku, qtdAComprar, motivo }) => {
+            const skuItem = skuMap.get(codSku);
+            if (!skuItem) {
+              console.warn(
+                `[resumoPorMarca] SKU não encontrado no skuMap: ` +
+                `codSku=${codSku}, marca=${marca}, qtdAComprar=${qtdAComprar}`
+              );
+              return null;
+            }
+            return buildSkuView(skuItem, 'REPOR', qtdAComprar, motivo);
+          })
+          .filter((s): s is SkuARepor => s !== null)
           .sort((a, b) => {
             const ordemPrio = { URGENTE: 0, ALTA: 1, MEDIA: 2, BAIXA: 3 } as const;
             return ordemPrio[a.prioridade] - ordemPrio[b.prioridade] || b.qtdAComprar - a.qtdAComprar;

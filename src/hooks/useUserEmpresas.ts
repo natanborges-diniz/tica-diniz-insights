@@ -63,7 +63,8 @@ export function useUserEmpresas(): UseUserEmpresasReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]); // intencional: re-fetch apenas quando o ID muda, não a cada TOKEN_REFRESHED que recria o objeto
 
   useEffect(() => {
     load();
