@@ -23,7 +23,7 @@ const ZEISS_FORMATOS: { code: string; label: string; file: string }[] = [
   { code: "vis13", label: "vis13", file: "VIS13.png" },
   { code: "vis14", label: "vis14", file: "VIS14.png" },
   { code: "vis15", label: "vis15", file: "VIS15.png" },
-  { code: "60P", label: "60P", file: "60P.png" },
+  { code: "6OP", label: "6OP", file: "6OP.png" },
   { code: "1RA", label: "1RA", file: "1RA.png" },
 ];
 
