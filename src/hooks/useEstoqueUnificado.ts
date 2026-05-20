@@ -6,7 +6,7 @@
 // - /vendas/analise-sku: Métricas de giro/vendas para "Análise OTB"
 // - Dados são MESCLADOS pelo cod_sku para ter visão completa
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useUserEmpresas } from "./useUserEmpresas";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
