@@ -1137,10 +1137,17 @@ const PedidoZeissPage: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div>
-                    <Label className="text-[10px] uppercase text-muted-foreground">OS</Label>
-                    <Input value={osNumero} onChange={e => setOsNumero(e.target.value)} className="h-8 text-sm font-mono" />
-                    <span className="text-[9px] text-muted-foreground">Pré-preenchido da OS. Editável se necessário.</span>
+                  <div className="rounded-md border-2 border-primary/40 bg-primary/5 p-2">
+                    <Label className="text-[10px] uppercase text-primary font-semibold flex items-center gap-1">
+                      OS (enviada no payload) <span className="text-[9px] font-normal text-muted-foreground">editável</span>
+                    </Label>
+                    <Input
+                      value={osNumero}
+                      onChange={e => setOsNumero(e.target.value)}
+                      className="h-9 text-sm font-mono font-bold border-primary/30 focus-visible:ring-primary"
+                      placeholder="Nº da OS"
+                    />
+                    <span className="text-[9px] text-muted-foreground">Pré-preenchido da OS {codOs}. Altere se for enviar outra OS para a Zeiss.</span>
                   </div>
                   <div>
                     <Label className="text-[10px] uppercase text-muted-foreground">Paciente</Label>
