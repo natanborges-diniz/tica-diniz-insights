@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`calcularMixIdealMarcas — pecasAtuais exclui dead stock > snapshot com dead stock 1`] = `
+[
+  {
+    "curvaMarca": "C",
+    "decisao": "REPOR_REFERENCIA",
+    "faturamento6m": 1000,
+    "incluidaNoMix": true,
+    "lacuna": 0,
+    "marca": "BRAND",
+    "pecasAtuais": 8,
+    "pecasIdeais": 5,
+    "pecasVendidas6m": 10,
+    "taxaPerformance": 0.5,
+    "vendaDiaria": 0.05555555555555555,
+  },
+]
+`;
