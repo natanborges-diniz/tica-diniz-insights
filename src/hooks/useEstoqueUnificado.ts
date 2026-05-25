@@ -43,6 +43,7 @@ export interface ItemEstoque {
   qtdVendidos: number;
   totalVendido: number;
   diasEmEstoque: number;
+  diasDesdeUltimaVenda: number;
   vendaDiaria: number;
   coberturaDias: number;
   diasAlvo: number;
@@ -184,6 +185,7 @@ export interface MetricasEstoque {
   deadStockPecas: number;
   deadStockValor: number;
   deadStockPercentual: number;
+  deadStockSkus: number;
   totalSkus: number;
   fornecedoresDistintos: number;
   marcasDistintas: number;
@@ -360,8 +362,9 @@ export function useEstoqueUnificado() {
       const precoVenda = estoqueItem?.precoVenda ?? vendas?.precoVendaFinal ?? 0;
       const valorEstoqueCusto = estoqueItem?.valorEstoqueCusto ?? (estoqueAtual * precoCusto);
       const diasEmEstoque = estoqueItem?.diasEmEstoque ?? (vendas?.diasDesdeUltimaVenda ?? 0);
+      const diasDesdeUltimaVenda = estoqueItem?.diasDesdeUltimaVenda ?? 0;
       const acaoSugerida = estoqueItem?.acaoSugerida ?? '';
-      const isDeadStock = estoqueItem?.isDeadStock ?? false;
+      const isDeadStock = estoqueAtual > 0 && diasDesdeUltimaVenda > 180;
 
       const categoria = categorizarProduto(tipo);
       // Subcategoria: prefere o que veio do Bridge (estoque ou vendas), fallback regex
@@ -446,6 +449,7 @@ export function useEstoqueUnificado() {
         qtdVendidos,
         totalVendido,
         diasEmEstoque,
+        diasDesdeUltimaVenda,
         vendaDiaria,
         coberturaDias,
         diasAlvo,
@@ -520,7 +524,8 @@ export function useEstoqueUnificado() {
     const deadStockPecas = deadStock.reduce((acc, i) => acc + i.estoqueAtual, 0);
     const deadStockValor = deadStock.reduce((acc, i) => acc + i.valorEstoqueCusto, 0);
     const deadStockPercentual = totalPecas > 0 ? (deadStockPecas / totalPecas) * 100 : 0;
-    
+    const deadStockSkus = deadStock.length;
+
     const totalSkus = itensFiltrados.length;
     const fornecedoresDistintos = new Set(comEstoque.map(i => i.fornecedor)).size;
     const marcasDistintas = new Set(comEstoque.map(i => i.marca)).size;
@@ -540,7 +545,7 @@ export function useEstoqueUnificado() {
     
     return {
       totalPecas, totalSkusComEstoque, valorTotalCusto,
-      deadStockPecas, deadStockValor, deadStockPercentual,
+      deadStockPecas, deadStockValor, deadStockPercentual, deadStockSkus,
       totalSkus, fornecedoresDistintos, marcasDistintas,
       pecasLiquidar, pecasManter, pecasComprar,
       totalVendido, totalVendido6mPecas, totalOtb, totalOtbValor,
@@ -548,6 +553,16 @@ export function useEstoqueUnificado() {
       diasPeriodo: DIAS_PERIODO,
     };
   }, [itensFiltrados]);
+
+  const estoqueEfetivoArmacoes = useMemo(() => {
+    return itensProcessados
+      .filter(item =>
+        item.categoria === 'ARMACOES'
+        && item.estoqueAtual > 0
+        && !item.isDeadStock
+      )
+      .reduce((soma, item) => soma + item.estoqueAtual, 0);
+  }, [itensProcessados]);
 
   // Listas para filtros
   const listaFornecedores = useMemo(() => {
@@ -945,6 +960,7 @@ export function useEstoqueUnificado() {
     dadosBrutos, dadosEstoqueCompleto, dadosVendasSku,
     itensProcessados, itensFiltrados, itensComEstoque,
     metricas, contagemPorCategoria, diasPeriodo: DIAS_PERIODO,
+    estoqueEfetivoArmacoes,
     listaFornecedores, listaMarcas, listaAcoes, marcasSemFornecedor,
     mixIdealCategoria, mixIdealMarca, mixIdealMarcas, lacunasNaoPreenchiveis,
     resumoPorMarca, estoqueDoenteAgrupado, listaCompraFlat,
