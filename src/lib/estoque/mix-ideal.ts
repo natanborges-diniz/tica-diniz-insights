@@ -49,6 +49,7 @@ export function calcularMixIdealMarcas(
     qtdVendidos: number;
     totalVendido: number;
     estoqueAtual: number;
+    isDeadStock?: boolean;
   }>,
   opts?: {
     coberturaAlvo?: Record<'A' | 'B' | 'C', number>;
@@ -69,7 +70,7 @@ export function calcularMixIdealMarcas(
     const a = aggByMarca.get(k) ?? { pecasVendidas: 0, faturamento: 0, pecasAtuais: 0, skusComVenda: 0, skusAtivos: 0 };
     a.pecasVendidas += it.qtdVendidos;
     a.faturamento += it.totalVendido;
-    a.pecasAtuais += Math.max(0, it.estoqueAtual);
+    if (!it.isDeadStock) a.pecasAtuais += Math.max(0, it.estoqueAtual);
     if (it.qtdVendidos > 0) a.skusComVenda += 1;
     if (it.estoqueAtual > 0 || it.qtdVendidos > 0) a.skusAtivos += 1;
     aggByMarca.set(k, a);

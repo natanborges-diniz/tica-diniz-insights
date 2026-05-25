@@ -57,9 +57,10 @@ export interface EstoqueCompleto {
   valorEstoqueCusto: number; // calculado: qtd * custo
   dataUltimaEntrada: string | null;
   dataUltimaVenda: string | null;
+  diasDesdeUltimaVenda: number; // dias desde última venda (0 se nunca vendeu)
   diasEmEstoque: number; // calculado pelo backend (dias desde última entrada)
   acaoSugerida: string; // calculado pelo backend baseado em dias_estoque
-  isDeadStock: boolean; // dias_estoque > 180
+  isDeadStock: boolean; // estoqueAtual > 0 && diasDesdeUltimaVenda > 180 (Princípio #19)
   // Subcategoria do Bridge (fallback regex)
   subcategoria: SubcategoriaProduto;
   // Métricas de giro real (Bridge). null quando não há vendas no período
@@ -141,6 +142,19 @@ export async function getEstoqueCompleto(
     const rawCodSku = r.cod_sku ?? r.cod_armacao ?? 0;
     const codSku = typeof rawCodSku === 'string' ? parseInt(rawCodSku, 10) : rawCodSku;
     
+    const diasDesdeUltimaVenda = (() => {
+      if (r.dias_sem_venda !== undefined && r.dias_sem_venda !== null) {
+        return Math.max(0, r.dias_sem_venda);
+      }
+      if (r.data_ultima_venda) {
+        const dataVenda = new Date(r.data_ultima_venda);
+        if (!isNaN(dataVenda.getTime())) {
+          return Math.max(0, Math.floor((hoje.getTime() - dataVenda.getTime()) / (1000 * 60 * 60 * 24)));
+        }
+      }
+      return 0;
+    })();
+
     return {
       // Converter para número garantindo consistência
       codSku: isNaN(codSku) ? 0 : codSku,
@@ -169,10 +183,11 @@ export async function getEstoqueCompleto(
       valorEstoqueCusto: quantidadeEstoque * precoCusto,
       dataUltimaEntrada: r.data_ultima_entrada ?? null,
       dataUltimaVenda: r.data_ultima_venda ?? null,
+      diasDesdeUltimaVenda,
       diasEmEstoque,
       acaoSugerida,
-      // Dead stock: mais de 180 dias em estoque
-      isDeadStock: diasEmEstoque > 180,
+      // Dead stock: estoque positivo sem venda há mais de 180 dias
+      isDeadStock: quantidadeEstoque > 0 && diasDesdeUltimaVenda > 180,
       // Subcategoria: prefere o backend; fallback regex em tipo, depois descrição
       subcategoria: (() => {
         const sub = (r.subcategoria ?? '').toString().toUpperCase().trim();
