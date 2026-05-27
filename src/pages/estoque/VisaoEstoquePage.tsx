@@ -36,14 +36,18 @@ import { registerAction, unregisterAction } from "@/lib/actionCatalog";
 import { useNavigate } from "react-router-dom";
 
 // KPI Cards Component
+type FiltroSubcategoria = 'TODAS' | 'AR_RX' | 'AR_SOLAR';
+
 function EstoqueKPICards({
   metricas,
   categoria,
   estoqueEfetivoArmacoes,
+  filtroAtivo,
 }: {
   metricas: ReturnType<typeof useEstoqueUnificado>["metricas"];
   categoria: string;
   estoqueEfetivoArmacoes: number;
+  filtroAtivo: FiltroSubcategoria;
 }) {
   const isArmacoes = categoria === "ARMACOES";
   const labelCategoria =
@@ -51,6 +55,13 @@ function EstoqueKPICards({
     categoria === "LENTES_CONTATO" ? "Lentes de Contato" :
     categoria === "PRODUTOS" ? "Produtos" :
     categoria === "OUTROS" ? "Outros" : "Estoque";
+
+  // Fundo sutil dos cards quando filtro RX/Solar está ativo
+  const cardBg = isArmacoes && filtroAtivo !== 'TODAS'
+    ? filtroAtivo === 'AR_RX'
+      ? 'border-blue-200 bg-blue-50/60'
+      : 'border-amber-200 bg-amber-50/60'
+    : '';
 
   return (
     <div className="space-y-2">
@@ -61,8 +72,20 @@ function EstoqueKPICards({
           <Badge variant="secondary">{labelCategoria}</Badge>
         </div>
       )}
+      {isArmacoes && filtroAtivo !== 'TODAS' && (
+        <div className="flex items-center gap-2 text-xs">
+          <Filter className="h-3 w-3 text-muted-foreground" />
+          <span className="text-muted-foreground">KPIs filtrados por subcategoria:</span>
+          <Badge
+            variant="secondary"
+            className={filtroAtivo === 'AR_RX' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}
+          >
+            {filtroAtivo === 'AR_RX' ? 'Armações RX' : 'Óculos Solar'}
+          </Badge>
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
+        <Card className={cardBg}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total em Estoque</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
@@ -74,7 +97,7 @@ function EstoqueKPICards({
         </Card>
 
         {isArmacoes && (
-          <Card title="Peças de Armações com estoque positivo que não são Dead Stock.">
+          <Card className={cardBg} title="Peças de Armações com estoque positivo que não são Dead Stock.">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Estoque Efetivo</CardTitle>
               <ShieldCheck className="h-4 w-4 text-green-600" />
@@ -89,7 +112,7 @@ function EstoqueKPICards({
           </Card>
         )}
 
-        <Card>
+        <Card className={cardBg}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Valor em Estoque</CardTitle>
             <BoxIcon className="h-4 w-4 text-muted-foreground" />
@@ -103,7 +126,7 @@ function EstoqueKPICards({
         </Card>
 
         {isArmacoes && (
-          <Card title="SKUs com estoque > 0 e sem venda há mais de 180 dias (Princípio #19).">
+          <Card className={cardBg} title="SKUs com estoque > 0 e sem venda há mais de 180 dias (Princípio #19).">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Dead Stock</CardTitle>
               <AlertTriangle className="h-4 w-4 text-accent-foreground" />
@@ -120,7 +143,7 @@ function EstoqueKPICards({
           </Card>
         )}
 
-        <Card>
+        <Card className={cardBg}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Fornecedores</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -132,7 +155,7 @@ function EstoqueKPICards({
         </Card>
 
         {isArmacoes && (
-          <Card>
+          <Card className={cardBg}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Peças p/ Liquidar</CardTitle>
               <AlertTriangle className="h-4 w-4 text-destructive" />
@@ -362,6 +385,48 @@ export default function VisaoEstoquePage() {
     return itensComEstoque.filter(item => item.subcategoria === subcategoriaFiltroVisual);
   }, [itensComEstoque, filters.categoria, subcategoriaFiltroVisual]);
 
+  // Contador da aba Armações filtrado por subcategoria (usa itensProcessados — não depende de outros filtros)
+  const contagemArmacoesVisiveis = useMemo(() => {
+    if (subcategoriaFiltroVisual === 'TODAS') return contagemPorCategoria.armacoes;
+    const itens = itensProcessados.filter(i =>
+      i.estoqueAtual > 0 &&
+      i.categoria === 'ARMACOES' &&
+      i.subcategoria === subcategoriaFiltroVisual
+    );
+    return { skus: itens.length, pecas: itens.reduce((acc, i) => acc + i.estoqueAtual, 0) };
+  }, [contagemPorCategoria.armacoes, itensProcessados, subcategoriaFiltroVisual]);
+
+  // Estoque Efetivo filtrado pela subcategoria ativa
+  const estoqueEfetivoVisivel = useMemo(() => {
+    if (filters.categoria !== 'ARMACOES' || subcategoriaFiltroVisual === 'TODAS') return estoqueEfetivoArmacoes;
+    return itensParaTabela.filter(i => !i.isDeadStock).reduce((acc, i) => acc + i.estoqueAtual, 0);
+  }, [estoqueEfetivoArmacoes, itensParaTabela, subcategoriaFiltroVisual, filters.categoria]);
+
+  // Métricas dos KPIs filtradas pela subcategoria ativa (Motor de mix-ideal NÃO é afetado)
+  const metricasVisiveis = useMemo(() => {
+    if (filters.categoria !== 'ARMACOES' || subcategoriaFiltroVisual === 'TODAS') return metricas;
+    const base = itensParaTabela;
+    const totalPecas = base.reduce((acc, i) => acc + i.estoqueAtual, 0);
+    const totalSkusComEstoque = base.length;
+    const valorTotalCusto = base.reduce((acc, i) => acc + i.valorEstoqueCusto, 0);
+    const deadStock = base.filter(i => i.isDeadStock);
+    const deadStockPecas = deadStock.reduce((acc, i) => acc + i.estoqueAtual, 0);
+    const deadStockValor = deadStock.reduce((acc, i) => acc + i.valorEstoqueCusto, 0);
+    const deadStockPercentual = totalPecas > 0 ? (deadStockPecas / totalPecas) * 100 : 0;
+    const deadStockSkus = deadStock.length;
+    const fornecedoresDistintos = new Set(base.map(i => i.fornecedor)).size;
+    const marcasDistintas = new Set(base.map(i => i.marca)).size;
+    const pecasLiquidar = base
+      .filter(i => i.acaoSugerida.toUpperCase().includes('LIQUIDA'))
+      .reduce((acc, i) => acc + i.estoqueAtual, 0);
+    return {
+      ...metricas,
+      totalPecas, totalSkusComEstoque, valorTotalCusto,
+      deadStockPecas, deadStockValor, deadStockPercentual, deadStockSkus,
+      fornecedoresDistintos, marcasDistintas, pecasLiquidar,
+    };
+  }, [metricas, itensParaTabela, subcategoriaFiltroVisual, filters.categoria]);
+
   const hoje = new Date();
   const dataFimInsights = hoje.toISOString().split('T')[0];
   const dataInicioInsights = new Date(hoje.getTime() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -482,7 +547,7 @@ export default function VisaoEstoquePage() {
               >
                 <span className="text-xs font-medium">Armações</span>
                 <span className="text-[10px] font-normal opacity-70 leading-tight">
-                  {contagemPorCategoria.armacoes.skus.toLocaleString('pt-BR')} SKUs · {contagemPorCategoria.armacoes.pecas.toLocaleString('pt-BR')} peças
+                  {contagemArmacoesVisiveis.skus.toLocaleString('pt-BR')} SKUs · {contagemArmacoesVisiveis.pecas.toLocaleString('pt-BR')} peças
                 </span>
               </Button>
 
@@ -695,7 +760,12 @@ export default function VisaoEstoquePage() {
           />
 
           {/* KPIs */}
-          <EstoqueKPICards metricas={metricas} categoria={filters.categoria} estoqueEfetivoArmacoes={estoqueEfetivoArmacoes} />
+          <EstoqueKPICards
+            metricas={metricasVisiveis}
+            categoria={filters.categoria}
+            estoqueEfetivoArmacoes={estoqueEfetivoVisivel}
+            filtroAtivo={subcategoriaFiltroVisual}
+          />
 
           {/* Tabela */}
           <Card>
