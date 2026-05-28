@@ -314,6 +314,28 @@ const PedidoHaytekPage: React.FC = () => {
       });
   }, [codEmpresa]);
 
+  // ── Check existing order (HAYTEK) ──
+  useEffect(() => {
+    if (!codOs) return;
+    (async () => {
+      const { data: rows } = await supabase
+        .from("pedidos_fornecedor")
+        .select("numero_pedido, status, created_at")
+        .eq("cod_os", codOs)
+        .eq("fornecedor", "HAYTEK")
+        .order("created_at", { ascending: false });
+      if (rows && rows.length > 0) {
+        const confirmado = rows.find((r: any) => r.numero_pedido);
+        if (confirmado) {
+          setPedidoExistente({ numero_pedido: (confirmado as any).numero_pedido, status: (confirmado as any).status || "" });
+        } else {
+          setPedidoExistente({ numero_pedido: null, status: (rows[0] as any).status || "ERRO" });
+        }
+      }
+    })();
+  }, [codOs]);
+
+
   // ── Auto-match when products + OS loaded ──
   useEffect(() => {
     if (!osData || produtos.length === 0) return;
