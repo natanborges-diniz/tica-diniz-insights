@@ -684,19 +684,15 @@ const PedidoZeissPage: React.FC = () => {
   const erpDescOd = os?.lenteOdDescricao;
   const erpDescOe = os?.lenteOeDescricao;
 
-  // ── Can submit ──
-  const blockingExistingOrder = !!pedidoExistente?.numero_pedido && !isNegativeStatusFn(pedidoExistente.status);
-  const canSubmit = !!produtoOd && confirmedProduct && !blockingExistingOrder && !enviando;
-
-  function isNegativeStatusFn(s: string) {
+  // ── Negative status helper (hoisted) ──
+  function isNegativeStatus(s: string) {
     const lower = (s || "").toLowerCase();
     return lower.includes("cancel") || lower.includes("rejeit") || lower.includes("falha") || lower.includes("recusa");
   }
 
-  const isNegativeStatus = (s: string) => {
-    const lower = (s || "").toLowerCase();
-    return lower.includes("cancel") || lower.includes("rejeit") || lower.includes("falha") || lower.includes("recusa");
-  };
+  // ── Can submit ──
+  const blockingExistingOrder = !!pedidoExistente?.numero_pedido && !isNegativeStatus(pedidoExistente.status);
+  const canSubmit = !!produtoOd && confirmedProduct && !blockingExistingOrder && !enviando;
 
   // ============================================
   // RENDER: Pedido já enviado (bloqueia novo envio — igual à Hoya)
