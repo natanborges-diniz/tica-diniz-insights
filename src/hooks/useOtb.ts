@@ -166,8 +166,8 @@ export function useOtb() {
     dadosBrutos.forEach(sku => {
       const cat = categorizarProduto(sku.tipo);
       if (cat === 'ARMACOES') armacoes++;
-      else if (cat === 'LENTES') lentes++;
-      else if (cat === 'ACESSORIOS') acessorios++;
+      else if (cat === 'LENTES_GRAU' || cat === 'LENTES_CONTATO') lentes++;
+      else if (cat === 'PRODUTOS') acessorios++;
       else outros++;
     });
     
