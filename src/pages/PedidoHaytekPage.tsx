@@ -114,6 +114,19 @@ const PedidoHaytekPage: React.FC = () => {
   const [autoFillSource, setAutoFillSource] = useState<AutoFillSource>(null);
   const [matchResult, setMatchResult] = useState<HaytekMatchResult | null>(null);
   const [showCandidates, setShowCandidates] = useState(false);
+  const [buscaProduto, setBuscaProduto] = useState("");
+
+  const produtosFiltrados = useMemo(() => {
+    const q = buscaProduto.trim().toLowerCase();
+    if (!q) return produtos.slice(0, 50);
+    return produtos.filter(p =>
+      (p.product_id || "").toLowerCase().includes(q) ||
+      (p.nome_comercial || "").toLowerCase().includes(q) ||
+      (p.design || "").toLowerCase().includes(q) ||
+      (p.linha || "").toLowerCase().includes(q) ||
+      (p.material || "").toLowerCase().includes(q)
+    ).slice(0, 100);
+  }, [produtos, buscaProduto]);
 
   // ── Prescrição OD/OE ──
   const [prescOd, setPrescOd] = useState({ esferico: "", cilindrico: "", eixo: "", adicao: "", dnp: "", altura: "" });
@@ -771,27 +784,39 @@ const PedidoHaytekPage: React.FC = () => {
           {showCandidates && (
             <div className="space-y-2">
               <Label className="text-xs">Busca manual no catálogo ({produtos.length} produtos)</Label>
-              <Select onValueChange={(pid) => {
-                const p = produtos.find(pr => pr.product_id === pid);
-                if (p) {
-                  setProdutoSelecionado(p);
-                  setAutoFillSource("manual");
-                  setShowCandidates(false);
-                  const lensDesc = osData?.lenteOdDescricao || osData?.lenteOeDescricao || "";
-                  if (lensDesc) saveHaytekDepara(lensDesc, p);
-                }
-              }}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Selecionar produto..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {produtos.map((p) => (
-                    <SelectItem key={p.product_id} value={p.product_id}>
-                      {p.product_id} — {p.nome_comercial || p.design}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={buscaProduto}
+                  onChange={(e) => setBuscaProduto(e.target.value)}
+                  placeholder="Buscar por nome, design, linha ou código..."
+                  className="pl-9 h-9 text-xs"
+                />
+              </div>
+              <div className="max-h-56 overflow-y-auto border rounded-md divide-y">
+                {produtosFiltrados.map((p) => (
+                  <button
+                    key={p.product_id}
+                    type="button"
+                    onClick={() => {
+                      setProdutoSelecionado(p);
+                      setAutoFillSource("manual");
+                      setShowCandidates(false);
+                      const lensDesc = osData?.lenteOdDescricao || osData?.lenteOeDescricao || "";
+                      if (lensDesc) saveHaytekDepara(lensDesc, p);
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-accent transition-colors"
+                  >
+                    <span className="font-mono text-muted-foreground mr-2">{p.product_id}</span>
+                    <span className="font-medium">{p.nome_comercial || p.design}</span>
+                    {p.linha && <span className="text-muted-foreground ml-2">— {p.linha}</span>}
+                    {p.material && <Badge variant="secondary" className="text-[10px] ml-2">{p.material}</Badge>}
+                  </button>
+                ))}
+                {produtosFiltrados.length === 0 && (
+                  <p className="text-xs text-muted-foreground p-3">Nenhum produto encontrado</p>
+                )}
+              </div>
             </div>
           )}
         </CardContent>
