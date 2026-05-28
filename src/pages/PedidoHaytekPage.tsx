@@ -114,6 +114,19 @@ const PedidoHaytekPage: React.FC = () => {
   const [autoFillSource, setAutoFillSource] = useState<AutoFillSource>(null);
   const [matchResult, setMatchResult] = useState<HaytekMatchResult | null>(null);
   const [showCandidates, setShowCandidates] = useState(false);
+  const [buscaProduto, setBuscaProduto] = useState("");
+
+  const produtosFiltrados = useMemo(() => {
+    const q = buscaProduto.trim().toLowerCase();
+    if (!q) return produtos.slice(0, 50);
+    return produtos.filter(p =>
+      (p.product_id || "").toLowerCase().includes(q) ||
+      (p.nome_comercial || "").toLowerCase().includes(q) ||
+      (p.design || "").toLowerCase().includes(q) ||
+      (p.linha || "").toLowerCase().includes(q) ||
+      (p.material || "").toLowerCase().includes(q)
+    ).slice(0, 100);
+  }, [produtos, buscaProduto]);
 
   // ── Prescrição OD/OE ──
   const [prescOd, setPrescOd] = useState({ esferico: "", cilindrico: "", eixo: "", adicao: "", dnp: "", altura: "" });
