@@ -71,6 +71,44 @@ export const HaytekTrackingDetail: React.FC<Props> = ({ tracking, sentPayload, t
   const deliveries: any[] = Array.isArray(t.deliveries) ? t.deliveries : [];
   const payment = t.payment;
 
+  // ── Frete / Envio ──
+  const shippingRoot: any =
+    get<any>(t, "shipping", "freight", "envio", "frete", "delivery") ||
+    (deliveries.length > 0 ? deliveries[0] : null) ||
+    {};
+  const carrier = get<string>(shippingRoot, "carrier", "transportadora", "shippingCompany", "carrierName")
+    ?? get<string>(t, "carrier", "transportadora");
+  const trackingCode = get<string>(shippingRoot, "trackingCode", "trackingNumber", "tracking", "code", "codigoRastreio", "codigo")
+    ?? get<string>(t, "trackingCode", "trackingNumber");
+  const trackingUrl = get<string>(shippingRoot, "trackingUrl", "url", "link", "urlRastreio")
+    ?? get<string>(t, "trackingUrl");
+  const shippingMethod = get<string>(shippingRoot, "method", "shippingMethod", "modalidade", "service");
+  const estimatedDate = get<string>(shippingRoot, "estimatedDate", "estimatedDelivery", "previsao", "previsaoEntrega", "deliveryDate", "dataPrevista");
+  const shippedAt = get<string>(shippingRoot, "shippedAt", "dataEnvio", "sentAt", "dispatchedAt");
+  const shippingValueRaw = get<number | string>(shippingRoot, "value", "shippingValue", "freightValue", "valor", "amount", "cost", "price");
+  const shippingValue = shippingValueRaw != null ? Number(shippingValueRaw) : undefined;
+
+  const hasShipping = !!(carrier || trackingCode || shippingMethod || estimatedDate || shippedAt || shippingValue != null);
+
+  // ── Faturamento ──
+  const invoiceRoot: any = get<any>(t, "invoice", "billing", "faturamento", "nf", "nota") || {};
+  const invoiceNumber = get<string>(invoiceRoot, "number", "invoiceNumber", "numero", "nfNumber", "nfeNumber");
+  const invoiceSerie = get<string>(invoiceRoot, "serie", "series", "serieNf");
+  const invoiceKey = get<string>(invoiceRoot, "key", "chave", "accessKey", "chaveAcesso");
+  const invoiceUrl = get<string>(invoiceRoot, "url", "link", "danfe", "danfeUrl", "pdf");
+  const invoiceDate = get<string>(invoiceRoot, "date", "issuedAt", "dataEmissao", "emissao", "issueDate");
+  const invoiceTotalRaw = get<number | string>(invoiceRoot, "total", "amount", "value", "valor", "totalAmount") ?? get<number | string>(t, "total", "amount");
+  const invoiceTotal = invoiceTotalRaw != null ? Number(invoiceTotalRaw) : undefined;
+  const invoiceSubtotal = (() => { const v = get<number | string>(invoiceRoot, "subtotal", "subTotal"); return v != null ? Number(v) : undefined; })();
+  const invoiceDiscount = (() => { const v = get<number | string>(invoiceRoot, "discount", "desconto"); return v != null ? Number(v) : undefined; })();
+
+  const hasInvoice = !!(invoiceNumber || invoiceUrl || invoiceDate || invoiceTotal != null || invoiceKey);
+
+  const fmtBRL = (n?: number) =>
+    typeof n === "number" && Number.isFinite(n)
+      ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+      : "—";
+
   return (
     <div className="space-y-3 text-xs">
       {title && (
