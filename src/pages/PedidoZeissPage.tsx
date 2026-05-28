@@ -685,7 +685,8 @@ const PedidoZeissPage: React.FC = () => {
   const erpDescOe = os?.lenteOeDescricao;
 
   // ── Can submit ──
-  const canSubmit = !!produtoOd && confirmedProduct && !pedidoExistente?.numero_pedido && !enviando;
+  const blockingExistingOrder = !!pedidoExistente?.numero_pedido && !isNegativeStatusCheck(pedidoExistente.status);
+  const canSubmit = !!produtoOd && confirmedProduct && !blockingExistingOrder && !enviando;
 
   const isNegativeStatus = (s: string) => {
     const lower = (s || "").toLowerCase();
