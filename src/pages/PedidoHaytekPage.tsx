@@ -36,8 +36,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import HaytekFormatoAroSelector from "@/components/haytek/HaytekFormatoAroSelector";
 import {
   ArrowLeft, Send, Eye, Glasses, Package, Loader2, Check, AlertTriangle,
-  Search, CheckCircle2, Zap, Sparkles, ChevronDown, ChevronUp, Pencil,
+  Search, CheckCircle2, Zap, Sparkles, ChevronDown, ChevronUp, Pencil, PackageCheck,
 } from "lucide-react";
+import { useUserEmpresas } from "@/hooks/useUserEmpresas";
 
 // ============================================
 // HELPERS
@@ -157,6 +158,20 @@ const PedidoHaytekPage: React.FC = () => {
   const [erroEnvioDetalhado, setErroEnvioDetalhado] = useState<string | null>(null);
   const [haytekStoreId, setHaytekStoreId] = useState<string>("");
   const [storeName, setStoreName] = useState<string>("");
+  const [pedidoExistente, setPedidoExistente] = useState<{ numero_pedido: string | null; status: string } | null>(null);
+
+  // ── Empresa name resolution (alias oficial) ──
+  const { empresas } = useUserEmpresas();
+  const empresaNomeOficial = useMemo(() => {
+    const e = empresas.find(e => e.codEmpresa === codEmpresa);
+    return e?.nome || "";
+  }, [empresas, codEmpresa]);
+  const empresaLabel = empresaNomeOficial || storeName || `Empresa ${codEmpresa}`;
+
+  const isNegativeStatus = (s: string) => {
+    const lower = (s || "").toLowerCase();
+    return lower.includes("cancel") || lower.includes("rejeit") || lower.includes("falha") || lower.includes("recusa");
+  };
 
   function parsePositiveInt(value: string): number | null {
     const parsed = parseInt(value, 10);
@@ -298,6 +313,28 @@ const PedidoHaytekPage: React.FC = () => {
         if ((data as any)?.alias) setStoreName((data as any).alias);
       });
   }, [codEmpresa]);
+
+  // ── Check existing order (HAYTEK) ──
+  useEffect(() => {
+    if (!codOs) return;
+    (async () => {
+      const { data: rows } = await supabase
+        .from("pedidos_fornecedor")
+        .select("numero_pedido, status, created_at")
+        .eq("cod_os", codOs)
+        .eq("fornecedor", "HAYTEK")
+        .order("created_at", { ascending: false });
+      if (rows && rows.length > 0) {
+        const confirmado = rows.find((r: any) => r.numero_pedido);
+        if (confirmado) {
+          setPedidoExistente({ numero_pedido: (confirmado as any).numero_pedido, status: (confirmado as any).status || "" });
+        } else {
+          setPedidoExistente({ numero_pedido: null, status: (rows[0] as any).status || "ERRO" });
+        }
+      }
+    })();
+  }, [codOs]);
+
 
   // ── Auto-match when products + OS loaded ──
   useEffect(() => {
@@ -567,6 +604,55 @@ const PedidoHaytekPage: React.FC = () => {
 
   const autoLabel = autoFillLabel(autoFillSource);
 
+  // ── Pedido já confirmado → bloqueia novo envio (igual à Hoya) ──
+  if (pedidoExistente?.numero_pedido && !isNegativeStatus(pedidoExistente.status)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
+        <div className="flex items-center justify-center h-16 w-16 rounded-full bg-primary/10">
+          <PackageCheck className="h-8 w-8 text-primary" />
+        </div>
+        <h2 className="text-2xl font-bold">Pedido já enviado</h2>
+        <div className="text-center space-y-2">
+          <p className="text-lg">
+            Nº Pedido HAYTEK:{" "}
+            <span className="font-mono font-bold text-primary">{pedidoExistente.numero_pedido}</span>
+          </p>
+          <p className="text-muted-foreground">Status: {pedidoExistente.status}</p>
+          <p className="text-sm text-muted-foreground">Esta OS já possui pedido confirmado. Não é possível enviar um segundo pedido.</p>
+        </div>
+        <Button variant="outline" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar à Receita
+        </Button>
+      </div>
+    );
+  }
+
+  // ── Tela de sucesso (igual à Hoya) ──
+  if (resultado?.orderId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
+        <div className="flex items-center justify-center h-16 w-16 rounded-full bg-primary/10">
+          <Check className="h-8 w-8 text-primary" />
+        </div>
+        <h2 className="text-2xl font-bold">Pedido Enviado!</h2>
+        <div className="text-center space-y-2">
+          <p className="text-lg">
+            Nº Pedido HAYTEK:{" "}
+            <span className="font-mono font-bold text-primary">{resultado.orderId}</span>
+          </p>
+          {resultado.message && (
+            <p className="text-muted-foreground text-sm">{resultado.message}</p>
+          )}
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => navigate(`/os?openOs=${codOs}&codEmpresa=${codEmpresa}`)}>
+            <ArrowLeft className="h-4 w-4 mr-2" /> Voltar à Receita
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -586,7 +672,7 @@ const PedidoHaytekPage: React.FC = () => {
               value={osNumero}
               onChange={(e) => setOsNumero(e.target.value)}
             />
-            <span>— {paciente} — {storeName || `Empresa ${codEmpresa}`}</span>
+            <span>— {paciente} — {empresaLabel}</span>
           </div>
         </div>
         {autoLabel && (
@@ -596,12 +682,14 @@ const PedidoHaytekPage: React.FC = () => {
         )}
       </div>
 
-      {/* Resultado (sucesso) */}
-      {resultado?.orderId && (
-        <Alert className="border-emerald-300 bg-emerald-50">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-          <AlertDescription className="text-emerald-800">
-            Pedido criado com sucesso! Nº <strong>{resultado.orderId}</strong>
+      {/* Banner: pedido anterior cancelado/rejeitado — permite refazer */}
+      {pedidoExistente?.numero_pedido && isNegativeStatus(pedidoExistente.status) && (
+        <Alert className="border-amber-300 bg-amber-500/10">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-sm">
+            <span className="font-semibold">Pedido anterior #{pedidoExistente.numero_pedido}</span> foi{" "}
+            <span className="font-semibold text-amber-700">{pedidoExistente.status}</span>.
+            Você pode enviar um novo pedido para esta OS.
           </AlertDescription>
         </Alert>
       )}

@@ -71,6 +71,44 @@ export const HaytekTrackingDetail: React.FC<Props> = ({ tracking, sentPayload, t
   const deliveries: any[] = Array.isArray(t.deliveries) ? t.deliveries : [];
   const payment = t.payment;
 
+  // ── Frete / Envio ──
+  const shippingRoot: any =
+    get<any>(t, "shipping", "freight", "envio", "frete", "delivery") ||
+    (deliveries.length > 0 ? deliveries[0] : null) ||
+    {};
+  const carrier = get<string>(shippingRoot, "carrier", "transportadora", "shippingCompany", "carrierName")
+    ?? get<string>(t, "carrier", "transportadora");
+  const trackingCode = get<string>(shippingRoot, "trackingCode", "trackingNumber", "tracking", "code", "codigoRastreio", "codigo")
+    ?? get<string>(t, "trackingCode", "trackingNumber");
+  const trackingUrl = get<string>(shippingRoot, "trackingUrl", "url", "link", "urlRastreio")
+    ?? get<string>(t, "trackingUrl");
+  const shippingMethod = get<string>(shippingRoot, "method", "shippingMethod", "modalidade", "service");
+  const estimatedDate = get<string>(shippingRoot, "estimatedDate", "estimatedDelivery", "previsao", "previsaoEntrega", "deliveryDate", "dataPrevista");
+  const shippedAt = get<string>(shippingRoot, "shippedAt", "dataEnvio", "sentAt", "dispatchedAt");
+  const shippingValueRaw = get<number | string>(shippingRoot, "value", "shippingValue", "freightValue", "valor", "amount", "cost", "price");
+  const shippingValue = shippingValueRaw != null ? Number(shippingValueRaw) : undefined;
+
+  const hasShipping = !!(carrier || trackingCode || shippingMethod || estimatedDate || shippedAt || shippingValue != null);
+
+  // ── Faturamento ──
+  const invoiceRoot: any = get<any>(t, "invoice", "billing", "faturamento", "nf", "nota") || {};
+  const invoiceNumber = get<string>(invoiceRoot, "number", "invoiceNumber", "numero", "nfNumber", "nfeNumber");
+  const invoiceSerie = get<string>(invoiceRoot, "serie", "series", "serieNf");
+  const invoiceKey = get<string>(invoiceRoot, "key", "chave", "accessKey", "chaveAcesso");
+  const invoiceUrl = get<string>(invoiceRoot, "url", "link", "danfe", "danfeUrl", "pdf");
+  const invoiceDate = get<string>(invoiceRoot, "date", "issuedAt", "dataEmissao", "emissao", "issueDate");
+  const invoiceTotalRaw = get<number | string>(invoiceRoot, "total", "amount", "value", "valor", "totalAmount") ?? get<number | string>(t, "total", "amount");
+  const invoiceTotal = invoiceTotalRaw != null ? Number(invoiceTotalRaw) : undefined;
+  const invoiceSubtotal = (() => { const v = get<number | string>(invoiceRoot, "subtotal", "subTotal"); return v != null ? Number(v) : undefined; })();
+  const invoiceDiscount = (() => { const v = get<number | string>(invoiceRoot, "discount", "desconto"); return v != null ? Number(v) : undefined; })();
+
+  const hasInvoice = !!(invoiceNumber || invoiceUrl || invoiceDate || invoiceTotal != null || invoiceKey);
+
+  const fmtBRL = (n?: number) =>
+    typeof n === "number" && Number.isFinite(n)
+      ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+      : "—";
+
   return (
     <div className="space-y-3 text-xs">
       {title && (
@@ -185,6 +223,54 @@ export const HaytekTrackingDetail: React.FC<Props> = ({ tracking, sentPayload, t
                 {d.carrier && <span><span className="text-muted-foreground">Transp.:</span> {d.carrier}</span>}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Frete / Envio */}
+      {hasShipping && (
+        <div className="rounded border p-2 bg-background">
+          <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+            <Truck className="h-3 w-3" /> Frete / Envio
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+            {carrier && <div><span className="text-muted-foreground">Transportadora:</span> <span className="font-medium">{carrier}</span></div>}
+            {shippingMethod && <div><span className="text-muted-foreground">Modalidade:</span> {shippingMethod}</div>}
+            {trackingCode && (
+              <div className="sm:col-span-2">
+                <span className="text-muted-foreground">Rastreio:</span>{" "}
+                {trackingUrl ? (
+                  <a href={trackingUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-primary underline">
+                    {trackingCode}
+                  </a>
+                ) : (
+                  <span className="font-mono">{trackingCode}</span>
+                )}
+              </div>
+            )}
+            {estimatedDate && <div><span className="text-muted-foreground">Previsão:</span> {fmtDate(estimatedDate)}</div>}
+            {shippedAt && <div><span className="text-muted-foreground">Enviado em:</span> {fmtDate(shippedAt)}</div>}
+            {shippingValue != null && <div><span className="text-muted-foreground">Valor frete:</span> <span className="font-medium">{fmtBRL(shippingValue)}</span></div>}
+          </div>
+        </div>
+      )}
+
+      {/* Faturamento */}
+      {hasInvoice && (
+        <div className="rounded border p-2 bg-background">
+          <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Faturamento</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+            {invoiceNumber && <div><span className="text-muted-foreground">NF:</span> <span className="font-mono font-medium">{invoiceNumber}{invoiceSerie ? `/${invoiceSerie}` : ""}</span></div>}
+            {invoiceDate && <div><span className="text-muted-foreground">Emissão:</span> {fmtDate(invoiceDate)}</div>}
+            {invoiceSubtotal != null && <div><span className="text-muted-foreground">Subtotal:</span> {fmtBRL(invoiceSubtotal)}</div>}
+            {invoiceDiscount != null && <div><span className="text-muted-foreground">Desconto:</span> {fmtBRL(invoiceDiscount)}</div>}
+            {invoiceTotal != null && <div className="sm:col-span-2"><span className="text-muted-foreground">Total:</span> <span className="font-semibold text-foreground">{fmtBRL(invoiceTotal)}</span></div>}
+            {invoiceKey && <div className="sm:col-span-4 text-[10px] break-all"><span className="text-muted-foreground">Chave:</span> <span className="font-mono">{invoiceKey}</span></div>}
+            {invoiceUrl && (
+              <div className="sm:col-span-4">
+                <a href={invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">Abrir DANFE / NF</a>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -49,7 +49,7 @@ import ZeissValidationPanel from "@/components/zeiss-pedido/ZeissValidationPanel
 import {
   ArrowLeft, Send, Eye, Glasses, Package, Loader2, Check, AlertTriangle,
   Search, ShieldCheck, CheckCircle2, DollarSign, Zap, Sparkles, ChevronDown,
-  ChevronUp, XCircle, Ban, Copy, Ticket, Pencil,
+  ChevronUp, XCircle, Ban, Copy, Ticket, Pencil, PackageCheck,
 } from "lucide-react";
 
 // ============================================
@@ -684,12 +684,53 @@ const PedidoZeissPage: React.FC = () => {
   const erpDescOd = os?.lenteOdDescricao;
   const erpDescOe = os?.lenteOeDescricao;
 
+  // ── Negative status helper (hoisted) ──
+  function isNegativeStatus(s: string) {
+    const lower = (s || "").toLowerCase();
+    return lower.includes("cancel") || lower.includes("rejeit") || lower.includes("falha") || lower.includes("recusa");
+  }
+
   // ── Can submit ──
-  const canSubmit = !!produtoOd && confirmedProduct && !pedidoExistente?.numero_pedido && !enviando;
+  const blockingExistingOrder = !!pedidoExistente?.numero_pedido && !isNegativeStatus(pedidoExistente.status);
+  const canSubmit = !!produtoOd && confirmedProduct && !blockingExistingOrder && !enviando;
+
+  // ============================================
+  // RENDER: Pedido já enviado (bloqueia novo envio — igual à Hoya)
+  // ============================================
+  if (pedidoExistente?.numero_pedido && !isNegativeStatus(pedidoExistente.status) && !pedidoConfirmado) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
+        <div className="flex items-center justify-center h-16 w-16 rounded-full bg-primary/10">
+          <PackageCheck className="h-8 w-8 text-primary" />
+        </div>
+        <h2 className="text-2xl font-bold">Pedido já enviado</h2>
+        <div className="text-center space-y-2">
+          <p className="text-lg">
+            Nº Pedido ZEISS:{" "}
+            <span className="font-mono font-bold text-primary">{pedidoExistente.numero_pedido}</span>
+          </p>
+          <p className="text-muted-foreground">Status: {pedidoExistente.status}</p>
+          <p className="text-sm text-muted-foreground">Esta OS já possui pedido confirmado. Não é possível enviar um segundo pedido.</p>
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4 mr-2" /> Voltar à Receita
+          </Button>
+          {pedidoExistente.estabelecimento && (
+            <Button variant="destructive" onClick={handleCancelarPedido} disabled={cancelando}>
+              {cancelando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Ban className="h-4 w-4 mr-2" />}
+              Cancelar Pedido
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // ============================================
   // RENDER: Confirmed
   // ============================================
+
 
   if (pedidoConfirmado) {
     const handleCopyVoucher = (v: string) => {
@@ -764,26 +805,14 @@ const PedidoZeissPage: React.FC = () => {
           )}
         </div>
 
-        {/* Existing order warning */}
-        {pedidoExistente?.numero_pedido && (
+        {/* Banner: pedido anterior cancelado/rejeitado — permite refazer */}
+        {pedidoExistente?.numero_pedido && isNegativeStatus(pedidoExistente.status) && (
           <Alert className="border-amber-300 bg-amber-500/10">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="flex items-center justify-between gap-2">
-              <span>
-                Já existe pedido Zeiss para esta OS: <strong>{pedidoExistente.numero_pedido}</strong> ({pedidoExistente.status})
-              </span>
-              {pedidoExistente.estabelecimento && pedidoExistente.status !== "CANCELAMENTO_SOLICITADO" && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="gap-1.5 shrink-0"
-                  onClick={handleCancelarPedido}
-                  disabled={cancelando}
-                >
-                  {cancelando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
-                  Cancelar Pedido
-                </Button>
-              )}
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-sm">
+              <span className="font-semibold">Pedido anterior #{pedidoExistente.numero_pedido}</span> está{" "}
+              <span className="font-semibold text-amber-700">{pedidoExistente.status}</span>.
+              Você pode enviar um novo pedido para esta OS.
             </AlertDescription>
           </Alert>
         )}
