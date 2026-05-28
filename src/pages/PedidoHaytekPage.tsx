@@ -158,6 +158,20 @@ const PedidoHaytekPage: React.FC = () => {
   const [erroEnvioDetalhado, setErroEnvioDetalhado] = useState<string | null>(null);
   const [haytekStoreId, setHaytekStoreId] = useState<string>("");
   const [storeName, setStoreName] = useState<string>("");
+  const [pedidoExistente, setPedidoExistente] = useState<{ numero_pedido: string | null; status: string } | null>(null);
+
+  // ── Empresa name resolution (alias oficial) ──
+  const { empresas } = useUserEmpresas();
+  const empresaNomeOficial = useMemo(() => {
+    const e = empresas.find(e => e.codEmpresa === codEmpresa);
+    return e?.nome || "";
+  }, [empresas, codEmpresa]);
+  const empresaLabel = empresaNomeOficial || storeName || `Empresa ${codEmpresa}`;
+
+  const isNegativeStatus = (s: string) => {
+    const lower = (s || "").toLowerCase();
+    return lower.includes("cancel") || lower.includes("rejeit") || lower.includes("falha") || lower.includes("recusa");
+  };
 
   function parsePositiveInt(value: string): number | null {
     const parsed = parseInt(value, 10);
