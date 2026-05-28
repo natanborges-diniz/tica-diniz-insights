@@ -1,0 +1,71 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`calcularMixIdealV2 — ordenação > snapshot com dataset base 1`] = `
+[
+  {
+    "estoqueEfetivo": 50,
+    "estrategica": false,
+    "faturamento": 6000,
+    "lacuna": 62,
+    "marca": "RAYBAN",
+    "mixRX": 78,
+    "mixSolar": 34,
+    "mixTotal": 112,
+    "participacao": 0.56,
+    "pctFaturamento": 0.5,
+    "pctPecas": 0.6,
+    "pctSolar": 30,
+    "pecasVendidas": 60,
+    "skusAlocados": [
+      {
+        "codSku": 1,
+        "descricao": "RB 4105",
+        "diasGiroUltimaPeca": 10,
+        "qtdSugerida": 62,
+      },
+    ],
+    "status": "OK",
+  },
+  {
+    "estoqueEfetivo": 40,
+    "estrategica": false,
+    "faturamento": 4000,
+    "lacuna": 23,
+    "marca": "OAKLEY",
+    "mixRX": 44,
+    "mixSolar": 19,
+    "mixTotal": 63,
+    "participacao": 0.31333333333333335,
+    "pctFaturamento": 0.3333333333333333,
+    "pctPecas": 0.3,
+    "pctSolar": 30,
+    "pecasVendidas": 30,
+    "skusAlocados": [
+      {
+        "codSku": 2,
+        "descricao": "OAK Metal",
+        "diasGiroUltimaPeca": 15,
+        "qtdSugerida": 23,
+      },
+    ],
+    "status": "OK",
+  },
+  {
+    "estoqueEfetivo": 30,
+    "estrategica": false,
+    "faturamento": 2000,
+    "lacuna": 0,
+    "marca": "SILHOUETTE",
+    "mixRX": 18,
+    "mixSolar": 7,
+    "mixTotal": 25,
+    "participacao": 0.12666666666666665,
+    "pctFaturamento": 0.16666666666666666,
+    "pctPecas": 0.1,
+    "pctSolar": 30,
+    "pecasVendidas": 10,
+    "skusAlocados": [],
+    "status": "OK",
+  },
+]
+`;

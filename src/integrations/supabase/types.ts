@@ -538,6 +538,75 @@ export type Database = {
         }
         Relationships: []
       }
+      marca_config: {
+        Row: {
+          id: string
+          cod_empresa: number
+          marca: string
+          pct_solar: number | null
+          estrategica: boolean
+          recem_introduzida: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          cod_empresa: number
+          marca: string
+          pct_solar?: number | null
+          estrategica?: boolean
+          recem_introduzida?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          cod_empresa?: number
+          marca?: string
+          pct_solar?: number | null
+          estrategica?: boolean
+          recem_introduzida?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      plano_compra_historico: {
+        Row: {
+          id: string
+          cod_empresa: number
+          data_geracao: string
+          parametros: Json | null
+          plano_sugerido: Json | null
+          plano_final: Json | null
+          total_sugerido: number | null
+          total_final: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          cod_empresa: number
+          data_geracao?: string
+          parametros?: Json | null
+          plano_sugerido?: Json | null
+          plano_final?: Json | null
+          total_sugerido?: number | null
+          total_final?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          cod_empresa?: number
+          data_geracao?: string
+          parametros?: Json | null
+          plano_sugerido?: Json | null
+          plano_final?: Json | null
+          total_sugerido?: number | null
+          total_final?: number | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       conciliacao_vendas: {
         Row: {
           cod_empresa: number
