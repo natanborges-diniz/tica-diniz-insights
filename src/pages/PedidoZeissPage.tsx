@@ -803,26 +803,14 @@ const PedidoZeissPage: React.FC = () => {
           )}
         </div>
 
-        {/* Existing order warning */}
-        {pedidoExistente?.numero_pedido && (
+        {/* Banner: pedido anterior cancelado/rejeitado — permite refazer */}
+        {pedidoExistente?.numero_pedido && isNegativeStatus(pedidoExistente.status) && (
           <Alert className="border-amber-300 bg-amber-500/10">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="flex items-center justify-between gap-2">
-              <span>
-                Já existe pedido Zeiss para esta OS: <strong>{pedidoExistente.numero_pedido}</strong> ({pedidoExistente.status})
-              </span>
-              {pedidoExistente.estabelecimento && pedidoExistente.status !== "CANCELAMENTO_SOLICITADO" && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="gap-1.5 shrink-0"
-                  onClick={handleCancelarPedido}
-                  disabled={cancelando}
-                >
-                  {cancelando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
-                  Cancelar Pedido
-                </Button>
-              )}
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-sm">
+              <span className="font-semibold">Pedido anterior #{pedidoExistente.numero_pedido}</span> está{" "}
+              <span className="font-semibold text-amber-700">{pedidoExistente.status}</span>.
+              Você pode enviar um novo pedido para esta OS.
             </AlertDescription>
           </Alert>
         )}
