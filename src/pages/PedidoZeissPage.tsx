@@ -687,9 +687,48 @@ const PedidoZeissPage: React.FC = () => {
   // ── Can submit ──
   const canSubmit = !!produtoOd && confirmedProduct && !pedidoExistente?.numero_pedido && !enviando;
 
+  const isNegativeStatus = (s: string) => {
+    const lower = (s || "").toLowerCase();
+    return lower.includes("cancel") || lower.includes("rejeit") || lower.includes("falha") || lower.includes("recusa");
+  };
+
+  // ============================================
+  // RENDER: Pedido já enviado (bloqueia novo envio — igual à Hoya)
+  // ============================================
+  if (pedidoExistente?.numero_pedido && !isNegativeStatus(pedidoExistente.status) && !pedidoConfirmado) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-6 p-8">
+        <div className="flex items-center justify-center h-16 w-16 rounded-full bg-primary/10">
+          <PackageCheck className="h-8 w-8 text-primary" />
+        </div>
+        <h2 className="text-2xl font-bold">Pedido já enviado</h2>
+        <div className="text-center space-y-2">
+          <p className="text-lg">
+            Nº Pedido ZEISS:{" "}
+            <span className="font-mono font-bold text-primary">{pedidoExistente.numero_pedido}</span>
+          </p>
+          <p className="text-muted-foreground">Status: {pedidoExistente.status}</p>
+          <p className="text-sm text-muted-foreground">Esta OS já possui pedido confirmado. Não é possível enviar um segundo pedido.</p>
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4 mr-2" /> Voltar à Receita
+          </Button>
+          {pedidoExistente.estabelecimento && (
+            <Button variant="destructive" onClick={handleCancelarPedido} disabled={cancelando}>
+              {cancelando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Ban className="h-4 w-4 mr-2" />}
+              Cancelar Pedido
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ============================================
   // RENDER: Confirmed
   // ============================================
+
 
   if (pedidoConfirmado) {
     const handleCopyVoucher = (v: string) => {
