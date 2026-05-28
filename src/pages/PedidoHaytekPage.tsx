@@ -36,8 +36,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import HaytekFormatoAroSelector from "@/components/haytek/HaytekFormatoAroSelector";
 import {
   ArrowLeft, Send, Eye, Glasses, Package, Loader2, Check, AlertTriangle,
-  Search, CheckCircle2, Zap, Sparkles, ChevronDown, ChevronUp, Pencil,
+  Search, CheckCircle2, Zap, Sparkles, ChevronDown, ChevronUp, Pencil, PackageCheck,
 } from "lucide-react";
+import { useUserEmpresas } from "@/hooks/useUserEmpresas";
 
 // ============================================
 // HELPERS
