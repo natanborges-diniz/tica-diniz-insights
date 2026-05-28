@@ -227,6 +227,54 @@ export const HaytekTrackingDetail: React.FC<Props> = ({ tracking, sentPayload, t
         </div>
       )}
 
+      {/* Frete / Envio */}
+      {hasShipping && (
+        <div className="rounded border p-2 bg-background">
+          <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+            <Truck className="h-3 w-3" /> Frete / Envio
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+            {carrier && <div><span className="text-muted-foreground">Transportadora:</span> <span className="font-medium">{carrier}</span></div>}
+            {shippingMethod && <div><span className="text-muted-foreground">Modalidade:</span> {shippingMethod}</div>}
+            {trackingCode && (
+              <div className="sm:col-span-2">
+                <span className="text-muted-foreground">Rastreio:</span>{" "}
+                {trackingUrl ? (
+                  <a href={trackingUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-primary underline">
+                    {trackingCode}
+                  </a>
+                ) : (
+                  <span className="font-mono">{trackingCode}</span>
+                )}
+              </div>
+            )}
+            {estimatedDate && <div><span className="text-muted-foreground">Previsão:</span> {fmtDate(estimatedDate)}</div>}
+            {shippedAt && <div><span className="text-muted-foreground">Enviado em:</span> {fmtDate(shippedAt)}</div>}
+            {shippingValue != null && <div><span className="text-muted-foreground">Valor frete:</span> <span className="font-medium">{fmtBRL(shippingValue)}</span></div>}
+          </div>
+        </div>
+      )}
+
+      {/* Faturamento */}
+      {hasInvoice && (
+        <div className="rounded border p-2 bg-background">
+          <p className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Faturamento</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+            {invoiceNumber && <div><span className="text-muted-foreground">NF:</span> <span className="font-mono font-medium">{invoiceNumber}{invoiceSerie ? `/${invoiceSerie}` : ""}</span></div>}
+            {invoiceDate && <div><span className="text-muted-foreground">Emissão:</span> {fmtDate(invoiceDate)}</div>}
+            {invoiceSubtotal != null && <div><span className="text-muted-foreground">Subtotal:</span> {fmtBRL(invoiceSubtotal)}</div>}
+            {invoiceDiscount != null && <div><span className="text-muted-foreground">Desconto:</span> {fmtBRL(invoiceDiscount)}</div>}
+            {invoiceTotal != null && <div className="sm:col-span-2"><span className="text-muted-foreground">Total:</span> <span className="font-semibold text-foreground">{fmtBRL(invoiceTotal)}</span></div>}
+            {invoiceKey && <div className="sm:col-span-4 text-[10px] break-all"><span className="text-muted-foreground">Chave:</span> <span className="font-mono">{invoiceKey}</span></div>}
+            {invoiceUrl && (
+              <div className="sm:col-span-4">
+                <a href={invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">Abrir DANFE / NF</a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Pagamento */}
       {payment && typeof payment === "object" && (
         <div className="rounded border p-2 bg-background">
