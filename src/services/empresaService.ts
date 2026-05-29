@@ -38,7 +38,13 @@ export async function getEmpresas(): Promise<Empresa[]> {
     }));
   }
   
-  // FALLBACK: Se Supabase falhar, tentar Firebird Bridge com timeout reduzido
+  // FALLBACK: Se Supabase falhar, tentar Firebird Bridge com timeout reduzido.
+  // Se foi cancelado por re-render (Load failed/AbortError), apenas registra em debug
+  // e não tenta o fallback — o próximo render vai refazer a chamada certa.
+  if (isAbortError(error)) {
+    console.debug('Supabase empresas cancelado por re-render — aguardando próximo ciclo');
+    return [];
+  }
   console.warn('Supabase falhou para empresas, tentando Firebird Bridge:', error);
   try {
     const raw = await apiGet<EmpresaRaw>('/empresas', undefined, { timeoutMs: 10000 });
