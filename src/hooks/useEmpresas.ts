@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { getEmpresas, Empresa } from '@/services/empresaService';
+import { isAbortError } from '@/lib/isAbortError';
 
 interface UseEmpresasReturn {
   empresas: Empresa[];
@@ -23,6 +24,7 @@ export function useEmpresas(): UseEmpresasReturn {
         const data = await getEmpresas();
         setEmpresas(data);
       } catch (err) {
+        if (isAbortError(err)) return;
         const message = err instanceof Error ? err.message : 'Erro ao carregar empresas';
         setError(message);
         setEmpresas([]);

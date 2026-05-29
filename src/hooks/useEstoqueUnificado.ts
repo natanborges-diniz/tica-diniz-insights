@@ -15,6 +15,7 @@ import { getEstoqueCompleto, EstoqueCompleto } from "@/services/estoqueCompletoS
 import { categorizarProduto, subcategorizarProduto, type CategoriaProduto, type SubcategoriaProduto } from "@/utils/categorizarProduto";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { isAbortError } from "@/lib/isAbortError";
 import { useEstoqueStore, type EstoqueFilters } from "@/stores/useEstoqueStore";
 import { classificarPorIdade, toFaixaDoente, type FaixaDoente } from "@/lib/estoque/faixas-saneamento";
 import { calcularCurvaABC } from "@/lib/estoque/curva-abc";
@@ -305,6 +306,7 @@ export function useEstoqueUnificado() {
           setMapeamentoFornecedor(mapa);
         }
       } catch (err) {
+        if (isAbortError(err)) return;
         console.error('[useEstoqueUnificado] Erro ao carregar mapeamentos:', err);
       }
     };
@@ -320,6 +322,7 @@ export function useEstoqueUnificado() {
         if (error) throw error;
         if (data) setConfigCapacidade(data as CapacidadeExpositorRow[]);
       } catch (err) {
+        if (isAbortError(err)) return;
         console.error('[useEstoqueUnificado] Erro ao carregar capacidades:', err);
       }
     };
@@ -926,6 +929,12 @@ export function useEstoqueUnificado() {
         description: `${estoqueCompleto.length} SKUs • ${totalPecasEstoque.toLocaleString('pt-BR')} peças em estoque • ${pecasDeadStock.toLocaleString('pt-BR')} paradas`,
       });
     } catch (err) {
+      if (isAbortError(err)) {
+        // Fetch foi cancelado por re-render (ex.: troca de empresa logo após login).
+        // Não mostrar toast nem setar error; o auto-load vai disparar a versão correta.
+        console.debug('[useEstoqueUnificado] carregamento cancelado (re-render)');
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Erro ao carregar dados';
       setError(message);
       toast({ title: "Erro ao carregar", description: message, variant: "destructive" });
@@ -940,6 +949,10 @@ export function useEstoqueUnificado() {
   // não precise clicar em "Carregar Dados" novamente.
   useEffect(() => {
     if (filters.empresa === null || filters.empresa === undefined) return;
+    // Espera o AuthContext / lista de empresas terminar de carregar antes de
+    // disparar fetches — evita rajada de requests sendo abortadas por re-render
+    // logo após o login.
+    if (loadingEmpresas) return;
     if (loading || autoLoadingRef.current) return;
     const empresaMudou = String(empresaCarregada) !== String(filters.empresa);
     const semDados = dadosEstoqueCompleto.length === 0 && dadosVendasSku.length === 0;
@@ -949,7 +962,7 @@ export function useEstoqueUnificado() {
         autoLoadingRef.current = false;
       });
     }
-  }, [filters.empresa, empresaCarregada, dadosEstoqueCompleto.length, dadosVendasSku.length, loading, carregarDados]);
+  }, [filters.empresa, empresaCarregada, dadosEstoqueCompleto.length, dadosVendasSku.length, loading, loadingEmpresas, carregarDados]);
 
   const dadosBrutos = dadosVendasSku;
 

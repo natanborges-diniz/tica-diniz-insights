@@ -3,6 +3,7 @@
 
 import { apiGet } from './firebirdBridge';
 import { supabase } from '@/integrations/supabase/client';
+import { isAbortError } from '@/lib/isAbortError';
 
 // ============================================
 // INTERFACES
