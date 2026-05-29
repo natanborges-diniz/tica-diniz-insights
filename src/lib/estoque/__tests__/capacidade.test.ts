@@ -71,4 +71,37 @@ describe('calcularCapacidadePorCategoria', () => {
       expect(rx + solar).toBeLessThanOrEqual(cfg.capacidade_total);
     });
   });
+
+  describe('override pctSolarOverride (marca_config)', () => {
+    const cfg = { capacidade_total: 1000, percentual_solar: 30 };
+
+    it('override 50% substitui o global 30% para AR_RX (500 vs 700)', () => {
+      expect(calcularCapacidadePorCategoria(cfg, 'AR_RX', 50)).toBe(500);
+    });
+    it('override 50% substitui o global 30% para AR_SOLAR (500 vs 300)', () => {
+      expect(calcularCapacidadePorCategoria(cfg, 'AR_SOLAR', 50)).toBe(500);
+    });
+    it('override 0% → toda capacidade vira RX para essa marca', () => {
+      expect(calcularCapacidadePorCategoria(cfg, 'AR_RX', 0)).toBe(1000);
+      expect(calcularCapacidadePorCategoria(cfg, 'AR_SOLAR', 0)).toBe(0);
+    });
+    it('override 100% → toda capacidade vira SOLAR para essa marca', () => {
+      expect(calcularCapacidadePorCategoria(cfg, 'AR_RX', 100)).toBe(0);
+      expect(calcularCapacidadePorCategoria(cfg, 'AR_SOLAR', 100)).toBe(1000);
+    });
+    it('override null → cai no percentual_solar global', () => {
+      expect(calcularCapacidadePorCategoria(cfg, 'AR_RX', null)).toBe(700);
+      expect(calcularCapacidadePorCategoria(cfg, 'AR_SOLAR', null)).toBe(300);
+    });
+    it('override undefined → cai no percentual_solar global', () => {
+      expect(calcularCapacidadePorCategoria(cfg, 'AR_RX', undefined)).toBe(700);
+    });
+    it('config nula + override → ainda 0 (sem capacidade base não há o que dividir)', () => {
+      expect(calcularCapacidadePorCategoria(null, 'AR_RX', 50)).toBe(0);
+      expect(calcularCapacidadePorCategoria(undefined, 'AR_SOLAR', 50)).toBe(0);
+    });
+    it('override em categoria sem meta física → 0', () => {
+      expect(calcularCapacidadePorCategoria(cfg, 'LENTES', 50)).toBe(0);
+    });
+  });
 });

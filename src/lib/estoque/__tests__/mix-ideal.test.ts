@@ -5,6 +5,7 @@ import {
   type MixComparativo,
   type MixMarca,
   type DecisaoMarca,
+  type MarcaConfigFlags,
 } from '../mix-ideal';
 
 // ─── Dataset fixo — 3 marcas, 2 categorias ───────────────────────────────────
@@ -233,6 +234,96 @@ describe('calcularMixIdealMarcas', () => {
 
   it('snapshot com dados fixos', () => {
     expect(calcularMixIdealMarcas(MOCK_ITENS)).toMatchSnapshot();
+  });
+});
+
+// ─── Flags marca_config: estrategica / recem_introduzida ─────────────────────
+
+describe('calcularMixIdealMarcas — flags marca_config', () => {
+  // Cenário base: RUIM seria AVALIAR_DESCONTINUACAO (curva C + taxa < threshold).
+  const ITENS_RUIM = [
+    { marca: 'TOP',  qtdVendidos: 100, totalVendido: 9000, estoqueAtual: 20 },
+    { marca: 'RUIM', qtdVendidos: 1,   totalVendido: 50,   estoqueAtual: 5 },
+    { marca: 'RUIM', qtdVendidos: 0,   totalVendido: 0,    estoqueAtual: 3 },
+    { marca: 'RUIM', qtdVendidos: 0,   totalVendido: 0,    estoqueAtual: 2 },
+  ];
+
+  it('sem flag → RUIM = AVALIAR_DESCONTINUACAO (controle)', () => {
+    const r = calcularMixIdealMarcas(ITENS_RUIM);
+    const ruim = r.find(m => m.marca === 'RUIM')!;
+    expect(ruim.decisao).toBe('AVALIAR_DESCONTINUACAO');
+    expect(ruim.incluidaNoMix).toBe(false);
+  });
+
+  it('estrategica=true → marca C entra no mix mesmo com baixa performance', () => {
+    const configs = new Map<string, MarcaConfigFlags>([['RUIM', { estrategica: true }]]);
+    const r = calcularMixIdealMarcas(ITENS_RUIM, { marcaConfigs: configs });
+    const ruim = r.find(m => m.marca === 'RUIM')!;
+    expect(ruim.incluidaNoMix).toBe(true);
+    expect(ruim.decisao).toBe('REPOR_REFERENCIA');
+    expect(ruim.pecasIdeais).toBeGreaterThanOrEqual(25);
+  });
+
+  it('estrategica=true em marca SEM_HISTORICO → mantém SEM_HISTORICO mas com piso', () => {
+    const itens = [
+      { marca: 'BOA',  qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 10 },
+      { marca: 'NOVA', qtdVendidos: 0,  totalVendido: 0,    estoqueAtual: 0 },
+    ];
+    const configs = new Map<string, MarcaConfigFlags>([['NOVA', { estrategica: true }]]);
+    const r = calcularMixIdealMarcas(itens, { marcaConfigs: configs });
+    const nova = r.find(m => m.marca === 'NOVA')!;
+    expect(nova.incluidaNoMix).toBe(true);
+    expect(nova.decisao).toBe('SEM_HISTORICO');
+    expect(nova.pecasIdeais).toBeGreaterThanOrEqual(25);
+  });
+
+  it('recemIntroduzida=true protege marca C de AVALIAR_DESCONTINUACAO', () => {
+    const configs = new Map<string, MarcaConfigFlags>([['RUIM', { recemIntroduzida: true }]]);
+    const r = calcularMixIdealMarcas(ITENS_RUIM, { marcaConfigs: configs });
+    const ruim = r.find(m => m.marca === 'RUIM')!;
+    expect(ruim.decisao).not.toBe('AVALIAR_DESCONTINUACAO');
+    expect(ruim.decisao).toBe('RENOVAR_COLECAO');
+    expect(ruim.incluidaNoMix).toBe(true);
+    expect(ruim.pecasIdeais).toBeGreaterThanOrEqual(25);
+  });
+
+  it('recemIntroduzida NÃO interfere em marca que já passa pelo crivo', () => {
+    // RAYBAN no MOCK_ITENS sempre é REPOR_REFERENCIA — flag não muda nada além do piso.
+    const configs = new Map<string, MarcaConfigFlags>([['RAYBAN', { recemIntroduzida: true }]]);
+    const r = calcularMixIdealMarcas(MOCK_ITENS, { marcaConfigs: configs });
+    const rb = r.find(m => m.marca === 'RAYBAN')!;
+    expect(rb.decisao).toBe('REPOR_REFERENCIA');
+    expect(rb.incluidaNoMix).toBe(true);
+    // pisos não devem reduzir o que já era maior
+    expect(rb.pecasIdeais).toBeGreaterThanOrEqual(25);
+  });
+
+  it('estrategica + recemIntroduzida juntas → tudo coerente', () => {
+    const configs = new Map<string, MarcaConfigFlags>([['RUIM', { estrategica: true, recemIntroduzida: true }]]);
+    const r = calcularMixIdealMarcas(ITENS_RUIM, { marcaConfigs: configs });
+    const ruim = r.find(m => m.marca === 'RUIM')!;
+    expect(ruim.incluidaNoMix).toBe(true);
+    expect(ruim.decisao).not.toBe('AVALIAR_DESCONTINUACAO');
+    expect(ruim.pecasIdeais).toBeGreaterThanOrEqual(25);
+  });
+
+  it('marcas SEM config seguem regra padrão (nada alterado)', () => {
+    const configs = new Map<string, MarcaConfigFlags>([['RUIM', { estrategica: true }]]);
+    const r = calcularMixIdealMarcas(ITENS_RUIM, { marcaConfigs: configs });
+    const top = r.find(m => m.marca === 'TOP')!;
+    expect(top.decisao).toBe('REPOR_REFERENCIA');
+  });
+
+  it('minPecasMarcaProtegida customizado é respeitado', () => {
+    const configs = new Map<string, MarcaConfigFlags>([['RUIM', { estrategica: true }]]);
+    const r = calcularMixIdealMarcas(ITENS_RUIM, { marcaConfigs: configs, minPecasMarcaProtegida: 40 });
+    const ruim = r.find(m => m.marca === 'RUIM')!;
+    expect(ruim.pecasIdeais).toBeGreaterThanOrEqual(40);
+  });
+
+  it('snapshot — RUIM estratégica', () => {
+    const configs = new Map<string, MarcaConfigFlags>([['RUIM', { estrategica: true }]]);
+    expect(calcularMixIdealMarcas(ITENS_RUIM, { marcaConfigs: configs })).toMatchSnapshot();
   });
 });
 
