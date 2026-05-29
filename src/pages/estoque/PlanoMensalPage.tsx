@@ -1,13 +1,31 @@
 // src/pages/estoque/PlanoMensalPage.tsx
-// Wizard 6 etapas — Plano Mensal de Compras (Sub-Entrega D₄)
+// Wizard 7 etapas — Plano Mensal de Compras
+// Sub-Entrega D₄ + Step "Ajuste Final" do plano persistido em plano_compra_historico
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserEmpresas } from '@/hooks/useUserEmpresas';
 import { getEstoqueCompleto } from '@/services/estoqueCompletoService';
 import { getAnaliseSku } from '@/services/vendasService';
 import { calcularMixIdealV2, type MixMarcaV2, type MarcaConfigV2 } from '@/lib/estoque/mix-ideal-v2';
+import {
+  derivarPlanoFinalInicial,
+  aplicarAjustePlanoFinal,
+  montarPayloadInsert,
+  podeAvancarStep,
+  totalLacunaSugerida,
+  totalPlanoFinal,
+  type PlanoFinalMarca,
+  type ParametrosPlano,
+} from '@/lib/estoque/plano-compra-payload';
+import {
+  PESO_PECAS,
+  PESO_FATURAMENTO,
+  JANELA_PARTICIPACAO_DIAS,
+  JANELA_CANDIDATOS_DIAS,
+  MIX_MINIMO_MARCA,
+} from '@/lib/estoque/constants';
 import { classificarPorIdade } from '@/lib/estoque/faixas-saneamento';
 import { categorizarProduto } from '@/utils/categorizarProduto';
 import { Button } from '@/components/ui/button';
@@ -50,8 +68,11 @@ const ETAPAS = [
   'Marcas',
   'Mix Ideal',
   'Plano',
+  'Ajuste Final',
   'Exportar',
 ];
+
+const TOTAL_ETAPAS = ETAPAS.length;
 
 function EtapaProgresso({ step }: { step: number }) {
   return (
@@ -183,6 +204,7 @@ export default function PlanoMensalPage() {
   const [step, setStep] = useState(1);
   const [empresaId, setEmpresaId] = useState<number | null>(null);
   const [overrides, setOverrides] = useState<Map<string, MarcaOverride>>(new Map());
+  const [planoFinal, setPlanoFinal] = useState<PlanoFinalMarca[]>([]);
 
   // Janela de vendas (180 dias fixo — Princípio #6)
   const hoje = new Date();
@@ -319,6 +341,21 @@ export default function PlanoMensalPage() {
 
   const totalMixIdeal = mixMarcas.reduce((s, m) => s + m.mixTotal, 0);
 
+  // Reset plano final quando o mix muda (overrides, capacidade, dados).
+  // Preserva edições do usuário só se as marcas continuam idênticas.
+  useEffect(() => {
+    setPlanoFinal(prev => {
+      const inicial = derivarPlanoFinalInicial(mixMarcas);
+      if (prev.length === 0) return inicial;
+      const mesmasMarcas =
+        prev.length === inicial.length &&
+        prev.every((p, i) => p.marca === inicial[i].marca);
+      if (!mesmasMarcas) return inicial;
+      // Mantém valores ajustados pelo usuário; restante volta ao sugerido.
+      return inicial.map((novo, i) => prev[i].ajusteUsuario ? prev[i] : novo);
+    });
+  }, [mixMarcas]);
+
   // ── Itens para liquidação (dead stock com faixa) ───────────────────────────
   const itensLiquidacao = useMemo((): ItemLiquidacao[] => {
     return itensMix
@@ -364,31 +401,33 @@ export default function PlanoMensalPage() {
     onError: (e: Error) => toast({ title: 'Erro ao salvar', description: e.message, variant: 'destructive' }),
   });
 
+  // ── Parâmetros do plano (snapshot do que rodou) ────────────────────────────
+  const parametrosPlano = useMemo((): ParametrosPlano => ({
+    capacidadeTotal,
+    pctSolarDefault,
+    pesoPecas: PESO_PECAS,
+    pesoFaturamento: PESO_FATURAMENTO,
+    janelaParticipacaoDias: JANELA_PARTICIPACAO_DIAS,
+    janelaCandidatosDias: JANELA_CANDIDATOS_DIAS,
+    mixMinimoMarca: MIX_MINIMO_MARCA,
+    dataInicio,
+    dataFim,
+  }), [capacidadeTotal, pctSolarDefault, dataInicio, dataFim]);
+
   // ── Salvar plano ───────────────────────────────────────────────────────────
   const { mutateAsync: salvarPlano, isPending: salvandoPlano } = useMutation({
     mutationFn: async () => {
       if (!empresaId) throw new Error('Empresa não selecionada');
-      const planoSugerido = mixMarcas.map(m => ({
-        marca: m.marca,
-        mixTotal: m.mixTotal,
-        mixRX: m.mixRX,
-        mixSolar: m.mixSolar,
-        estoqueEfetivo: m.estoqueEfetivo,
-        lacuna: m.lacuna,
-        status: m.status,
-        skusAlocados: m.skusAlocados,
-      }));
+      const payload = montarPayloadInsert({
+        codEmpresa: empresaId,
+        mix: mixMarcas,
+        planoFinal,
+        parametros: parametrosPlano,
+      });
       const { error } = await supabase
         .from('plano_compra_historico')
-        .insert({
-          loja_codigo: empresaId,
-          data_geracao: new Date().toISOString(),
-          parametros: { capacidadeTotal, pctSolarDefault },
-          plano_sugerido: planoSugerido,
-          plano_final: planoSugerido,
-          total_sugerido: mixMarcas.reduce((s, m) => s + m.lacuna, 0),
-          total_final: mixMarcas.reduce((s, m) => s + m.lacuna, 0),
-        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .insert(payload as any);
       if (error) throw error;
     },
     onSuccess: () => toast({ title: 'Plano salvo com sucesso.' }),
@@ -418,18 +457,34 @@ export default function PlanoMensalPage() {
   }, [mixMarcas, empresaId, dataFim]);
 
   // ── Helpers de navegação ──────────────────────────────────────────────────
-  const podeAvancar = () => {
-    if (step === 1) return empresaId !== null;
-    if (step === 2) return !loading && itensMix.length > 0;
-    return true;
-  };
+  const podeAvancar = () => podeAvancarStep({
+    step,
+    empresaId,
+    loadingDados: loading,
+    qtdItens: itensMix.length,
+    capacidadeTotal,
+    mixVazio: mixMarcas.length === 0,
+  });
 
   const avancar = async () => {
     if (step === 3) await salvarOverrides();
-    if (podeAvancar()) setStep(s => Math.min(6, s + 1));
+    if (podeAvancar()) setStep(s => Math.min(TOTAL_ETAPAS, s + 1));
   };
 
   const voltar = () => setStep(s => Math.max(1, s - 1));
+
+  // ── Edição manual do plano final (Step 6) ──────────────────────────────────
+  const setAjusteMarca = (marca: string, qtd: number) => {
+    setPlanoFinal(prev => aplicarAjustePlanoFinal(prev, mixMarcas, marca, qtd));
+  };
+  const resetAjustes = () => setPlanoFinal(derivarPlanoFinalInicial(mixMarcas));
+
+  const totalSugerido = useMemo(() => totalLacunaSugerida(mixMarcas), [mixMarcas]);
+  const totalFinal = useMemo(() => totalPlanoFinal(planoFinal), [planoFinal]);
+  const qtdMarcasAjustadas = useMemo(
+    () => planoFinal.filter(p => p.ajusteUsuario).length,
+    [planoFinal],
+  );
 
   // ── Override helpers ───────────────────────────────────────────────────────
   const setOverride = (marca: string, field: keyof Omit<MarcaOverride, 'marca'>, value: number | boolean | null) => {
@@ -644,15 +699,91 @@ export default function PlanoMensalPage() {
         </div>
       )}
 
-      {/* ── Etapa 6: Exportar e Salvar ───────────────────────────────────── */}
+      {/* ── Etapa 6: Ajuste Final ────────────────────────────────────────── */}
       {step === 6 && (
         <Card>
-          <CardHeader><CardTitle>Etapa 6 — Exportar e Salvar</CardTitle></CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 max-w-sm">
-              <MetricCard label="Peças a Comprar" value={mixMarcas.reduce((s, m) => s + m.lacuna, 0)} unit="" color="text-primary" />
-              <MetricCard label="SKUs para Liquidar" value={itensLiquidacao.length} unit="" color="text-amber-600" />
+          <CardHeader>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <CardTitle>Etapa 6 — Ajuste Final</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Edite a quantidade a comprar por marca. Sugerido = lacuna calculada;
+                  final = o que será efetivamente registrado.
+                </p>
+              </div>
+              {qtdMarcasAjustadas > 0 && (
+                <Button variant="ghost" size="sm" onClick={resetAjustes}>
+                  Resetar ajustes ({qtdMarcasAjustadas})
+                </Button>
+              )}
             </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4 max-w-md mb-4">
+              <MetricCard label="Total Sugerido" value={totalSugerido} unit="peças" color="text-slate-700" />
+              <MetricCard label="Total Final" value={totalFinal} unit="peças" color={totalFinal !== totalSugerido ? 'text-primary' : 'text-slate-700'} />
+              <MetricCard label="Δ Ajuste" value={totalFinal - totalSugerido} unit="" color={totalFinal === totalSugerido ? 'text-muted-foreground' : 'text-amber-600'} />
+            </div>
+            <div className="overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Marca</TableHead>
+                    <TableHead className="text-right">Estoque Efetivo</TableHead>
+                    <TableHead className="text-right">Mix Ideal</TableHead>
+                    <TableHead className="text-right">Sugerido</TableHead>
+                    <TableHead className="w-32 text-right">Final</TableHead>
+                    <TableHead className="w-20"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {mixMarcas.map(m => {
+                    const ajuste = planoFinal.find(p => p.marca === m.marca);
+                    return (
+                      <TableRow key={m.marca}>
+                        <TableCell className="font-medium">{m.marca}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{m.estoqueEfetivo}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{m.mixTotal}</TableCell>
+                        <TableCell className="text-right">{m.lacuna}</TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            min={0}
+                            value={ajuste?.qtdComprar ?? 0}
+                            onChange={e => setAjusteMarca(m.marca, Number(e.target.value))}
+                            className="w-24 text-right inline-block"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {ajuste?.ajusteUsuario && (
+                            <Badge variant="outline" className="text-xs">editado</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Etapa 7: Exportar e Salvar ───────────────────────────────────── */}
+      {step === 7 && (
+        <Card>
+          <CardHeader><CardTitle>Etapa 7 — Exportar e Salvar</CardTitle></CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-3 gap-4 max-w-md">
+              <MetricCard label="Total Sugerido" value={totalSugerido} unit="" color="text-slate-700" />
+              <MetricCard label="Total Final" value={totalFinal} unit="" color="text-primary" />
+              <MetricCard label="SKUs Liquidar" value={itensLiquidacao.length} unit="" color="text-amber-600" />
+            </div>
+            {qtdMarcasAjustadas > 0 && (
+              <p className="text-sm text-amber-700">
+                {qtdMarcasAjustadas} marca(s) com ajuste manual. plano_final difere do plano_sugerido.
+              </p>
+            )}
             <div className="flex flex-col sm:flex-row gap-3">
               <Button
                 variant="outline"
@@ -683,13 +814,13 @@ export default function PlanoMensalPage() {
         <Button variant="outline" onClick={voltar} disabled={step === 1} className="gap-2">
           <ChevronLeft className="h-4 w-4" /> Voltar
         </Button>
-        {step < 6 ? (
+        {step < TOTAL_ETAPAS ? (
           <Button onClick={avancar} disabled={!podeAvancar() || salvandoOverrides} className="gap-2">
             {salvandoOverrides ? 'Salvando…' : 'Avançar'}
             <ChevronRight className="h-4 w-4" />
           </Button>
         ) : (
-          <div /> /* botão de salvar fica dentro da etapa 6 */
+          <div /> /* botão de salvar fica dentro da etapa final */
         )}
       </div>
     </div>
