@@ -44,19 +44,12 @@ import { useUserEmpresas } from "@/hooks/useUserEmpresas";
 // HELPERS
 // ============================================
 
-// Tratamentos conforme portal web Haytek.
-// V = Verde, A = Azul. ARS/ART são códigos tentativos para Antirrisco (sem doc oficial).
+// Tratamentos oficiais Haytek (confirmados pela API /orders/lab).
 const TREATMENTS = [
-  { value: "ARS", label: "ARS — Antirrisco" },
-  { value: "ART", label: "ART — Antirrisco Tingível" },
-  { value: "TIN", label: "TIN — Tintura" },
+  { value: "ANT", label: "ANT — Antirrisco" },
   { value: "ARV", label: "ARV — Antirreflexo Verde (Super-Hidrofóbico, 1 ano)" },
   { value: "ARA", label: "ARA — Antirreflexo Azul (Super-Hidrofóbico, 1 ano)" },
   { value: "APV", label: "APV — Antirreflexo Premium Verde (2 anos)" },
-  { value: "APA", label: "APA — Antirreflexo Premium Azul (2 anos)" },
-  { value: "ANT", label: "ANT — Antirreflexo (genérico)" },
-  { value: "TRP", label: "TRP — Transitions" },
-  { value: "TRS", label: "TRS — Transitions Solar" },
 ];
 
 const FRAME_CODES = [
