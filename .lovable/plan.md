@@ -1,60 +1,68 @@
-# Pedido Haytek / Zeiss — padronização, tracking e nome da loja
+## Causa raiz
 
-Quatro ajustes solicitados:
+Logo após o login (e em todo reload com sessão válida), aparece o toast vermelho **"Erro ao carregar — Fetch is aborted"** na tela `/estoque`, embora os dados sejam carregados normalmente ~2 segundos depois.
 
-## 1. Tela de sucesso (Haytek e Zeiss) igual à Hoya
+Reproduzido nos logs (login 17:28:13 → primeiro lote falha 17:28:18 → segundo lote sucede 17:28:20). O sintoma vem de **três problemas combinados**, não de um bug do Bridge nem do Supabase:
 
-Hoje, ao confirmar um pedido na Haytek e na Zeiss, o operador continua na mesma tela e só vê uma barra verde de confirmação. Na Hoya existe uma tela cheia de sucesso (`PackageCheck` + "Pedido Enviado!" + nº do pedido + voucher + botão "Voltar à Receita").
+### 1. `AuthContext` dispara `loadUserData` em duplicidade (origem do burst)
 
-**O que será feito:**
+`src/contexts/AuthContext.tsx` (linhas 55–96) faz, no mesmo `useEffect`:
 
-- `src/pages/PedidoHaytekPage.tsx`: após `setResultado(resp)` com `orderId`, mostrar uma tela dedicada de sucesso, no mesmo padrão visual da Hoya: ícone redondo, título "Pedido Enviado!", "Nº Pedido Haytek: <orderId>", status e botão "Voltar à Receita". A barra verde inline atual é removida.
-- `src/pages/PedidoZeissPage.tsx`: mesmo padrão após confirmação Zeiss bem-sucedida (usando `numeroPedido` + `voucherGerado` quando houver, já que Zeiss também emite voucher).
+- registra `supabase.auth.onAuthStateChange(...)` — que **dispara imediatamente** o evento `INITIAL_SESSION` com a sessão atual, chamando `loadUserData`;
+- **em paralelo** chama `supabase.auth.getSession()` — cujo `.then(...)` também chama `loadUserData`.
 
-## 2. Bloqueio de novo pedido quando já existe um confirmado
+Resultado: 2 ciclos de `setUser` + `setProfile` + `setRoles` quase simultâneos. Cada `setUser` re-renderiza todo o app autenticado, que reabre conexões fetch para Supabase REST e Firebird Bridge. No Safari (`TypeError: Load failed` é a assinatura clássica dele) o segundo render cancela os fetches do primeiro → "Fetch is aborted".
 
-Na Hoya, ao reabrir a tela de uma OS que já tem pedido confirmado, é exibida a tela "Pedido já enviado" e o formulário fica indisponível. Hoje:
+### 2. `useEstoqueUnificado` mostra toast de erro mesmo quando o erro é um cancelamento
 
-- **Haytek**: não checa `pedidos_fornecedor` ao montar a tela → operador consegue enviar outro pedido para a mesma OS.
-- **Zeiss**: checa, mas apenas mostra um banner de aviso; o formulário continua visível.
+`src/hooks/useEstoqueUnificado.ts` (linhas 904–935 e o auto-load 941–952):
 
-**O que será feito (mesmo padrão da Hoya, com tratamento de status negativos):**
+- O `carregarDados` é disparado pelo auto-load assim que `filters.empresa` muda de `null` → valor real (vindo do `useDefaultEmpresa`/profile).
+- Como o profile é setado 2x pelo problema 1, o auto-load também executa 2x; o primeiro `Promise.all([getEstoqueCompleto, getAnaliseSku])` é cancelado pelo re-render.
+- No `catch` (linha 928–931) não há filtro: qualquer erro vira `toast({ title: "Erro ao carregar", ... })` — inclusive `REQUEST_CANCELLED` / "Load failed".
 
-- `PedidoHaytekPage.tsx`:
-  - Adicionar `useEffect` que consulta `pedidos_fornecedor` por `cod_os` + `fornecedor='HAYTEK'`, ordenado por `created_at desc`.
-  - Estado `pedidoExistente` + helper `isNegativeStatus` (cancel / rejeit / falha / recusa).
-  - Se existir pedido confirmado e não-negativo → renderizar tela "Pedido já enviado" idêntica à da Hoya, trocando o rótulo do fornecedor.
-  - Se negativo → banner amarelo "Pedido anterior #X foi cancelado/rejeitado — você pode enviar um novo pedido" e libera o formulário.
-- `PedidoZeissPage.tsx`:
-  - Promover o `pedidoExistente` atual a tela de bloqueio full-page (mesmo padrão), mantendo "CANCELAMENTO_SOLICITADO" / negativos como banner que libera o reenvio.
+### 3. `firebirdBridge` já tem o código de cancelamento, mas o consumidor não o filtra
 
-## 3. Tracking Haytek — substituir JSON por dados estruturados
+`src/services/firebirdBridge.ts` (linhas 237–246) **já** marca erros cancelados como `code: 'REQUEST_CANCELLED'`. O Supabase JS, porém, só joga `TypeError: Load failed`. Precisamos detectar ambos no consumidor.
 
-`HaytekTrackingDetail` já parseia status, produto, prescrição, armação, deliveries e payment, mas o usuário relata que **frete (transportadora, código, previsão) e valor (total, NF)** estão chegando como JSON bruto. Provável causa: a resposta da Haytek usa chaves que ainda não estão mapeadas.
+---
 
-**O que será feito:**
+## O que vai mudar
 
-- Ampliar `src/components/haytek/HaytekTrackingDetail.tsx` cobrindo nomes comuns em snake_case e camelCase:
-  - **Frete / Envio**: `shipping`, `freight`, `shippingMethod`, `shippingValue`/`freightValue`, `carrier`, `trackingCode`/`trackingNumber`/`trackingUrl`, `estimatedDate`/`estimatedDelivery`.
-  - **Faturamento**: `invoice`/`invoiceNumber`/`invoiceUrl`/`invoiceDate`, `total`/`subtotal`/`discount`.
-- Renderizar dois novos cards: **"Frete / Envio"** (transportadora, rastreio com link clicável, previsão, valor do frete) e **"Faturamento"** (NF, valor total, descontos).
-- Manter "Ver JSON bruto" como debug colapsável.
+### Arquivo 1 — `src/contexts/AuthContext.tsx`
+Aplicar o padrão oficial Supabase para evitar a duplicidade:
+- Registrar `onAuthStateChange` primeiro, fazendo **apenas** updates síncronos no callback;
+- Deferir `loadUserData` com `setTimeout(..., 0)` (evita deadlock dentro do callback);
+- Chamar `getSession()` somente para seed inicial; **não** disparar `loadUserData` ali — o `INITIAL_SESSION` que o `onAuthStateChange` emite já faz isso;
+- Guardar o último `userId` carregado em um `ref` e ignorar callbacks com o mesmo userId que já está carregado (deduplica `INITIAL_SESSION` + eventual `TOKEN_REFRESHED` cedo).
 
-> Como não tenho um exemplo real do JSON com frete/valor, vou cobrir os nomes mais comuns + fallback. **Se possível, anexe o JSON real no próximo passo** para mapear exatamente o que a Haytek devolve.
+### Arquivo 2 — `src/lib/isAbortError.ts` (novo, ~15 linhas)
+Helper único para detectar erros de cancelamento, cobrindo:
+- `err.name === 'AbortError'`
+- `err.code === 'REQUEST_CANCELLED'`
+- mensagens contendo `aborted`, `Load failed`, `Fetch is aborted`, `cancelled`
+- `DOMException` com `name === 'AbortError'`
 
-## 4. Nome (alias) da loja no header do Pedido Haytek
+### Arquivo 3 — `src/hooks/useEstoqueUnificado.ts`
+- No `catch` de `carregarDados` (linhas 928–934): se `isAbortError(err)`, apenas logar em `console.debug` e sair sem `setError` / sem toast.
+- No auto-load (941–952): adicionar guarda extra `if (loadingEmpresas) return;` para não disparar antes de o AuthContext terminar de carregar o profile.
 
-Hoje o header usa `haytek_empresa_config.alias` (`"— Empresa 18"` aparece quando o alias está vazio). O usuário quer ver o alias padrão da loja (ex.: "Diniz Primitiva II"), como acontece no `HaytekTrackingPage`.
+### Arquivo 4 — `src/hooks/useUserEmpresas.ts` e `src/hooks/useEmpresas.ts`
+Aplicar o mesmo `isAbortError` para silenciar warnings/toasts irrelevantes durante o burst inicial.
 
-**O que será feito em `PedidoHaytekPage.tsx`:**
+### Arquivo 5 (opcional, escopo enxuto) — `src/services/empresaService.ts`
+O log `"Supabase falhou para empresas, tentando Firebird Bridge"` aparece duas vezes apenas porque o `Load failed` inicial dispara o fallback. Após corrigir o AuthContext o fallback não vai mais acionar; nenhuma mudança aqui é necessária além de degradar o `console.warn` para `console.debug` quando `isAbortError(error)`.
 
-- Usar `useUserEmpresas()` (mesmo hook já usado no tracking) para resolver o nome oficial da loja a partir de `codEmpresa`.
-- Ordem de fallback no header: `nome de useUserEmpresas` → `haytek_empresa_config.alias` → `"Empresa {codEmpresa}"`.
+---
 
-## Arquivos afetados
+## Como vou validar
 
-- `src/pages/PedidoHaytekPage.tsx`
-- `src/pages/PedidoZeissPage.tsx`
-- `src/components/haytek/HaytekTrackingDetail.tsx`
+1. Recarregar `/estoque` logado e confirmar que **não há mais toast vermelho** "Fetch is aborted".
+2. Conferir nos logs do console que `[FirebirdBridge] GET /estoque/completo` aparece **uma única vez** por carregamento (em vez de duas).
+3. Conferir nos network requests que `user_roles`, `profiles`, `empresa`, `capacidade_expositor` são chamados **uma vez** logo após o login (em vez de duas falhando + duas sucedendo).
+4. Login → navegar para `/estoque` → trocar de loja: dados continuam carregando normalmente e o toast verde "Dados Carregados" aparece.
 
-Sem mudanças de backend, edge function ou schema.
+## O que NÃO vai mudar
+- Nenhuma lógica de negócio do estoque, OTB, plano de compra.
+- Nenhuma alteração no `firebird-bridge`, em RLS, ou em Edge Functions.
+- Nenhuma mudança nas telas de pedido Hoya / Zeiss / Haytek.

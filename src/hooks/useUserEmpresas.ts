@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { getEmpresas, Empresa } from '@/services/empresaService';
+import { isAbortError } from '@/lib/isAbortError';
 
 interface UseUserEmpresasReturn {
   empresas: Empresa[];
@@ -48,7 +49,9 @@ export function useUserEmpresas(): UseUserEmpresasReturn {
       setAllEmpresas(empresasData);
 
       if (permsRes.error) {
-        console.warn('Erro ao buscar permissões de empresa:', permsRes.error);
+        if (!isAbortError(permsRes.error)) {
+          console.warn('Erro ao buscar permissões de empresa:', permsRes.error);
+        }
         setAllowedCods(null);
       } else if (permsRes.data && permsRes.data.length > 0) {
         setAllowedCods(permsRes.data.map(p => p.cod_empresa));
@@ -57,6 +60,10 @@ export function useUserEmpresas(): UseUserEmpresasReturn {
         setAllowedCods([]);
       }
     } catch (err) {
+      if (isAbortError(err)) {
+        // Cancelado por re-render — não propagar como erro.
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Erro ao carregar empresas';
       setError(message);
       setAllEmpresas([]);
