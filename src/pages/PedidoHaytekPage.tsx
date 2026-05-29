@@ -44,8 +44,7 @@ import { useUserEmpresas } from "@/hooks/useUserEmpresas";
 // HELPERS
 // ============================================
 
-// Tratamentos conforme portal web Haytek.
-// V = Verde, A = Azul.
+// Tratamentos conforme portal web Haytek (nomes idênticos à UI).
 const TREATMENTS = [
   { value: "ANT", label: "ANT — Antirrisco" },
   { value: "ART", label: "ART — Antirrisco Tingível" },
