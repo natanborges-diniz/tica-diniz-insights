@@ -19,10 +19,12 @@ import { isAbortError } from "@/lib/isAbortError";
 import { useEstoqueStore, type EstoqueFilters } from "@/stores/useEstoqueStore";
 import { classificarPorIdade, toFaixaDoente, type FaixaDoente } from "@/lib/estoque/faixas-saneamento";
 import { calcularCurvaABC } from "@/lib/estoque/curva-abc";
-import { calcularMixIdealCategoria, calcularMixIdealMarcas, type DecisaoMarca as DecisaoMarcaType, type MixMarca as MixMarcaType, type MixComparativo as MixComparativoType } from "@/lib/estoque/mix-ideal";
+import { calcularMixIdealCategoria, calcularMixIdealMarcas, type DecisaoMarca as DecisaoMarcaType, type MixMarca as MixMarcaType, type MixComparativo as MixComparativoType, type MarcaConfigFlags } from "@/lib/estoque/mix-ideal";
 import { calcularDecisaoSku, type DecisaoSku as DecisaoSkuType } from "@/lib/estoque/decisao-sku";
 import { distribuirLacuna, type MotivoQtd as MotivoQtdType, type SkuParaPool } from "@/lib/estoque/lacuna";
 import { calcularCapacidadePorCategoria, type CapacidadeConfig } from "@/lib/estoque/capacidade";
+import { calcularParticipacaoMarca, type ParticipacaoMarca } from "@/lib/estoque/participacao-marca";
+import { calcularMixIdealV2, type MixMarcaV2, type MarcaConfigV2 } from "@/lib/estoque/mix-ideal-v2";
 
 // Re-export para compatibilidade com imports existentes
 export type { EstoqueFilters };
@@ -213,6 +215,23 @@ interface MapeamentoFornecedor {
   fornecedor: string;
 }
 
+interface MarcaConfigRow {
+  cod_empresa: number;
+  marca: string;
+  pct_solar: number | null;
+  estrategica: boolean;
+  recem_introduzida: boolean;
+}
+
+export interface MarcaConfig {
+  pctSolar: number | null;
+  estrategica: boolean;
+  recemIntroduzida: boolean;
+}
+
+// Re-export para consumers
+export type { ParticipacaoMarca, MixMarcaV2 };
+
 // Período fixo: 180 dias
 const DIAS_PERIODO = 180;
 
@@ -290,6 +309,8 @@ export function useEstoqueUnificado() {
   // Estado local apenas para mapeamentos (são globais e não dependem de empresa)
   const [mapeamentoFornecedor, setMapeamentoFornecedor] = useState<Map<string, string>>(new Map());
   const [configCapacidade, setConfigCapacidade] = useState<CapacidadeExpositorRow[]>([]);
+  // marca_config: chaveado por (cod_empresa, marca). Carregado por empresa.
+  const [marcaConfigRows, setMarcaConfigRows] = useState<MarcaConfigRow[]>([]);
 
   useEffect(() => {
     const carregarMapeamentos = async () => {
@@ -328,6 +349,51 @@ export function useEstoqueUnificado() {
     };
     carregarCapacidades();
   }, []);
+
+  // Carrega marca_config da empresa selecionada (override de pct_solar + flags).
+  // Re-fetch quando filters.empresa muda. ALL → carrega tudo.
+  useEffect(() => {
+    const carregarMarcaConfig = async () => {
+      if (filters.empresa === null || filters.empresa === undefined) {
+        setMarcaConfigRows([]);
+        return;
+      }
+      try {
+        let query = supabase
+          .from('marca_config')
+          .select('cod_empresa, marca, pct_solar, estrategica, recem_introduzida');
+        if (filters.empresa !== 'ALL') {
+          const codEmpresa = typeof filters.empresa === 'number' ? filters.empresa : parseInt(String(filters.empresa));
+          query = query.eq('cod_empresa', codEmpresa);
+        }
+        const { data, error } = await query;
+        if (error) throw error;
+        if (data) setMarcaConfigRows(data as MarcaConfigRow[]);
+      } catch (err) {
+        console.error('[useEstoqueUnificado] Erro ao carregar marca_config:', err);
+        setMarcaConfigRows([]);
+      }
+    };
+    carregarMarcaConfig();
+  }, [filters.empresa]);
+
+  // Map<marcaUpperCase, MarcaConfig> filtrado pela empresa atual.
+  // Chave em uppercase porque marca chega em formatação variável dos fontes.
+  const marcaConfigMap = useMemo((): Map<string, MarcaConfig> => {
+    const map = new Map<string, MarcaConfig>();
+    const codEmpresaAtual = filters.empresa !== null && filters.empresa !== 'ALL'
+      ? (typeof filters.empresa === 'number' ? filters.empresa : parseInt(String(filters.empresa)))
+      : null;
+    marcaConfigRows.forEach(r => {
+      if (codEmpresaAtual !== null && r.cod_empresa !== codEmpresaAtual) return;
+      map.set(r.marca.trim().toUpperCase(), {
+        pctSolar: r.pct_solar,
+        estrategica: r.estrategica,
+        recemIntroduzida: r.recem_introduzida,
+      });
+    });
+    return map;
+  }, [marcaConfigRows, filters.empresa]);
 
   // Mescla dados de ambos endpoints por cod_sku — UNIÃO (estoque ∪ vendas)
   // Inclui SKUs sem estoque mas com venda nos 180d, para que "Vendas 6m" não fique subcontado
@@ -406,7 +472,9 @@ export function useEstoqueUnificado() {
       if (filters.empresa !== null && filters.empresa !== 'ALL') {
         const codEmpresa = typeof filters.empresa === 'number' ? filters.empresa : parseInt(String(filters.empresa));
         const config = configCapacidade.find(c => c.cod_empresa === codEmpresa) ?? null;
-        estoqueMinimo = calcularCapacidadePorCategoria(config, subcategoria);
+        // Override de pct_solar por marca (marca_config), quando existir.
+        const marcaCfg = marcaConfigMap.get(marca.trim().toUpperCase());
+        estoqueMinimo = calcularCapacidadePorCategoria(config, subcategoria, marcaCfg?.pctSolar);
       }
 
       const otb = Math.max(0, Math.ceil(estoqueMinimo - estoqueAtual));
@@ -473,7 +541,7 @@ export function useEstoqueUnificado() {
         decisaoSku,
       };
     });
-  }, [dadosEstoqueCompleto, dadosVendasSku, filters.empresa, mapeamentoFornecedor, configCapacidade]);
+  }, [dadosEstoqueCompleto, dadosVendasSku, filters.empresa, mapeamentoFornecedor, configCapacidade, marcaConfigMap]);
 
   // Contagem por categoria — apenas itens com estoque positivo (B.1)
   // LENTES_GRAU: excluída da UI (oculta), não entra em nenhum contador
@@ -624,9 +692,87 @@ export function useEstoqueUnificado() {
   // Decide quais marcas compõem o mix e quanto de estoque cada uma deve ter.
   // SKU não entra aqui. A saída alimenta a Fase 2 (distribuição da lacuna).
 
+  // Repassa as flags estrategica/recem_introduzida (marca_config) pro motor V1.
+  // Chave em uppercase pra bater com a normalização feita ao montar marcaConfigMap.
+  const marcaConfigFlagsMap = useMemo((): Map<string, MarcaConfigFlags> => {
+    const m = new Map<string, MarcaConfigFlags>();
+    marcaConfigMap.forEach((cfg, marcaKey) => {
+      m.set(marcaKey, { estrategica: cfg.estrategica, recemIntroduzida: cfg.recemIntroduzida });
+    });
+    return m;
+  }, [marcaConfigMap]);
+
+  // calcularMixIdealMarcas usa o nome cru da marca como chave; normalizamos
+  // o map de flags para casar com a forma que o motor consulta.
+  const marcaConfigFlagsByName = useMemo((): Map<string, MarcaConfigFlags> => {
+    const m = new Map<string, MarcaConfigFlags>();
+    const visto = new Set<string>();
+    itensFiltrados.forEach(i => {
+      const nome = (i.marca || 'SEM MARCA');
+      if (visto.has(nome)) return;
+      visto.add(nome);
+      const cfg = marcaConfigFlagsMap.get(nome.trim().toUpperCase());
+      if (cfg) m.set(nome, cfg);
+    });
+    return m;
+  }, [itensFiltrados, marcaConfigFlagsMap]);
+
   const mixIdealMarcas = useMemo((): MixMarca[] => {
-    return calcularMixIdealMarcas(itensFiltrados, { diasPeriodo: DIAS_PERIODO, coberturaAlvo: COBERTURA_ALVO_MARCA });
+    return calcularMixIdealMarcas(itensFiltrados, {
+      diasPeriodo: DIAS_PERIODO,
+      coberturaAlvo: COBERTURA_ALVO_MARCA,
+      marcaConfigs: marcaConfigFlagsByName,
+    });
+  }, [itensFiltrados, marcaConfigFlagsByName]);
+
+  // ============================================
+  // FASE 2.0 — PARTICIPAÇÃO POR MARCA (Princípio #6)
+  // ============================================
+  // Participação proporcional = 60% peças + 40% faturamento (apenas Armações).
+  // Consumível pelo Wizard Plano Mensal e por qualquer view que precise do
+  // share-of-sales por marca.
+  const participacaoMarca = useMemo((): Map<string, ParticipacaoMarca> => {
+    return calcularParticipacaoMarca(itensFiltrados);
   }, [itensFiltrados]);
+
+  // Capacidade total e pct_solar default da empresa selecionada (input do V2).
+  const capacidadeEmpresa = useMemo(() => {
+    if (filters.empresa === null || filters.empresa === 'ALL') return null;
+    const codEmpresa = typeof filters.empresa === 'number' ? filters.empresa : parseInt(String(filters.empresa));
+    return configCapacidade.find(c => c.cod_empresa === codEmpresa) ?? null;
+  }, [configCapacidade, filters.empresa]);
+
+  // Mix ideal V2: participação × capacidade, com override de pct_solar e flags
+  // por marca aplicadas. Vazio quando não há empresa ou capacidade carregada.
+  const mixIdealV2 = useMemo((): MixMarcaV2[] => {
+    if (!capacidadeEmpresa || capacidadeEmpresa.capacidade_total <= 0) return [];
+    const configsV2 = new Map<string, MarcaConfigV2>();
+    marcaConfigFlagsByName.forEach((_flags, nome) => {
+      const cfg = marcaConfigMap.get(nome.trim().toUpperCase());
+      if (!cfg) return;
+      configsV2.set(nome, {
+        pctSolar: cfg.pctSolar,
+        estrategica: cfg.estrategica,
+        recemIntroduzida: cfg.recemIntroduzida,
+      });
+    });
+    return calcularMixIdealV2({
+      itens: itensFiltrados.map(i => ({
+        codSku: i.codSku,
+        descricao: i.descricao,
+        marca: i.marca || 'SEM MARCA',
+        qtdVendidos: i.qtdVendidos,
+        totalVendido: i.totalVendido,
+        estoqueAtual: i.estoqueAtual,
+        isDeadStock: i.isDeadStock,
+        diasGiroUltimaPeca: i.diasGiroUltimaPeca,
+        categoria: i.categoria,
+      })),
+      capacidadeTotal: capacidadeEmpresa.capacidade_total,
+      marcaConfigs: configsV2,
+      pctSolarDefault: capacidadeEmpresa.percentual_solar,
+    });
+  }, [itensFiltrados, capacidadeEmpresa, marcaConfigMap, marcaConfigFlagsByName]);
 
   // ============================================
   // RESUMO POR MARCA — com blocos acionáveis (Fase 2)
@@ -977,6 +1123,8 @@ export function useEstoqueUnificado() {
     listaFornecedores, listaMarcas, listaAcoes, marcasSemFornecedor,
     mixIdealCategoria, mixIdealMarca, mixIdealMarcas, lacunasNaoPreenchiveis,
     resumoPorMarca, estoqueDoenteAgrupado, listaCompraFlat,
+    // Fase 2.0 — participação proporcional + V2
+    participacaoMarca, mixIdealV2, marcaConfigMap, capacidadeEmpresa,
     carregarDados,
     carregadoEm, empresaCarregada,
   };

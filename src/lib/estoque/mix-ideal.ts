@@ -43,6 +43,20 @@ export function calcularMixIdealCategoria(
     .filter(m => m.percentualIdeal > 0 || m.percentualAtual > 0);
 }
 
+/**
+ * Config opcional por marca — flags vindas da tabela `marca_config`.
+ *
+ * - `estrategica`: garante presença mínima da marca no mix mesmo quando ela seria
+ *   excluída por baixa performance (curva C + taxa < threshold).
+ * - `recemIntroduzida`: protege a marca de ser marcada como
+ *   AVALIAR_DESCONTINUACAO durante a janela inicial, dando-lhe um piso de
+ *   peças ideais para que tenha estoque para vender.
+ */
+export interface MarcaConfigFlags {
+  estrategica?: boolean;
+  recemIntroduzida?: boolean;
+}
+
 export function calcularMixIdealMarcas(
   itens: ReadonlyArray<{
     marca: string;
@@ -55,6 +69,8 @@ export function calcularMixIdealMarcas(
     coberturaAlvo?: Record<'A' | 'B' | 'C', number>;
     thresholdPerformance?: number;
     diasPeriodo?: number;
+    marcaConfigs?: Map<string, MarcaConfigFlags>;
+    minPecasMarcaProtegida?: number;
   }
 ): MixMarca[] {
   if (itens.length === 0) return [];
@@ -62,6 +78,8 @@ export function calcularMixIdealMarcas(
   const coberturaAlvo = opts?.coberturaAlvo ?? COBERTURA_ALVO_PADRAO;
   const threshold = opts?.thresholdPerformance ?? 0.5;
   const diasPeriodo = opts?.diasPeriodo ?? 180;
+  const marcaConfigs = opts?.marcaConfigs;
+  const minProtegida = opts?.minPecasMarcaProtegida ?? 25;
 
   type Agg = { pecasVendidas: number; faturamento: number; pecasAtuais: number; skusComVenda: number; skusAtivos: number };
   const aggByMarca = new Map<string, Agg>();
@@ -93,6 +111,10 @@ export function calcularMixIdealMarcas(
     const vendaDiaria = diasPeriodo > 0 ? agg.pecasVendidas / diasPeriodo : 0;
     const taxaPerformance = agg.skusAtivos > 0 ? agg.skusComVenda / agg.skusAtivos : 0;
 
+    const flags = marcaConfigs?.get(marca) ?? {};
+    const estrategica = !!flags.estrategica;
+    const recemIntroduzida = !!flags.recemIntroduzida;
+
     let decisao: DecisaoMarca;
     let incluidaNoMix: boolean;
     if (agg.skusComVenda === 0) {
@@ -106,7 +128,23 @@ export function calcularMixIdealMarcas(
       incluidaNoMix = true;
     }
 
-    const pecasIdeais = incluidaNoMix ? Math.ceil(vendaDiaria * coberturaAlvo[curvaMarca]) : 0;
+    // Flags de proteção (marca_config). Ordem importa:
+    // - recém-introduzida nunca pode virar AVALIAR_DESCONTINUACAO; recebe piso.
+    // - estratégica garante presença mesmo se curva C / baixa performance; recebe piso.
+    if (recemIntroduzida && decisao === 'AVALIAR_DESCONTINUACAO') {
+      decisao = 'RENOVAR_COLECAO';
+      incluidaNoMix = true;
+    }
+    if (estrategica && !incluidaNoMix) {
+      // mesmo SEM_HISTORICO ou AVALIAR_DESCONTINUACAO: forçar entrada
+      decisao = agg.skusComVenda === 0 ? 'SEM_HISTORICO' : 'REPOR_REFERENCIA';
+      incluidaNoMix = true;
+    }
+
+    const pecasIdeaisBase = incluidaNoMix ? Math.ceil(vendaDiaria * coberturaAlvo[curvaMarca]) : 0;
+    const pecasIdeais = (estrategica || recemIntroduzida) && incluidaNoMix
+      ? Math.max(pecasIdeaisBase, minProtegida)
+      : pecasIdeaisBase;
     const lacuna = Math.max(0, pecasIdeais - agg.pecasAtuais);
 
     return {
