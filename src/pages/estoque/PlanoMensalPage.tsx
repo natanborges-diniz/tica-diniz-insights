@@ -579,7 +579,18 @@ export default function PlanoMensalPage() {
       if (prev.length === 0) return inicial;
       const mesmasMarcas = prev.length === inicial.length && prev.every((p, i) => p.marca === inicial[i].marca);
       if (!mesmasMarcas) return inicial;
-      return inicial.map((novo, i) => prev[i].ajusteUsuario ? prev[i] : novo);
+      const merged = inicial.map((novo, i) => prev[i].ajusteUsuario ? prev[i] : novo);
+      // Evita novo array (e novo render) quando nada mudou de fato
+      const igual = merged.every((m, i) => {
+        const p = prev[i];
+        return m === p || (
+          m.marca === p.marca &&
+          m.quantidade === p.quantidade &&
+          m.ajusteUsuario === p.ajusteUsuario &&
+          m.valorEstimado === p.valorEstimado
+        );
+      });
+      return igual ? prev : merged;
     });
   }, [mixMarcas]);
 
