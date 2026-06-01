@@ -133,6 +133,10 @@ export function calcularMixIdealV2({
   >();
   armacoes.forEach(i => {
     if (i.codSku === undefined) return;
+    // Filtros de candidato (Onda 1 — Princípio: só SKU com giro recente entra no plano)
+    if (!(i.qtdVendidos > 0)) return;            // filtro 1: vendeu nos últimos 90d
+    if (i.diasGiroUltimaPeca == null) return;    // filtro 2: tem giro válido
+    if (i.diasGiroUltimaPeca > 90) return;       // filtro 3: giro recente (≤ 90d)
     const k = (i.marca || 'SEM MARCA').trim();
     const lista = candidatosByMarca.get(k) ?? [];
     lista.push({
