@@ -63,7 +63,7 @@ describe('calcularMixIdealV2 — status e MIX_MINIMO_MARCA', () => {
     expect(p.mixTotal).toBe(MIX_MINIMO_MARCA);
   });
 
-  it('marca < MIX_MINIMO não-estratégica → status=SUGERIR_DESCONTINUAR', () => {
+  it('marca < MIX_MINIMO não-estratégica → mixTotal=0, status=SUGERIR_DESCONTINUAR', () => {
     const itens = [
       { marca: 'PEQUENA', qtdVendidos:   1, totalVendido:   100, estoqueAtual:  5, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 10, descricao: 'PEQ', diasGiroUltimaPeca: 30 },
       { marca: 'GRANDE',  qtdVendidos: 100, totalVendido: 10000, estoqueAtual: 80, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 11, descricao: 'GRA', diasGiroUltimaPeca:  5 },
@@ -71,7 +71,9 @@ describe('calcularMixIdealV2 — status e MIX_MINIMO_MARCA', () => {
     const r = calcularMixIdealV2({ itens, capacidadeTotal: CAP });
     const p = r.find(m => m.marca === 'PEQUENA')!;
     expect(p.status).toBe('SUGERIR_DESCONTINUAR');
-    expect(p.mixTotal).toBeLessThan(MIX_MINIMO_MARCA);
+    expect(p.mixTotal).toBe(0);
+    expect(p.lacuna).toBe(0);
+    expect(p.skusAlocados).toHaveLength(0);
   });
 });
 
@@ -146,14 +148,16 @@ describe('calcularMixIdealV2 — lacuna e dead stock', () => {
 
 describe('calcularMixIdealV2 — alocação por passadas', () => {
   it('SKU mais rápido recebe unidade extra do resto (lacuna ímpar)', () => {
-    // 2 SKUs, única marca → lacuna=3 (capacidade=3, estoque=0)
+    // Única marca (100% participação) → mixTotal = 100
+    // estoqueAtual = 97 no SKU2 → estoqueEfetivo = 97, lacuna = 3
     // Round-robin: sku1(giro=5) → 2, sku2(giro=20) → 1
     const itens = [
-      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 0, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1, descricao: 'Rápido', diasGiroUltimaPeca: 5 },
-      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 0, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 2, descricao: 'Lento',  diasGiroUltimaPeca: 20 },
+      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual:  0, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1, descricao: 'Rápido', diasGiroUltimaPeca: 5 },
+      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 97, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 2, descricao: 'Lento',  diasGiroUltimaPeca: 20 },
     ];
-    const r = calcularMixIdealV2({ itens, capacidadeTotal: 3 });
+    const r = calcularMixIdealV2({ itens, capacidadeTotal: 100 });
     const brand = r.find(m => m.marca === 'BRAND')!;
+    expect(brand.lacuna).toBe(3);
     const sku1 = brand.skusAlocados.find(s => s.codSku === 1)!;
     const sku2 = brand.skusAlocados.find(s => s.codSku === 2)!;
     expect(sku1.qtdSugerida).toBe(2);
@@ -161,13 +165,14 @@ describe('calcularMixIdealV2 — alocação por passadas', () => {
   });
 
   it('SKU sem diasGiroUltimaPeca tem menor prioridade', () => {
-    // 2 SKUs, lacuna=3: sku1(giro=5) → 2, sku2(null→Infinity) → 1
+    // Única marca, lacuna=3: sku1(giro=5) → 2, sku2(null→Infinity) → 1
     const itens = [
-      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 0, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1, descricao: 'Rápido',   diasGiroUltimaPeca: 5 },
-      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 0, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 2, descricao: 'Sem dado', diasGiroUltimaPeca: null },
+      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual:  0, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1, descricao: 'Rápido',   diasGiroUltimaPeca: 5 },
+      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 97, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 2, descricao: 'Sem dado', diasGiroUltimaPeca: null },
     ];
-    const r = calcularMixIdealV2({ itens, capacidadeTotal: 3 });
+    const r = calcularMixIdealV2({ itens, capacidadeTotal: 100 });
     const brand = r.find(m => m.marca === 'BRAND')!;
+    expect(brand.lacuna).toBe(3);
     const rapido = brand.skusAlocados.find(s => s.codSku === 1)!;
     const semDado = brand.skusAlocados.find(s => s.codSku === 2)!;
     expect(rapido.qtdSugerida).toBeGreaterThan(semDado.qtdSugerida);

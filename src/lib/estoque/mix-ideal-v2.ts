@@ -162,7 +162,7 @@ export function calcularMixIdealV2({
         mixTotal = MIX_MINIMO_MARCA;
         status = 'ABAIXO_MINIMO_ESTRATEGICA';
       } else {
-        mixTotal = mixTotalRaw;
+        mixTotal = 0;
         status = 'SUGERIR_DESCONTINUAR';
       }
     } else {
