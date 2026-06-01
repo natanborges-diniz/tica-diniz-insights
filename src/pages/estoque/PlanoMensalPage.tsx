@@ -579,7 +579,17 @@ export default function PlanoMensalPage() {
       if (prev.length === 0) return inicial;
       const mesmasMarcas = prev.length === inicial.length && prev.every((p, i) => p.marca === inicial[i].marca);
       if (!mesmasMarcas) return inicial;
-      return inicial.map((novo, i) => prev[i].ajusteUsuario ? prev[i] : novo);
+      const merged = inicial.map((novo, i) => prev[i].ajusteUsuario ? prev[i] : novo);
+      // Evita novo array (e novo render) quando nada mudou de fato
+      const igual = merged.every((m, i) => {
+        const p = prev[i];
+        return m === p || (
+          m.marca === p.marca &&
+          m.qtdComprar === p.qtdComprar &&
+          m.ajusteUsuario === p.ajusteUsuario
+        );
+      });
+      return igual ? prev : merged;
     });
   }, [mixMarcas]);
 
@@ -678,7 +688,7 @@ export default function PlanoMensalPage() {
 
   const handleExportarExcel = useCallback(() => {
     const buf = gerarExcel(exportParams);
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const blob = new Blob([buf as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `plano-mensal-loja${empresaId}-${dataFim}.xlsx`; a.click();
