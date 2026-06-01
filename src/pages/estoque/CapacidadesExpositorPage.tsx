@@ -10,14 +10,7 @@ import { toastPatterns } from "@/lib/toastPatterns";
 import { Package, Trash2, Plus } from "lucide-react";
 import { calcularCapacidadePorCategoria } from "@/lib/estoque/capacidade";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog";
+import { BaseDialog } from "@/components/system/BaseDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -150,9 +143,9 @@ export default function CapacidadesExpositorPage() {
       setClean();
       await refetch();
       setTimeout(() => setStatus("idle"), 1500);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setStatus("idle");
-      toastPatterns.error("Falha ao salvar", e?.message ?? "Tente novamente.");
+      toastPatterns.error("Falha ao salvar", e instanceof Error ? e.message : "Tente novamente.");
     }
   };
 
@@ -193,7 +186,7 @@ export default function CapacidadesExpositorPage() {
       setDialogOpen(false);
       setForm(FORM_DEFAULT);
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       toastPatterns.error("Falha ao salvar", e?.message ?? "Tente novamente.");
     },
   });
@@ -207,7 +200,7 @@ export default function CapacidadesExpositorPage() {
       queryClient.invalidateQueries({ queryKey: ["marca_config"] });
       toastPatterns.saved("Override removido");
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       toastPatterns.error("Falha ao remover", e?.message ?? "Tente novamente.");
     },
   });
@@ -412,85 +405,83 @@ export default function CapacidadesExpositorPage() {
           </div>
 
           {/* Dialog — Adicionar override */}
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Adicionar override de marca</DialogTitle>
-              </DialogHeader>
-
-              <div className="grid gap-4 py-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="mc-loja">Loja</Label>
-                  <select
-                    id="mc-loja"
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    value={form.cod_empresa}
-                    onChange={(e) => setForm((f) => ({ ...f, cod_empresa: Number(e.target.value) }))}
-                  >
-                    {LOJA_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="mc-marca">Marca</Label>
-                  <Input
-                    id="mc-marca"
-                    placeholder="ex: RAYBAN"
-                    value={form.marca}
-                    onChange={(e) => setForm((f) => ({ ...f, marca: e.target.value.toUpperCase() }))}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="mc-pct">% Solar (override)</Label>
-                  <Input
-                    id="mc-pct"
-                    type="number"
-                    min={0}
-                    max={100}
-                    placeholder="Deixe vazio para herdar o default"
-                    value={form.pct_solar}
-                    onChange={(e) => setForm((f) => ({ ...f, pct_solar: e.target.value }))}
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="mc-estrategica"
-                    checked={form.estrategica}
-                    onCheckedChange={(v) => setForm((f) => ({ ...f, estrategica: Boolean(v) }))}
-                  />
-                  <Label htmlFor="mc-estrategica" className="cursor-pointer">
-                    Estratégica <span className="text-muted-foreground text-xs">(garante mín. 25 peças)</span>
-                  </Label>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="mc-nova"
-                    checked={form.recem_introduzida}
-                    onCheckedChange={(v) => setForm((f) => ({ ...f, recem_introduzida: Boolean(v) }))}
-                  />
-                  <Label htmlFor="mc-nova" className="cursor-pointer">
-                    Recém-introduzida <span className="text-muted-foreground text-xs">(exclui do ranking de descontinuação)</span>
-                  </Label>
-                </div>
-              </div>
-
-              <DialogFooter className="gap-2">
-                <DialogClose asChild>
-                  <Button variant="outline">Cancelar</Button>
-                </DialogClose>
+          <BaseDialog
+            open={dialogOpen}
+            onOpenChange={setDialogOpen}
+            title="Adicionar override de marca"
+            size="sm"
+            footer={
+              <>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
                 <Button onClick={handleAddSubmit} disabled={addMarca.isPending}>
                   {addMarca.isPending ? "Salvando..." : "Salvar"}
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </>
+            }
+          >
+            <div className="grid gap-4 py-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="mc-loja">Loja</Label>
+                <select
+                  id="mc-loja"
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  value={form.cod_empresa}
+                  onChange={(e) => setForm((f) => ({ ...f, cod_empresa: Number(e.target.value) }))}
+                >
+                  {LOJA_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="mc-marca">Marca</Label>
+                <Input
+                  id="mc-marca"
+                  placeholder="ex: RAYBAN"
+                  value={form.marca}
+                  onChange={(e) => setForm((f) => ({ ...f, marca: e.target.value.toUpperCase() }))}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="mc-pct">% Solar (override)</Label>
+                <Input
+                  id="mc-pct"
+                  type="number"
+                  min={0}
+                  max={100}
+                  placeholder="Deixe vazio para herdar o default"
+                  value={form.pct_solar}
+                  onChange={(e) => setForm((f) => ({ ...f, pct_solar: e.target.value }))}
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="mc-estrategica"
+                  checked={form.estrategica}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, estrategica: Boolean(v) }))}
+                />
+                <Label htmlFor="mc-estrategica" className="cursor-pointer">
+                  Estratégica <span className="text-muted-foreground text-xs">(garante mín. 25 peças)</span>
+                </Label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="mc-nova"
+                  checked={form.recem_introduzida}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, recem_introduzida: Boolean(v) }))}
+                />
+                <Label htmlFor="mc-nova" className="cursor-pointer">
+                  Recém-introduzida <span className="text-muted-foreground text-xs">(exclui do ranking de descontinuação)</span>
+                </Label>
+              </div>
+            </div>
+          </BaseDialog>
         </TabsContent>
       </Tabs>
     </div>
