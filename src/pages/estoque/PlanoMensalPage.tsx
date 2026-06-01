@@ -585,9 +585,8 @@ export default function PlanoMensalPage() {
         const p = prev[i];
         return m === p || (
           m.marca === p.marca &&
-          m.quantidade === p.quantidade &&
-          m.ajusteUsuario === p.ajusteUsuario &&
-          m.valorEstimado === p.valorEstimado
+          m.qtdComprar === p.qtdComprar &&
+          m.ajusteUsuario === p.ajusteUsuario
         );
       });
       return igual ? prev : merged;
