@@ -688,7 +688,7 @@ export default function PlanoMensalPage() {
 
   const handleExportarExcel = useCallback(() => {
     const buf = gerarExcel(exportParams);
-    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const blob = new Blob([buf as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `plano-mensal-loja${empresaId}-${dataFim}.xlsx`; a.click();
