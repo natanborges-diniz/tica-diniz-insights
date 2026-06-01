@@ -447,7 +447,7 @@ export default function PlanoMensalPage() {
   }, [fornecedorMarcaRows]);
 
   // Sync marcaConfigRows → overrides
-  useMemo(() => {
+  useEffect(() => {
     const m = new Map<string, MarcaOverride>();
     marcaConfigRows.forEach(r => {
       m.set(r.marca, { marca: r.marca, pct_solar: r.pct_solar, estrategica: r.estrategica, recem_introduzida: r.recem_introduzida });
