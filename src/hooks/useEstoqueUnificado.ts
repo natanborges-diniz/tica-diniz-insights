@@ -31,7 +31,8 @@ export type { EstoqueFilters };
 
 export interface ItemEstoque {
   codSku: number;
-  codigoBarra: string;
+  codigoBarra: string;   // cod_barras_interno (sempre preenchido)
+  ean: string | null;    // EAN do fabricante; null quando não disponível
   descricao: string;
   marca: string;
   fornecedor: string;
@@ -426,6 +427,7 @@ export function useEstoqueUnificado() {
       const fornecedorBruto = estoqueItem?.fornecedor ?? vendas?.fornecedor ?? '';
       const tipo = estoqueItem?.tipo ?? vendas?.tipo ?? '';
       const codigoBarra = estoqueItem?.codigoBarra ?? '';
+      const ean = estoqueItem?.ean ?? null;
       const estoqueAtual = estoqueItem?.quantidadeEstoque ?? 0;
       const precoCusto = estoqueItem?.precoCusto ?? vendas?.precoCusto ?? 0;
       const precoVenda = estoqueItem?.precoVenda ?? vendas?.precoVendaFinal ?? 0;
@@ -508,6 +510,7 @@ export function useEstoqueUnificado() {
       return {
         codSku,
         codigoBarra,
+        ean,
         descricao,
         marca,
         fornecedor: fornecedorFinal,

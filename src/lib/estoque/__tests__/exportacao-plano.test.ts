@@ -41,11 +41,11 @@ const GRUPOS: FornecedorGrupo[] = [
     isSemFornecedor: false,
     marcas: [
       makeMarca('RAYBAN', 62, [
-        { codSku: 1, descricao: 'RB 3025 Aviator', diasGiroUltimaPeca: 10, qtdSugerida: 40, codigoBarra: '7891234567890' },
-        { codSku: 2, descricao: 'RB 2140 Wayfarer', diasGiroUltimaPeca: 15, qtdSugerida: 22 },   // sem EAN
+        { codSku: 1, descricao: 'RB 3025 Aviator', diasGiroUltimaPeca: 10, qtdSugerida: 40, codigoBarra: '7891234567890', ean: '8056597137928' },
+        { codSku: 2, descricao: 'RB 2140 Wayfarer', diasGiroUltimaPeca: 15, qtdSugerida: 22, codigoBarra: '7891234567891', ean: null },
       ]),
       makeMarca('OAKLEY', 23, [
-        { codSku: 3, descricao: 'OAK Metal', diasGiroUltimaPeca: 9999, qtdSugerida: 23 },         // sem EAN
+        { codSku: 3, descricao: 'OAK Metal', diasGiroUltimaPeca: 9999, qtdSugerida: 23, codigoBarra: '7899876543211', ean: null },
       ]),
     ],
     totalMixIdeal: 160,
@@ -56,7 +56,7 @@ const GRUPOS: FornecedorGrupo[] = [
     isSemFornecedor: true,
     marcas: [
       makeMarca('GUESS', 10, [
-        { codSku: 4, descricao: 'GU 2345', diasGiroUltimaPeca: 30, qtdSugerida: 10, codigoBarra: '7899876543210' },
+        { codSku: 4, descricao: 'GU 2345', diasGiroUltimaPeca: 30, qtdSugerida: 10, codigoBarra: '7899876543210', ean: '8053672528009' },
       ]),
     ],
     totalMixIdeal: 80,
@@ -84,7 +84,7 @@ describe('gerarLinhasCSV', () => {
   it('primeira linha é o cabeçalho correto', () => {
     const linhas = gerarLinhasCSV(PARAMS);
     expect(linhas[0]).toEqual([
-      'Fornecedor', 'Marca', 'Código de Barras', 'Descrição', 'Sugerido', 'Final (Marca)', 'Dias p/ Sair',
+      'Fornecedor', 'Marca', 'Cód. Barras Interno', 'EAN', 'Descrição', 'Sugerido', 'Final (Marca)', 'Dias p/ Sair',
     ]);
   });
 
@@ -96,46 +96,52 @@ describe('gerarLinhasCSV', () => {
 
   it('fornecedor correto na coluna 0', () => {
     const linhas = gerarLinhasCSV(PARAMS);
-    const aviatorRow = linhas.find(l => l[2] === '7891234567890'); // SKU 1 tem EAN
+    const aviatorRow = linhas.find(l => l[2] === '7891234567890'); // SKU 1 tem cód barras interno
     expect(aviatorRow?.[0]).toBe('LUXOTTICA BR');
   });
 
-  it('codigoBarra preenchido aparece na coluna 2', () => {
+  it('codigoBarra aparece na coluna 2', () => {
     const linhas = gerarLinhasCSV(PARAMS);
-    const aviatorRow = linhas.find(l => l[3] === 'RB 3025 Aviator');
+    const aviatorRow = linhas.find(l => l[4] === 'RB 3025 Aviator');
     expect(aviatorRow?.[2]).toBe('7891234567890');
   });
 
-  it('SKU sem codigoBarra cai em fallback "codSku (sem EAN)"', () => {
+  it('EAN preenchido aparece na coluna 3', () => {
     const linhas = gerarLinhasCSV(PARAMS);
-    const wayfarerRow = linhas.find(l => l[3] === 'RB 2140 Wayfarer');
-    expect(wayfarerRow?.[2]).toBe('2 (sem EAN)');
+    const aviatorRow = linhas.find(l => l[4] === 'RB 3025 Aviator');
+    expect(aviatorRow?.[3]).toBe('8056597137928');
+  });
+
+  it('EAN nulo aparece como string vazia na coluna 3', () => {
+    const linhas = gerarLinhasCSV(PARAMS);
+    const wayfarerRow = linhas.find(l => l[4] === 'RB 2140 Wayfarer');
+    expect(wayfarerRow?.[3]).toBe('');
   });
 
   it('dias_giro 9999 aparece como string vazia', () => {
     const linhas = gerarLinhasCSV(PARAMS);
     const oakleyRow = linhas.find(l => l[1] === 'OAKLEY');
-    expect(oakleyRow?.[6]).toBe('');
+    expect(oakleyRow?.[7]).toBe('');
   });
 
   it('dias_giro válido aparece como string numérica', () => {
     const linhas = gerarLinhasCSV(PARAMS);
-    const aviatorRow = linhas.find(l => l[3] === 'RB 3025 Aviator');
-    expect(aviatorRow?.[6]).toBe('10');
+    const aviatorRow = linhas.find(l => l[4] === 'RB 3025 Aviator');
+    expect(aviatorRow?.[7]).toBe('10');
   });
 
   it('qtd Final usa valor do planoFinal (ajuste do usuário)', () => {
     const linhas = gerarLinhasCSV(PARAMS);
     // RAYBAN foi ajustado para 50 (originalmente 62)
-    const aviatorRow = linhas.find(l => l[3] === 'RB 3025 Aviator');
-    expect(aviatorRow?.[5]).toBe('50');
+    const aviatorRow = linhas.find(l => l[4] === 'RB 3025 Aviator');
+    expect(aviatorRow?.[6]).toBe('50');
   });
 
   it('qtd Final usa lacuna quando marca não está no planoFinal', () => {
     const params: ExportParams = { ...PARAMS, planoFinal: [] };
     const linhas = gerarLinhasCSV(params);
-    const aviatorRow = linhas.find(l => l[3] === 'RB 3025 Aviator');
-    expect(aviatorRow?.[5]).toBe('62'); // lacuna de RAYBAN
+    const aviatorRow = linhas.find(l => l[4] === 'RB 3025 Aviator');
+    expect(aviatorRow?.[6]).toBe('62'); // lacuna de RAYBAN
   });
 
   it('marca sem SKUs alocados gera 1 linha placeholder', () => {
@@ -148,7 +154,7 @@ describe('gerarLinhasCSV', () => {
     }];
     const linhas = gerarLinhasCSV({ ...PARAMS, grupos, planoFinal: [] });
     expect(linhas).toHaveLength(2); // header + 1 placeholder
-    expect(linhas[1][4]).toBe('0'); // sugerido = 0
+    expect(linhas[1][5]).toBe('0'); // sugerido = 0 (col 5 com 8 colunas)
   });
 });
 
@@ -197,7 +203,8 @@ describe('prepararExcelData', () => {
     const data = prepararExcelData(PARAMS);
     const luxSheet = data.sheets.get('LUXOTTICA BR')!;
     expect(luxSheet[0]).toContain('Marca');
-    expect(luxSheet[0]).toContain('Código de Barras');
+    expect(luxSheet[0]).toContain('Cód. Barras Interno');
+    expect(luxSheet[0]).toContain('EAN');
     expect(luxSheet[0]).toContain('Qtd Final');
   });
 
@@ -281,6 +288,18 @@ describe('prepararSecoesPDF', () => {
     const lux = secoes[0];
     const oakleyLinha = lux.linhas.find(l => l.marca === 'OAKLEY');
     expect(oakleyLinha?.diasGiro).toBeNull();
+  });
+
+  it('EAN preenchido propagado para linha PDF', () => {
+    const secoes = prepararSecoesPDF(PARAMS);
+    const aviatorLinha = secoes[0].linhas.find(l => l.descricao === 'RB 3025 Aviator');
+    expect(aviatorLinha?.ean).toBe('8056597137928');
+  });
+
+  it('EAN nulo propagado como null para linha PDF', () => {
+    const secoes = prepararSecoesPDF(PARAMS);
+    const wayfarerLinha = secoes[0].linhas.find(l => l.descricao === 'RB 2140 Wayfarer');
+    expect(wayfarerLinha?.ean).toBeNull();
   });
 
   it('input vazio → seções vazias', () => {

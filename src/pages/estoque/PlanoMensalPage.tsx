@@ -210,6 +210,7 @@ function GrupoFornecedorCompra({ grupo }: { grupo: FornecedorGrupo }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Cód. Barras</TableHead>
+                    <TableHead>EAN</TableHead>
                     <TableHead>Descrição</TableHead>
                     <TableHead className="text-right">Giro (d)</TableHead>
                     <TableHead className="text-right">Qtd</TableHead>
@@ -218,9 +219,8 @@ function GrupoFornecedorCompra({ grupo }: { grupo: FornecedorGrupo }) {
                 <TableBody>
                   {marca.skusAlocados.map(sku => (
                     <TableRow key={sku.codSku}>
-                      <TableCell className="font-mono text-xs">
-                        {sku.codigoBarra?.trim() || <span className="text-muted-foreground">{sku.codSku} <em>(sem EAN)</em></span>}
-                      </TableCell>
+                      <TableCell className="font-mono text-xs">{sku.codigoBarra || '—'}</TableCell>
+                      <TableCell className="font-mono text-xs">{sku.ean?.trim() || '—'}</TableCell>
                       <TableCell className="max-w-48 truncate">{sku.descricao}</TableCell>
                       <TableCell className="text-right">{sku.diasGiroUltimaPeca === 9999 ? '—' : sku.diasGiroUltimaPeca}</TableCell>
                       <TableCell className="text-right font-bold">{sku.qtdSugerida}</TableCell>
@@ -331,24 +331,26 @@ function renderPDFSecao(doc: jsPDF, secao: PDFSecao, nomeEmpresa: string, dataGe
 
   const rows = secao.linhas.map(l => [
     l.marca,
-    l.codigoBarra?.trim() || (l.codSku ? `${l.codSku} (sem EAN)` : '—'),
+    l.codigoBarra || '—',
+    l.ean || '—',
     l.descricao,
     String(l.qtdSugerida),
     String(l.qtdFinal),
   ]);
 
   autoTable(doc, {
-    head: [['Marca', 'Cód. Barras', 'Descrição', 'Sugerido', 'Final']],
+    head: [['Marca', 'Cód. Barras', 'EAN', 'Descrição', 'Sugerido', 'Final']],
     body: rows,
     startY: 38,
     styles: { fontSize: 8, cellPadding: 1.5 },
     headStyles: { fillColor: [55, 65, 81], textColor: 255, fontStyle: 'bold' },
     columnStyles: {
-      0: { cellWidth: 32 },
+      0: { cellWidth: 28 },
       1: { cellWidth: 16 },
-      2: { cellWidth: 88 },
-      3: { cellWidth: 18, halign: 'right' },
+      2: { cellWidth: 16 },
+      3: { cellWidth: 76 },
       4: { cellWidth: 18, halign: 'right' },
+      5: { cellWidth: 18, halign: 'right' },
     },
     alternateRowStyles: { fillColor: [249, 250, 251] },
   });
@@ -488,6 +490,7 @@ export default function PlanoMensalPage() {
         estoqueAtual: e?.quantidadeEstoque ?? 0,
         isDeadStock: e?.isDeadStock ?? false,
         codigoBarra: e?.codigoBarra ?? '',
+        ean: e?.ean ?? null,
         diasGiroUltimaPeca: e?.diasGiroUltimaPeca ?? v?.diasGiroUltimaPeca ?? null,
         diasEmEstoque: e?.diasEmEstoque ?? 0,
         precoCusto: e?.precoCusto ?? v?.precoCusto ?? 0,
