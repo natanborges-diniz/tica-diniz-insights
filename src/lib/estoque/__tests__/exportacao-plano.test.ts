@@ -84,7 +84,7 @@ describe('gerarLinhasCSV', () => {
   it('primeira linha é o cabeçalho correto', () => {
     const linhas = gerarLinhasCSV(PARAMS);
     expect(linhas[0]).toEqual([
-      'Fornecedor', 'Marca', 'Cód. Barras Interno', 'EAN', 'Descrição', 'Sugerido', 'Final (Marca)', 'Dias p/ Sair',
+      'Fornecedor', 'Marca', 'Cód. Barras Interno', 'EAN', 'Descrição', 'Sugerido', 'Final (Marca)', 'Dias p/ Sair', 'Tipo',
     ]);
   });
 
@@ -154,7 +154,28 @@ describe('gerarLinhasCSV', () => {
     }];
     const linhas = gerarLinhasCSV({ ...PARAMS, grupos, planoFinal: [] });
     expect(linhas).toHaveLength(2); // header + 1 placeholder
-    expect(linhas[1][5]).toBe('0'); // sugerido = 0 (col 5 com 8 colunas)
+    expect(linhas[1][5]).toBe('0'); // sugerido = 0 (col 5 com 9 colunas)
+  });
+
+  it('SKU normal tem Tipo=Sugerido na coluna 8', () => {
+    const linhas = gerarLinhasCSV(PARAMS);
+    const aviatorRow = linhas.find(l => l[4] === 'RB 3025 Aviator');
+    expect(aviatorRow?.[8]).toBe('Sugerido');
+  });
+
+  it('SKU manual tem Tipo=Manual na coluna 8', () => {
+    const grupos: FornecedorGrupo[] = [{
+      fornecedor: 'FORN',
+      isSemFornecedor: false,
+      marcas: [makeMarca('ZEISS', 5, [
+        { codSku: 0, descricao: 'Modelo manual', diasGiroUltimaPeca: 9999, qtdSugerida: 5, isManual: true },
+      ])],
+      totalMixIdeal: 80,
+      totalLacuna: 5,
+    }];
+    const linhas = gerarLinhasCSV({ ...PARAMS, grupos });
+    const manualRow = linhas.find(l => l[4] === 'Modelo manual');
+    expect(manualRow?.[8]).toBe('Manual');
   });
 });
 
@@ -300,6 +321,21 @@ describe('prepararSecoesPDF', () => {
     const secoes = prepararSecoesPDF(PARAMS);
     const wayfarerLinha = secoes[0].linhas.find(l => l.descricao === 'RB 2140 Wayfarer');
     expect(wayfarerLinha?.ean).toBeNull();
+  });
+
+  it('SKU manual propagado com isManual=true na linha PDF', () => {
+    const grupos: FornecedorGrupo[] = [{
+      fornecedor: 'FORN',
+      isSemFornecedor: false,
+      marcas: [makeMarca('ZEISS', 5, [
+        { codSku: 0, descricao: 'Modelo manual', diasGiroUltimaPeca: 9999, qtdSugerida: 5, isManual: true },
+      ])],
+      totalMixIdeal: 80,
+      totalLacuna: 5,
+    }];
+    const secoes = prepararSecoesPDF({ ...PARAMS, grupos });
+    const manualLinha = secoes[0].linhas.find(l => l.descricao === 'Modelo manual');
+    expect(manualLinha?.isManual).toBe(true);
   });
 
   it('input vazio → seções vazias', () => {

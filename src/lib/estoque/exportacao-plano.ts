@@ -28,7 +28,7 @@ function sanitizeSheetName(name: string): string {
 
 // ── CSV ───────────────────────────────────────────────────────────────────────
 
-const CSV_HEADER = ['Fornecedor', 'Marca', 'Cód. Barras Interno', 'EAN', 'Descrição', 'Sugerido', 'Final (Marca)', 'Dias p/ Sair'];
+const CSV_HEADER = ['Fornecedor', 'Marca', 'Cód. Barras Interno', 'EAN', 'Descrição', 'Sugerido', 'Final (Marca)', 'Dias p/ Sair', 'Tipo'];
 
 /** Retorna todas as linhas (incluindo cabeçalho) como arrays de strings — puro, testável. */
 export function gerarLinhasCSV(params: ExportParams): string[][] {
@@ -40,7 +40,7 @@ export function gerarLinhasCSV(params: ExportParams): string[][] {
       const qtdFinal = qtdFinalMarca(marca.marca, planoFinal, marca.lacuna);
       if (marca.skusAlocados.length === 0) {
         linhas.push([
-          grupo.fornecedor, marca.marca, '', '', '', '0', String(qtdFinal), '',
+          grupo.fornecedor, marca.marca, '', '', '', '0', String(qtdFinal), '', '',
         ]);
         continue;
       }
@@ -54,6 +54,7 @@ export function gerarLinhasCSV(params: ExportParams): string[][] {
           String(sku.qtdSugerida),
           String(qtdFinal),
           sku.diasGiroUltimaPeca === 9999 ? '' : String(sku.diasGiroUltimaPeca),
+          sku.isManual ? 'Manual' : 'Sugerido',
         ]);
       }
     }
@@ -102,12 +103,12 @@ export function prepararExcelData(params: ExportParams): ExcelData {
   for (const g of grupos) {
     const sheetName = sanitizeSheetName(g.fornecedor);
     const rows: (string | number)[][] = [
-      ['Marca', 'Cód. Barras Interno', 'EAN', 'Descrição', 'Qtd Sugerida', 'Qtd Final', 'Dias p/ Sair'],
+      ['Marca', 'Cód. Barras Interno', 'EAN', 'Descrição', 'Qtd Sugerida', 'Qtd Final', 'Dias p/ Sair', 'Tipo'],
     ];
     for (const marca of g.marcas) {
       const qtdFinal = qtdFinalMarca(marca.marca, planoFinal, marca.lacuna);
       if (marca.skusAlocados.length === 0) {
-        rows.push([marca.marca, '', '', '(sem SKUs alocados)', 0, qtdFinal, '']);
+        rows.push([marca.marca, '', '', '(sem SKUs alocados)', 0, qtdFinal, '', '']);
         continue;
       }
       for (const sku of marca.skusAlocados) {
@@ -119,6 +120,7 @@ export function prepararExcelData(params: ExportParams): ExcelData {
           sku.qtdSugerida,
           qtdFinal,
           sku.diasGiroUltimaPeca === 9999 ? '' : sku.diasGiroUltimaPeca,
+          sku.isManual ? 'Manual' : 'Sugerido',
         ]);
       }
     }
@@ -139,7 +141,7 @@ export function gerarExcel(params: ExportParams): Uint8Array {
 
   for (const [sheetName, rows] of data.sheets) {
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }];
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
   }
 
@@ -157,6 +159,7 @@ export interface PDFLinhaItem {
   qtdSugerida: number;
   qtdFinal: number;
   diasGiro: number | null;
+  isManual?: boolean;
 }
 
 export interface PDFSecao {
@@ -189,6 +192,7 @@ export function prepararSecoesPDF(params: ExportParams): PDFSecao[] {
         qtdSugerida: sku.qtdSugerida,
         qtdFinal,
         diasGiro: sku.diasGiroUltimaPeca === 9999 ? null : sku.diasGiroUltimaPeca,
+        isManual: sku.isManual,
       }));
     });
 

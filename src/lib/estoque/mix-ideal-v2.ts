@@ -37,6 +37,8 @@ export interface SkuAlocado {
   qtdSugerida: number;
   codigoBarra?: string;       // cod_barras_interno; undefined em SKUs manuais
   ean?: string | null;        // EAN do fabricante; null quando não disponível
+  isManual?: boolean;         // true para SKUs inseridos manualmente pelo usuário
+  id?: string;                // UUID para SKUs manuais (chave de deduplicação)
 }
 
 export type StatusMixV2 = 'OK' | 'ABAIXO_MINIMO_ESTRATEGICA' | 'SUGERIR_DESCONTINUAR';
