@@ -28,7 +28,7 @@ function sanitizeSheetName(name: string): string {
 
 // ── CSV ───────────────────────────────────────────────────────────────────────
 
-const CSV_HEADER = ['Fornecedor', 'Marca', 'Código de Barras', 'Descrição', 'Sugerido', 'Final (Marca)', 'Dias p/ Sair'];
+const CSV_HEADER = ['Fornecedor', 'Marca', 'Cód. Barras Interno', 'EAN', 'Descrição', 'Sugerido', 'Final (Marca)', 'Dias p/ Sair', 'Tipo'];
 
 /** Retorna todas as linhas (incluindo cabeçalho) como arrays de strings — puro, testável. */
 export function gerarLinhasCSV(params: ExportParams): string[][] {
@@ -40,20 +40,21 @@ export function gerarLinhasCSV(params: ExportParams): string[][] {
       const qtdFinal = qtdFinalMarca(marca.marca, planoFinal, marca.lacuna);
       if (marca.skusAlocados.length === 0) {
         linhas.push([
-          grupo.fornecedor, marca.marca, '', '', '0', String(qtdFinal), '',
+          grupo.fornecedor, marca.marca, '', '', '', '0', String(qtdFinal), '', '',
         ]);
         continue;
       }
       for (const sku of marca.skusAlocados) {
-        const ean = sku.codigoBarra?.trim() || `${sku.codSku} (sem EAN)`;
         linhas.push([
           grupo.fornecedor,
           marca.marca,
-          ean,
+          sku.codigoBarra?.trim() ?? '',
+          sku.ean?.trim() ?? '',
           sku.descricao,
           String(sku.qtdSugerida),
           String(qtdFinal),
           sku.diasGiroUltimaPeca === 9999 ? '' : String(sku.diasGiroUltimaPeca),
+          sku.isManual ? 'Manual' : 'Sugerido',
         ]);
       }
     }
@@ -102,23 +103,24 @@ export function prepararExcelData(params: ExportParams): ExcelData {
   for (const g of grupos) {
     const sheetName = sanitizeSheetName(g.fornecedor);
     const rows: (string | number)[][] = [
-      ['Marca', 'Código de Barras', 'Descrição', 'Qtd Sugerida', 'Qtd Final', 'Dias p/ Sair'],
+      ['Marca', 'Cód. Barras Interno', 'EAN', 'Descrição', 'Qtd Sugerida', 'Qtd Final', 'Dias p/ Sair', 'Tipo'],
     ];
     for (const marca of g.marcas) {
       const qtdFinal = qtdFinalMarca(marca.marca, planoFinal, marca.lacuna);
       if (marca.skusAlocados.length === 0) {
-        rows.push([marca.marca, '', '(sem SKUs alocados)', 0, qtdFinal, '']);
+        rows.push([marca.marca, '', '', '(sem SKUs alocados)', 0, qtdFinal, '', '']);
         continue;
       }
       for (const sku of marca.skusAlocados) {
-        const ean = sku.codigoBarra?.trim() || `${sku.codSku} (sem EAN)`;
         rows.push([
           marca.marca,
-          ean,
+          sku.codigoBarra?.trim() ?? '',
+          sku.ean?.trim() ?? '',
           sku.descricao,
           sku.qtdSugerida,
           qtdFinal,
           sku.diasGiroUltimaPeca === 9999 ? '' : sku.diasGiroUltimaPeca,
+          sku.isManual ? 'Manual' : 'Sugerido',
         ]);
       }
     }
@@ -139,7 +141,7 @@ export function gerarExcel(params: ExportParams): Uint8Array {
 
   for (const [sheetName, rows] of data.sheets) {
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 14 }];
+    ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 40 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }];
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
   }
 
@@ -151,11 +153,13 @@ export function gerarExcel(params: ExportParams): Uint8Array {
 export interface PDFLinhaItem {
   marca: string;
   codSku: number;
-  codigoBarra: string;        // EAN; vazio → exibir codSku + "(sem EAN)"
+  codigoBarra: string;        // cod_barras_interno (sempre preenchido)
+  ean: string | null;         // EAN do fabricante; null quando não disponível
   descricao: string;
   qtdSugerida: number;
   qtdFinal: number;
   diasGiro: number | null;
+  isManual?: boolean;
 }
 
 export interface PDFSecao {
@@ -175,7 +179,7 @@ export function prepararSecoesPDF(params: ExportParams): PDFSecao[] {
       const qtdFinal = qtdFinalMarca(m.marca, planoFinal, m.lacuna);
       if (m.skusAlocados.length === 0) {
         return [{
-          marca: m.marca, codSku: 0, codigoBarra: '', descricao: '(sem alocação)',
+          marca: m.marca, codSku: 0, codigoBarra: '', ean: null, descricao: '(sem alocação)',
           qtdSugerida: 0, qtdFinal, diasGiro: null,
         }];
       }
@@ -183,10 +187,12 @@ export function prepararSecoesPDF(params: ExportParams): PDFSecao[] {
         marca: m.marca,
         codSku: sku.codSku,
         codigoBarra: sku.codigoBarra?.trim() ?? '',
+        ean: sku.ean?.trim() || null,
         descricao: sku.descricao,
         qtdSugerida: sku.qtdSugerida,
         qtdFinal,
         diasGiro: sku.diasGiroUltimaPeca === 9999 ? null : sku.diasGiroUltimaPeca,
+        isManual: sku.isManual,
       }));
     });
 

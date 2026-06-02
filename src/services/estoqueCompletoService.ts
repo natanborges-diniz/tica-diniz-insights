@@ -14,7 +14,9 @@ interface EstoqueCompletoRaw {
   // Backend pode retornar como cod_sku OU cod_armacao
   cod_sku?: number | string;
   cod_armacao?: number | string;
-  codigo_barras?: string;
+  codigo_barras?: string;       // alias legado (compat)
+  cod_barras_interno?: string;  // código interno Firebird (Bridge ≥ 1.6, sempre preenchido)
+  ean?: string | null;          // EAN do fabricante (~79% preenchido)
   // Backend pode retornar como descricao ou descricao_item
   descricao?: string;
   descricao_item?: string;
@@ -46,7 +48,8 @@ interface EstoqueCompletoRaw {
 
 export interface EstoqueCompleto {
   codSku: number;
-  codigoBarra: string;
+  codigoBarra: string;   // cod_barras_interno (sempre preenchido)
+  ean: string | null;    // EAN do fabricante; null quando não disponível
   descricao: string;
   fornecedor: string;
   marca: string; // grife no backend
@@ -158,7 +161,8 @@ export async function getEstoqueCompleto(
     return {
       // Converter para número garantindo consistência
       codSku: isNaN(codSku) ? 0 : codSku,
-      codigoBarra: (r.codigo_barras ?? '').trim(),
+      codigoBarra: (r.cod_barras_interno?.trim() ?? r.codigo_barras?.trim() ?? ''),
+      ean: r.ean?.trim() || null,
       descricao,
       // Fornecedor: tratar valores nulos ou vazios
       fornecedor: (() => {

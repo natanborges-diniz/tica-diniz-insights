@@ -18,7 +18,8 @@ export interface ItemMixV2 {
   categoria?: string;         // 'ARMACOES' | outros — undefined assume ARMACOES
   codSku?: number;
   descricao?: string;
-  codigoBarra?: string;       // EAN/código de barras (exibição e exportação)
+  codigoBarra?: string;       // cod_barras_interno (sempre preenchido quando vem do Bridge)
+  ean?: string | null;        // EAN do fabricante; null quando não disponível
 }
 
 export interface MarcaConfigV2 {
@@ -34,7 +35,10 @@ export interface SkuAlocado {
   descricao: string;
   diasGiroUltimaPeca: number; // 9999 quando null (sem dado de giro)
   qtdSugerida: number;
-  codigoBarra?: string;       // EAN/código de barras; undefined → exibir codSku com "(sem EAN)"
+  codigoBarra?: string;       // cod_barras_interno; undefined em SKUs manuais
+  ean?: string | null;        // EAN do fabricante; null quando não disponível
+  isManual?: boolean;         // true para SKUs inseridos manualmente pelo usuário
+  id?: string;                // UUID para SKUs manuais (chave de deduplicação)
 }
 
 export type StatusMixV2 = 'OK' | 'ABAIXO_MINIMO_ESTRATEGICA' | 'SUGERIR_DESCONTINUAR';
@@ -72,6 +76,7 @@ function alocarPorPassadas(
     descricao: string;
     diasGiroUltimaPeca: number | null | undefined;
     codigoBarra?: string;
+    ean?: string | null;
   }>,
   lacuna: number
 ): SkuAlocado[] {
@@ -95,6 +100,7 @@ function alocarPorPassadas(
       diasGiroUltimaPeca: sku.diasGiroUltimaPeca ?? 9999,
       qtdSugerida: qtds[idx],
       codigoBarra: sku.codigoBarra,
+      ean: sku.ean,
     }))
     .filter(s => s.qtdSugerida > 0);
 }
@@ -148,6 +154,7 @@ export function calcularMixIdealV2({
       descricao: i.descricao ?? '',
       diasGiroUltimaPeca: i.diasGiroUltimaPeca,
       codigoBarra: i.codigoBarra,
+      ean: i.ean,
     });
     candidatosByMarca.set(k, lista);
   });

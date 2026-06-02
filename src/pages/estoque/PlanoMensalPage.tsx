@@ -51,7 +51,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { BaseDialog } from '@/components/system/BaseDialog';
 import {
   DropdownMenu,
@@ -61,7 +61,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { toast } from '@/hooks/use-toast';
-import { AlertTriangle, ChevronLeft, ChevronRight, Download, Save, Package } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Download, Save, Package, Plus, X } from 'lucide-react';
 
 // ── Tipos internos ────────────────────────────────────────────────────────────
 
@@ -81,6 +81,13 @@ interface ItemLiquidacao {
   faixa: string;
   desconto: number;
   valorCusto: number;
+}
+
+interface ManualSkuInput {
+  id: string;
+  marca: string;
+  descricao: string;
+  qtd: number;
 }
 
 // ── Etapas ────────────────────────────────────────────────────────────────────
@@ -180,9 +187,20 @@ function MetricCard({ label, value, unit, color }: { label: string; value: numbe
 }
 
 // Etapa 5: card de compras por fornecedor
-function GrupoFornecedorCompra({ grupo }: { grupo: FornecedorGrupo }) {
-  const marcasComCompra = grupo.marcas.filter(m => m.lacuna > 0);
-  if (marcasComCompra.length === 0) return null;
+function GrupoFornecedorCompra({
+  grupo,
+  onAdicionarManual,
+  onRemoverManual,
+  onAtualizarManualQtd,
+}: {
+  grupo: FornecedorGrupo;
+  onAdicionarManual: (marca: string) => void;
+  onRemoverManual: (id: string) => void;
+  onAtualizarManualQtd: (id: string, qtd: number) => void;
+}) {
+  const marcasComCompra = grupo.marcas.filter(m => m.lacuna > 0 || m.skusAlocados.some(s => s.isManual));
+  if (marcasComCompra.length === 0 && grupo.marcas.every(m => m.lacuna === 0)) return null;
+  const todasMarcas = grupo.marcas.filter(m => m.mixTotal > 0);
   return (
     <Card className={grupo.isSemFornecedor ? 'border-orange-300 bg-orange-50/30' : ''}>
       <CardHeader className="pb-2">
@@ -193,12 +211,12 @@ function GrupoFornecedorCompra({ grupo }: { grupo: FornecedorGrupo }) {
             <Badge variant="outline" className="border-orange-400 text-orange-600 text-xs">⚠ Sem Fornecedor</Badge>
           )}
           <span className="ml-auto text-sm text-muted-foreground">
-            {marcasComCompra.length} {marcasComCompra.length === 1 ? 'marca' : 'marcas'} · {grupo.totalLacuna} peças
+            {todasMarcas.length} {todasMarcas.length === 1 ? 'marca' : 'marcas'} · {grupo.totalLacuna} peças
           </span>
         </div>
       </CardHeader>
       <CardContent className="pt-0 space-y-4">
-        {marcasComCompra.map(marca => (
+        {todasMarcas.map(marca => (
           <div key={marca.marca}>
             <div className="flex items-center gap-2 mb-2">
               <span className="font-medium text-sm">{marca.marca}</span>
@@ -210,20 +228,41 @@ function GrupoFornecedorCompra({ grupo }: { grupo: FornecedorGrupo }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Cód. Barras</TableHead>
+                    <TableHead>EAN</TableHead>
                     <TableHead>Descrição</TableHead>
                     <TableHead className="text-right">Giro (d)</TableHead>
                     <TableHead className="text-right">Qtd</TableHead>
+                    <TableHead className="w-8" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {marca.skusAlocados.map(sku => (
-                    <TableRow key={sku.codSku}>
-                      <TableCell className="font-mono text-xs">
-                        {sku.codigoBarra?.trim() || <span className="text-muted-foreground">{sku.codSku} <em>(sem EAN)</em></span>}
+                    <TableRow key={sku.id ?? sku.codSku}>
+                      <TableCell className="font-mono text-xs">{sku.codigoBarra || '—'}</TableCell>
+                      <TableCell className="font-mono text-xs">{sku.ean?.trim() || '—'}</TableCell>
+                      <TableCell className="max-w-48 truncate">
+                        {sku.descricao}
+                        {sku.isManual && <Badge variant="secondary" className="ml-1 text-xs py-0">Manual</Badge>}
                       </TableCell>
-                      <TableCell className="max-w-48 truncate">{sku.descricao}</TableCell>
                       <TableCell className="text-right">{sku.diasGiroUltimaPeca === 9999 ? '—' : sku.diasGiroUltimaPeca}</TableCell>
-                      <TableCell className="text-right font-bold">{sku.qtdSugerida}</TableCell>
+                      <TableCell className="text-right font-bold">
+                        {sku.isManual ? (
+                          <Input
+                            type="number"
+                            min={1}
+                            value={sku.qtdSugerida}
+                            onChange={e => onAtualizarManualQtd(sku.id!, Math.max(1, Number(e.target.value)))}
+                            className="w-16 text-right h-7 text-xs inline-block"
+                          />
+                        ) : sku.qtdSugerida}
+                      </TableCell>
+                      <TableCell>
+                        {sku.isManual && (
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onRemoverManual(sku.id!)}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -231,6 +270,14 @@ function GrupoFornecedorCompra({ grupo }: { grupo: FornecedorGrupo }) {
             ) : (
               <p className="text-xs text-muted-foreground ml-2 italic">Sem SKUs na janela de candidatos</p>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-1 text-xs gap-1 text-muted-foreground hover:text-foreground"
+              onClick={() => onAdicionarManual(marca.marca)}
+            >
+              <Plus className="h-3 w-3" /> Adicionar SKU manual
+            </Button>
           </div>
         ))}
         <div className="pt-3 border-t text-sm text-right text-muted-foreground">
@@ -331,24 +378,26 @@ function renderPDFSecao(doc: jsPDF, secao: PDFSecao, nomeEmpresa: string, dataGe
 
   const rows = secao.linhas.map(l => [
     l.marca,
-    l.codigoBarra?.trim() || (l.codSku ? `${l.codSku} (sem EAN)` : '—'),
-    l.descricao,
+    l.codigoBarra || '—',
+    l.ean || '—',
+    l.isManual ? `[M] ${l.descricao}` : l.descricao,
     String(l.qtdSugerida),
     String(l.qtdFinal),
   ]);
 
   autoTable(doc, {
-    head: [['Marca', 'Cód. Barras', 'Descrição', 'Sugerido', 'Final']],
+    head: [['Marca', 'Cód. Barras', 'EAN', 'Descrição', 'Sugerido', 'Final']],
     body: rows,
     startY: 38,
     styles: { fontSize: 8, cellPadding: 1.5 },
     headStyles: { fillColor: [55, 65, 81], textColor: 255, fontStyle: 'bold' },
     columnStyles: {
-      0: { cellWidth: 32 },
+      0: { cellWidth: 28 },
       1: { cellWidth: 16 },
-      2: { cellWidth: 88 },
-      3: { cellWidth: 18, halign: 'right' },
+      2: { cellWidth: 16 },
+      3: { cellWidth: 76 },
       4: { cellWidth: 18, halign: 'right' },
+      5: { cellWidth: 18, halign: 'right' },
     },
     alternateRowStyles: { fillColor: [249, 250, 251] },
   });
@@ -382,6 +431,13 @@ export default function PlanoMensalPage() {
   const [modalFornecedorOpen, setModalFornecedorOpen] = useState(false);
   const [modalFornecedorVisto, setModalFornecedorVisto] = useState(false);
   const [overridesFornecedor, setOverridesFornecedor] = useState<Map<string, string>>(new Map());
+
+  // Manual SKU state
+  const [manualSkus, setManualSkus] = useState<ManualSkuInput[]>([]);
+  const [modalManualAberto, setModalManualAberto] = useState(false);
+  const [modalManualMarca, setModalManualMarca] = useState('');
+  const [novoSkuDescricao, setNovoSkuDescricao] = useState('');
+  const [novoSkuQtd, setNovoSkuQtd] = useState(1);
 
   // Reset "visto" quando troca de empresa
   useEffect(() => { setModalFornecedorVisto(false); }, [empresaId]);
@@ -488,6 +544,7 @@ export default function PlanoMensalPage() {
         estoqueAtual: e?.quantidadeEstoque ?? 0,
         isDeadStock: e?.isDeadStock ?? false,
         codigoBarra: e?.codigoBarra ?? '',
+        ean: e?.ean ?? null,
         diasGiroUltimaPeca: e?.diasGiroUltimaPeca ?? v?.diasGiroUltimaPeca ?? null,
         diasEmEstoque: e?.diasEmEstoque ?? 0,
         precoCusto: e?.precoCusto ?? v?.precoCusto ?? 0,
@@ -540,6 +597,44 @@ export default function PlanoMensalPage() {
     () => agruparPorFornecedor(mixMarcas, fornecedorPorMarca),
     [mixMarcas, fornecedorPorMarca]
   );
+
+  // Grupos com SKUs manuais injetados
+  const gruposFornecedorComManuais = useMemo(() => {
+    if (manualSkus.length === 0) return gruposFornecedor;
+    return gruposFornecedor.map(g => ({
+      ...g,
+      marcas: g.marcas.map(m => {
+        const manuais = manualSkus.filter(s => s.marca === m.marca);
+        if (manuais.length === 0) return m;
+        const skusManuais = manuais.map(s => ({
+          id: s.id,
+          codSku: 0,
+          descricao: s.descricao,
+          diasGiroUltimaPeca: 9999 as const,
+          qtdSugerida: s.qtd,
+          codigoBarra: '',
+          ean: null,
+          isManual: true as const,
+        }));
+        return { ...m, skusAlocados: [...m.skusAlocados, ...skusManuais] };
+      }),
+    }));
+  }, [gruposFornecedor, manualSkus]);
+
+  // Marcas com compra pendente mas sem SKUs definidos.
+  // Usa qtdFinal do planoFinal (não mixTotal) para que zeragem na Etapa 6 desbloqueie o export.
+  const pendencias = useMemo(() => {
+    const marcasPendentes: string[] = [];
+    for (const g of gruposFornecedorComManuais) {
+      for (const m of g.marcas) {
+        const qtdFinal = planoFinal.find(p => p.marca === m.marca)?.qtdComprar ?? m.lacuna;
+        if (qtdFinal > 0 && m.skusAlocados.length === 0) {
+          marcasPendentes.push(m.marca);
+        }
+      }
+    }
+    return marcasPendentes;
+  }, [gruposFornecedorComManuais, planoFinal]);
 
   // Marcas com lacuna > 0 que ainda estão sem fornecedor
   const marcasSemFornecedor = useMemo(
@@ -612,9 +707,9 @@ export default function PlanoMensalPage() {
     nomeEmpresa,
     codEmpresa: empresaId ?? 0,
     dataGeracao: dataFim,
-    grupos: gruposFornecedor,
+    grupos: gruposFornecedorComManuais,
     planoFinal,
-  }), [nomeEmpresa, empresaId, dataFim, gruposFornecedor, planoFinal]);
+  }), [nomeEmpresa, empresaId, dataFim, gruposFornecedorComManuais, planoFinal]);
 
   const secoesPDF = useMemo(() => prepararSecoesPDF(exportParams), [exportParams]);
 
@@ -773,6 +868,32 @@ export default function PlanoMensalPage() {
     setPlanoFinal(prev => aplicarAjustePlanoFinal(prev, mixMarcas, marca, qtd));
   };
   const resetAjustes = () => setPlanoFinal(derivarPlanoFinalInicial(mixMarcas));
+
+  const abrirModalManual = (marca: string) => {
+    setModalManualMarca(marca);
+    setNovoSkuDescricao('');
+    setNovoSkuQtd(1);
+    setModalManualAberto(true);
+  };
+
+  const confirmarManual = () => {
+    if (novoSkuDescricao.trim().length < 3 || novoSkuQtd < 1) return;
+    setManualSkus(prev => [...prev, {
+      id: crypto.randomUUID(),
+      marca: modalManualMarca,
+      descricao: novoSkuDescricao.trim(),
+      qtd: novoSkuQtd,
+    }]);
+    setModalManualAberto(false);
+  };
+
+  const removerManual = (id: string) => {
+    setManualSkus(prev => prev.filter(s => s.id !== id));
+  };
+
+  const atualizarManualQtd = (id: string, qtd: number) => {
+    setManualSkus(prev => prev.map(s => s.id === id ? { ...s, qtd: Math.max(1, qtd) } : s));
+  };
 
   const setOverride = (marca: string, field: keyof Omit<MarcaOverride, 'marca'>, value: number | boolean | null) => {
     setOverrides(prev => {
@@ -941,8 +1062,16 @@ export default function PlanoMensalPage() {
           <AlertaEstouro totalMix={totalMixIdeal} capacidade={capacidadeTotal} />
 
           {/* Compras agrupadas por fornecedor */}
-          {gruposFornecedor.some(g => g.totalLacuna > 0) ? (
-            gruposFornecedor.map(g => <GrupoFornecedorCompra key={g.fornecedor} grupo={g} />)
+          {gruposFornecedorComManuais.some(g => g.totalLacuna > 0 || g.marcas.some(m => m.mixTotal > 0)) ? (
+            gruposFornecedorComManuais.map(g => (
+              <GrupoFornecedorCompra
+                key={g.fornecedor}
+                grupo={g}
+                onAdicionarManual={abrirModalManual}
+                onRemoverManual={removerManual}
+                onAtualizarManualQtd={atualizarManualQtd}
+              />
+            ))
           ) : (
             <Card>
               <CardContent className="py-8 text-center text-muted-foreground">
@@ -1012,6 +1141,26 @@ export default function PlanoMensalPage() {
               <MetricCard label="Total Final" value={totalFinal} unit="" color="text-primary" />
               <MetricCard label="SKUs Liquidar" value={itensLiquidacao.length} unit="" color="text-amber-600" />
             </div>
+            {pendencias.length > 0 && (
+              <Alert className="border-red-400 bg-red-50">
+                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <AlertTitle className="text-red-700">SKUs pendentes — exportação bloqueada</AlertTitle>
+                <AlertDescription className="text-red-600">
+                  <p className="mb-1">As seguintes marcas têm peças a comprar mas sem SKUs definidos:</p>
+                  <ul className="list-disc list-inside mb-2 text-sm">
+                    {pendencias.map(m => <li key={m}>{m}</li>)}
+                  </ul>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button size="sm" variant="outline" className="text-red-700 border-red-400 hover:bg-red-100" onClick={() => setStep(5)}>
+                      Ir para Etapa 5 (Plano)
+                    </Button>
+                    <Button size="sm" variant="outline" className="text-red-700 border-red-400 hover:bg-red-100" onClick={() => setStep(6)}>
+                      Ir para Etapa 6 (Ajuste)
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
             {qtdMarcasAjustadas > 0 && (
               <p className="text-sm text-amber-700">
                 {qtdMarcasAjustadas} marca(s) com ajuste manual.
@@ -1020,7 +1169,7 @@ export default function PlanoMensalPage() {
             <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2">
+                  <Button variant="outline" className="gap-2" disabled={pendencias.length > 0}>
                     <Download className="h-4 w-4" />
                     Exportar ▾
                   </Button>
@@ -1113,6 +1262,51 @@ export default function PlanoMensalPage() {
             {fornecedoresExistentes.map(f => <option key={f} value={f} />)}
           </datalist>
         )}
+      </BaseDialog>
+
+      {/* ── Modal: adicionar SKU manual ───────────────────────────────────── */}
+      <BaseDialog
+        open={modalManualAberto}
+        onOpenChange={open => {
+          if (!open) setModalManualAberto(false);
+        }}
+        title={`Adicionar SKU Manual — ${modalManualMarca}`}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setModalManualAberto(false)}>Cancelar</Button>
+            <Button
+              onClick={confirmarManual}
+              disabled={novoSkuDescricao.trim().length < 3 || novoSkuQtd < 1}
+            >
+              Adicionar
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="manual-descricao" className="text-sm font-medium">Modelo / Descrição</Label>
+            <Input
+              id="manual-descricao"
+              placeholder="Mínimo 3 caracteres"
+              value={novoSkuDescricao}
+              onChange={e => setNovoSkuDescricao(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="manual-qtd" className="text-sm font-medium">Quantidade</Label>
+            <Input
+              id="manual-qtd"
+              type="number"
+              min={1}
+              value={novoSkuQtd}
+              onChange={e => setNovoSkuQtd(Math.max(1, Number(e.target.value)))}
+              className="mt-1 w-24"
+            />
+          </div>
+        </div>
       </BaseDialog>
     </div>
   );
