@@ -19,6 +19,7 @@ exports[`calcularMixIdealV2 — ordenação > snapshot com dataset base 1`] = `
     "skusAlocados": [
       {
         "codSku": 1,
+        "codigoBarra": undefined,
         "descricao": "RB 4105",
         "diasGiroUltimaPeca": 10,
         "qtdSugerida": 62,
@@ -43,6 +44,7 @@ exports[`calcularMixIdealV2 — ordenação > snapshot com dataset base 1`] = `
     "skusAlocados": [
       {
         "codSku": 2,
+        "codigoBarra": undefined,
         "descricao": "OAK Metal",
         "diasGiroUltimaPeca": 15,
         "qtdSugerida": 23,

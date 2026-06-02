@@ -15,6 +15,7 @@ import VisaoEstoquePage from "./pages/estoque/VisaoEstoquePage";
 import AnaliseOTBPage from "./pages/estoque/AnaliseOTBPage";
 import CapacidadesExpositorPage from "./pages/estoque/CapacidadesExpositorPage";
 import PlanoMensalPage from "./pages/estoque/PlanoMensalPage";
+import PlanoHistoricoPage from "./pages/estoque/PlanoHistoricoPage";
 import { EstoqueErrorBoundary } from "@/components/estoque/EstoqueErrorBoundary";
 import SalesFamilyDashboard from "./pages/SalesFamilyDashboard";
 import OsDashboard from "./pages/OsDashboard";
@@ -88,6 +89,7 @@ const App = () => (
                   <Route path="/estoque/otb" element={<EstoqueErrorBoundary><AnaliseOTBPage /></EstoqueErrorBoundary>} />
                   <Route path="/estoque/capacidades" element={<CapacidadesExpositorPage />} />
                   <Route path="/estoque/plano-mensal" element={<PlanoMensalPage />} />
+                  <Route path="/estoque/planos-historico" element={<PlanoHistoricoPage />} />
                 </Route>
 
                 {/* Monitor */}
