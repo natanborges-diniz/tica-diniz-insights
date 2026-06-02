@@ -41,11 +41,11 @@ const GRUPOS: FornecedorGrupo[] = [
     isSemFornecedor: false,
     marcas: [
       makeMarca('RAYBAN', 62, [
-        { codSku: 1, descricao: 'RB 3025 Aviator', diasGiroUltimaPeca: 10, qtdSugerida: 40 },
-        { codSku: 2, descricao: 'RB 2140 Wayfarer', diasGiroUltimaPeca: 15, qtdSugerida: 22 },
+        { codSku: 1, descricao: 'RB 3025 Aviator', diasGiroUltimaPeca: 10, qtdSugerida: 40, codigoBarra: '7891234567890' },
+        { codSku: 2, descricao: 'RB 2140 Wayfarer', diasGiroUltimaPeca: 15, qtdSugerida: 22 },   // sem EAN
       ]),
       makeMarca('OAKLEY', 23, [
-        { codSku: 3, descricao: 'OAK Metal', diasGiroUltimaPeca: 9999, qtdSugerida: 23 },
+        { codSku: 3, descricao: 'OAK Metal', diasGiroUltimaPeca: 9999, qtdSugerida: 23 },         // sem EAN
       ]),
     ],
     totalMixIdeal: 160,
@@ -56,7 +56,7 @@ const GRUPOS: FornecedorGrupo[] = [
     isSemFornecedor: true,
     marcas: [
       makeMarca('GUESS', 10, [
-        { codSku: 4, descricao: 'GU 2345', diasGiroUltimaPeca: 30, qtdSugerida: 10 },
+        { codSku: 4, descricao: 'GU 2345', diasGiroUltimaPeca: 30, qtdSugerida: 10, codigoBarra: '7899876543210' },
       ]),
     ],
     totalMixIdeal: 80,
@@ -84,7 +84,7 @@ describe('gerarLinhasCSV', () => {
   it('primeira linha é o cabeçalho correto', () => {
     const linhas = gerarLinhasCSV(PARAMS);
     expect(linhas[0]).toEqual([
-      'Fornecedor', 'Marca', 'Cód SKU', 'Descrição', 'Sugerido', 'Final (Marca)', 'Dias p/ Sair',
+      'Fornecedor', 'Marca', 'Código de Barras', 'Descrição', 'Sugerido', 'Final (Marca)', 'Dias p/ Sair',
     ]);
   });
 
@@ -96,8 +96,20 @@ describe('gerarLinhasCSV', () => {
 
   it('fornecedor correto na coluna 0', () => {
     const linhas = gerarLinhasCSV(PARAMS);
-    const raybanRow = linhas.find(l => l[2] === '1');
-    expect(raybanRow?.[0]).toBe('LUXOTTICA BR');
+    const aviatorRow = linhas.find(l => l[2] === '7891234567890'); // SKU 1 tem EAN
+    expect(aviatorRow?.[0]).toBe('LUXOTTICA BR');
+  });
+
+  it('codigoBarra preenchido aparece na coluna 2', () => {
+    const linhas = gerarLinhasCSV(PARAMS);
+    const aviatorRow = linhas.find(l => l[3] === 'RB 3025 Aviator');
+    expect(aviatorRow?.[2]).toBe('7891234567890');
+  });
+
+  it('SKU sem codigoBarra cai em fallback "codSku (sem EAN)"', () => {
+    const linhas = gerarLinhasCSV(PARAMS);
+    const wayfarerRow = linhas.find(l => l[3] === 'RB 2140 Wayfarer');
+    expect(wayfarerRow?.[2]).toBe('2 (sem EAN)');
   });
 
   it('dias_giro 9999 aparece como string vazia', () => {
@@ -108,22 +120,22 @@ describe('gerarLinhasCSV', () => {
 
   it('dias_giro válido aparece como string numérica', () => {
     const linhas = gerarLinhasCSV(PARAMS);
-    const aviatorRow = linhas.find(l => l[2] === '1');
+    const aviatorRow = linhas.find(l => l[3] === 'RB 3025 Aviator');
     expect(aviatorRow?.[6]).toBe('10');
   });
 
   it('qtd Final usa valor do planoFinal (ajuste do usuário)', () => {
     const linhas = gerarLinhasCSV(PARAMS);
     // RAYBAN foi ajustado para 50 (originalmente 62)
-    const raybanRow = linhas.find(l => l[2] === '1');
-    expect(raybanRow?.[5]).toBe('50');
+    const aviatorRow = linhas.find(l => l[3] === 'RB 3025 Aviator');
+    expect(aviatorRow?.[5]).toBe('50');
   });
 
   it('qtd Final usa lacuna quando marca não está no planoFinal', () => {
     const params: ExportParams = { ...PARAMS, planoFinal: [] };
     const linhas = gerarLinhasCSV(params);
-    const raybanRow = linhas.find(l => l[2] === '1');
-    expect(raybanRow?.[5]).toBe('62'); // lacuna de RAYBAN
+    const aviatorRow = linhas.find(l => l[3] === 'RB 3025 Aviator');
+    expect(aviatorRow?.[5]).toBe('62'); // lacuna de RAYBAN
   });
 
   it('marca sem SKUs alocados gera 1 linha placeholder', () => {
@@ -185,7 +197,7 @@ describe('prepararExcelData', () => {
     const data = prepararExcelData(PARAMS);
     const luxSheet = data.sheets.get('LUXOTTICA BR')!;
     expect(luxSheet[0]).toContain('Marca');
-    expect(luxSheet[0]).toContain('Cód SKU');
+    expect(luxSheet[0]).toContain('Código de Barras');
     expect(luxSheet[0]).toContain('Qtd Final');
   });
 

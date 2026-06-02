@@ -164,8 +164,9 @@ describe('calcularMixIdealV2 — alocação por passadas', () => {
     expect(sku2.qtdSugerida).toBe(1);
   });
 
-  it('SKU sem diasGiroUltimaPeca tem menor prioridade', () => {
-    // Única marca, lacuna=3: sku1(giro=5) → 2, sku2(null→Infinity) → 1
+  it('SKU sem diasGiroUltimaPeca é excluído dos candidatos (filtro 1.5.A)', () => {
+    // Filtro 1.5.A: diasGiroUltimaPeca == null → não entra como candidato.
+    // Toda a lacuna vai para sku1 (diasGiro=5); sku2 (null) não é alocado.
     const itens = [
       { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual:  0, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1, descricao: 'Rápido',   diasGiroUltimaPeca: 5 },
       { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 97, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 2, descricao: 'Sem dado', diasGiroUltimaPeca: null },
@@ -173,9 +174,9 @@ describe('calcularMixIdealV2 — alocação por passadas', () => {
     const r = calcularMixIdealV2({ itens, capacidadeTotal: 100 });
     const brand = r.find(m => m.marca === 'BRAND')!;
     expect(brand.lacuna).toBe(3);
-    const rapido = brand.skusAlocados.find(s => s.codSku === 1)!;
-    const semDado = brand.skusAlocados.find(s => s.codSku === 2)!;
-    expect(rapido.qtdSugerida).toBeGreaterThan(semDado.qtdSugerida);
+    expect(brand.skusAlocados).toHaveLength(1);
+    expect(brand.skusAlocados[0].codSku).toBe(1);
+    expect(brand.skusAlocados[0].qtdSugerida).toBe(3); // toda a lacuna vai para sku1
   });
 
   it('soma dos qtdSugerida = lacuna', () => {

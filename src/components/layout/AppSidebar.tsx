@@ -61,6 +61,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
         { title: "Visão Estoque", url: "/estoque", icon: Package },
         { title: "Plano de Compra", url: "/estoque/otb", icon: Layers },
         { title: "Plano Mensal", url: "/estoque/plano-mensal", icon: ClipboardList },
+        { title: "Histórico de Planos", url: "/estoque/planos-historico", icon: FileText },
         { title: "Capacidade Expositor", url: "/estoque/capacidades", icon: Settings2 },
       ],
     },

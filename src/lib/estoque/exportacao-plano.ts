@@ -28,7 +28,7 @@ function sanitizeSheetName(name: string): string {
 
 // ── CSV ───────────────────────────────────────────────────────────────────────
 
-const CSV_HEADER = ['Fornecedor', 'Marca', 'Cód SKU', 'Descrição', 'Sugerido', 'Final (Marca)', 'Dias p/ Sair'];
+const CSV_HEADER = ['Fornecedor', 'Marca', 'Código de Barras', 'Descrição', 'Sugerido', 'Final (Marca)', 'Dias p/ Sair'];
 
 /** Retorna todas as linhas (incluindo cabeçalho) como arrays de strings — puro, testável. */
 export function gerarLinhasCSV(params: ExportParams): string[][] {
@@ -45,10 +45,11 @@ export function gerarLinhasCSV(params: ExportParams): string[][] {
         continue;
       }
       for (const sku of marca.skusAlocados) {
+        const ean = sku.codigoBarra?.trim() || `${sku.codSku} (sem EAN)`;
         linhas.push([
           grupo.fornecedor,
           marca.marca,
-          String(sku.codSku),
+          ean,
           sku.descricao,
           String(sku.qtdSugerida),
           String(qtdFinal),
@@ -101,7 +102,7 @@ export function prepararExcelData(params: ExportParams): ExcelData {
   for (const g of grupos) {
     const sheetName = sanitizeSheetName(g.fornecedor);
     const rows: (string | number)[][] = [
-      ['Marca', 'Cód SKU', 'Descrição', 'Qtd Sugerida', 'Qtd Final', 'Dias p/ Sair'],
+      ['Marca', 'Código de Barras', 'Descrição', 'Qtd Sugerida', 'Qtd Final', 'Dias p/ Sair'],
     ];
     for (const marca of g.marcas) {
       const qtdFinal = qtdFinalMarca(marca.marca, planoFinal, marca.lacuna);
@@ -110,9 +111,10 @@ export function prepararExcelData(params: ExportParams): ExcelData {
         continue;
       }
       for (const sku of marca.skusAlocados) {
+        const ean = sku.codigoBarra?.trim() || `${sku.codSku} (sem EAN)`;
         rows.push([
           marca.marca,
-          sku.codSku,
+          ean,
           sku.descricao,
           sku.qtdSugerida,
           qtdFinal,
@@ -149,6 +151,7 @@ export function gerarExcel(params: ExportParams): Uint8Array {
 export interface PDFLinhaItem {
   marca: string;
   codSku: number;
+  codigoBarra: string;        // EAN; vazio → exibir codSku + "(sem EAN)"
   descricao: string;
   qtdSugerida: number;
   qtdFinal: number;
@@ -172,13 +175,14 @@ export function prepararSecoesPDF(params: ExportParams): PDFSecao[] {
       const qtdFinal = qtdFinalMarca(m.marca, planoFinal, m.lacuna);
       if (m.skusAlocados.length === 0) {
         return [{
-          marca: m.marca, codSku: 0, descricao: '(sem alocação)', qtdSugerida: 0,
-          qtdFinal, diasGiro: null,
+          marca: m.marca, codSku: 0, codigoBarra: '', descricao: '(sem alocação)',
+          qtdSugerida: 0, qtdFinal, diasGiro: null,
         }];
       }
       return m.skusAlocados.map(sku => ({
         marca: m.marca,
         codSku: sku.codSku,
+        codigoBarra: sku.codigoBarra?.trim() ?? '',
         descricao: sku.descricao,
         qtdSugerida: sku.qtdSugerida,
         qtdFinal,
