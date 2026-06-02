@@ -209,7 +209,7 @@ function GrupoFornecedorCompra({ grupo }: { grupo: FornecedorGrupo }) {
               <Table className="text-xs">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>SKU</TableHead>
+                    <TableHead>Cód. Barras</TableHead>
                     <TableHead>Descrição</TableHead>
                     <TableHead className="text-right">Giro (d)</TableHead>
                     <TableHead className="text-right">Qtd</TableHead>
@@ -218,7 +218,9 @@ function GrupoFornecedorCompra({ grupo }: { grupo: FornecedorGrupo }) {
                 <TableBody>
                   {marca.skusAlocados.map(sku => (
                     <TableRow key={sku.codSku}>
-                      <TableCell className="font-mono text-xs">{sku.codSku}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {sku.codigoBarra?.trim() || <span className="text-muted-foreground">{sku.codSku} <em>(sem EAN)</em></span>}
+                      </TableCell>
                       <TableCell className="max-w-48 truncate">{sku.descricao}</TableCell>
                       <TableCell className="text-right">{sku.diasGiroUltimaPeca === 9999 ? '—' : sku.diasGiroUltimaPeca}</TableCell>
                       <TableCell className="text-right font-bold">{sku.qtdSugerida}</TableCell>
@@ -329,14 +331,14 @@ function renderPDFSecao(doc: jsPDF, secao: PDFSecao, nomeEmpresa: string, dataGe
 
   const rows = secao.linhas.map(l => [
     l.marca,
-    l.codSku ? String(l.codSku) : '—',
+    l.codigoBarra?.trim() || (l.codSku ? `${l.codSku} (sem EAN)` : '—'),
     l.descricao,
     String(l.qtdSugerida),
     String(l.qtdFinal),
   ]);
 
   autoTable(doc, {
-    head: [['Marca', 'SKU', 'Descrição', 'Sugerido', 'Final']],
+    head: [['Marca', 'Cód. Barras', 'Descrição', 'Sugerido', 'Final']],
     body: rows,
     startY: 38,
     styles: { fontSize: 8, cellPadding: 1.5 },
@@ -362,13 +364,6 @@ function gerarPDFCompleto(secoes: PDFSecao[], nomeEmpresa: string, dataGeracao: 
   const doc = new jsPDF({ format: 'a4', unit: 'mm' });
   secoes.forEach((secao, idx) => renderPDFSecao(doc, secao, nomeEmpresa, dataGeracao, idx > 0));
   doc.save(`plano-mensal-${dataGeracao}.pdf`);
-}
-
-function gerarPDFUmFornecedor(secao: PDFSecao, nomeEmpresa: string, dataGeracao: string) {
-  const doc = new jsPDF({ format: 'a4', unit: 'mm' });
-  renderPDFSecao(doc, secao, nomeEmpresa, dataGeracao, false);
-  const slug = secao.fornecedor.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').toLowerCase();
-  doc.save(`plano-${slug}-${dataGeracao}.pdf`);
 }
 
 // ── Página principal ──────────────────────────────────────────────────────────
@@ -492,6 +487,7 @@ export default function PlanoMensalPage() {
         totalVendido: v?.totalVendido ?? 0,
         estoqueAtual: e?.quantidadeEstoque ?? 0,
         isDeadStock: e?.isDeadStock ?? false,
+        codigoBarra: e?.codigoBarra ?? '',
         diasGiroUltimaPeca: e?.diasGiroUltimaPeca ?? v?.diasGiroUltimaPeca ?? null,
         diasEmEstoque: e?.diasEmEstoque ?? 0,
         precoCusto: e?.precoCusto ?? v?.precoCusto ?? 0,
@@ -678,33 +674,84 @@ export default function PlanoMensalPage() {
   // ── Exportações ───────────────────────────────────────────────────────────
 
   const handleExportarCSV = useCallback(() => {
-    const csv = gerarCSVString(exportParams);
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `plano-mensal-loja${empresaId}-${dataFim}.csv`; a.click();
-    URL.revokeObjectURL(url);
+    try {
+      console.info('[export-csv] iniciando', { marcas: exportParams.grupos.flatMap(g => g.marcas).length });
+      const csv = gerarCSVString(exportParams);
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `plano-mensal-loja${empresaId}-${dataFim}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: 'CSV exportado.' });
+    } catch (err) {
+      console.error('[export-csv]', err);
+      toast({ title: 'Falha ao exportar CSV', description: err instanceof Error ? err.message : 'Tente novamente.', variant: 'destructive' });
+    }
   }, [exportParams, empresaId, dataFim]);
 
   const handleExportarExcel = useCallback(() => {
-    const buf = gerarExcel(exportParams);
-    const blob = new Blob([buf as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `plano-mensal-loja${empresaId}-${dataFim}.xlsx`; a.click();
-    URL.revokeObjectURL(url);
+    try {
+      console.info('[export-excel] iniciando', { marcas: exportParams.grupos.flatMap(g => g.marcas).length });
+      const buf = gerarExcel(exportParams);
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `plano-mensal-loja${empresaId}-${dataFim}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: 'Excel exportado.' });
+    } catch (err) {
+      console.error('[export-excel]', err);
+      toast({ title: 'Falha ao exportar Excel', description: err instanceof Error ? err.message : 'Tente novamente.', variant: 'destructive' });
+    }
   }, [exportParams, empresaId, dataFim]);
 
   const handleExportarPDFCompleto = useCallback(() => {
-    gerarPDFCompleto(secoesPDF, nomeEmpresa, dataFim);
+    try {
+      console.info('[export-pdf-completo] iniciando', { secoes: secoesPDF.length });
+      gerarPDFCompleto(secoesPDF, nomeEmpresa, dataFim);
+      toast({ title: 'PDF exportado.' });
+    } catch (err) {
+      console.error('[export-pdf-completo]', err);
+      toast({ title: 'Falha ao exportar PDF', description: err instanceof Error ? err.message : 'Tente novamente.', variant: 'destructive' });
+    }
   }, [secoesPDF, nomeEmpresa, dataFim]);
 
-  const handleExportarPDFPorFornecedor = useCallback(() => {
-    const secoesAtivas = secoesPDF.filter(s => s.totalFinal > 0 || s.linhas.length > 0);
-    secoesAtivas.forEach((secao, idx) => {
-      setTimeout(() => gerarPDFUmFornecedor(secao, nomeEmpresa, dataFim), idx * 400);
-    });
-  }, [secoesPDF, nomeEmpresa, dataFim]);
+  const handleExportarPDFPorFornecedor = useCallback(async () => {
+    try {
+      const secoesAtivas = secoesPDF.filter(s => s.totalFinal > 0 || s.linhas.length > 0);
+      console.info('[export-pdf-fornecedor] iniciando', { totalFornecedores: secoesAtivas.length });
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      for (const secao of secoesAtivas) {
+        const doc = new jsPDF({ format: 'a4', unit: 'mm' });
+        renderPDFSecao(doc, secao, nomeEmpresa, dataFim, false);
+        const slug = secao.fornecedor.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').toLowerCase();
+        zip.file(`plano-${slug}-${dataFim}.pdf`, doc.output('arraybuffer'));
+      }
+      const buf = await zip.generateAsync({ type: 'uint8array' });
+      const blob = new Blob([buf], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `plano-loja${empresaId}-${dataFim}-por-fornecedor.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: `ZIP gerado (${secoesAtivas.length} fornecedores).` });
+    } catch (err) {
+      console.error('[export-pdf-fornecedor]', err);
+      toast({ title: 'Falha ao exportar ZIP', description: err instanceof Error ? err.message : 'Tente novamente.', variant: 'destructive' });
+    }
+  }, [secoesPDF, nomeEmpresa, dataFim, empresaId]);
 
   // ── Navegação ─────────────────────────────────────────────────────────────
 
