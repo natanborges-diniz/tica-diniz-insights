@@ -563,10 +563,19 @@ export default function PlanoMensalPage() {
     });
   }, [estoqueData, vendasData]);
 
-  // Debug temporário — Onda 1.6 key-mismatch fix
+  // Debug temporário — Onda 1.6 rastreamento onde codigoBarra se perde
+  useEffect(() => {
+    if (estoqueData.length > 0) {
+      console.info('[plano-estoque-raw]', estoqueData[0], estoqueData.filter(e => e.codigoBarra).length);
+    }
+  }, [estoqueData]);
+
   useEffect(() => {
     const matched = itensMix.filter(i => i.codigoBarra).length;
     console.info(`[merge] ${matched}/${itensMix.length} items com codigoBarra`);
+    if (itensMix.length > 0) {
+      console.info('[plano-itemmix-sample]', itensMix[0]);
+    }
   }, [itensMix]);
 
   // ── Diagnóstico ────────────────────────────────────────────────────────────
@@ -595,6 +604,12 @@ export default function PlanoMensalPage() {
   }, [itensMix, capacidadeTotal, marcaConfigsV2, pctSolarDefault]);
 
   const totalMixIdeal = mixMarcas.reduce((s, m) => s + m.mixTotal, 0);
+
+  useEffect(() => {
+    if (mixMarcas.length > 0) {
+      console.info('[plano-skualocado-sample]', mixMarcas[0]?.skusAlocados[0]);
+    }
+  }, [mixMarcas]);
 
   // ── Agrupamento por fornecedor ─────────────────────────────────────────────
 
