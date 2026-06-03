@@ -525,8 +525,17 @@ export default function PlanoMensalPage() {
   // ── Merge estoque + vendas → itensMix (com fornecedor) ────────────────────
 
   const itensMix = useMemo(() => {
-    const vendasMap = new Map(vendasData.map(v => [v.codSku, v]));
-    const estoqueMap = new Map(estoqueData.map(e => [e.codSku, e]));
+    // Investigação tipo (Onda 1.6) — confirma que Bridge não entrega string após normalização
+    console.info('[merge-types]', {
+      estoqueCodSkuType: typeof estoqueData[0]?.codSku,
+      estoqueCodSkuSample: estoqueData[0]?.codSku,
+      vendasCodSkuType: typeof vendasData[0]?.codSku,
+      vendasCodSkuSample: vendasData[0]?.codSku,
+    });
+
+    // Number() garante chaves numéricas mesmo se Bridge entregar cod_sku como string
+    const vendasMap = new Map(vendasData.map(v => [Number(v.codSku), v]));
+    const estoqueMap = new Map(estoqueData.map(e => [Number(e.codSku), e]));
     const allSkus = new Set([...vendasMap.keys(), ...estoqueMap.keys()]);
 
     return Array.from(allSkus).map(codSku => {
@@ -553,6 +562,12 @@ export default function PlanoMensalPage() {
       };
     });
   }, [estoqueData, vendasData]);
+
+  // Debug temporário — Onda 1.6 key-mismatch fix
+  useEffect(() => {
+    const matched = itensMix.filter(i => i.codigoBarra).length;
+    console.info(`[merge] ${matched}/${itensMix.length} items com codigoBarra`);
+  }, [itensMix]);
 
   // ── Diagnóstico ────────────────────────────────────────────────────────────
 

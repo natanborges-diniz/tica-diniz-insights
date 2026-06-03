@@ -139,7 +139,7 @@ export function calcularMixIdealV2({
   // Candidatos à alocação por marca (qualquer SKU com codSku definido)
   const candidatosByMarca = new Map<
     string,
-    Array<{ codSku: number; descricao: string; diasGiroUltimaPeca: number | null | undefined }>
+    Array<{ codSku: number; descricao: string; diasGiroUltimaPeca: number | null | undefined; codigoBarra?: string; ean?: string | null }>
   >();
   armacoes.forEach(i => {
     if (i.codSku === undefined) return;

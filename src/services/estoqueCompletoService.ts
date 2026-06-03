@@ -48,6 +48,7 @@ interface EstoqueCompletoRaw {
 
 export interface EstoqueCompleto {
   codSku: number;
+  codArmacao: number | null; // cod_armacao bruto — usado no double-lookup do merge (Onda 1.6 fix)
   codigoBarra: string;   // cod_barras_interno (sempre preenchido)
   ean: string | null;    // EAN do fabricante; null quando não disponível
   descricao: string;
@@ -141,9 +142,12 @@ export async function getEstoqueCompleto(
       ? classificarPorIdade(diasEmEstoque).rotulo
       : 'SEM CADASTRO';
     
-    // cod_sku: backend pode enviar como cod_sku OU cod_armacao (fallback)
-    const rawCodSku = r.cod_sku ?? r.cod_armacao ?? 0;
-    const codSku = typeof rawCodSku === 'string' ? parseInt(rawCodSku, 10) : rawCodSku;
+    // cod_sku: Bridge pode enviar como string ("3293456") ou number — Number() normaliza
+    const codSkuNum = Number(r.cod_sku ?? r.cod_armacao ?? 0);
+
+    // cod_armacao bruto — preservado como referência alternativa
+    const rawCodArmacao = r.cod_armacao ?? null;
+    const codArmacao = rawCodArmacao == null ? null : (Number(rawCodArmacao) || null);
     
     const diasDesdeUltimaVenda = (() => {
       if (r.dias_sem_venda !== undefined && r.dias_sem_venda !== null) {
@@ -159,8 +163,8 @@ export async function getEstoqueCompleto(
     })();
 
     return {
-      // Converter para número garantindo consistência
-      codSku: isNaN(codSku) ? 0 : codSku,
+      codSku: isNaN(codSkuNum) ? 0 : codSkuNum,
+      codArmacao: codArmacao != null && !isNaN(codArmacao) ? codArmacao : null,
       codigoBarra: (r.cod_barras_interno?.trim() ?? r.codigo_barras?.trim() ?? ''),
       ean: r.ean?.trim() || null,
       descricao,

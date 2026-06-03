@@ -209,3 +209,38 @@ describe('calcularMixIdealV2 — ordenação', () => {
     expect(calcularMixIdealV2({ itens: BASE, capacidadeTotal: CAP })).toMatchSnapshot();
   });
 });
+
+// ─── Propagação codigoBarra / ean ─────────────────────────────────────────────
+
+describe('calcularMixIdealV2 — propagação codigoBarra/ean (Onda 1.6)', () => {
+  const itensComBarras = [
+    {
+      marca: 'RAYBAN', qtdVendidos: 60, totalVendido: 6000, estoqueAtual: 50,
+      isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1,
+      descricao: 'RB 4105', diasGiroUltimaPeca: 10,
+      codigoBarra: '7891234567', ean: '8056597137928',
+    },
+  ];
+
+  it('codigoBarra propagado do ItemMixV2 para SkuAlocado', () => {
+    const r = calcularMixIdealV2({ itens: itensComBarras, capacidadeTotal: CAP });
+    expect(r[0].skusAlocados[0].codigoBarra).toBe('7891234567');
+  });
+
+  it('ean preenchido propagado para SkuAlocado', () => {
+    const r = calcularMixIdealV2({ itens: itensComBarras, capacidadeTotal: CAP });
+    expect(r[0].skusAlocados[0].ean).toBe('8056597137928');
+  });
+
+  it('ean=null propagado como null', () => {
+    const itens = [{ ...itensComBarras[0], ean: null }];
+    const r = calcularMixIdealV2({ itens, capacidadeTotal: CAP });
+    expect(r[0].skusAlocados[0].ean).toBeNull();
+  });
+
+  it('codigoBarra ausente → undefined em SkuAlocado', () => {
+    const r = calcularMixIdealV2({ itens: BASE, capacidadeTotal: CAP });
+    const rb = r.find(m => m.marca === 'RAYBAN')!;
+    expect(rb.skusAlocados[0].codigoBarra).toBeUndefined();
+  });
+});
