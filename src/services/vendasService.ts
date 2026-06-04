@@ -267,6 +267,9 @@ interface AnaliseSkuRaw {
   dias_giro_mediano?: number | null;
   dias_giro_ultima_peca?: number | null;
   pecas_vendidas_consideradas?: number | null;
+  // Bridge 73ef85f
+  cod_barras_interno?: string | null;
+  ean?: string | null;
 }
 
 export interface AnaliseSku {
@@ -292,6 +295,9 @@ export interface AnaliseSku {
   diasGiroMediano: number | null;
   diasGiroUltimaPeca: number | null;
   pecasGiroConsideradas: number;
+  // Bridge 73ef85f
+  codigoBarra: string;
+  ean: string | null;
 }
 
 export interface GetAnaliseSkuParams {
@@ -361,6 +367,8 @@ export async function getAnaliseSku(
       diasGiroMediano: r.dias_giro_mediano ?? null,
       diasGiroUltimaPeca: r.dias_giro_ultima_peca ?? null,
       pecasGiroConsideradas: r.pecas_vendidas_consideradas ?? 0,
+      codigoBarra: r.cod_barras_interno?.trim() || '',
+      ean: r.ean?.trim() || null,
     };
   });
 }

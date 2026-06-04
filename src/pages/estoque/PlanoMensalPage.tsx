@@ -525,14 +525,6 @@ export default function PlanoMensalPage() {
   // ── Merge estoque + vendas → itensMix (com fornecedor) ────────────────────
 
   const itensMix = useMemo(() => {
-    // Investigação tipo (Onda 1.6) — confirma que Bridge não entrega string após normalização
-    console.info('[merge-types]', {
-      estoqueCodSkuType: typeof estoqueData[0]?.codSku,
-      estoqueCodSkuSample: estoqueData[0]?.codSku,
-      vendasCodSkuType: typeof vendasData[0]?.codSku,
-      vendasCodSkuSample: vendasData[0]?.codSku,
-    });
-
     // Number() garante chaves numéricas mesmo se Bridge entregar cod_sku como string
     const vendasMap = new Map(vendasData.map(v => [Number(v.codSku), v]));
     const estoqueMap = new Map(estoqueData.map(e => [Number(e.codSku), e]));
@@ -552,8 +544,8 @@ export default function PlanoMensalPage() {
         totalVendido: v?.totalVendido ?? 0,
         estoqueAtual: e?.quantidadeEstoque ?? 0,
         isDeadStock: e?.isDeadStock ?? false,
-        codigoBarra: e?.codigoBarra ?? '',
-        ean: e?.ean ?? null,
+        codigoBarra: e?.codigoBarra || v?.codigoBarra || '',
+        ean: e?.ean ?? v?.ean ?? null,
         diasGiroUltimaPeca: e?.diasGiroUltimaPeca ?? v?.diasGiroUltimaPeca ?? null,
         diasEmEstoque: e?.diasEmEstoque ?? 0,
         precoCusto: e?.precoCusto ?? v?.precoCusto ?? 0,
@@ -562,32 +554,6 @@ export default function PlanoMensalPage() {
       };
     });
   }, [estoqueData, vendasData]);
-
-  // Debug temporário — Onda 1.6 rastreamento onde codigoBarra se perde
-  useEffect(() => {
-    if (estoqueData.length > 0) {
-      console.info('[plano-estoque-raw]', estoqueData[0], estoqueData.filter(e => e.codigoBarra).length);
-    }
-  }, [estoqueData]);
-
-  useEffect(() => {
-    const matched = itensMix.filter(i => i.codigoBarra).length;
-    console.info(`[merge] ${matched}/${itensMix.length} items com codigoBarra`);
-    if (itensMix.length > 0) {
-      console.info('[plano-itemmix-sample]', itensMix[0]);
-    }
-    console.info('[plano-itemsmix-filter]', {
-      totalAntes: itensMix.length,
-      categorias: itensMix.reduce((acc: Record<string, number>, i) => {
-        acc[i.categoria] = (acc[i.categoria] || 0) + 1;
-        return acc;
-      }, {}),
-      totalArmacoes: itensMix.filter(i => i.categoria === 'ARMACOES').length,
-      totalArmacoesComCodigoBarra: itensMix.filter(i => i.categoria === 'ARMACOES' && i.codigoBarra).length,
-      sampleArmacao: itensMix.find(i => i.categoria === 'ARMACOES'),
-      sampleNaoArmacao: itensMix.find(i => i.categoria !== 'ARMACOES'),
-    });
-  }, [itensMix]);
 
   // ── Diagnóstico ────────────────────────────────────────────────────────────
 
@@ -615,29 +581,6 @@ export default function PlanoMensalPage() {
   }, [itensMix, capacidadeTotal, marcaConfigsV2, pctSolarDefault]);
 
   const totalMixIdeal = mixMarcas.reduce((s, m) => s + m.mixTotal, 0);
-
-  useEffect(() => {
-    if (mixMarcas.length === 0) return;
-    const top = [...mixMarcas]
-      .filter(m => m.skusAlocados?.length > 0)
-      .sort((a, b) => b.skusAlocados.length - a.skusAlocados.length)[0];
-    console.info('[plano-mixideal-full]', {
-      totalMarcas: mixMarcas.length,
-      marcasComSkus: mixMarcas.filter(m => m.skusAlocados?.length > 0).length,
-      primeiras3Marcas: mixMarcas.slice(0, 3).map(m => ({
-        marca: m.marca,
-        mixTotal: m.mixTotal,
-        estoqueEfetivo: m.estoqueEfetivo,
-        lacuna: m.lacuna,
-        status: m.status,
-        qtdCandidatos: m.skusAlocados?.length ?? 0,
-        primeiroSku: m.skusAlocados?.[0] ?? null,
-      })),
-      marcaComMaisSkus: top
-        ? { marca: top.marca, qtdSkus: top.skusAlocados.length, primeiro: top.skusAlocados[0] }
-        : null,
-    });
-  }, [mixMarcas]);
 
   // ── Agrupamento por fornecedor ─────────────────────────────────────────────
 
