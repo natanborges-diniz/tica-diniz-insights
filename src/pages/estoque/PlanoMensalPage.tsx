@@ -2,7 +2,7 @@
 // Wizard 7 etapas — Plano Mensal de Compras
 // Sub-Entrega D₄ + D.6 (agrupamento fornecedor) + D.7 (multi-export)
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -10,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUserEmpresas } from '@/hooks/useUserEmpresas';
 import { getEstoqueCompleto } from '@/services/estoqueCompletoService';
 import { getAnaliseSku } from '@/services/vendasService';
-import { calcularMixIdealV2, type MixMarcaV2, type MarcaConfigV2 } from '@/lib/estoque/mix-ideal-v2';
+import { calcularMixIdealV2, type MixMarcaV2, type MarcaConfigV2, type StatusMixV2 } from '@/lib/estoque/mix-ideal-v2';
 import {
   derivarPlanoFinalInicial,
   aplicarAjustePlanoFinal,
@@ -171,6 +171,7 @@ function PlanoColunaLiquidacao({ itens }: { itens: ItemLiquidacao[] }) {
 function StatusBadge({ status }: { status: MixMarcaV2['status'] }) {
   if (status === 'OK') return <Badge className="bg-green-100 text-green-800 border-green-300">OK</Badge>;
   if (status === 'ABAIXO_MINIMO_ESTRATEGICA') return <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-xs">Estratégica ↑25</Badge>;
+  if (status === 'SEM_VENDAS_180D') return <Badge className="bg-slate-100 text-slate-600 border-slate-300 text-xs">Sem vendas 180d</Badge>;
   return <Badge className="bg-red-100 text-red-800 border-red-300 text-xs">Descontinuar?</Badge>;
 }
 
@@ -580,7 +581,56 @@ export default function PlanoMensalPage() {
     return calcularMixIdealV2({ itens: itensMix, capacidadeTotal, marcaConfigs: marcaConfigsV2, pctSolarDefault });
   }, [itensMix, capacidadeTotal, marcaConfigsV2, pctSolarDefault]);
 
-  const totalMixIdeal = mixMarcas.reduce((s, m) => s + m.mixTotal, 0);
+  const mixMarcasCompleto = useMemo((): MixMarcaV2[] => {
+    const marcasNoMix = new Set(mixMarcas.map(m => m.marca));
+
+    // Collect brands with positive stock in ARMACOES not already in mixMarcas
+    const extraMap = new Map<string, { estoqueEfetivo: number; allDeadStock: boolean }>();
+    itensMix.forEach(i => {
+      if (i.categoria !== 'ARMACOES' || i.estoqueAtual <= 0) return;
+      if (marcasNoMix.has(i.marca)) return;
+      const entry = extraMap.get(i.marca) ?? { estoqueEfetivo: 0, allDeadStock: true };
+      if (!i.isDeadStock) {
+        entry.estoqueEfetivo += i.estoqueAtual;
+        entry.allDeadStock = false;
+      }
+      extraMap.set(i.marca, entry);
+    });
+
+    const pctSolarDef = pctSolarDefault;
+    const extras: MixMarcaV2[] = Array.from(extraMap.entries())
+      .sort((a, b) => b[1].estoqueEfetivo - a[1].estoqueEfetivo)
+      .map(([marca, data]) => {
+        const isEstrategica = overrides.get(marca)?.estrategica ?? false;
+        const pctSolar = overrides.get(marca)?.pct_solar ?? pctSolarDef;
+        const mixTotal = isEstrategica ? MIX_MINIMO_MARCA : 0;
+        const mixRX = Math.round(mixTotal * (1 - pctSolar / 100));
+        return {
+          marca,
+          participacao: 0,
+          pctPecas: 0,
+          pctFaturamento: 0,
+          pecasVendidas: 0,
+          faturamento: 0,
+          mixTotal,
+          mixRX,
+          mixSolar: mixTotal - mixRX,
+          pctSolar,
+          estoqueEfetivo: data.estoqueEfetivo,
+          lacuna: Math.max(0, mixTotal - data.estoqueEfetivo),
+          status: (isEstrategica ? 'ABAIXO_MINIMO_ESTRATEGICA' : (data.allDeadStock ? 'SUGERIR_DESCONTINUAR' : 'SEM_VENDAS_180D')) as StatusMixV2,
+          estrategica: isEstrategica,
+          skusAlocados: [],
+        };
+      });
+
+    return [...mixMarcas, ...extras];
+  }, [mixMarcas, itensMix, overrides, pctSolarDefault]);
+
+  const totalMixIdeal = mixMarcasCompleto.reduce((s, m) => s + m.mixTotal, 0);
+
+  const corte1 = mixMarcasCompleto.filter(m => m.mixTotal >= MIX_MINIMO_MARCA).length;
+  const corte2 = Math.floor(capacidadeTotal / MIX_MINIMO_MARCA);
 
   // ── Agrupamento por fornecedor ─────────────────────────────────────────────
 
@@ -1016,9 +1066,28 @@ export default function PlanoMensalPage() {
       {/* ── Etapa 4: Mix Ideal ───────────────────────────────────────────── */}
       {step === 4 && (
         <Card>
-          <CardHeader><CardTitle>Etapa 4 — Mix Ideal por Marca</CardTitle></CardHeader>
+          <CardHeader>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <CardTitle>Etapa 4 — Mix Ideal por Marca</CardTitle>
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-muted-foreground">
+                  Capacidade: <span className="font-semibold text-foreground">{capacidadeTotal}</span>
+                </span>
+                <span className="text-muted-foreground">│</span>
+                <span className="text-muted-foreground">
+                  Plano:{' '}
+                  <span className={`font-semibold ${totalMixIdeal > capacidadeTotal ? 'text-red-600' : 'text-foreground'}`}>
+                    {totalMixIdeal} peças
+                  </span>
+                  {totalMixIdeal > capacidadeTotal && (
+                    <span className="ml-1 text-xs text-red-500">⚠ estouro</span>
+                  )}
+                </span>
+                <span className="text-muted-foreground text-xs">{mixMarcasCompleto.length} marcas</span>
+              </div>
+            </div>
+          </CardHeader>
           <CardContent>
-            <AlertaEstouro totalMix={totalMixIdeal} capacidade={capacidadeTotal} />
             <div className="overflow-auto">
               <Table>
                 <TableHeader>
@@ -1031,25 +1100,67 @@ export default function PlanoMensalPage() {
                     <TableHead className="text-right">Solar</TableHead>
                     <TableHead className="text-right">Ef. Atual</TableHead>
                     <TableHead className="text-right">Lacuna</TableHead>
+                    <TableHead className="text-center w-20">Estrat.</TableHead>
+                    <TableHead className="text-center w-20">Recém</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mixMarcas.map(m => (
-                    <TableRow key={m.marca}>
-                      <TableCell className="font-medium">{m.marca}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-32 truncate">
-                        {fornecedorPorMarca.get(m.marca) ?? SEM_FORNECEDOR_LABEL}
-                      </TableCell>
-                      <TableCell className="text-right">{(m.participacao * 100).toFixed(1)}%</TableCell>
-                      <TableCell className="text-right font-bold">{m.mixTotal}</TableCell>
-                      <TableCell className="text-right">{m.mixRX}</TableCell>
-                      <TableCell className="text-right">{m.mixSolar}</TableCell>
-                      <TableCell className="text-right">{m.estoqueEfetivo}</TableCell>
-                      <TableCell className={`text-right font-bold ${m.lacuna > 0 ? 'text-red-600' : 'text-green-600'}`}>{m.lacuna}</TableCell>
-                      <TableCell><StatusBadge status={m.status} /></TableCell>
-                    </TableRow>
-                  ))}
+                  {mixMarcasCompleto.map((m, idx) => {
+                    const cfg = overrides.get(m.marca) ?? { marca: m.marca, pct_solar: null, estrategica: false, recem_introduzida: false };
+                    const belowCorte1 = idx >= corte1;
+                    const belowCorte2 = idx >= corte2;
+                    const rowBg = belowCorte2
+                      ? 'bg-slate-50 opacity-60'
+                      : belowCorte1
+                      ? 'bg-amber-50/40'
+                      : '';
+                    return (
+                      <Fragment key={m.marca}>
+                        {idx === corte1 && corte1 > 0 && corte1 <= mixMarcasCompleto.length && (
+                          <TableRow className="pointer-events-none hover:bg-transparent">
+                            <TableCell colSpan={11} className="py-1.5 px-3 bg-amber-50 text-amber-700 text-xs font-medium border-y border-amber-200">
+                              ▼ Abaixo do mínimo viável de {MIX_MINIMO_MARCA} peças — {mixMarcasCompleto.length - corte1} marcas a avaliar
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {idx === corte2 && corte2 !== corte1 && corte2 > 0 && corte2 <= mixMarcasCompleto.length && (
+                          <TableRow className="pointer-events-none hover:bg-transparent">
+                            <TableCell colSpan={11} className="py-1.5 px-3 bg-slate-100 text-slate-500 text-xs border-y border-slate-200">
+                              ▼ Corte teórico: {corte2} marcas para capacidade {capacidadeTotal}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        <TableRow className={rowBg}>
+                          <TableCell className="font-medium">{m.marca}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-32 truncate">
+                            {fornecedorPorMarca.get(m.marca) ?? SEM_FORNECEDOR_LABEL}
+                          </TableCell>
+                          <TableCell className="text-right">{m.participacao > 0 ? `${(m.participacao * 100).toFixed(1)}%` : '—'}</TableCell>
+                          <TableCell className="text-right font-bold">{m.mixTotal > 0 ? m.mixTotal : '—'}</TableCell>
+                          <TableCell className="text-right">{m.mixRX > 0 ? m.mixRX : '—'}</TableCell>
+                          <TableCell className="text-right">{m.mixSolar > 0 ? m.mixSolar : '—'}</TableCell>
+                          <TableCell className="text-right">{m.estoqueEfetivo}</TableCell>
+                          <TableCell className={`text-right font-bold ${m.lacuna > 0 ? 'text-red-600' : m.mixTotal > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                            {m.mixTotal > 0 ? m.lacuna : '—'}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Checkbox
+                              checked={cfg.estrategica}
+                              onCheckedChange={v => setOverride(m.marca, 'estrategica', !!v)}
+                            />
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Checkbox
+                              checked={cfg.recem_introduzida}
+                              onCheckedChange={v => setOverride(m.marca, 'recem_introduzida', !!v)}
+                            />
+                          </TableCell>
+                          <TableCell><StatusBadge status={m.status} /></TableCell>
+                        </TableRow>
+                      </Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

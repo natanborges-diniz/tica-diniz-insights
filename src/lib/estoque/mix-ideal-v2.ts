@@ -41,7 +41,7 @@ export interface SkuAlocado {
   id?: string;                // UUID para SKUs manuais (chave de deduplicação)
 }
 
-export type StatusMixV2 = 'OK' | 'ABAIXO_MINIMO_ESTRATEGICA' | 'SUGERIR_DESCONTINUAR';
+export type StatusMixV2 = 'OK' | 'ABAIXO_MINIMO_ESTRATEGICA' | 'SUGERIR_DESCONTINUAR' | 'SEM_VENDAS_180D';
 
 export interface MixMarcaV2 {
   marca: string;

@@ -6,7 +6,7 @@
  *           alocação por passadas, estouro de capacidade, dead stock.
  */
 import { describe, it, expect } from 'vitest';
-import { calcularMixIdealV2 } from '../mix-ideal-v2';
+import { calcularMixIdealV2, type StatusMixV2 } from '../mix-ideal-v2';
 import { MIX_MINIMO_MARCA } from '../constants';
 
 // ─── Dataset base — 3 marcas, capacidade 200 ─────────────────────────────────
@@ -242,5 +242,12 @@ describe('calcularMixIdealV2 — propagação codigoBarra/ean (Onda 1.6)', () =>
     const r = calcularMixIdealV2({ itens: BASE, capacidadeTotal: CAP });
     const rb = r.find(m => m.marca === 'RAYBAN')!;
     expect(rb.skusAlocados[0].codigoBarra).toBeUndefined();
+  });
+});
+
+describe('StatusMixV2 — valores válidos', () => {
+  it('inclui SEM_VENDAS_180D como status válido', () => {
+    const status: StatusMixV2 = 'SEM_VENDAS_180D';
+    expect(status).toBe('SEM_VENDAS_180D');
   });
 });
