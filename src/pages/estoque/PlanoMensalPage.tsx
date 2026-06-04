@@ -576,6 +576,17 @@ export default function PlanoMensalPage() {
     if (itensMix.length > 0) {
       console.info('[plano-itemmix-sample]', itensMix[0]);
     }
+    console.info('[plano-itemsmix-filter]', {
+      totalAntes: itensMix.length,
+      categorias: itensMix.reduce((acc: Record<string, number>, i) => {
+        acc[i.categoria] = (acc[i.categoria] || 0) + 1;
+        return acc;
+      }, {}),
+      totalArmacoes: itensMix.filter(i => i.categoria === 'ARMACOES').length,
+      totalArmacoesComCodigoBarra: itensMix.filter(i => i.categoria === 'ARMACOES' && i.codigoBarra).length,
+      sampleArmacao: itensMix.find(i => i.categoria === 'ARMACOES'),
+      sampleNaoArmacao: itensMix.find(i => i.categoria !== 'ARMACOES'),
+    });
   }, [itensMix]);
 
   // ── Diagnóstico ────────────────────────────────────────────────────────────
@@ -606,9 +617,26 @@ export default function PlanoMensalPage() {
   const totalMixIdeal = mixMarcas.reduce((s, m) => s + m.mixTotal, 0);
 
   useEffect(() => {
-    if (mixMarcas.length > 0) {
-      console.info('[plano-skualocado-sample]', mixMarcas[0]?.skusAlocados[0]);
-    }
+    if (mixMarcas.length === 0) return;
+    const top = [...mixMarcas]
+      .filter(m => m.skusAlocados?.length > 0)
+      .sort((a, b) => b.skusAlocados.length - a.skusAlocados.length)[0];
+    console.info('[plano-mixideal-full]', {
+      totalMarcas: mixMarcas.length,
+      marcasComSkus: mixMarcas.filter(m => m.skusAlocados?.length > 0).length,
+      primeiras3Marcas: mixMarcas.slice(0, 3).map(m => ({
+        marca: m.marca,
+        mixTotal: m.mixTotal,
+        estoqueEfetivo: m.estoqueEfetivo,
+        lacuna: m.lacuna,
+        status: m.status,
+        qtdCandidatos: m.skusAlocados?.length ?? 0,
+        primeiroSku: m.skusAlocados?.[0] ?? null,
+      })),
+      marcaComMaisSkus: top
+        ? { marca: top.marca, qtdSkus: top.skusAlocados.length, primeiro: top.skusAlocados[0] }
+        : null,
+    });
   }, [mixMarcas]);
 
   // ── Agrupamento por fornecedor ─────────────────────────────────────────────
