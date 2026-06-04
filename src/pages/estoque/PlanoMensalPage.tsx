@@ -10,7 +10,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUserEmpresas } from '@/hooks/useUserEmpresas';
 import { getEstoqueCompleto } from '@/services/estoqueCompletoService';
 import { getAnaliseSku } from '@/services/vendasService';
-import { calcularMixIdealV2, type MixMarcaV2, type MarcaConfigV2, type StatusMixV2 } from '@/lib/estoque/mix-ideal-v2';
+import { calcularMixIdealV2, type MixMarcaV2, type MarcaConfigV2 } from '@/lib/estoque/mix-ideal-v2';
+import { construirMixMarcasCompleto, calcularCortes } from '@/lib/estoque/mix-marcas-completo';
 import {
   derivarPlanoFinalInicial,
   aplicarAjustePlanoFinal,
@@ -581,56 +582,14 @@ export default function PlanoMensalPage() {
     return calcularMixIdealV2({ itens: itensMix, capacidadeTotal, marcaConfigs: marcaConfigsV2, pctSolarDefault });
   }, [itensMix, capacidadeTotal, marcaConfigsV2, pctSolarDefault]);
 
-  const mixMarcasCompleto = useMemo((): MixMarcaV2[] => {
-    const marcasNoMix = new Set(mixMarcas.map(m => m.marca));
-
-    // Collect brands with positive stock in ARMACOES not already in mixMarcas
-    const extraMap = new Map<string, { estoqueEfetivo: number; allDeadStock: boolean }>();
-    itensMix.forEach(i => {
-      if (i.categoria !== 'ARMACOES' || i.estoqueAtual <= 0) return;
-      if (marcasNoMix.has(i.marca)) return;
-      const entry = extraMap.get(i.marca) ?? { estoqueEfetivo: 0, allDeadStock: true };
-      if (!i.isDeadStock) {
-        entry.estoqueEfetivo += i.estoqueAtual;
-        entry.allDeadStock = false;
-      }
-      extraMap.set(i.marca, entry);
-    });
-
-    const pctSolarDef = pctSolarDefault;
-    const extras: MixMarcaV2[] = Array.from(extraMap.entries())
-      .sort((a, b) => b[1].estoqueEfetivo - a[1].estoqueEfetivo)
-      .map(([marca, data]) => {
-        const isEstrategica = overrides.get(marca)?.estrategica ?? false;
-        const pctSolar = overrides.get(marca)?.pct_solar ?? pctSolarDef;
-        const mixTotal = isEstrategica ? MIX_MINIMO_MARCA : 0;
-        const mixRX = Math.round(mixTotal * (1 - pctSolar / 100));
-        return {
-          marca,
-          participacao: 0,
-          pctPecas: 0,
-          pctFaturamento: 0,
-          pecasVendidas: 0,
-          faturamento: 0,
-          mixTotal,
-          mixRX,
-          mixSolar: mixTotal - mixRX,
-          pctSolar,
-          estoqueEfetivo: data.estoqueEfetivo,
-          lacuna: Math.max(0, mixTotal - data.estoqueEfetivo),
-          status: (isEstrategica ? 'ABAIXO_MINIMO_ESTRATEGICA' : (data.allDeadStock ? 'SUGERIR_DESCONTINUAR' : 'SEM_VENDAS_180D')) as StatusMixV2,
-          estrategica: isEstrategica,
-          skusAlocados: [],
-        };
-      });
-
-    return [...mixMarcas, ...extras];
-  }, [mixMarcas, itensMix, overrides, pctSolarDefault]);
+  const mixMarcasCompleto = useMemo(
+    () => construirMixMarcasCompleto(mixMarcas, itensMix, overrides, pctSolarDefault),
+    [mixMarcas, itensMix, overrides, pctSolarDefault],
+  );
 
   const totalMixIdeal = mixMarcasCompleto.reduce((s, m) => s + m.mixTotal, 0);
 
-  const corte1 = mixMarcasCompleto.filter(m => m.mixTotal >= MIX_MINIMO_MARCA).length;
-  const corte2 = Math.floor(capacidadeTotal / MIX_MINIMO_MARCA);
+  const { corte1, corte2 } = calcularCortes(mixMarcasCompleto, capacidadeTotal);
 
   // ── Agrupamento por fornecedor ─────────────────────────────────────────────
 
@@ -1092,6 +1051,7 @@ export default function PlanoMensalPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-9 text-right text-muted-foreground">#</TableHead>
                     <TableHead>Marca</TableHead>
                     <TableHead>Fornecedor</TableHead>
                     <TableHead className="text-right">Part. %</TableHead>
@@ -1119,19 +1079,20 @@ export default function PlanoMensalPage() {
                       <Fragment key={m.marca}>
                         {idx === corte1 && corte1 > 0 && corte1 <= mixMarcasCompleto.length && (
                           <TableRow className="pointer-events-none hover:bg-transparent">
-                            <TableCell colSpan={11} className="py-1.5 px-3 bg-amber-50 text-amber-700 text-xs font-medium border-y border-amber-200">
+                            <TableCell colSpan={12} className="py-1.5 px-3 bg-amber-50 text-amber-700 text-xs font-medium border-y border-amber-200">
                               ▼ Abaixo do mínimo viável de {MIX_MINIMO_MARCA} peças — {mixMarcasCompleto.length - corte1} marcas a avaliar
                             </TableCell>
                           </TableRow>
                         )}
                         {idx === corte2 && corte2 !== corte1 && corte2 > 0 && corte2 <= mixMarcasCompleto.length && (
                           <TableRow className="pointer-events-none hover:bg-transparent">
-                            <TableCell colSpan={11} className="py-1.5 px-3 bg-slate-100 text-slate-500 text-xs border-y border-slate-200">
+                            <TableCell colSpan={12} className="py-1.5 px-3 bg-slate-100 text-slate-500 text-xs border-y border-slate-200">
                               ▼ Corte teórico: {corte2} marcas para capacidade {capacidadeTotal}
                             </TableCell>
                           </TableRow>
                         )}
                         <TableRow className={rowBg}>
+                          <TableCell className="text-right text-xs text-muted-foreground tabular-nums">{idx + 1}</TableCell>
                           <TableCell className="font-medium">{m.marca}</TableCell>
                           <TableCell className="text-sm text-muted-foreground max-w-32 truncate">
                             {fornecedorPorMarca.get(m.marca) ?? SEM_FORNECEDOR_LABEL}
