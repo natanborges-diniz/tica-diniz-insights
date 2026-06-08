@@ -17,9 +17,9 @@ import { MIX_MINIMO_MARCA } from '../constants';
 
 const CAP = 200;
 const BASE = [
-  { marca: 'RAYBAN',     qtdVendidos: 60, totalVendido: 6000, estoqueAtual: 50, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1, descricao: 'RB 4105',     diasGiroUltimaPeca: 10 },
-  { marca: 'OAKLEY',     qtdVendidos: 30, totalVendido: 4000, estoqueAtual: 40, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 2, descricao: 'OAK Metal',   diasGiroUltimaPeca: 15 },
-  { marca: 'SILHOUETTE', qtdVendidos: 10, totalVendido: 2000, estoqueAtual: 30, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 3, descricao: 'SIL Momentum', diasGiroUltimaPeca: 25 },
+  { marca: 'RAYBAN',     qtdVendidos: 60, totalVendido: 6000, estoqueAtual: 50, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1, descricao: 'RB 4105',     diasGiroUltimaPeca: 10, subcategoria: 'AR_RX' as const },
+  { marca: 'OAKLEY',     qtdVendidos: 30, totalVendido: 4000, estoqueAtual: 40, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 2, descricao: 'OAK Metal',   diasGiroUltimaPeca: 15, subcategoria: 'AR_RX' as const },
+  { marca: 'SILHOUETTE', qtdVendidos: 10, totalVendido: 2000, estoqueAtual: 30, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 3, descricao: 'SIL Momentum', diasGiroUltimaPeca: 25, subcategoria: 'AR_RX' as const },
 ];
 
 // ─── Guardas básicas ──────────────────────────────────────────────────────────
@@ -148,12 +148,12 @@ describe('calcularMixIdealV2 — lacuna e dead stock', () => {
 
 describe('calcularMixIdealV2 — alocação por passadas', () => {
   it('SKU mais rápido recebe unidade extra do resto (lacuna ímpar)', () => {
-    // Única marca (100% participação) → mixTotal = 100
-    // estoqueAtual = 97 no SKU2 → estoqueEfetivo = 97, lacuna = 3
-    // Round-robin: sku1(giro=5) → 2, sku2(giro=20) → 1
+    // sku1=AR (RX), sku2=OC (Solar) → split independente por subcategoria (Princípio #24)
+    // lacuna=3, pctSolar=30 → lacunaRxAlloc=round(3*0.7)=2, lacunaSolarAlloc=1
+    // candidatosRx=[sku1(5)]: sku1=2; candidatosSolar=[sku2(20)]: sku2=1
     const itens = [
-      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual:  0, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1, descricao: 'Rápido', diasGiroUltimaPeca: 5 },
-      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 97, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 2, descricao: 'Lento',  diasGiroUltimaPeca: 20 },
+      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual:  0, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1, descricao: 'AR Rápido', diasGiroUltimaPeca: 5 },
+      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 97, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 2, descricao: 'OC Lento',  diasGiroUltimaPeca: 20 },
     ];
     const r = calcularMixIdealV2({ itens, capacidadeTotal: 100 });
     const brand = r.find(m => m.marca === 'BRAND')!;
@@ -165,25 +165,28 @@ describe('calcularMixIdealV2 — alocação por passadas', () => {
   });
 
   it('SKU sem diasGiroUltimaPeca é excluído dos candidatos (filtro 1.5.A)', () => {
-    // Filtro 1.5.A: diasGiroUltimaPeca == null → não entra como candidato.
-    // Toda a lacuna vai para sku1 (diasGiro=5); sku2 (null) não é alocado.
+    // sku2 (null giro) excluído; sku1 (AR_RX, giro=5) recebe a porção RX da lacuna.
+    // lacuna=3, pctSolar=30 → lacunaRxAlloc=2, lacunaSolarAlloc=1 (sem candidatos Solar).
     const itens = [
-      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual:  0, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1, descricao: 'Rápido',   diasGiroUltimaPeca: 5 },
-      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 97, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 2, descricao: 'Sem dado', diasGiroUltimaPeca: null },
+      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual:  0, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1, descricao: 'AR Rápido',   diasGiroUltimaPeca: 5 },
+      { marca: 'BRAND', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 97, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 2, descricao: 'AR Sem dado', diasGiroUltimaPeca: null },
     ];
     const r = calcularMixIdealV2({ itens, capacidadeTotal: 100 });
     const brand = r.find(m => m.marca === 'BRAND')!;
     expect(brand.lacuna).toBe(3);
     expect(brand.skusAlocados).toHaveLength(1);
     expect(brand.skusAlocados[0].codSku).toBe(1);
-    expect(brand.skusAlocados[0].qtdSugerida).toBe(3); // toda a lacuna vai para sku1
+    expect(brand.skusAlocados[0].qtdSugerida).toBe(2); // porção RX da lacuna
+    expect(brand.lacunaSolar).toBe(1);                 // porção Solar sem candidatos
   });
 
-  it('soma dos qtdSugerida = lacuna', () => {
+  it('sum(qtdSugerida) + lacunaRx + lacunaSolar = lacuna (invariante split)', () => {
+    // BASE só tem AR_RX; candidatosSolar=[].
+    // Parte solar da lacuna fica em lacunaSolar; parte RX é alocada.
     const r = calcularMixIdealV2({ itens: BASE, capacidadeTotal: CAP });
     r.forEach(m => {
       const totalAlocado = m.skusAlocados.reduce((s, sku) => s + sku.qtdSugerida, 0);
-      expect(totalAlocado).toBe(m.lacuna);
+      expect(totalAlocado + m.lacunaRx + m.lacunaSolar).toBe(m.lacuna);
     });
   });
 
@@ -217,7 +220,7 @@ describe('calcularMixIdealV2 — propagação codigoBarra/ean (Onda 1.6)', () =>
     {
       marca: 'RAYBAN', qtdVendidos: 60, totalVendido: 6000, estoqueAtual: 50,
       isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 1,
-      descricao: 'RB 4105', diasGiroUltimaPeca: 10,
+      descricao: 'RB 4105', diasGiroUltimaPeca: 10, subcategoria: 'AR_RX' as const,
       codigoBarra: '7891234567', ean: '8056597137928',
     },
   ];
@@ -249,5 +252,132 @@ describe('StatusMixV2 — valores válidos', () => {
   it('inclui SEM_VENDAS_180D como status válido', () => {
     const status: StatusMixV2 = 'SEM_VENDAS_180D';
     expect(status).toBe('SEM_VENDAS_180D');
+  });
+});
+
+// ─── Onda 2.B: split RX/Solar + volume vendido ────────────────────────────────
+
+describe('calcularMixIdealV2 — alocação split RX/Solar (Onda 2.B)', () => {
+  const itensRxSolar = [
+    { marca: 'B', qtdVendidos: 60, totalVendido: 6000, estoqueAtual:  0, isDeadStock: false,
+      categoria: 'ARMACOES' as const, codSku: 1, descricao: 'AR Grau 1', diasGiroUltimaPeca: 5 },
+    { marca: 'B', qtdVendidos: 40, totalVendido: 4000, estoqueAtual: 60, isDeadStock: false,
+      categoria: 'ARMACOES' as const, codSku: 2, descricao: 'OC Solar 2', diasGiroUltimaPeca: 8 },
+  ];
+
+  it('candidatos RX e Solar são alocados independentemente', () => {
+    // 100% participação, cap=100, pctSolar=30
+    // lacuna=40 (estoqueEfetivo=60), lacunaRxAlloc=round(40*0.7)=28, lacunaSolarAlloc=12
+    const r = calcularMixIdealV2({ itens: itensRxSolar, capacidadeTotal: 100 });
+    const b = r.find(m => m.marca === 'B')!;
+    expect(b.qtdAlocadaRx).toBeGreaterThan(0);
+    expect(b.qtdAlocadaSolar).toBeGreaterThan(0);
+    expect(b.lacunaRx).toBe(0);
+    expect(b.lacunaSolar).toBe(0);
+  });
+
+  it('subcategoria propagada para skusAlocados', () => {
+    const r = calcularMixIdealV2({ itens: itensRxSolar, capacidadeTotal: 100 });
+    const b = r.find(m => m.marca === 'B')!;
+    const rx = b.skusAlocados.find(s => s.codSku === 1)!;
+    const sol = b.skusAlocados.find(s => s.codSku === 2)!;
+    expect(rx.subcategoria).toBe('AR_RX');
+    expect(sol.subcategoria).toBe('AR_SOLAR');
+  });
+
+  it('sem candidatos Solar → lacunaSolar = porção solar da lacuna', () => {
+    const apenasRx = [
+      { marca: 'B', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 0, isDeadStock: false,
+        categoria: 'ARMACOES' as const, codSku: 1, descricao: 'AR Grau', diasGiroUltimaPeca: 5 },
+    ];
+    const r = calcularMixIdealV2({ itens: apenasRx, capacidadeTotal: 100 });
+    const b = r.find(m => m.marca === 'B')!;
+    expect(b.lacunaSolar).toBeGreaterThan(0);
+    expect(b.lacunaRx).toBe(0);
+  });
+
+  it('sem candidatos RX → lacunaRx = porção RX da lacuna', () => {
+    const apenasSolar = [
+      { marca: 'B', qtdVendidos: 50, totalVendido: 5000, estoqueAtual: 0, isDeadStock: false,
+        categoria: 'ARMACOES' as const, codSku: 1, descricao: 'OC Solar', diasGiroUltimaPeca: 5 },
+    ];
+    const r = calcularMixIdealV2({ itens: apenasSolar, capacidadeTotal: 100 });
+    const b = r.find(m => m.marca === 'B')!;
+    expect(b.lacunaRx).toBeGreaterThan(0);
+    expect(b.lacunaSolar).toBe(0);
+  });
+
+  it('invariante: qtdAlocadaRx + qtdAlocadaSolar + lacunaRx + lacunaSolar = lacuna', () => {
+    const r = calcularMixIdealV2({ itens: itensRxSolar, capacidadeTotal: 100 });
+    r.forEach(m => {
+      expect(m.qtdAlocadaRx + m.qtdAlocadaSolar + m.lacunaRx + m.lacunaSolar).toBe(m.lacuna);
+    });
+  });
+});
+
+// ─── Princípio #27: OUTROS em armações ficam fora do plano ───────────────────
+
+describe('calcularMixIdealV2 — Princípio #27: subcategoria OUTROS excluída', () => {
+  it('item AR_RX com estoque e giro → entra como candidato', () => {
+    const itens = [
+      { marca: 'B', qtdVendidos: 30, totalVendido: 3000, estoqueAtual: 0, isDeadStock: false,
+        categoria: 'ARMACOES' as const, codSku: 1, descricao: 'AR Grau', diasGiroUltimaPeca: 5,
+        subcategoria: 'AR_RX' as const },
+    ];
+    const r = calcularMixIdealV2({ itens, capacidadeTotal: 100 });
+    expect(r[0].skusAlocados.length).toBeGreaterThan(0);
+  });
+
+  it('item OUTROS com giro válido → NÃO entra em nenhum bucket (skusAlocados vazio, lacuna honesta)', () => {
+    const itens = [
+      { marca: 'B', qtdVendidos: 30, totalVendido: 3000, estoqueAtual: 0, isDeadStock: false,
+        categoria: 'ARMACOES' as const, codSku: 1, descricao: 'XX Modelo', diasGiroUltimaPeca: 5,
+        subcategoria: 'OUTROS' as const },
+    ];
+    const r = calcularMixIdealV2({ itens, capacidadeTotal: 100 });
+    expect(r[0].skusAlocados).toHaveLength(0);
+    expect(r[0].lacunaRx + r[0].lacunaSolar).toBe(r[0].lacuna);
+  });
+});
+
+describe('calcularMixIdealV2 — volume vendido 180d (Onda 2.B)', () => {
+  it('vendido180dTotal acumulado por marca', () => {
+    const r = calcularMixIdealV2({ itens: BASE, capacidadeTotal: CAP });
+    const rb = r.find(m => m.marca === 'RAYBAN')!;
+    expect(rb.vendido180dTotal).toBe(60);
+  });
+
+  it('vendido180dRx e vendido180dSolar split por subcategoria', () => {
+    const itens = [
+      { marca: 'M', qtdVendidos: 30, totalVendido: 3000, estoqueAtual: 10, isDeadStock: false,
+        categoria: 'ARMACOES' as const, codSku: 1, descricao: 'AR Grau', diasGiroUltimaPeca: 5,
+        subcategoria: 'AR_RX' },
+      { marca: 'M', qtdVendidos: 20, totalVendido: 2000, estoqueAtual: 10, isDeadStock: false,
+        categoria: 'ARMACOES' as const, codSku: 2, descricao: 'OC Sol', diasGiroUltimaPeca: 8,
+        subcategoria: 'AR_SOLAR' },
+    ];
+    const r = calcularMixIdealV2({ itens, capacidadeTotal: 100 });
+    const m = r.find(x => x.marca === 'M')!;
+    expect(m.vendido180dTotal).toBe(50);
+    expect(m.vendido180dRx).toBe(30);
+    expect(m.vendido180dSolar).toBe(20);
+  });
+
+  it('marca sem vendas: todos vendido180d = 0', () => {
+    const semVendas = [
+      { marca: 'M', qtdVendidos: 0, totalVendido: 0, estoqueAtual: 10, isDeadStock: false,
+        categoria: 'ARMACOES' as const, codSku: 1, descricao: 'AR X', diasGiroUltimaPeca: null },
+    ];
+    // marca com qtdVendidos=0 não passa pelo filtro de participação (participacao=0, pecasVendidas=0)
+    const r = calcularMixIdealV2({ itens: semVendas, capacidadeTotal: 100 });
+    expect(r).toHaveLength(0);
+  });
+
+  it('BASE: vendido180dTotal = sum(qtdVendidos) por marca', () => {
+    const r = calcularMixIdealV2({ itens: BASE, capacidadeTotal: CAP });
+    const oak = r.find(m => m.marca === 'OAKLEY')!;
+    expect(oak.vendido180dTotal).toBe(30);
+    const sil = r.find(m => m.marca === 'SILHOUETTE')!;
+    expect(sil.vendido180dTotal).toBe(10);
   });
 });

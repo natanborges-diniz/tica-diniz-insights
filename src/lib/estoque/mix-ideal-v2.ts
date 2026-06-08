@@ -5,6 +5,7 @@
 
 import { calcularParticipacaoMarca } from './participacao-marca';
 import { MIX_MINIMO_MARCA } from './constants';
+import { subcategorizarPorDescricao } from '@/utils/categorizarProduto';
 
 // ── Interfaces de entrada ──────────────────────────────────────────────────────
 
@@ -16,6 +17,7 @@ export interface ItemMixV2 {
   isDeadStock?: boolean;
   diasGiroUltimaPeca?: number | null;
   categoria?: string;         // 'ARMACOES' | outros — undefined assume ARMACOES
+  subcategoria?: string;      // 'AR_RX' | 'AR_SOLAR' | outros; fallback via descrição
   codSku?: number;
   descricao?: string;
   codigoBarra?: string;       // cod_barras_interno (sempre preenchido quando vem do Bridge)
@@ -35,6 +37,7 @@ export interface SkuAlocado {
   descricao: string;
   diasGiroUltimaPeca: number; // 9999 quando null (sem dado de giro)
   qtdSugerida: number;
+  subcategoria?: string;      // 'AR_RX' | 'AR_SOLAR'
   codigoBarra?: string;       // cod_barras_interno; undefined em SKUs manuais
   ean?: string | null;        // EAN do fabricante; null quando não disponível
   isManual?: boolean;         // true para SKUs inseridos manualmente pelo usuário
@@ -59,6 +62,15 @@ export interface MixMarcaV2 {
   status: StatusMixV2;
   estrategica: boolean;
   skusAlocados: SkuAlocado[];  // alocação por passadas (diasGiroUltimaPeca ASC)
+  // Volume vendido 180d (Onda 2.B — Princípio #26)
+  vendido180dTotal: number;
+  vendido180dRx: number;
+  vendido180dSolar: number;
+  // Alocação RX/Solar (Onda 2.B — Princípio #24)
+  qtdAlocadaRx: number;
+  qtdAlocadaSolar: number;
+  lacunaRx: number;            // porção RX da lacuna sem candidatos disponíveis
+  lacunaSolar: number;         // porção Solar da lacuna sem candidatos disponíveis
 }
 
 export interface CalcMixIdealV2Params {
@@ -67,6 +79,17 @@ export interface CalcMixIdealV2Params {
   marcaConfigs?: Map<string, MarcaConfigV2>;
   pctSolarDefault?: number;    // 0-100, default 30
 }
+
+// ── Tipo interno para candidatos ──────────────────────────────────────────────
+
+type CandidatoInterno = {
+  codSku: number;
+  descricao: string;
+  diasGiroUltimaPeca: number | null | undefined;
+  codigoBarra?: string;
+  ean?: string | null;
+  subcategoria: string;
+};
 
 // ── Alocação por passadas (round-robin, mais rápido primeiro) ─────────────────
 
@@ -105,6 +128,46 @@ function alocarPorPassadas(
     .filter(s => s.qtdSugerida > 0);
 }
 
+// ── Alocação split RX/Solar (Onda 2.B — Princípio #24) ───────────────────────
+//
+// Divide a lacuna proporcionalmente entre RX e Solar e roda dois round-robins
+// independentes. Em falta de candidatos numa categoria, a lacuna fica honesta.
+
+function alocarSplit(
+  candidatosRx: ReadonlyArray<CandidatoInterno>,
+  candidatosSolar: ReadonlyArray<CandidatoInterno>,
+  mixRX: number,
+  mixSolar: number,
+  lacuna: number,
+): { skus: SkuAlocado[]; qtdAlocadaRx: number; qtdAlocadaSolar: number; lacunaRx: number; lacunaSolar: number } {
+  if (lacuna <= 0) {
+    return { skus: [], qtdAlocadaRx: 0, qtdAlocadaSolar: 0, lacunaRx: 0, lacunaSolar: 0 };
+  }
+
+  const mixTotal = mixRX + mixSolar;
+  const lacunaRxAlloc = mixTotal > 0 ? Math.round(lacuna * mixRX / mixTotal) : 0;
+  const lacunaSolarAlloc = lacuna - lacunaRxAlloc;
+
+  const rxAloc = alocarPorPassadas(candidatosRx, lacunaRxAlloc);
+  const solarAloc = alocarPorPassadas(candidatosSolar, lacunaSolarAlloc);
+
+  const qtdAlocadaRx = rxAloc.reduce((s, sk) => s + sk.qtdSugerida, 0);
+  const qtdAlocadaSolar = solarAloc.reduce((s, sk) => s + sk.qtdSugerida, 0);
+
+  const skus: SkuAlocado[] = [
+    ...rxAloc.map(sk => ({ ...sk, subcategoria: 'AR_RX' })),
+    ...solarAloc.map(sk => ({ ...sk, subcategoria: 'AR_SOLAR' })),
+  ];
+
+  return {
+    skus,
+    qtdAlocadaRx,
+    qtdAlocadaSolar,
+    lacunaRx: lacunaRxAlloc - qtdAlocadaRx,
+    lacunaSolar: lacunaSolarAlloc - qtdAlocadaSolar,
+  };
+}
+
 // ── Função principal ──────────────────────────────────────────────────────────
 
 /**
@@ -136,11 +199,21 @@ export function calcularMixIdealV2({
     }
   });
 
-  // Candidatos à alocação por marca (qualquer SKU com codSku definido)
-  const candidatosByMarca = new Map<
-    string,
-    Array<{ codSku: number; descricao: string; diasGiroUltimaPeca: number | null | undefined; codigoBarra?: string; ean?: string | null }>
-  >();
+  // Volume vendido 180d por marca, split RX/Solar (Onda 2.B)
+  const vendidoByMarca = new Map<string, { total: number; rx: number; solar: number }>();
+  armacoes.forEach(i => {
+    if (!(i.qtdVendidos > 0)) return;
+    const k = (i.marca || 'SEM MARCA').trim();
+    const subcat = i.subcategoria ?? subcategorizarPorDescricao(i.descricao ?? '');
+    const entry = vendidoByMarca.get(k) ?? { total: 0, rx: 0, solar: 0 };
+    entry.total += i.qtdVendidos;
+    if (subcat === 'AR_RX') entry.rx += i.qtdVendidos;
+    if (subcat === 'AR_SOLAR') entry.solar += i.qtdVendidos;
+    vendidoByMarca.set(k, entry);
+  });
+
+  // Candidatos à alocação por marca, separados por RX/Solar
+  const candidatosByMarca = new Map<string, CandidatoInterno[]>();
   armacoes.forEach(i => {
     if (i.codSku === undefined) return;
     // Filtros de candidato (Onda 1 — Princípio: só SKU com giro recente entra no plano)
@@ -148,6 +221,7 @@ export function calcularMixIdealV2({
     if (i.diasGiroUltimaPeca == null) return;    // filtro 2: tem giro válido
     if (i.diasGiroUltimaPeca > 90) return;       // filtro 3: giro recente (≤ 90d)
     const k = (i.marca || 'SEM MARCA').trim();
+    const subcat = i.subcategoria ?? subcategorizarPorDescricao(i.descricao ?? '');
     const lista = candidatosByMarca.get(k) ?? [];
     lista.push({
       codSku: i.codSku,
@@ -155,6 +229,7 @@ export function calcularMixIdealV2({
       diasGiroUltimaPeca: i.diasGiroUltimaPeca,
       codigoBarra: i.codigoBarra,
       ean: i.ean,
+      subcategoria: subcat,
     });
     candidatosByMarca.set(k, lista);
   });
@@ -190,7 +265,15 @@ export function calcularMixIdealV2({
     const mixSolar = mixTotal - mixRX;
     const estoqueEfetivo = estoqueEfMap.get(marca) ?? 0;
     const lacuna = Math.max(0, mixTotal - estoqueEfetivo);
-    const skusAlocados = alocarPorPassadas(candidatosByMarca.get(marca) ?? [], lacuna);
+
+    const candidatos = candidatosByMarca.get(marca) ?? [];
+    // Princípio #27: classificação estrita — OUTROS não compõe plano automático
+    const candidatosRx = candidatos.filter(c => c.subcategoria === 'AR_RX');
+    const candidatosSolar = candidatos.filter(c => c.subcategoria === 'AR_SOLAR');
+    const { skus: skusAlocados, qtdAlocadaRx, qtdAlocadaSolar, lacunaRx, lacunaSolar } =
+      alocarSplit(candidatosRx, candidatosSolar, mixRX, mixSolar, lacuna);
+
+    const vend = vendidoByMarca.get(marca) ?? { total: 0, rx: 0, solar: 0 };
 
     resultado.push({
       marca,
@@ -208,6 +291,13 @@ export function calcularMixIdealV2({
       status,
       estrategica,
       skusAlocados,
+      vendido180dTotal: vend.total,
+      vendido180dRx: vend.rx,
+      vendido180dSolar: vend.solar,
+      qtdAlocadaRx,
+      qtdAlocadaSolar,
+      lacunaRx,
+      lacunaSolar,
     });
   }
 
