@@ -1,10 +1,10 @@
 // src/components/zeiss-pedido/ZeissServicosSection.tsx
 // Seção de serviços (tratamentos) e cores para pedido Zeiss
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Paintbrush, Wrench } from "lucide-react";
+import { Loader2, Paintbrush, Wrench, Lock } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
