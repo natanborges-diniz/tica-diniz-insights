@@ -842,7 +842,7 @@ export default function PlanoMensalPage() {
         zip.file(`plano-${slug}-${dataFim}.pdf`, doc.output('arraybuffer'));
       }
       const buf = await zip.generateAsync({ type: 'uint8array' });
-      const blob = new Blob([buf], { type: 'application/zip' });
+      const blob = new Blob([buf as BlobPart], { type: 'application/zip' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
