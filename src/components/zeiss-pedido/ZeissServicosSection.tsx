@@ -1,10 +1,10 @@
 // src/components/zeiss-pedido/ZeissServicosSection.tsx
 // Seção de serviços (tratamentos) e cores para pedido Zeiss
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Paintbrush, Wrench } from "lucide-react";
+import { Loader2, Paintbrush, Wrench, Lock } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -28,10 +28,13 @@ interface Props {
   onServicosChange: (servicos: string[]) => void;
   selectedCor: string;
   onCorChange: (cor: string) => void;
+  /** Quando true (lente surfaçada), marca BlueGuard automaticamente e re-marca se a coloração for removida. */
+  autoSelectBlueguard?: boolean;
 }
 
 const ZeissServicosSection: React.FC<Props> = ({
   familia, codEmpresa, selectedServicos, onServicosChange, selectedCor, onCorChange,
+  autoSelectBlueguard = false,
 }) => {
   const [servicos, setServicos] = useState<ZeissServico[]>([]);
   const [cores, setCores] = useState<ZeissCor[]>([]);
@@ -87,7 +90,28 @@ const ZeissServicosSection: React.FC<Props> = ({
       .finally(() => setLoadingCores(false));
   }, [familia, codEmpresa]);
 
+  // ── Detect BlueGuard service from loaded catalog (works regardless of code) ──
+  const blueguardCod = useMemo(
+    () => servicos.find(s => /BLUE\s*GUARD/i.test(s.nome))?.cod ?? null,
+    [servicos]
+  );
+  const corBloqueia = Boolean(selectedCor && selectedCor !== "none");
+
+  // ── Auto-marca BlueGuard em lente surfaçada; remove obrigatoriamente se houver coloração ──
+  useEffect(() => {
+    if (!blueguardCod) return;
+    const marcado = selectedServicos.includes(blueguardCod);
+    if (corBloqueia && marcado) {
+      onServicosChange(selectedServicos.filter(c => c !== blueguardCod));
+    } else if (!corBloqueia && autoSelectBlueguard && !marcado) {
+      onServicosChange([...selectedServicos, blueguardCod]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blueguardCod, corBloqueia, autoSelectBlueguard]);
+
   const toggleServico = (cod: string) => {
+    // Não permite alternar BlueGuard manualmente quando há coloração
+    if (cod === blueguardCod && corBloqueia) return;
     onServicosChange(
       selectedServicos.includes(cod)
         ? selectedServicos.filter(s => s !== cod)
@@ -111,31 +135,47 @@ const ZeissServicosSection: React.FC<Props> = ({
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-muted-foreground uppercase">Tratamentos disponíveis</Label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {servicos.map(s => (
-                <label
-                  key={s.cod}
-                  className="flex items-start gap-2 rounded-md border border-border/60 p-2.5 cursor-pointer hover:bg-accent/50 transition-colors"
-                >
-                  <Checkbox
-                    checked={selectedServicos.includes(s.cod)}
-                    onCheckedChange={() => toggleServico(s.cod)}
-                    className="mt-0.5"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className="font-mono text-[10px] shrink-0">{s.cod}</Badge>
-                      <span className="text-sm font-medium truncate">{s.nome}</span>
+              {servicos.map(s => {
+                const isBlueguard = s.cod === blueguardCod;
+                const disabled = isBlueguard && corBloqueia;
+                return (
+                  <label
+                    key={s.cod}
+                    className={`flex items-start gap-2 rounded-md border border-border/60 p-2.5 transition-colors ${
+                      disabled ? "opacity-60 cursor-not-allowed bg-muted/40" : "cursor-pointer hover:bg-accent/50"
+                    }`}
+                  >
+                    <Checkbox
+                      checked={selectedServicos.includes(s.cod)}
+                      onCheckedChange={() => toggleServico(s.cod)}
+                      disabled={disabled}
+                      className="mt-0.5"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="outline" className="font-mono text-[10px] shrink-0">{s.cod}</Badge>
+                        <span className="text-sm font-medium truncate">{s.nome}</span>
+                        {isBlueguard && !corBloqueia && (
+                          <Badge variant="secondary" className="text-[10px] h-4 px-1.5">Padrão Zeiss</Badge>
+                        )}
+                        {disabled && (
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-1 border-amber-500/50 text-amber-700 dark:text-amber-400">
+                            <Lock className="h-2.5 w-2.5" /> Indisponível com coloração
+                          </Badge>
+                        )}
+                      </div>
+                      {s.descr && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{s.descr}</p>}
                     </div>
-                    {s.descr && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{s.descr}</p>}
-                  </div>
-                </label>
-              ))}
+                  </label>
+                );
+              })}
             </div>
           </div>
         )}
         {!loadingServicos && servicos.length === 0 && (
           <p className="text-xs text-muted-foreground">Nenhum serviço disponível para esta família.</p>
         )}
+
 
         {/* Cores */}
         {cores.length > 0 && (
