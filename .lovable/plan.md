@@ -1,71 +1,54 @@
-## Problema confirmado
+## Diagnóstico
 
-Verifiquei os 10 últimos pedidos Zeiss em produção (tabela `pedidos_fornecedor`, fornecedor `ZEISS`): todos os pedidos surfaçados foram enviados com **apenas 1 serviço** (`"76"` ou `"124"`) e **sem nenhum tratamento BlueGuard** — exatamente o que o stakeholder reportou.
+O fix anterior aplicou auto-seleção silenciosa: se o BlueGuard é detectado, ele é marcado; senão, **nada acontece e nada é mostrado**. Como o operador não tem feedback visual claro, ele não percebe se a tecnologia entrou ou não. Além disso, a detecção depende de o catálogo Zeiss devolver um nome contendo "BLUE GUARD", o que pode falhar para algumas famílias ou variações ("Blue Protect", "BG", etc.) — nesse caso a UI fica completamente muda.
 
-Causa raiz: em `src/components/zeiss-pedido/ZeissServicosSection.tsx` os serviços são carregados da API Zeiss e exibidos como checkboxes **sem nenhuma pré-seleção**. O operador precisa marcar BlueGuard manualmente toda vez, e nas últimas semanas isso vem sendo esquecido. Além disso, o reset de serviços é disparado em vários pontos de `PedidoZeissPage.tsx` (linhas 321, 365, 979) sempre zerando a lista.
+## O que mudar (apenas UI/lógica de apresentação no componente de serviços Zeiss)
 
-A regra Zeiss confirmada pelo stakeholder:
-- **Lente surfaçada (não-LP)** → BlueGuard é tecnologia padrão, deve vir **marcado por padrão**.
-- **Lente surfaçada COM coloração** → Zeiss obriga retirar BlueGuard; deve ser **desmarcado e bloqueado** (não-clicável) enquanto houver cor selecionada.
-- **Lente Pronta (`LP*`)** → não aplica (não tem tratamentos surfaçados).
+### 1. Tornar o status do BlueGuard explícito e impossível de ignorar
 
-## Mudanças propostas
+No topo de `ZeissServicosSection`, acima da lista de tratamentos, renderizar uma **faixa de status dedicada** sempre que `autoSelectBlueguard` for `true` (lente surfaçada). Estados possíveis:
 
-### 1. `ZeissServicosSection.tsx` — detectar e auto-marcar BlueGuard
+- **Incluído** (verde, ícone Shield): "BlueGuard incluído (padrão Zeiss para lentes surfaçadas)".
+- **Removido por coloração** (âmbar, ícone Lock): "BlueGuard removido — incompatível com coloração selecionada. Para reativar, escolha 'Sem coloração'."
+- **Não disponível neste produto** (vermelho discreto, ícone AlertTriangle): "Atenção: BlueGuard não foi encontrado no catálogo desta família. Verifique manualmente antes de enviar." — esse aviso é o que faltava: hoje o silêncio engana o operador.
 
-- Após carregar `servicos`, identificar o serviço BlueGuard procurando no `nome` por `/BLUE\s*GUARD/i` (regex tolerante a variações tipo "BlueGuard", "BLUE GUARD", "Blue Guard DV"). Guardar o `cod` desse serviço em estado local `blueguardCod`.
-- Receber duas novas props vindas da página pai:
-  - `autoSelectBlueguard: boolean` → quando `true` (lente surfaçada) e ainda não há `blueguardCod` na lista `selectedServicos` e não há coloração, marcar automaticamente assim que o catálogo carrega.
-  - (não precisa de prop nova para "bloquear" — usamos `selectedCor` que já é prop).
-- No `<label>` do checkbox do BlueGuard:
-  - se `selectedCor !== "none"`: renderizar `Checkbox disabled`, com `opacity-60` e tooltip/badge "Indisponível com coloração".
-  - manter o restante dos serviços livres.
-- Novo `useEffect` reagindo a `selectedCor`:
-  - se `selectedCor !== "none"` e `blueguardCod` está em `selectedServicos` → remover (chama `onServicosChange`).
-  - se `selectedCor === "none"` e `autoSelectBlueguard` e BlueGuard não está marcado → marcar de volta.
+A faixa é a **fonte primária de verdade**; o checkbox correspondente na lista fica destacado (borda accent + badge "Padrão Zeiss") quando incluído, e disabled + tachado quando bloqueado.
 
-### 2. `PedidoZeissPage.tsx` — passar a flag e preservar comportamento
+### 2. Detecção de BlueGuard mais robusta
 
-- Calcular `const isSurfacada = !odIsLentePronta && (!oeProduct || !oeIsLentePronta);` reutilizando `isLentePronta` já importado e os produtos OD/OE atuais.
-- Passar `autoSelectBlueguard={isSurfacada}` ao `<ZeissServicosSection>`.
-- Manter os resets atuais (`setSelectedServicos([])` em troca de produto / corridor / limpar) — o auto-select reaplica BlueGuard quando o novo catálogo carregar.
+Atualmente só varre `s.nome` com `/BLUE\s*GUARD/i`. Vamos:
 
-### 3. Sem mudanças no Edge Function `zeiss-proxy`
+- Procurar também em `s.descr` (quando vier).
+- Aceitar variantes confirmadas pela Zeiss: `BLUE\s*GUARD`, `BLUEGUARD`, `BG\s*DV`, `DURAVISION\s+BLUE`. (Lista fechada para evitar falso-positivo com "Blue Protect" que é outro produto.)
+- Logar uma única vez no console (`console.info`) o catálogo cru de serviços recebido para a família, com prefixo `[ZeissServicos]` — facilita identificar nomes reais no próximo teste sem precisar mexer no proxy.
 
-O payload já encaminha `servicos[]` corretamente — o problema é puramente de UI/default. Não mexer no proxy nem em `zeissService.ts`.
+### 3. Garantir que o efeito reaja quando o catálogo carrega depois
 
-### 4. Não-objetivos
+O `useEffect` atual depende de `[blueguardCod, corBloqueia, autoSelectBlueguard]`. Está correto em teoria (blueguardCod muda quando servicos chegam), mas quando o usuário troca de produto, `servicos` é resetado e recarregado; o efeito precisa também rodar de novo se `selectedServicos` for esvaziado por reset externo. Adicionar `servicos.length` à lista de dependências, e usar uma ref para evitar loop com `onServicosChange`.
 
-- Não criar config por loja para o código BlueGuard (a detecção por nome no catálogo basta e funciona para qualquer empresa).
-- Não alterar pedidos já gravados.
-- Não tocar em Hoya/Haytek.
+### 4. Bloqueio visual mais óbvio quando há coloração
 
-## Detalhes técnicos
+Quando `corBloqueia === true`:
+- O `<SelectTrigger>` da coloração ganha uma nota inline: "Coloração ativa remove BlueGuard automaticamente."
+- A linha do BlueGuard na lista fica com `line-through` no nome e o checkbox `disabled`.
 
-Trecho-chave em `ZeissServicosSection.tsx` (pseudo-diff):
+### 5. Nenhuma mudança em
 
-```tsx
-const blueguardCod = useMemo(
-  () => servicos.find(s => /BLUE\s*GUARD/i.test(s.nome))?.cod ?? null,
-  [servicos]
-);
-const corBloqueia = selectedCor && selectedCor !== "none";
+- `zeiss-proxy` Edge Function.
+- `zeissService.ts`.
+- Payload final enviado (continua sendo `servicos: [{codigo}]`; o auto-select só mexe na lista local).
+- Pedidos já gravados.
+- Fluxos Hoya / Haytek.
 
-useEffect(() => {
-  if (!blueguardCod) return;
-  const marcado = selectedServicos.includes(blueguardCod);
-  if (corBloqueia && marcado) {
-    onServicosChange(selectedServicos.filter(c => c !== blueguardCod));
-  } else if (!corBloqueia && autoSelectBlueguard && !marcado) {
-    onServicosChange([...selectedServicos, blueguardCod]);
-  }
-}, [blueguardCod, corBloqueia, autoSelectBlueguard]);
-```
+## Arquivos afetados
 
-## Validação após implementar
+- `src/components/zeiss-pedido/ZeissServicosSection.tsx` — adiciona faixa de status, detecção ampliada, log diagnóstico, dependência extra do effect, estilo de bloqueio.
+- `src/pages/PedidoZeissPage.tsx` — sem mudança funcional; manter prop `autoSelectBlueguard` como já está.
 
-1. Abrir `/pedidos-zeiss` em uma OS com lente surfaçada → BlueGuard já vem marcado.
-2. Selecionar uma cor → BlueGuard é desmarcado e fica disabled com label de aviso.
-3. Voltar para "Sem coloração" → BlueGuard volta marcado.
-4. Selecionar uma Lente Pronta (LP…) → BlueGuard não aparece marcado (catálogo da família LP normalmente não traz BlueGuard, mas se trouxer não auto-marcamos).
-5. Enviar um pedido teste e conferir no banco que `payload.sao.pedido.servicos` contém o código do BlueGuard.
+## Como validar depois
+
+1. Abrir uma OS surfaçada → faixa verde "BlueGuard incluído" + checkbox marcado e destacado.
+2. Selecionar uma cor → faixa muda para âmbar "Removido por coloração", checkbox disabled e tachado, payload de envio sem o código.
+3. Voltar para "Sem coloração" → faixa volta verde e checkbox remarca.
+4. Abrir uma família que comprovadamente não tem BlueGuard no catálogo (ex.: alguma LP, se chegar a renderizar a seção) → faixa vermelha de aviso aparece, operador é forçado a decidir.
+5. Conferir no console o log `[ZeissServicos] catálogo` com os nomes reais — se aparecer um nome esperado de BlueGuard que ainda não casa, ampliamos a regex.
