@@ -91,6 +91,12 @@ function extractFamilia(produto: ZeissProduto | null): string | null {
   return produto.cat || produto.cod || null;
 }
 
+function hasBlueguardFlag(produto: ZeissProduto | null): boolean {
+  if (!produto) return false;
+  const flag = produto.luzazul;
+  return flag === true || ["true", "s", "sim", "1"].includes(String(flag ?? "").toLowerCase());
+}
+
 // ============================================
 // COMPONENT
 // ============================================
