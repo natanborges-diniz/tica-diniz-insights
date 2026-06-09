@@ -1172,6 +1172,8 @@ const PedidoZeissPage: React.FC = () => {
               onServicosChange={setSelectedServicos}
               selectedCor={selectedCor}
               onCorChange={setSelectedCor}
+              blueguardAvailable={hasBlueguardFlag(produtoOd) && (!(useSameProduct ? produtoOd : produtoOe) || hasBlueguardFlag(useSameProduct ? produtoOd : produtoOe))}
+              blueguardLabel={produtoOd?.nome?.toUpperCase().includes("BLUEGUARD") ? "BlueGuard" : "BlueGuard (luzazul)"}
               autoSelectBlueguard={
                 !isLentePronta(produtoOd?.cod || null, produtoOd?.nome || produtoOd?.descr || null) &&
                 (!(useSameProduct ? produtoOd : produtoOe) ||
