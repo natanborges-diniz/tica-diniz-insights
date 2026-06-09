@@ -802,7 +802,7 @@ export default function PlanoMensalPage() {
     try {
       console.info('[export-excel] iniciando', { marcas: exportParams.grupos.flatMap(g => g.marcas).length });
       const buf = gerarExcel(exportParams);
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const blob = new Blob([buf as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
