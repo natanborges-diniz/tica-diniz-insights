@@ -421,6 +421,9 @@ const PedidoZeissPage: React.FC = () => {
       oeProduct?.cod || null,
       oeProduct?.nome || oeProduct?.descr || null,
     );
+    const blueguardPedidoAtivo = !selectedCor || selectedCor === "none"
+      ? hasBlueguardFlag(produtoOd) && (!oeProduct || hasBlueguardFlag(oeProduct))
+      : false;
 
     const payload: ZeissPedidoPayload = {
       oscliente: osNumero,
@@ -429,6 +432,7 @@ const PedidoZeissPage: React.FC = () => {
       medico,
       crm,
       voucher: voucher || "",
+      luzazul: blueguardPedidoAtivo ? "true" : "false",
       corcoloracao: selectedCor !== "none" ? selectedCor : "",
       amostracoloracao: "",
       observacao: observacao ? [observacao] : [],
@@ -541,7 +545,7 @@ const PedidoZeissPage: React.FC = () => {
       produtoOeCod: oeProductMeta?.cod || null,
     };
 
-    if (aprov) payload.aprov = aprov;
+    if (aprov) payload.aprov = { ...aprov, luzazul: blueguardPedidoAtivo ? "true" : "false" };
     return payload;
   }
 
