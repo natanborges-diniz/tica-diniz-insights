@@ -1162,6 +1162,16 @@ const PedidoZeissPage: React.FC = () => {
               onServicosChange={setSelectedServicos}
               selectedCor={selectedCor}
               onCorChange={setSelectedCor}
+              autoSelectBlueguard={
+                !isLentePronta(produtoOd?.cod || null, produtoOd?.nome || produtoOd?.descr || null) &&
+                (!(useSameProduct ? produtoOd : produtoOe) ||
+                  !isLentePronta(
+                    (useSameProduct ? produtoOd : produtoOe)?.cod || null,
+                    (useSameProduct ? produtoOd : produtoOe)?.nome ||
+                      (useSameProduct ? produtoOd : produtoOe)?.descr ||
+                      null,
+                  ))
+              }
             />
 
             {/* ── Patient & Doctor ── */}
