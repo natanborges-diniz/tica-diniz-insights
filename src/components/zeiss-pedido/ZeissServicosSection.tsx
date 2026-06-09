@@ -1,7 +1,7 @@
 // src/components/zeiss-pedido/ZeissServicosSection.tsx
 // Seção de serviços (tratamentos) e cores para pedido Zeiss
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Paintbrush, Wrench, Lock, ShieldCheck, AlertTriangle } from "lucide-react";
@@ -30,25 +30,16 @@ interface Props {
   onCorChange: (cor: string) => void;
   /** Quando true (lente surfaçada), marca BlueGuard automaticamente e re-marca se a coloração for removida. */
   autoSelectBlueguard?: boolean;
+  /** BlueGuard na API Zeiss vem como flag do produto (`luzazul`), não como serviço do catálogo. */
+  blueguardAvailable?: boolean;
+  blueguardLabel?: string;
 }
-
-// Padrões aceitos para identificar o tratamento BlueGuard no catálogo Zeiss.
-// Lista fechada para evitar falso-positivo com "Blue Protect" (produto diferente).
-const BLUEGUARD_PATTERNS: RegExp[] = [
-  /BLUE\s*GUARD/i,
-  /BLUEGUARD/i,
-  /\bBG\s*DV\b/i,
-  /DURAVISION\s+BLUE/i,
-];
-
-const isBlueguardName = (text: string | undefined | null): boolean => {
-  if (!text) return false;
-  return BLUEGUARD_PATTERNS.some((re) => re.test(text));
-};
 
 const ZeissServicosSection: React.FC<Props> = ({
   familia, codEmpresa, selectedServicos, onServicosChange, selectedCor, onCorChange,
   autoSelectBlueguard = false,
+  blueguardAvailable = false,
+  blueguardLabel = "BlueGuard",
 }) => {
   const [servicos, setServicos] = useState<ZeissServico[]>([]);
   const [cores, setCores] = useState<ZeissCor[]>([]);
@@ -122,27 +113,20 @@ const ZeissServicosSection: React.FC<Props> = ({
       .finally(() => setLoadingCores(false));
   }, [familia, codEmpresa]);
 
-  // ── Detect BlueGuard (busca nome + descr, padrões múltiplos) ──
-  const blueguardCod = useMemo(
-    () => servicos.find((s) => isBlueguardName(s.nome) || isBlueguardName(s.descr))?.cod ?? null,
-    [servicos],
-  );
   const corBloqueia = Boolean(selectedCor && selectedCor !== "none");
+  const blueguardAtivo = autoSelectBlueguard && blueguardAvailable && !corBloqueia;
 
-  // ── Auto-marca BlueGuard em lente surfaçada; remove se houver coloração ──
+  // ── BlueGuard é flag do produto (`luzazul`), não código em `servicos` ──
   useEffect(() => {
-    if (!blueguardCod) return;
-    const marcado = selectedServicos.includes(blueguardCod);
-    if (corBloqueia && marcado) {
-      onServicosChange(selectedServicos.filter((c) => c !== blueguardCod));
-    } else if (!corBloqueia && autoSelectBlueguard && !marcado) {
-      onServicosChange([...selectedServicos, blueguardCod]);
+    if (!corBloqueia) return;
+    const serviceLikeBlueguard = servicos.filter((s) => /BLUE\s*GUARD|BLUEGUARD/i.test(`${s.nome} ${s.descr || ""}`)).map((s) => s.cod);
+    if (serviceLikeBlueguard.length > 0 && selectedServicos.some((cod) => serviceLikeBlueguard.includes(cod))) {
+      onServicosChange(selectedServicos.filter((cod) => !serviceLikeBlueguard.includes(cod)));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blueguardCod, corBloqueia, autoSelectBlueguard, servicos.length]);
+  }, [corBloqueia, servicos.length]);
 
   const toggleServico = (cod: string) => {
-    if (cod === blueguardCod && corBloqueia) return;
     onServicosChange(
       selectedServicos.includes(cod)
         ? selectedServicos.filter((s) => s !== cod)
@@ -153,24 +137,23 @@ const ZeissServicosSection: React.FC<Props> = ({
   if (!familia) return null;
 
   // ── Status do BlueGuard (faixa explícita acima da lista) ──
-  const blueguardMarcado = blueguardCod ? selectedServicos.includes(blueguardCod) : false;
   type StatusVariant = "ok" | "warn" | "danger";
   let statusVariant: StatusVariant | null = null;
   let statusIcon: React.ReactNode = null;
   let statusText: string = "";
   if (autoSelectBlueguard) {
-    if (blueguardCod && blueguardMarcado && !corBloqueia) {
+    if (blueguardAtivo) {
       statusVariant = "ok";
       statusIcon = <ShieldCheck className="h-4 w-4" />;
-      statusText = "BlueGuard incluído (padrão Zeiss para lentes surfaçadas).";
-    } else if (blueguardCod && corBloqueia) {
+      statusText = `${blueguardLabel} incluído (flag luzazul do produto Zeiss).`;
+    } else if (blueguardAvailable && corBloqueia) {
       statusVariant = "warn";
       statusIcon = <Lock className="h-4 w-4" />;
-      statusText = "BlueGuard removido — incompatível com a coloração selecionada. Para reativar, escolha 'Sem coloração'.";
-    } else if (!blueguardCod && !loadingServicos) {
+      statusText = `${blueguardLabel} removido — incompatível com a coloração selecionada. Para reativar, escolha 'Sem coloração'.`;
+    } else if (!blueguardAvailable) {
       statusVariant = "danger";
       statusIcon = <AlertTriangle className="h-4 w-4" />;
-      statusText = "Atenção: BlueGuard não foi encontrado no catálogo desta família. Verifique manualmente antes de enviar o pedido.";
+      statusText = "Atenção: o produto selecionado não informa luzazul=true no catálogo Zeiss. Verifique manualmente antes de enviar.";
     }
   }
   const statusClasses: Record<StatusVariant, string> = {
@@ -202,42 +185,20 @@ const ZeissServicosSection: React.FC<Props> = ({
             <Label className="text-xs font-semibold text-muted-foreground uppercase">Tratamentos disponíveis</Label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {servicos.map((s) => {
-                const isBlueguard = s.cod === blueguardCod;
-                const disabled = isBlueguard && corBloqueia;
-                const highlight = isBlueguard && !corBloqueia;
                 return (
                   <label
                     key={s.cod}
-                    className={`flex items-start gap-2 rounded-md border p-2.5 transition-colors ${
-                      disabled
-                        ? "opacity-60 cursor-not-allowed bg-muted/40 border-border/60"
-                        : highlight
-                          ? "cursor-pointer hover:bg-accent/50 border-emerald-500/50 bg-emerald-500/5"
-                          : "cursor-pointer hover:bg-accent/50 border-border/60"
-                    }`}
+                    className="flex cursor-pointer items-start gap-2 rounded-md border border-border/60 p-2.5 transition-colors hover:bg-accent/50"
                   >
                     <Checkbox
                       checked={selectedServicos.includes(s.cod)}
                       onCheckedChange={() => toggleServico(s.cod)}
-                      disabled={disabled}
                       className="mt-0.5"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <Badge variant="outline" className="font-mono text-[10px] shrink-0">{s.cod}</Badge>
-                        <span className={`text-sm font-medium truncate ${disabled ? "line-through" : ""}`}>
-                          {s.nome}
-                        </span>
-                        {isBlueguard && !corBloqueia && (
-                          <Badge variant="secondary" className="text-[10px] h-4 px-1.5 gap-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-                            <ShieldCheck className="h-2.5 w-2.5" /> Padrão Zeiss
-                          </Badge>
-                        )}
-                        {disabled && (
-                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-1 border-amber-500/50 text-amber-700 dark:text-amber-400">
-                            <Lock className="h-2.5 w-2.5" /> Indisponível com coloração
-                          </Badge>
-                        )}
+                        <span className="text-sm font-medium truncate">{s.nome}</span>
                       </div>
                       {s.descr && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{s.descr}</p>}
                     </div>
@@ -270,9 +231,9 @@ const ZeissServicosSection: React.FC<Props> = ({
                 ))}
               </SelectContent>
             </Select>
-            {autoSelectBlueguard && blueguardCod && (
+            {autoSelectBlueguard && blueguardAvailable && (
               <p className="text-[11px] text-muted-foreground italic">
-                Coloração ativa remove BlueGuard automaticamente (regra Zeiss).
+                Coloração ativa envia luzazul=false automaticamente (regra Zeiss).
               </p>
             )}
           </div>

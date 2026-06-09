@@ -91,6 +91,12 @@ function extractFamilia(produto: ZeissProduto | null): string | null {
   return produto.cat || produto.cod || null;
 }
 
+function hasBlueguardFlag(produto: ZeissProduto | null): boolean {
+  if (!produto) return false;
+  const flag = produto.luzazul;
+  return flag === true || ["true", "s", "sim", "1"].includes(String(flag ?? "").toLowerCase());
+}
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -415,6 +421,9 @@ const PedidoZeissPage: React.FC = () => {
       oeProduct?.cod || null,
       oeProduct?.nome || oeProduct?.descr || null,
     );
+    const blueguardPedidoAtivo = !selectedCor || selectedCor === "none"
+      ? hasBlueguardFlag(produtoOd) && (!oeProduct || hasBlueguardFlag(oeProduct))
+      : false;
 
     const payload: ZeissPedidoPayload = {
       oscliente: osNumero,
@@ -423,6 +432,7 @@ const PedidoZeissPage: React.FC = () => {
       medico,
       crm,
       voucher: voucher || "",
+      luzazul: blueguardPedidoAtivo ? "true" : "false",
       corcoloracao: selectedCor !== "none" ? selectedCor : "",
       amostracoloracao: "",
       observacao: observacao ? [observacao] : [],
@@ -535,7 +545,7 @@ const PedidoZeissPage: React.FC = () => {
       produtoOeCod: oeProductMeta?.cod || null,
     };
 
-    if (aprov) payload.aprov = aprov;
+    if (aprov) payload.aprov = { ...aprov, luzazul: blueguardPedidoAtivo ? "true" : "false" };
     return payload;
   }
 
@@ -1162,6 +1172,8 @@ const PedidoZeissPage: React.FC = () => {
               onServicosChange={setSelectedServicos}
               selectedCor={selectedCor}
               onCorChange={setSelectedCor}
+              blueguardAvailable={hasBlueguardFlag(produtoOd) && (!(useSameProduct ? produtoOd : produtoOe) || hasBlueguardFlag(useSameProduct ? produtoOd : produtoOe))}
+              blueguardLabel={produtoOd?.nome?.toUpperCase().includes("BLUEGUARD") ? "BlueGuard" : "BlueGuard (luzazul)"}
               autoSelectBlueguard={
                 !isLentePronta(produtoOd?.cod || null, produtoOd?.nome || produtoOd?.descr || null) &&
                 (!(useSameProduct ? produtoOd : produtoOe) ||
