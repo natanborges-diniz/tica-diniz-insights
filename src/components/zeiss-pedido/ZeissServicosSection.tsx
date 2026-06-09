@@ -28,10 +28,13 @@ interface Props {
   onServicosChange: (servicos: string[]) => void;
   selectedCor: string;
   onCorChange: (cor: string) => void;
+  /** Quando true (lente surfaçada), marca BlueGuard automaticamente e re-marca se a coloração for removida. */
+  autoSelectBlueguard?: boolean;
 }
 
 const ZeissServicosSection: React.FC<Props> = ({
   familia, codEmpresa, selectedServicos, onServicosChange, selectedCor, onCorChange,
+  autoSelectBlueguard = false,
 }) => {
   const [servicos, setServicos] = useState<ZeissServico[]>([]);
   const [cores, setCores] = useState<ZeissCor[]>([]);
