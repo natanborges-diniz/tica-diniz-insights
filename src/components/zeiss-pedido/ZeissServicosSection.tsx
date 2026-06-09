@@ -185,42 +185,20 @@ const ZeissServicosSection: React.FC<Props> = ({
             <Label className="text-xs font-semibold text-muted-foreground uppercase">Tratamentos disponíveis</Label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {servicos.map((s) => {
-                const isBlueguard = s.cod === blueguardCod;
-                const disabled = isBlueguard && corBloqueia;
-                const highlight = isBlueguard && !corBloqueia;
                 return (
                   <label
                     key={s.cod}
-                    className={`flex items-start gap-2 rounded-md border p-2.5 transition-colors ${
-                      disabled
-                        ? "opacity-60 cursor-not-allowed bg-muted/40 border-border/60"
-                        : highlight
-                          ? "cursor-pointer hover:bg-accent/50 border-emerald-500/50 bg-emerald-500/5"
-                          : "cursor-pointer hover:bg-accent/50 border-border/60"
-                    }`}
+                    className="flex cursor-pointer items-start gap-2 rounded-md border border-border/60 p-2.5 transition-colors hover:bg-accent/50"
                   >
                     <Checkbox
                       checked={selectedServicos.includes(s.cod)}
                       onCheckedChange={() => toggleServico(s.cod)}
-                      disabled={disabled}
                       className="mt-0.5"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <Badge variant="outline" className="font-mono text-[10px] shrink-0">{s.cod}</Badge>
-                        <span className={`text-sm font-medium truncate ${disabled ? "line-through" : ""}`}>
-                          {s.nome}
-                        </span>
-                        {isBlueguard && !corBloqueia && (
-                          <Badge variant="secondary" className="text-[10px] h-4 px-1.5 gap-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-                            <ShieldCheck className="h-2.5 w-2.5" /> Padrão Zeiss
-                          </Badge>
-                        )}
-                        {disabled && (
-                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 gap-1 border-amber-500/50 text-amber-700 dark:text-amber-400">
-                            <Lock className="h-2.5 w-2.5" /> Indisponível com coloração
-                          </Badge>
-                        )}
+                        <span className="text-sm font-medium truncate">{s.nome}</span>
                       </div>
                       {s.descr && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{s.descr}</p>}
                     </div>
@@ -253,9 +231,9 @@ const ZeissServicosSection: React.FC<Props> = ({
                 ))}
               </SelectContent>
             </Select>
-            {autoSelectBlueguard && blueguardCod && (
+            {autoSelectBlueguard && blueguardAvailable && (
               <p className="text-[11px] text-muted-foreground italic">
-                Coloração ativa remove BlueGuard automaticamente (regra Zeiss).
+                Coloração ativa envia luzazul=false automaticamente (regra Zeiss).
               </p>
             )}
           </div>
