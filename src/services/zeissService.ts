@@ -20,6 +20,8 @@ export interface ZeissProduto {
   subgrupo?: string;
   material?: string;
   cor?: string;
+  luzazul?: string | boolean;
+  codcor?: string;
 }
 
 export interface ZeissAprovacao {
@@ -29,6 +31,8 @@ export interface ZeissAprovacao {
   antec?: string;
   campanha?: string;
   mesmarec?: string;
+  certdig?: string;
+  luzazul?: string;
 }
 
 export interface ZeissPrecoItem {
@@ -91,6 +95,7 @@ export interface ZeissPedidoPayload {
   medico?: string;
   crm?: string;
   voucher?: string;
+  luzazul?: string;
   corcoloracao?: string;
   amostracoloracao?: string;
   observacao?: string[];
