@@ -196,7 +196,7 @@ export default function PlanoHistoricoPage() {
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
       if (error) throw error;
-      return (data ?? []) as PlanoHistoricoRow[];
+      return (data ?? []) as unknown as PlanoHistoricoRow[];
     },
     enabled: !!empresaId,
     staleTime: 2 * 60 * 1000,
