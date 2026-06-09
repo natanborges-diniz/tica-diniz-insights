@@ -63,14 +63,14 @@ export interface MixMarcaV2 {
   estrategica: boolean;
   skusAlocados: SkuAlocado[];  // alocação por passadas (diasGiroUltimaPeca ASC)
   // Volume vendido 180d (Onda 2.B — Princípio #26)
-  vendido180dTotal: number;
-  vendido180dRx: number;
-  vendido180dSolar: number;
+  vendido180dTotal?: number;
+  vendido180dRx?: number;
+  vendido180dSolar?: number;
   // Alocação RX/Solar (Onda 2.B — Princípio #24)
-  qtdAlocadaRx: number;
-  qtdAlocadaSolar: number;
-  lacunaRx: number;            // porção RX da lacuna sem candidatos disponíveis
-  lacunaSolar: number;         // porção Solar da lacuna sem candidatos disponíveis
+  qtdAlocadaRx?: number;
+  qtdAlocadaSolar?: number;
+  lacunaRx?: number;            // porção RX da lacuna sem candidatos disponíveis
+  lacunaSolar?: number;         // porção Solar da lacuna sem candidatos disponíveis
 }
 
 export interface CalcMixIdealV2Params {

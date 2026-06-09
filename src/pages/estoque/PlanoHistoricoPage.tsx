@@ -196,7 +196,7 @@ export default function PlanoHistoricoPage() {
         .order('created_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
       if (error) throw error;
-      return (data ?? []) as PlanoHistoricoRow[];
+      return (data ?? []) as unknown as PlanoHistoricoRow[];
     },
     enabled: !!empresaId,
     staleTime: 2 * 60 * 1000,
@@ -227,7 +227,7 @@ export default function PlanoHistoricoPage() {
     try {
       const params = exportParamsFromHistorico(row, nomeEmpresaSelecionada);
       const buf = gerarExcel(params);
-      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const blob = new Blob([buf as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -268,7 +268,7 @@ export default function PlanoHistoricoPage() {
         zip.file(`plano-${slug}-${params.dataGeracao}.pdf`, doc.output('arraybuffer'));
       }
       const buf = await zip.generateAsync({ type: 'uint8array' });
-      const blob = new Blob([buf], { type: 'application/zip' });
+      const blob = new Blob([buf as BlobPart], { type: 'application/zip' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
