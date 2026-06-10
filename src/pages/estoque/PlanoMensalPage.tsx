@@ -30,7 +30,7 @@ import {
   MIX_MINIMO_MARCA,
 } from '@/lib/estoque/constants';
 import { classificarPorIdade } from '@/lib/estoque/faixas-saneamento';
-import { categorizarProduto } from '@/utils/categorizarProduto';
+import { categorizarProduto, subcategorizarProduto } from '@/utils/categorizarProduto';
 import {
   resolverFornecedor,
   agruparPorFornecedor,
@@ -271,6 +271,16 @@ function GrupoFornecedorCompra({
               </Table>
             ) : (
               <p className="text-xs text-muted-foreground ml-2 italic">Sem SKUs na janela de candidatos</p>
+            )}
+            {((marca.lacunaRx ?? 0) > 0 || (marca.lacunaSolar ?? 0) > 0) && (
+              <div className="mt-1 space-y-0.5">
+                {(marca.lacunaRx ?? 0) > 0 && (
+                  <p className="text-xs text-amber-600">⚠ {marca.lacunaRx} SKU{(marca.lacunaRx ?? 0) !== 1 ? 's' : ''} RX sem candidatos no plano</p>
+                )}
+                {(marca.lacunaSolar ?? 0) > 0 && (
+                  <p className="text-xs text-amber-600">⚠ {marca.lacunaSolar} SKU{(marca.lacunaSolar ?? 0) !== 1 ? 's' : ''} Solar sem candidatos no plano</p>
+                )}
+              </div>
             )}
             <Button
               variant="ghost"
@@ -537,6 +547,7 @@ export default function PlanoMensalPage() {
       const v = vendasMap.get(codSku);
       const tipo = e?.tipo ?? v?.tipo ?? '';
       const categoria = categorizarProduto(tipo);
+      const subcategoria = (e?.subcategoria ?? subcategorizarProduto(tipo)) as string;
       return {
         codSku,
         descricao: e?.descricao ?? v?.descricaoItem ?? '',
@@ -553,6 +564,7 @@ export default function PlanoMensalPage() {
         precoCusto: e?.precoCusto ?? v?.precoCusto ?? 0,
         valorEstoqueCusto: e?.valorEstoqueCusto ?? 0,
         categoria: categoria as string,
+        subcategoria,
       };
     });
   }, [estoqueData, vendasData]);
@@ -564,7 +576,14 @@ export default function PlanoMensalPage() {
     const estoqueTotal = armacoes.reduce((s, i) => s + i.estoqueAtual, 0);
     const estoqueEfetivo = armacoes.filter(i => i.estoqueAtual > 0 && !i.isDeadStock).reduce((s, i) => s + i.estoqueAtual, 0);
     const deadStockPecas = armacoes.filter(i => i.isDeadStock).reduce((s, i) => s + i.estoqueAtual, 0);
-    return { capacidadeTotal, estoqueTotal, estoqueEfetivo, deadStockPecas, lacunaTotal: Math.max(0, capacidadeTotal - estoqueEfetivo) };
+    const vendidoTotal = armacoes.reduce((s, i) => s + i.qtdVendidos, 0);
+    const vendidoRx = armacoes.filter(i => i.subcategoria === 'AR_RX').reduce((s, i) => s + i.qtdVendidos, 0);
+    const vendidoSolar = armacoes.filter(i => i.subcategoria === 'AR_SOLAR').reduce((s, i) => s + i.qtdVendidos, 0);
+    return {
+      capacidadeTotal, estoqueTotal, estoqueEfetivo, deadStockPecas,
+      lacunaTotal: Math.max(0, capacidadeTotal - estoqueEfetivo),
+      vendidoTotal, vendidoRx, vendidoSolar,
+    };
   }, [itensMix, capacidadeTotal]);
 
   // ── Mix ideal V2 ──────────────────────────────────────────────────────────
@@ -954,12 +973,41 @@ export default function PlanoMensalPage() {
             {loading ? (
               <p className="text-muted-foreground">Carregando dados de estoque e vendas…</p>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <MetricCard label="Capacidade do Expositor" value={diagnostico.capacidadeTotal} unit="peças" color="text-blue-700" />
-                <MetricCard label="Estoque Total Armações" value={diagnostico.estoqueTotal} unit="peças" color="text-slate-700" />
-                <MetricCard label="Estoque Efetivo" value={diagnostico.estoqueEfetivo} unit="peças" color="text-green-700" />
-                <MetricCard label="Lacuna" value={diagnostico.lacunaTotal} unit="peças" color={diagnostico.lacunaTotal > 0 ? 'text-red-700' : 'text-green-700'} />
-              </div>
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <MetricCard label="Capacidade do Expositor" value={diagnostico.capacidadeTotal} unit="peças" color="text-blue-700" />
+                  <MetricCard label="Estoque Total Armações" value={diagnostico.estoqueTotal} unit="peças" color="text-slate-700" />
+                  <MetricCard label="Estoque Efetivo" value={diagnostico.estoqueEfetivo} unit="peças" color="text-green-700" />
+                  <MetricCard label="Lacuna" value={diagnostico.lacunaTotal} unit="peças" color={diagnostico.lacunaTotal > 0 ? 'text-red-700' : 'text-green-700'} />
+                </div>
+                {diagnostico.vendidoTotal > 0 && (
+                  <div className="mt-4 p-4 rounded-lg border bg-slate-50">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Volume Vendido — 6 meses (armações)</p>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-2xl font-bold text-slate-800 tabular-nums">{diagnostico.vendidoTotal.toLocaleString('pt-BR')}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Total</p>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-blue-700 tabular-nums">{diagnostico.vendidoRx.toLocaleString('pt-BR')}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          RX{diagnostico.vendidoTotal > 0 && (
+                            <span className="ml-1 text-slate-400">({Math.round(diagnostico.vendidoRx / diagnostico.vendidoTotal * 100)}%)</span>
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-amber-600 tabular-nums">{diagnostico.vendidoSolar.toLocaleString('pt-BR')}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Solar{diagnostico.vendidoTotal > 0 && (
+                            <span className="ml-1 text-slate-400">({Math.round(diagnostico.vendidoSolar / diagnostico.vendidoTotal * 100)}%)</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             {!loading && diagnostico.deadStockPecas > 0 && (
               <p className="text-sm text-amber-600 mt-4">
@@ -983,7 +1031,6 @@ export default function PlanoMensalPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Marca</TableHead>
-                    <TableHead className="w-32">% Solar override</TableHead>
                     <TableHead className="w-28 text-center">Estratégica</TableHead>
                     <TableHead className="w-28 text-center">Recém Introduzida</TableHead>
                   </TableRow>
@@ -994,18 +1041,6 @@ export default function PlanoMensalPage() {
                     return (
                       <TableRow key={marca}>
                         <TableCell className="font-medium">{marca}</TableCell>
-                        <TableCell>
-                          <Input
-                            type="number" min={0} max={100}
-                            placeholder={`${pctSolarDefault}%`}
-                            value={cfg.pct_solar != null ? String(cfg.pct_solar) : ''}
-                            onChange={e => {
-                              const v = e.target.value === '' ? null : Math.min(100, Math.max(0, Number(e.target.value)));
-                              setOverride(marca, 'pct_solar', v);
-                            }}
-                            className="w-24"
-                          />
-                        </TableCell>
                         <TableCell className="text-center">
                           <Checkbox checked={cfg.estrategica} onCheckedChange={v => setOverride(marca, 'estrategica', !!v)} />
                         </TableCell>
@@ -1054,10 +1089,14 @@ export default function PlanoMensalPage() {
                     <TableHead className="w-9 text-right text-muted-foreground">#</TableHead>
                     <TableHead>Marca</TableHead>
                     <TableHead>Fornecedor</TableHead>
+                    <TableHead className="text-right text-xs">Vend.</TableHead>
+                    <TableHead className="text-right text-xs text-blue-700">Vend.RX</TableHead>
+                    <TableHead className="text-right text-xs text-amber-600">Vend.Sol</TableHead>
                     <TableHead className="text-right">Part. %</TableHead>
                     <TableHead className="text-right">Mix Total</TableHead>
                     <TableHead className="text-right">RX</TableHead>
                     <TableHead className="text-right">Solar</TableHead>
+                    <TableHead className="text-right w-16">% Sol</TableHead>
                     <TableHead className="text-right">Ef. Atual</TableHead>
                     <TableHead className="text-right">Lacuna</TableHead>
                     <TableHead className="text-center w-20">Estrat.</TableHead>
@@ -1079,14 +1118,14 @@ export default function PlanoMensalPage() {
                       <Fragment key={m.marca}>
                         {idx === corte1 && corte1 > 0 && corte1 <= mixMarcasCompleto.length && (
                           <TableRow className="pointer-events-none hover:bg-transparent">
-                            <TableCell colSpan={12} className="py-1.5 px-3 bg-amber-50 text-amber-700 text-xs font-medium border-y border-amber-200">
+                            <TableCell colSpan={16} className="py-1.5 px-3 bg-amber-50 text-amber-700 text-xs font-medium border-y border-amber-200">
                               ▼ Abaixo do mínimo viável de {MIX_MINIMO_MARCA} peças — {mixMarcasCompleto.length - corte1} marcas a avaliar
                             </TableCell>
                           </TableRow>
                         )}
                         {idx === corte2 && corte2 !== corte1 && corte2 > 0 && corte2 <= mixMarcasCompleto.length && (
                           <TableRow className="pointer-events-none hover:bg-transparent">
-                            <TableCell colSpan={12} className="py-1.5 px-3 bg-slate-100 text-slate-500 text-xs border-y border-slate-200">
+                            <TableCell colSpan={16} className="py-1.5 px-3 bg-slate-100 text-slate-500 text-xs border-y border-slate-200">
                               ▼ Corte teórico: {corte2} marcas para capacidade {capacidadeTotal}
                             </TableCell>
                           </TableRow>
@@ -1097,10 +1136,25 @@ export default function PlanoMensalPage() {
                           <TableCell className="text-sm text-muted-foreground max-w-32 truncate">
                             {fornecedorPorMarca.get(m.marca) ?? SEM_FORNECEDOR_LABEL}
                           </TableCell>
+                          <TableCell className="text-right text-xs tabular-nums">{m.vendido180dTotal > 0 ? m.vendido180dTotal : '—'}</TableCell>
+                          <TableCell className="text-right text-xs tabular-nums text-blue-700">{m.vendido180dRx > 0 ? m.vendido180dRx : '—'}</TableCell>
+                          <TableCell className="text-right text-xs tabular-nums text-amber-600">{m.vendido180dSolar > 0 ? m.vendido180dSolar : '—'}</TableCell>
                           <TableCell className="text-right">{m.participacao > 0 ? `${(m.participacao * 100).toFixed(1)}%` : '—'}</TableCell>
                           <TableCell className="text-right font-bold">{m.mixTotal > 0 ? m.mixTotal : '—'}</TableCell>
                           <TableCell className="text-right">{m.mixRX > 0 ? m.mixRX : '—'}</TableCell>
                           <TableCell className="text-right">{m.mixSolar > 0 ? m.mixSolar : '—'}</TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number" min={0} max={100}
+                              placeholder={`${pctSolarDefault}`}
+                              value={cfg.pct_solar != null ? String(cfg.pct_solar) : ''}
+                              onChange={e => {
+                                const v = e.target.value === '' ? null : Math.min(100, Math.max(0, Number(e.target.value)));
+                                setOverride(m.marca, 'pct_solar', v);
+                              }}
+                              className="w-14 h-7 text-xs px-1.5 text-right"
+                            />
+                          </TableCell>
                           <TableCell className="text-right">{m.estoqueEfetivo}</TableCell>
                           <TableCell className={`text-right font-bold ${m.lacuna > 0 ? 'text-red-600' : m.mixTotal > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
                             {m.mixTotal > 0 ? m.lacuna : '—'}
