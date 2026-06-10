@@ -60,6 +60,9 @@ export function construirMixMarcasCompleto(
         ? 'SUGERIR_DESCONTINUAR'
         : 'SEM_VENDAS_180D';
 
+      const mixSolar = mixTotal - mixRX;
+      const lacuna = Math.max(0, mixTotal - data.estoqueEfetivo);
+
       return {
         marca,
         participacao: 0,
@@ -69,13 +72,21 @@ export function construirMixMarcasCompleto(
         faturamento: 0,
         mixTotal,
         mixRX,
-        mixSolar: mixTotal - mixRX,
+        mixSolar,
         pctSolar,
         estoqueEfetivo: data.estoqueEfetivo,
-        lacuna: Math.max(0, mixTotal - data.estoqueEfetivo),
+        lacuna,
         status,
         estrategica: isEstrategica,
         skusAlocados: [],
+        // Extras sem vendas: volumes e alocação zerados
+        vendido180dTotal: 0,
+        vendido180dRx: 0,
+        vendido180dSolar: 0,
+        qtdAlocadaRx: 0,
+        qtdAlocadaSolar: 0,
+        lacunaRx: mixRX,
+        lacunaSolar: mixSolar,
       };
     });
 
