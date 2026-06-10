@@ -27,6 +27,13 @@ const marcaMotor = (marca: string, mixTotal: number): MixMarcaV2 => ({
   status: mixTotal >= MIX_MINIMO_MARCA ? 'OK' : 'SUGERIR_DESCONTINUAR',
   estrategica: false,
   skusAlocados: [],
+  vendido180dTotal: 50,
+  vendido180dRx: 35,
+  vendido180dSolar: 15,
+  qtdAlocadaRx: 10,
+  qtdAlocadaSolar: 5,
+  lacunaRx: 0,
+  lacunaSolar: 0,
 });
 
 const itemEstoque = (marca: string, estoqueAtual: number, isDeadStock = false): ItemMixV2 => ({
@@ -175,5 +182,45 @@ describe('calcularCortes', () => {
   it('capacidade 0 → corte2=0', () => {
     const { corte2 } = calcularCortes([], 0);
     expect(corte2).toBe(0);
+  });
+});
+
+// ── Onda 2.B: novos campos nos extras ─────────────────────────────────────────
+
+describe('construirMixMarcasCompleto — campos Onda 2.B nos extras', () => {
+  it('extra não-estratégica: vendido180d zerados', () => {
+    const mixMarcas: MixMarcaV2[] = [];
+    const itens = [itemEstoque('NOVA', 10)];
+    const result = construirMixMarcasCompleto(mixMarcas, itens, new Map(), 30);
+    expect(result[0].vendido180dTotal).toBe(0);
+    expect(result[0].vendido180dRx).toBe(0);
+    expect(result[0].vendido180dSolar).toBe(0);
+  });
+
+  it('extra não-estratégica: qtdAlocada zerados, lacunaRx/Solar = mixRX/mixSolar (sem candidatos)', () => {
+    const mixMarcas: MixMarcaV2[] = [];
+    const itens = [itemEstoque('NOVA', 5)];
+    const result = construirMixMarcasCompleto(mixMarcas, itens, new Map(), 30);
+    expect(result[0].qtdAlocadaRx).toBe(0);
+    expect(result[0].qtdAlocadaSolar).toBe(0);
+    expect(result[0].lacunaRx).toBe(result[0].mixRX);
+    expect(result[0].lacunaSolar).toBe(result[0].mixSolar);
+  });
+
+  it('extra estratégica: lacunaRx + lacunaSolar = mixTotal', () => {
+    const mixMarcas: MixMarcaV2[] = [];
+    const itens = [itemEstoque('NOVA', 5)];
+    const overrides = new Map([['NOVA', { estrategica: true }]]);
+    const result = construirMixMarcasCompleto(mixMarcas, itens, overrides, 30);
+    const extra = result[0];
+    expect(extra.lacunaRx + extra.lacunaSolar).toBe(extra.mixTotal);
+  });
+
+  it('marcas do motor preservam seus campos vendido180d originais', () => {
+    const mixMarcas = [marcaMotor('RAYBAN', 100)];
+    const result = construirMixMarcasCompleto(mixMarcas, [], new Map(), 30);
+    expect(result[0].vendido180dTotal).toBe(50);
+    expect(result[0].vendido180dRx).toBe(35);
+    expect(result[0].vendido180dSolar).toBe(15);
   });
 });
