@@ -899,11 +899,6 @@ export default function PlanoMensalPage() {
 
   // ── Navegação ─────────────────────────────────────────────────────────────
 
-  const marcasComVendas = useMemo(() => {
-    const s = new Set<string>();
-    itensMix.filter(i => i.categoria === 'ARMACOES' && i.qtdVendidos > 0).forEach(i => s.add(i.marca));
-    return Array.from(s).sort();
-  }, [itensMix]);
 
   const podeAvancar = () => podeAvancarStep({ step, empresaId, loadingDados: loading, qtdItens: itensMix.length, capacidadeTotal, mixVazio: mixMarcas.length === 0 });
 
