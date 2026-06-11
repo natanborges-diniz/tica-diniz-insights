@@ -380,4 +380,22 @@ describe('calcularMixIdealV2 — volume vendido 180d (Onda 2.B)', () => {
     const sil = r.find(m => m.marca === 'SILHOUETTE')!;
     expect(sil.vendido180dTotal).toBe(10);
   });
+
+  it('SKU solar esgotado (estoqueAtual=0, subcategoria=AR_SOLAR) contabiliza em vendido180dSolar (Princípio #28)', () => {
+    // Simula frame solar vendido com estoque zerado — caso real "OC AEXC" e similares.
+    // O merge itensMix agora usa cascata e? → v? → fallback, então subcategoria=AR_SOLAR chega aqui.
+    const itens = [
+      { marca: 'M', qtdVendidos: 25, totalVendido: 2500, estoqueAtual: 0, isDeadStock: false,
+        categoria: 'ARMACOES' as const, codSku: 1, descricao: 'OC AEXC Solar', diasGiroUltimaPeca: null,
+        subcategoria: 'AR_SOLAR' as const },
+      { marca: 'M', qtdVendidos: 75, totalVendido: 7500, estoqueAtual: 50, isDeadStock: false,
+        categoria: 'ARMACOES' as const, codSku: 2, descricao: 'AR Grau RX', diasGiroUltimaPeca: 5,
+        subcategoria: 'AR_RX' as const },
+    ];
+    const r = calcularMixIdealV2({ itens, capacidadeTotal: 100 });
+    const m = r.find(x => x.marca === 'M')!;
+    expect(m.vendido180dSolar).toBe(25);
+    expect(m.vendido180dRx).toBe(75);
+    expect(m.vendido180dTotal).toBe(100);
+  });
 });
