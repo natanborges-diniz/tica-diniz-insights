@@ -569,6 +569,30 @@ export default function PlanoMensalPage() {
     });
   }, [estoqueData, vendasData]);
 
+  // ── Debug Solar (temporário) ───────────────────────────────────────────────
+  useEffect(() => {
+    if (itensMix.length === 0) return;
+    const armacoes = itensMix.filter(i => i.categoria === 'ARMACOES');
+    const vendidos = armacoes.filter(i => i.qtdVendidos > 0);
+    console.info('[debug-solar] itensMix total:', itensMix.length, '| armações:', armacoes.length);
+    console.info('[debug-solar] subcategoria dist (vendidos):', vendidos.reduce((acc, v) => {
+      const k = v.subcategoria || 'NULL';
+      acc[k] = (acc[k] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>));
+    const ocComDescricao = armacoes.filter(i => (i.descricao ?? '').toUpperCase().startsWith('OC'));
+    console.info('[debug-solar] OC-descrição total:', ocComDescricao.length, '→ AR_SOLAR:', ocComDescricao.filter(i => i.subcategoria === 'AR_SOLAR').length, '| AR_RX:', ocComDescricao.filter(i => i.subcategoria === 'AR_RX').length, '| outros:', ocComDescricao.filter(i => i.subcategoria !== 'AR_SOLAR' && i.subcategoria !== 'AR_RX').length);
+    const semEstoque = armacoes.filter(i => i.estoqueAtual === 0 && i.qtdVendidos > 0);
+    console.info('[debug-solar] vendidos sem estoque (sold-out):', semEstoque.length, '→ AR_SOLAR:', semEstoque.filter(i => i.subcategoria === 'AR_SOLAR').length, '| AR_RX:', semEstoque.filter(i => i.subcategoria === 'AR_RX').length);
+    const misclassified = armacoes.filter(i => (i.descricao ?? '').toUpperCase().startsWith('OC') && i.subcategoria !== 'AR_SOLAR');
+    if (misclassified.length > 0) {
+      console.warn('[debug-solar] OC mal-classificados (amostra 5):', misclassified.slice(0, 5).map(i => ({ codSku: i.codSku, descricao: i.descricao, subcategoria: i.subcategoria })));
+    }
+    // Amostra dos primeiros 5 vendasData com tipo para confirmar o que Bridge entrega
+    const solarVendas = vendasData.filter(v => (v.descricaoItem ?? '').toUpperCase().startsWith('OC')).slice(0, 5);
+    console.info('[debug-solar] vendasData amostra OC (tipo raw):', solarVendas.map(v => ({ codSku: v.codSku, descricaoItem: v.descricaoItem, tipo: v.tipo, subcategoria: (v as Record<string, unknown>).subcategoria })));
+  }, [itensMix, vendasData]);
+
   // ── Diagnóstico ────────────────────────────────────────────────────────────
 
   const diagnostico = useMemo(() => {
