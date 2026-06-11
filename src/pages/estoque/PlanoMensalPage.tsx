@@ -220,9 +220,18 @@ function GrupoFornecedorCompra({
       <CardContent className="pt-0 space-y-4">
         {todasMarcas.map(marca => (
           <div key={marca.marca}>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className="font-medium text-sm">{marca.marca}</span>
               <span className="text-xs text-muted-foreground">— {marca.lacuna} peças a comprar</span>
+              {marca.lacuna > 0 && (() => {
+                const rx = (marca.qtdAlocadaRx ?? 0) + (marca.lacunaRx ?? 0);
+                const sol = (marca.qtdAlocadaSolar ?? 0) + (marca.lacunaSolar ?? 0);
+                return (
+                  <span className="text-xs text-muted-foreground">
+                    ({rx > 0 && <span className="text-blue-600">{rx} RX</span>}{rx > 0 && sol > 0 && ' · '}{sol > 0 && <span className="text-amber-600">{sol} Solar</span>})
+                  </span>
+                );
+              })()}
               <StatusBadge status={marca.status} />
             </div>
             {marca.skusAlocados.length > 0 ? (
@@ -344,7 +353,18 @@ function GrupoFornecedorAjuste({
             const ajuste = planoFinal.find(p => p.marca === m.marca);
             return (
               <TableRow key={m.marca}>
-                <TableCell className="font-medium">{m.marca}</TableCell>
+                <TableCell className="font-medium">
+                  {m.marca}
+                  {m.lacuna > 0 && (() => {
+                    const rx = (m.qtdAlocadaRx ?? 0) + (m.lacunaRx ?? 0);
+                    const sol = (m.qtdAlocadaSolar ?? 0) + (m.lacunaSolar ?? 0);
+                    return (
+                      <div className="text-xs font-normal text-muted-foreground mt-0.5">
+                        {rx > 0 && <span className="text-blue-600">{rx} RX</span>}{rx > 0 && sol > 0 && ' · '}{sol > 0 && <span className="text-amber-600">{sol} Solar</span>}
+                      </div>
+                    );
+                  })()}
+                </TableCell>
                 <TableCell className="text-right text-muted-foreground">{m.estoqueEfetivo}</TableCell>
                 <TableCell className="text-right text-muted-foreground">{m.mixTotal}</TableCell>
                 <TableCell className="text-right">{m.lacuna}</TableCell>
