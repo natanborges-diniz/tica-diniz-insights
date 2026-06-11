@@ -1118,7 +1118,18 @@ export default function PlanoMensalPage() {
                           </TableCell>
                           <TableCell className="text-right">{m.estoqueEfetivo}</TableCell>
                           <TableCell className={`text-right font-bold ${m.lacuna > 0 ? 'text-red-600' : m.mixTotal > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
-                            {m.mixTotal > 0 ? m.lacuna : '—'}
+                            {m.mixTotal > 0 ? (
+                              <div
+                                title={m.lacuna > 0 ? `${m.lacunaRx ?? 0} SKUs RX + ${m.lacunaSolar ?? 0} SKUs Solar` : undefined}
+                              >
+                                {m.lacuna}
+                                {m.lacuna > 0 && (
+                                  <div className="text-xs font-normal text-muted-foreground tabular-nums">
+                                    {m.lacunaRx ?? 0} / {m.lacunaSolar ?? 0}
+                                  </div>
+                                )}
+                              </div>
+                            ) : '—'}
                           </TableCell>
                           <TableCell className="text-center">
                             <Checkbox
