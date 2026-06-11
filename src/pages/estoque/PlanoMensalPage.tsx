@@ -1,5 +1,5 @@
 // src/pages/estoque/PlanoMensalPage.tsx
-// Wizard 7 etapas — Plano Mensal de Compras
+// Wizard 6 etapas — Plano Mensal de Compras
 // Sub-Entrega D₄ + D.6 (agrupamento fornecedor) + D.7 (multi-export)
 
 import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from 'react';
@@ -93,7 +93,7 @@ interface ManualSkuInput {
 
 // ── Etapas ────────────────────────────────────────────────────────────────────
 
-const ETAPAS = ['Empresa', 'Diagnóstico', 'Marcas', 'Mix Ideal', 'Plano', 'Ajuste Final', 'Exportar'];
+const ETAPAS = ['Empresa', 'Diagnóstico', 'Mix Ideal', 'Plano', 'Ajuste Final', 'Exportar'];
 const TOTAL_ETAPAS = ETAPAS.length;
 
 // ── Sub-componentes ───────────────────────────────────────────────────────────
@@ -188,7 +188,7 @@ function MetricCard({ label, value, unit, color }: { label: string; value: numbe
   );
 }
 
-// Etapa 5: card de compras por fornecedor
+// Etapa 4: card de compras por fornecedor
 function GrupoFornecedorCompra({
   grupo,
   onAdicionarManual,
@@ -300,7 +300,7 @@ function GrupoFornecedorCompra({
   );
 }
 
-// Etapa 6: seção de ajuste por fornecedor
+// Etapa 5: seção de ajuste por fornecedor
 function GrupoFornecedorAjuste({
   grupo,
   planoFinal,
@@ -683,7 +683,7 @@ export default function PlanoMensalPage() {
 
   const prevStepRef = useRef(step);
   useEffect(() => {
-    if (step === 5 && prevStepRef.current !== 5 && !modalFornecedorVisto && marcasSemFornecedor.length > 0) {
+    if (step === 4 && prevStepRef.current !== 4 && !modalFornecedorVisto && marcasSemFornecedor.length > 0) {
       setOverridesFornecedor(new Map(marcasSemFornecedor.map(m => [m, ''])));
       setModalFornecedorOpen(true);
       setModalFornecedorVisto(true);
@@ -1018,51 +1018,12 @@ export default function PlanoMensalPage() {
         </Card>
       )}
 
-      {/* ── Etapa 3: Marcas e exceções ───────────────────────────────────── */}
+      {/* ── Etapa 3: Mix Ideal ───────────────────────────────────────────── */}
       {step === 3 && (
         <Card>
           <CardHeader>
-            <CardTitle>Etapa 3 — Marcas e Exceções</CardTitle>
-            <p className="text-sm text-muted-foreground">Override de % Solar, status estratégico e marcas novas. Salvo ao avançar.</p>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Marca</TableHead>
-                    <TableHead className="w-28 text-center">Estratégica</TableHead>
-                    <TableHead className="w-28 text-center">Recém Introduzida</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {marcasComVendas.map(marca => {
-                    const cfg = overrides.get(marca) ?? { marca, pct_solar: null, estrategica: false, recem_introduzida: false };
-                    return (
-                      <TableRow key={marca}>
-                        <TableCell className="font-medium">{marca}</TableCell>
-                        <TableCell className="text-center">
-                          <Checkbox checked={cfg.estrategica} onCheckedChange={v => setOverride(marca, 'estrategica', !!v)} />
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Checkbox checked={cfg.recem_introduzida} onCheckedChange={v => setOverride(marca, 'recem_introduzida', !!v)} />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── Etapa 4: Mix Ideal ───────────────────────────────────────────── */}
-      {step === 4 && (
-        <Card>
-          <CardHeader>
             <div className="flex items-center justify-between flex-wrap gap-3">
-              <CardTitle>Etapa 4 — Mix Ideal por Marca</CardTitle>
+              <CardTitle>Etapa 3 — Mix Ideal por Marca</CardTitle>
               <div className="flex items-center gap-4 text-sm">
                 <span className="text-muted-foreground">
                   Capacidade: <span className="font-semibold text-foreground">{capacidadeTotal}</span>
@@ -1183,8 +1144,8 @@ export default function PlanoMensalPage() {
         </Card>
       )}
 
-      {/* ── Etapa 5: Plano Consolidado (por fornecedor) ──────────────────── */}
-      {step === 5 && (
+      {/* ── Etapa 4: Plano Consolidado (por fornecedor) ──────────────────── */}
+      {step === 4 && (
         <div className="space-y-4">
           <AlertaEstouro totalMix={totalMixIdeal} capacidade={capacidadeTotal} />
 
@@ -1220,13 +1181,13 @@ export default function PlanoMensalPage() {
         </div>
       )}
 
-      {/* ── Etapa 6: Ajuste Final (por fornecedor) ───────────────────────── */}
-      {step === 6 && (
+      {/* ── Etapa 5: Ajuste Final (por fornecedor) ───────────────────────── */}
+      {step === 5 && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
-                <CardTitle>Etapa 6 — Ajuste Final</CardTitle>
+                <CardTitle>Etapa 5 — Ajuste Final</CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
                   Edite a quantidade a comprar por marca. Agrupado por fornecedor.
                 </p>
@@ -1258,10 +1219,10 @@ export default function PlanoMensalPage() {
         </Card>
       )}
 
-      {/* ── Etapa 7: Exportar e Salvar ───────────────────────────────────── */}
-      {step === 7 && (
+      {/* ── Etapa 6: Exportar e Salvar ───────────────────────────────────── */}
+      {step === 6 && (
         <Card>
-          <CardHeader><CardTitle>Etapa 7 — Exportar e Salvar</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Etapa 6 — Exportar e Salvar</CardTitle></CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-3 gap-4 max-w-md">
               <MetricCard label="Total Sugerido" value={totalSugerido} unit="" color="text-slate-700" />
@@ -1278,11 +1239,11 @@ export default function PlanoMensalPage() {
                     {pendencias.map(m => <li key={m}>{m}</li>)}
                   </ul>
                   <div className="flex gap-2 flex-wrap">
-                    <Button size="sm" variant="outline" className="text-red-700 border-red-400 hover:bg-red-100" onClick={() => setStep(5)}>
-                      Ir para Etapa 5 (Plano)
+                    <Button size="sm" variant="outline" className="text-red-700 border-red-400 hover:bg-red-100" onClick={() => setStep(4)}>
+                      Ir para Etapa 4 (Plano)
                     </Button>
-                    <Button size="sm" variant="outline" className="text-red-700 border-red-400 hover:bg-red-100" onClick={() => setStep(6)}>
-                      Ir para Etapa 6 (Ajuste)
+                    <Button size="sm" variant="outline" className="text-red-700 border-red-400 hover:bg-red-100" onClick={() => setStep(5)}>
+                      Ir para Etapa 5 (Ajuste)
                     </Button>
                   </div>
                 </AlertDescription>

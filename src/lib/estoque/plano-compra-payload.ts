@@ -156,7 +156,7 @@ export interface PodeAvancarInput {
  * Bloqueia avanço quando o pré-requisito da etapa não foi cumprido.
  * Step 1 → exige empresa específica (não 'ALL', não null).
  * Step 2 → exige dados carregados.
- * Step 4 → exige capacidade > 0 e mix não vazio.
+ * Step 3 → exige capacidade > 0 e mix não vazio.
  */
 export function podeAvancarStep({
   step,
@@ -172,7 +172,7 @@ export function podeAvancarStep({
   if (step === 2) {
     return !loadingDados && qtdItens > 0;
   }
-  if (step === 4) {
+  if (step === 3) {
     return capacidadeTotal > 0 && !mixVazio;
   }
   return true;
