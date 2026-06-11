@@ -227,16 +227,16 @@ describe('podeAvancarStep', () => {
     expect(podeAvancarStep({ ...base, step: 2, empresaId: 42, qtdItens: 0 })).toBe(false);
   });
 
-  it('step 4 — capacidade=0 bloqueia (não avança pro Plano)', () => {
-    expect(podeAvancarStep({ ...base, step: 4, empresaId: 42, capacidadeTotal: 0 })).toBe(false);
+  it('step 3 (Mix Ideal) — capacidade=0 bloqueia (não avança pro Plano)', () => {
+    expect(podeAvancarStep({ ...base, step: 3, empresaId: 42, capacidadeTotal: 0 })).toBe(false);
   });
 
-  it('step 4 — mix vazio bloqueia', () => {
-    expect(podeAvancarStep({ ...base, step: 4, empresaId: 42, mixVazio: true })).toBe(false);
+  it('step 3 (Mix Ideal) — mix vazio bloqueia', () => {
+    expect(podeAvancarStep({ ...base, step: 3, empresaId: 42, mixVazio: true })).toBe(false);
   });
 
-  it('step 3 e 5+ — sempre liberados (etapas read-only / locais)', () => {
-    expect(podeAvancarStep({ ...base, step: 3, empresaId: 42 })).toBe(true);
+  it('step 4 e 5+ — sempre liberados (etapas read-only / locais)', () => {
+    expect(podeAvancarStep({ ...base, step: 4, empresaId: 42 })).toBe(true);
     expect(podeAvancarStep({ ...base, step: 5, empresaId: 42 })).toBe(true);
     expect(podeAvancarStep({ ...base, step: 6, empresaId: 42 })).toBe(true);
   });
