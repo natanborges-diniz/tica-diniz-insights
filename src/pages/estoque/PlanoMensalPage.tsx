@@ -734,8 +734,20 @@ export default function PlanoMensalPage() {
   }, [mixMarcas]);
 
   const itensLiquidacao = useMemo((): ItemLiquidacao[] => {
-    return itensMix
-      .filter(i => i.isDeadStock && i.estoqueAtual > 0 && i.categoria === 'ARMACOES')
+    const deadStockArmacoes = itensMix.filter(i => i.isDeadStock && i.estoqueAtual > 0 && i.categoria === 'ARMACOES');
+    // debug-saneamento (temporário)
+    const porFaixa = deadStockArmacoes.reduce((acc, i) => {
+      const k = classificarPorIdade(i.diasEmEstoque).rotulo;
+      acc[k] = (acc[k] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.info('[debug-saneamento]', {
+      totalDeadStock: deadStockArmacoes.length,
+      porFaixa,
+      diasEmEstoqueDistrib: { min: Math.min(...deadStockArmacoes.map(i => i.diasEmEstoque)), max: Math.max(...deadStockArmacoes.map(i => i.diasEmEstoque)), zeros: deadStockArmacoes.filter(i => i.diasEmEstoque === 0).length },
+      sampleComRecompra: deadStockArmacoes.filter(i => classificarPorIdade(i.diasEmEstoque).rotulo === 'ANALISE PARA RECOMPRA').slice(0, 5).map(i => ({ descricao: i.descricao, diasEmEstoque: i.diasEmEstoque, isDeadStock: i.isDeadStock })),
+    });
+    return deadStockArmacoes
       .map(i => {
         const faixaObj = classificarPorIdade(i.diasEmEstoque);
         return { codSku: i.codSku, descricao: i.descricao, marca: i.marca, estoqueAtual: i.estoqueAtual, diasEmEstoque: i.diasEmEstoque, faixa: faixaObj.rotulo, desconto: faixaObj.desconto, valorCusto: i.valorEstoqueCusto };
