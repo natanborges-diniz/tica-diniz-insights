@@ -29,7 +29,7 @@ import {
   JANELA_CANDIDATOS_DIAS,
   MIX_MINIMO_MARCA,
 } from '@/lib/estoque/constants';
-import { classificarPorIdade } from '@/lib/estoque/faixas-saneamento';
+import { classificarItemP31 } from '@/lib/estoque/faixas-saneamento';
 import { categorizarProduto, subcategorizarProduto } from '@/utils/categorizarProduto';
 import {
   resolverFornecedor,
@@ -738,12 +738,8 @@ export default function PlanoMensalPage() {
     return itensMix
       .filter(i => i.isDeadStock && i.estoqueAtual > 0 && i.categoria === 'ARMACOES')
       .map(i => {
-        // Princípio #31: dead stock usa diasDesdeUltimaVenda (quão parado está de verdade).
-        // Peças saudáveis usam diasEmEstoque (critério de renovação de coleção).
-        const diasParaClassificar = i.isDeadStock
-          ? (i.diasDesdeUltimaVenda ?? i.diasEmEstoque)
-          : i.diasEmEstoque;
-        const faixaObj = classificarPorIdade(diasParaClassificar);
+        // Princípio #31 via classificarItemP31: dead stock usa diasDesdeUltimaVenda
+        const faixaObj = classificarItemP31(i);
         return { codSku: i.codSku, descricao: i.descricao, marca: i.marca, estoqueAtual: i.estoqueAtual, diasEmEstoque: i.diasEmEstoque, faixa: faixaObj.rotulo, desconto: faixaObj.desconto, valorCusto: i.valorEstoqueCusto };
       })
       .sort((a, b) => b.diasEmEstoque - a.diasEmEstoque);

@@ -4,7 +4,7 @@
 
 import { apiGet, EmpresaParam, formatEmpresaParam, ApiGetOptions } from './firebirdBridge';
 import { categorizarPorDescricao, subcategorizarProduto, subcategorizarPorDescricao, type SubcategoriaProduto } from '@/utils/categorizarProduto';
-import { classificarPorIdade } from '@/lib/estoque/faixas-saneamento';
+import { classificarItemP31 } from '@/lib/estoque/faixas-saneamento';
 
 // ============================================
 // INTERFACES - Campos do backend (snake_case)
@@ -131,24 +131,7 @@ export async function getEstoqueCompleto(
       diasEmEstoque = r.dias_sem_venda;
     }
     
-    // Frontend é a fonte de verdade para acaoSugerida.
-    // r.acao_sugerida do bridge é intencionalmente ignorado — alinhamento SQL pendente
-    // (ver FASE_1.5_RELATORIO.md). Quando o bridge entregar os mesmos rótulos,
-    // os dois concordarão; até lá o frontend calcula localmente.
-    const temInfoTempo = r.data_ultima_entrada !== null ||
-                         (r.dias_sem_venda !== undefined && r.dias_sem_venda !== null) ||
-                         (r.dias_estoque !== undefined && r.dias_estoque !== null);
-    const acaoSugerida = temInfoTempo
-      ? classificarPorIdade(diasEmEstoque).rotulo
-      : 'SEM CADASTRO';
-    
-    // cod_sku: Bridge pode enviar como string ("3293456") ou number — Number() normaliza
-    const codSkuNum = Number(r.cod_sku ?? r.cod_armacao ?? 0);
-
-    // cod_armacao bruto — preservado como referência alternativa
-    const rawCodArmacao = r.cod_armacao ?? null;
-    const codArmacao = rawCodArmacao == null ? null : (Number(rawCodArmacao) || null);
-    
+    // diasDesdeUltimaVenda precisa ser calculado antes de acaoSugerida (Princípio #31)
     const diasDesdeUltimaVenda = (() => {
       if (r.dias_sem_venda !== undefined && r.dias_sem_venda !== null) {
         return Math.max(0, r.dias_sem_venda);
@@ -161,6 +144,26 @@ export async function getEstoqueCompleto(
       }
       return 0;
     })();
+    const isDeadStock = quantidadeEstoque > 0 && diasDesdeUltimaVenda > 180;
+
+    // Frontend é a fonte de verdade para acaoSugerida.
+    // r.acao_sugerida do bridge é intencionalmente ignorado — alinhamento SQL pendente
+    // (ver FASE_1.5_RELATORIO.md). Quando o bridge entregar os mesmos rótulos,
+    // os dois concordarão; até lá o frontend calcula localmente.
+    const temInfoTempo = r.data_ultima_entrada !== null ||
+                         (r.dias_sem_venda !== undefined && r.dias_sem_venda !== null) ||
+                         (r.dias_estoque !== undefined && r.dias_estoque !== null);
+    // Princípio #31: dead stock usa diasDesdeUltimaVenda na classificação
+    const acaoSugerida = temInfoTempo
+      ? classificarItemP31({ isDeadStock, diasEmEstoque, diasDesdeUltimaVenda }).rotulo
+      : 'SEM CADASTRO';
+
+    // cod_sku: Bridge pode enviar como string ("3293456") ou number — Number() normaliza
+    const codSkuNum = Number(r.cod_sku ?? r.cod_armacao ?? 0);
+
+    // cod_armacao bruto — preservado como referência alternativa
+    const rawCodArmacao = r.cod_armacao ?? null;
+    const codArmacao = rawCodArmacao == null ? null : (Number(rawCodArmacao) || null);
 
     return {
       codSku: isNaN(codSkuNum) ? 0 : codSkuNum,
@@ -194,8 +197,7 @@ export async function getEstoqueCompleto(
       diasDesdeUltimaVenda,
       diasEmEstoque,
       acaoSugerida,
-      // Dead stock: estoque positivo sem venda há mais de 180 dias
-      isDeadStock: quantidadeEstoque > 0 && diasDesdeUltimaVenda > 180,
+      isDeadStock,
       // Subcategoria: prefere o backend; fallback regex em tipo, depois descrição
       subcategoria: (() => {
         const sub = (r.subcategoria ?? '').toString().toUpperCase().trim();
