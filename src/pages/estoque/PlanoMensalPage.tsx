@@ -581,6 +581,7 @@ export default function PlanoMensalPage() {
         ean: e?.ean ?? v?.ean ?? null,
         diasGiroUltimaPeca: e?.diasGiroUltimaPeca ?? v?.diasGiroUltimaPeca ?? null,
         diasEmEstoque: e?.diasEmEstoque ?? 0,
+        diasDesdeUltimaVenda: e?.diasDesdeUltimaVenda ?? 0,
         precoCusto: e?.precoCusto ?? v?.precoCusto ?? 0,
         valorEstoqueCusto: e?.valorEstoqueCusto ?? 0,
         categoria: categoria as string,
@@ -734,22 +735,15 @@ export default function PlanoMensalPage() {
   }, [mixMarcas]);
 
   const itensLiquidacao = useMemo((): ItemLiquidacao[] => {
-    const deadStockArmacoes = itensMix.filter(i => i.isDeadStock && i.estoqueAtual > 0 && i.categoria === 'ARMACOES');
-    // debug-saneamento (temporário)
-    const porFaixa = deadStockArmacoes.reduce((acc, i) => {
-      const k = classificarPorIdade(i.diasEmEstoque).rotulo;
-      acc[k] = (acc[k] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    console.info('[debug-saneamento]', {
-      totalDeadStock: deadStockArmacoes.length,
-      porFaixa,
-      diasEmEstoqueDistrib: { min: Math.min(...deadStockArmacoes.map(i => i.diasEmEstoque)), max: Math.max(...deadStockArmacoes.map(i => i.diasEmEstoque)), zeros: deadStockArmacoes.filter(i => i.diasEmEstoque === 0).length },
-      sampleComRecompra: deadStockArmacoes.filter(i => classificarPorIdade(i.diasEmEstoque).rotulo === 'ANALISE PARA RECOMPRA').slice(0, 5).map(i => ({ descricao: i.descricao, diasEmEstoque: i.diasEmEstoque, isDeadStock: i.isDeadStock })),
-    });
-    return deadStockArmacoes
+    return itensMix
+      .filter(i => i.isDeadStock && i.estoqueAtual > 0 && i.categoria === 'ARMACOES')
       .map(i => {
-        const faixaObj = classificarPorIdade(i.diasEmEstoque);
+        // Princípio #31: dead stock usa diasDesdeUltimaVenda (quão parado está de verdade).
+        // Peças saudáveis usam diasEmEstoque (critério de renovação de coleção).
+        const diasParaClassificar = i.isDeadStock
+          ? (i.diasDesdeUltimaVenda ?? i.diasEmEstoque)
+          : i.diasEmEstoque;
+        const faixaObj = classificarPorIdade(diasParaClassificar);
         return { codSku: i.codSku, descricao: i.descricao, marca: i.marca, estoqueAtual: i.estoqueAtual, diasEmEstoque: i.diasEmEstoque, faixa: faixaObj.rotulo, desconto: faixaObj.desconto, valorCusto: i.valorEstoqueCusto };
       })
       .sort((a, b) => b.diasEmEstoque - a.diasEmEstoque);
