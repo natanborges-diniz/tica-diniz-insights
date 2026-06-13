@@ -120,3 +120,39 @@ describe('classificarPorIdade — casos especiais (Part C)', () => {
     expect(classificarPorIdade(null).desconto).toBe(0);
   });
 });
+
+// ── Princípio #31 (versão final): dead stock usa diasDesdeUltimaVenda ─────────
+// Guard no Wizard: dias = isDeadStock ? diasDesdeUltimaVenda : diasEmEstoque
+// Documenta os 5 cenários canônicos da regra de negócio.
+
+function classificarItemP31(item: { isDeadStock: boolean; diasEmEstoque: number; diasDesdeUltimaVenda: number }) {
+  const dias = item.isDeadStock ? (item.diasDesdeUltimaVenda ?? item.diasEmEstoque) : item.diasEmEstoque;
+  return classificarPorIdade(dias);
+}
+
+describe('Princípio #31 — guard dead stock (versão final)', () => {
+  it('Caso 1 — peça saudável nova: isDeadStock=false, diasEmEstoque=30 → ANALISE PARA RECOMPRA', () => {
+    expect(classificarItemP31({ isDeadStock: false, diasEmEstoque: 30, diasDesdeUltimaVenda: 0 }).rotulo)
+      .toBe('ANALISE PARA RECOMPRA');
+  });
+
+  it('Caso 2 — peça saudável velha: isDeadStock=false, diasEmEstoque=200 → PROMOCAO 20%', () => {
+    expect(classificarItemP31({ isDeadStock: false, diasEmEstoque: 200, diasDesdeUltimaVenda: 0 }).rotulo)
+      .toBe('PROMOCAO 20%');
+  });
+
+  it('Caso 3 — dead stock médio: diasEmEstoque=30, diasDesdeUltimaVenda=200 → PROMOCAO 20% (usa 200, não 30)', () => {
+    expect(classificarItemP31({ isDeadStock: true, diasEmEstoque: 30, diasDesdeUltimaVenda: 200 }).rotulo)
+      .toBe('PROMOCAO 20%');
+  });
+
+  it('Caso 4 — dead stock antigo: diasEmEstoque=30, diasDesdeUltimaVenda=400 → LIQUIDA 50% (faixa 361-720)', () => {
+    expect(classificarItemP31({ isDeadStock: true, diasEmEstoque: 30, diasDesdeUltimaVenda: 400 }).rotulo)
+      .toBe('LIQUIDA 50%');
+  });
+
+  it('Caso 5 — dead stock muito antigo: diasEmEstoque=30, diasDesdeUltimaVenda=800 → AÇÃO ESPECIAL (721+)', () => {
+    expect(classificarItemP31({ isDeadStock: true, diasEmEstoque: 30, diasDesdeUltimaVenda: 800 }).rotulo)
+      .toBe('AÇÃO ESPECIAL');
+  });
+});
