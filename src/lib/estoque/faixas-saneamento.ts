@@ -48,6 +48,18 @@ export const LIMITES = {
   ACAO_CRITICA: limitePor('LIQUIDA 50%'),    // 720
 } as const;
 
+// Princípio #31: dead stock usa diasDesdeUltimaVenda (critério real de paralisação).
+// Peças saudáveis usam diasEmEstoque (critério de renovação de coleção).
+// Aplicado em Plano Mensal e Visão Estoque (Princípio #32: papéis distintos, mesma regra de classificação).
+export function classificarItemP31(item: {
+  isDeadStock: boolean;
+  diasEmEstoque: number;
+  diasDesdeUltimaVenda: number;
+}): FaixaSaneamento {
+  const dias = item.isDeadStock ? (item.diasDesdeUltimaVenda ?? item.diasEmEstoque) : item.diasEmEstoque;
+  return classificarPorIdade(dias);
+}
+
 // Maps a saneamento entry to its FaixaDoente enum value.
 // Switch on rotulo (unique per entry) to avoid ambiguity from shared desconto values.
 export function toFaixaDoente(entry: FaixaSaneamento): Exclude<FaixaDoente, 'REVISAO_URGENTE'> {

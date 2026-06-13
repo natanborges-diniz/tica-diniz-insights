@@ -17,7 +17,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { isAbortError } from "@/lib/isAbortError";
 import { useEstoqueStore, type EstoqueFilters } from "@/stores/useEstoqueStore";
-import { classificarPorIdade, toFaixaDoente, type FaixaDoente } from "@/lib/estoque/faixas-saneamento";
+import { classificarItemP31, toFaixaDoente, type FaixaDoente } from "@/lib/estoque/faixas-saneamento";
 import { calcularCurvaABC } from "@/lib/estoque/curva-abc";
 import { calcularMixIdealCategoria, calcularMixIdealMarcas, type DecisaoMarca as DecisaoMarcaType, type MixMarca as MixMarcaType, type MixComparativo as MixComparativoType, type MarcaConfigFlags } from "@/lib/estoque/mix-ideal";
 import { calcularDecisaoSku, type DecisaoSku as DecisaoSkuType } from "@/lib/estoque/decisao-sku";
@@ -928,9 +928,9 @@ export function useEstoqueUnificado() {
 
       // Estoque doente
       const itensDoentes: ItemDoenteMarca[] = comEstoque
-        .filter(s => classificarPorIdade(s.diasEmEstoque).desconto > 0 && s.qtdVendidos === 0)
+        .filter(s => classificarItemP31(s).desconto > 0 && s.qtdVendidos === 0)
         .map(s => {
-          const entry = classificarPorIdade(s.diasEmEstoque);
+          const entry = classificarItemP31(s);
           return {
             codSku: s.codSku,
             descricao: s.descricao,
@@ -997,7 +997,8 @@ export function useEstoqueUnificado() {
 
   // Estoque doente global (mantido para compatibilidade com Visão Estoque)
   const estoqueDoenteAgrupado = useMemo((): GrupoEstoqueDoente[] => {
-    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0 && classificarPorIdade(i.diasEmEstoque).desconto > 0);
+    // Princípio #31 + #32: todas categorias, dead stock usa diasDesdeUltimaVenda
+    const comEstoque = itensProcessados.filter(i => i.estoqueAtual > 0 && classificarItemP31(i).desconto > 0);
     if (comEstoque.length === 0) return [];
 
     const faixasConfig: Record<FaixaDoente, { label: string; desconto: string; cor: string }> = {
@@ -1010,7 +1011,7 @@ export function useEstoqueUnificado() {
 
     const grupos = new Map<FaixaDoente, ItemEstoque[]>();
     comEstoque.forEach(item => {
-      const faixa = toFaixaDoente(classificarPorIdade(item.diasEmEstoque));
+      const faixa = toFaixaDoente(classificarItemP31(item));
       if (!grupos.has(faixa)) grupos.set(faixa, []);
       grupos.get(faixa)!.push(item);
     });

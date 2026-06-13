@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   FAIXAS_SANEAMENTO,
   classificarPorIdade,
+  classificarItemP31,
   toFaixaDoente,
 } from '../faixas-saneamento';
 
@@ -121,16 +122,11 @@ describe('classificarPorIdade — casos especiais (Part C)', () => {
   });
 });
 
-// ── Princípio #31 (versão final): dead stock usa diasDesdeUltimaVenda ─────────
-// Guard no Wizard: dias = isDeadStock ? diasDesdeUltimaVenda : diasEmEstoque
-// Documenta os 5 cenários canônicos da regra de negócio.
+// ── Princípio #31 (versão final) + Princípio #32 ────────────────────────────
+// classificarItemP31 é exportada de faixas-saneamento — mesma função usada no
+// Plano Mensal (só ARMACOES) e na Visão Estoque (todas categorias).
 
-function classificarItemP31(item: { isDeadStock: boolean; diasEmEstoque: number; diasDesdeUltimaVenda: number }) {
-  const dias = item.isDeadStock ? (item.diasDesdeUltimaVenda ?? item.diasEmEstoque) : item.diasEmEstoque;
-  return classificarPorIdade(dias);
-}
-
-describe('Princípio #31 — guard dead stock (versão final)', () => {
+describe('Princípio #31 — classificarItemP31 (função exportada)', () => {
   it('Caso 1 — peça saudável nova: isDeadStock=false, diasEmEstoque=30 → ANALISE PARA RECOMPRA', () => {
     expect(classificarItemP31({ isDeadStock: false, diasEmEstoque: 30, diasDesdeUltimaVenda: 0 }).rotulo)
       .toBe('ANALISE PARA RECOMPRA');
@@ -154,5 +150,16 @@ describe('Princípio #31 — guard dead stock (versão final)', () => {
   it('Caso 5 — dead stock muito antigo: diasEmEstoque=30, diasDesdeUltimaVenda=800 → AÇÃO ESPECIAL (721+)', () => {
     expect(classificarItemP31({ isDeadStock: true, diasEmEstoque: 30, diasDesdeUltimaVenda: 800 }).rotulo)
       .toBe('AÇÃO ESPECIAL');
+  });
+
+  it('Princípio #32 — mesma função para Lente de Contato dead stock: diasDesdeUltimaVenda=400 → LIQUIDA 50%', () => {
+    // Visão Estoque cobre todas categorias; classificarItemP31 é agnóstica de categoria
+    expect(classificarItemP31({ isDeadStock: true, diasEmEstoque: 10, diasDesdeUltimaVenda: 400 }).rotulo)
+      .toBe('LIQUIDA 50%');
+  });
+
+  it('Princípio #32 — produto não-armação saudável usa diasEmEstoque normalmente', () => {
+    expect(classificarItemP31({ isDeadStock: false, diasEmEstoque: 50, diasDesdeUltimaVenda: 300 }).rotulo)
+      .toBe('ANALISE PARA RECOMPRA');
   });
 });

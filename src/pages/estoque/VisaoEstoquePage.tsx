@@ -453,7 +453,7 @@ export default function VisaoEstoquePage() {
     <div className="space-y-6">
       <ModuleHeader
         title="Visão Estoque"
-        subtitle="Lista detalhada de SKUs com KPIs"
+        subtitle="Consulta livre de todas as categorias. Para decisão de compra mensal, use Plano Mensal."
         icon={<Package className="h-6 w-6 text-primary" />}
         actions={
           empresas.length > 0 ? (
