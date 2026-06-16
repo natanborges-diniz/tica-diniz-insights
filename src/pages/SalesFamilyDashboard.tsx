@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Users } from 'lucide-react';
+import { ArrowLeft, FileDown, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useUserEmpresas } from '@/hooks/useUserEmpresas';
@@ -10,6 +10,8 @@ import { SalesFamilyFilters } from '@/components/sales-family/SalesFamilyFilters
 import { SalesFamilyKPICards } from '@/components/sales-family/SalesFamilyKPICards';
 import { SalesFamilyChart } from '@/components/sales-family/SalesFamilyChart';
 import { SalesFamilyTable } from '@/components/sales-family/SalesFamilyTable';
+import { exportSalesFamilyReport } from '@/utils/exportSalesFamilyReport';
+import { toast } from 'sonner';
 
 // Helper para obter o primeiro dia do mês atual
 function getFirstDayOfMonth(): string {
