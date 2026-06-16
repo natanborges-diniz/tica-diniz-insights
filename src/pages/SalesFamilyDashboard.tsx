@@ -30,6 +30,7 @@ export default function SalesFamilyDashboard() {
   // Estado de empresa — default do profile
   const { codEmpresa: profileEmpresa } = useDefaultEmpresa();
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<number | null>(null);
+  const [empresaTouched, setEmpresaTouched] = useState(false);
 
   const { empresas, isLoading: loadingEmpresas, error: errorEmpresas, canSeeAll } = useUserEmpresas();
 
@@ -43,14 +44,18 @@ export default function SalesFamilyDashboard() {
   const [filtroFornecedor, setFiltroFornecedor] = useState('TODOS');
   const [filtroBuscaTexto, setFiltroBuscaTexto] = useState('');
 
-  // Selecionar empresa do profile (ou primeira disponível como fallback)
+  // Selecionar empresa do profile (ou primeira disponível) apenas no carregamento inicial
   useEffect(() => {
-    if (!loadingEmpresas && !errorEmpresas && empresas.length > 0 && selectedEmpresaId === null) {
-      // Prefere empresa do profile
+    if (!loadingEmpresas && !errorEmpresas && empresas.length > 0 && !empresaTouched && selectedEmpresaId === null) {
       const profileMatch = profileEmpresa ? empresas.find(e => e.codEmpresa === profileEmpresa) : null;
       setSelectedEmpresaId(profileMatch ? profileMatch.codEmpresa : empresas[0].codEmpresa);
     }
-  }, [empresas, loadingEmpresas, errorEmpresas, selectedEmpresaId, profileEmpresa]);
+  }, [empresas, loadingEmpresas, errorEmpresas, selectedEmpresaId, profileEmpresa, empresaTouched]);
+
+  const handleEmpresaChange = (id: number | null) => {
+    setEmpresaTouched(true);
+    setSelectedEmpresaId(id);
+  };
 
   // Limpar filtros ao trocar de empresa ou datas
   useEffect(() => {
