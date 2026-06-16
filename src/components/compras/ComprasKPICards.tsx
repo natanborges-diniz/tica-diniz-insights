@@ -14,6 +14,7 @@ function calcular(notas: ComprasNota[]) {
   const total = notas.reduce((a, n) => a + n.valorTotal, 0);
   const fornecedores = new Set(notas.map(n => n.fornecedor)).size;
   const parcelas = notas.reduce((a, n) => a + n.qtdParcelas, 0);
+  const mediaParcelas = notas.length > 0 ? parcelas / notas.length : 0;
   const prazoMedio = notas.length > 0
     ? Math.round(notas.reduce((a, n) => a + n.prazoMedioDias, 0) / notas.length)
     : 0;
@@ -23,6 +24,7 @@ function calcular(notas: ComprasNota[]) {
     fornecedores,
     ticket: notas.length > 0 ? total / notas.length : 0,
     parcelas,
+    mediaParcelas,
     prazoMedio,
   };
 }
@@ -88,12 +90,12 @@ export function ComprasKPICards({ notas, notasAnterior }: Props) {
       </Card>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Nº Parcelas</CardTitle>
+          <CardTitle className="text-sm font-medium">Média Parcelas/NF</CardTitle>
           <FileText className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{fmtInt(c.parcelas)}</div>
-          {p && <Delta atual={c.parcelas} anterior={p.parcelas} />}
+          <div className="text-2xl font-bold">{c.mediaParcelas.toFixed(1)}</div>
+          {p && <Delta atual={c.mediaParcelas} anterior={p.mediaParcelas} />}
         </CardContent>
       </Card>
       <Card>
