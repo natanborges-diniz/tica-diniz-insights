@@ -95,7 +95,7 @@ export default function ComprasDashboard() {
   }, [notasAnterior, fornecedorFilter, contaFilter, formaPgtoFilter, comparRange]);
 
   const chartRef = useRef<HTMLDivElement | null>(null);
-  const [pivotView, setPivotView] = useState<PivotView | null>(null);
+  const pivotViewRef = useRef<PivotView | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const handleExportPdf = async () => {
