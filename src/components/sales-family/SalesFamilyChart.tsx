@@ -45,8 +45,9 @@ export function SalesFamilyChart({ dados }: SalesFamilyChartProps) {
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
           <TrendingUp className="h-5 w-5 text-primary" />
-          Vendas por Família (Top 10)
+          Faturamento por Família (Top 10)
         </CardTitle>
+        <p className="text-xs text-muted-foreground">Barras = faturamento no período • tooltip mostra peças vendidas</p>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={chartHeight}>
@@ -63,8 +64,8 @@ export function SalesFamilyChart({ dados }: SalesFamilyChartProps) {
             <Tooltip
               cursor={{ fill: 'hsl(var(--muted) / 0.3)' }}
               formatter={(value: number, name: string) => [
-                name === 'total' ? formatCurrency(value) : value.toLocaleString('pt-BR') + ' un.',
-                name === 'total' ? 'Total Vendido' : 'Qtd. Produtos',
+                name === 'total' ? formatCurrency(value) : value.toLocaleString('pt-BR') + ' peças',
+                name === 'total' ? 'Faturamento' : 'Peças',
               ]}
               labelFormatter={(_, payload) => payload?.[0]?.payload?.familia || ''}
               contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}

@@ -14,14 +14,19 @@ const formatCurrency = (v: number) =>
 const formatNumber = (v: number) =>
   v?.toLocaleString('pt-BR') ?? '—';
 
+// Glossário:
+// Vendas      = nº de cupons/transações (qtdTransacao)
+// Peças       = unidades vendidas        (qtdProdutos)
+// Faturamento = receita do período       (totalVendido)
+// Registros   = nº de linhas agregadas no grupo (badge automático do pivot)
 const columns: PivotColumn<AnaliseFamiliaVendedor>[] = [
   { key: 'empresa', header: 'Empresa', type: 'dimension' },
   { key: 'vendedor', header: 'Vendedor', type: 'dimension' },
   { key: 'familia', header: 'Família', type: 'dimension' },
   { key: 'fornecedor', header: 'Fornecedor', type: 'dimension' },
-  { key: 'qtdTransacao', header: 'Transações', type: 'measure', format: formatNumber, aggregate: 'sum' },
-  { key: 'qtdProdutos', header: 'Qtd.', type: 'measure', format: formatNumber, aggregate: 'sum' },
-  { key: 'totalVendido', header: 'Total Vendido', type: 'measure', format: formatCurrency, aggregate: 'sum' },
+  { key: 'qtdTransacao', header: 'Vendas', type: 'measure', format: formatNumber, aggregate: 'sum' },
+  { key: 'qtdProdutos', header: 'Peças', type: 'measure', format: formatNumber, aggregate: 'sum' },
+  { key: 'totalVendido', header: 'Faturamento', type: 'measure', format: formatCurrency, aggregate: 'sum' },
 ];
 
 const exportColumns = [
@@ -29,23 +34,29 @@ const exportColumns = [
   { key: 'vendedor', header: 'Vendedor' },
   { key: 'familia', header: 'Família' },
   { key: 'fornecedor', header: 'Fornecedor' },
-  { key: 'qtdTransacao', header: 'Transações', format: formatters.number },
-  { key: 'qtdProdutos', header: 'Qtd.', format: formatters.number },
-  { key: 'totalVendido', header: 'Total Vendido', format: formatters.currency },
+  { key: 'qtdTransacao', header: 'Vendas', format: formatters.number },
+  { key: 'qtdProdutos', header: 'Peças', format: formatters.number },
+  { key: 'totalVendido', header: 'Faturamento', format: formatters.currency },
 ];
 
 export function SalesFamilyTable({ dados }: SalesFamilyTableProps) {
   const hoje = new Date().toISOString().split('T')[0];
   return (
     <div className="space-y-3">
-      <DataTableToolbar
-        exportOptions={{
-          filename: `vendas-familia-${hoje}`,
-          title: 'Vendas por Família e Vendedor',
-          columns: exportColumns,
-          data: dados,
-        }}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          <strong>Vendas</strong>: cupons distintos · <strong>Peças</strong>: unidades vendidas ·
+          {' '}<strong>Faturamento</strong>: receita · <strong>Registros</strong>: linhas agrupadas
+        </p>
+        <DataTableToolbar
+          exportOptions={{
+            filename: `vendas-familia-${hoje}`,
+            title: 'Vendas por Família e Vendedor',
+            columns: exportColumns,
+            data: dados,
+          }}
+        />
+      </div>
       <PivotTable
         data={dados}
         columns={columns}
