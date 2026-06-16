@@ -30,7 +30,7 @@ const exportColumns = [
   { key: 'familia', header: 'Família' },
   { key: 'fornecedor', header: 'Fornecedor' },
   { key: 'qtdTransacao', header: 'Transações', format: formatters.number },
-  { key: 'qtdProdutos', header: 'Produtos', format: formatters.number },
+  { key: 'qtdProdutos', header: 'Qtd.', format: formatters.number },
   { key: 'totalVendido', header: 'Total Vendido', format: formatters.currency },
 ];
 
