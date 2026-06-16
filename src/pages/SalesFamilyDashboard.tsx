@@ -96,6 +96,53 @@ export default function SalesFamilyDashboard() {
     return result;
   }, [data, filtroVendedor, filtroFamilia, filtroFornecedor, filtroBuscaTexto]);
 
+  // Ref do gráfico para captura no PDF
+  const chartRef = useRef<HTMLDivElement | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+
+  const handleExportFullReport = async () => {
+    try {
+      setGeneratingPdf(true);
+      const empresaNome =
+        selectedEmpresaId === null
+          ? 'Todas as Empresas'
+          : empresas.find(e => e.codEmpresa === selectedEmpresaId)?.nome ?? '—';
+
+      const faturamento = filteredData.reduce((a, i) => a + (i.totalVendido || 0), 0);
+      const vendas = filteredData.reduce((a, i) => a + (i.qtdTransacao || 0), 0);
+      const pecas = filteredData.reduce((a, i) => a + (i.qtdProdutos || 0), 0);
+
+      await exportSalesFamilyReport({
+        filename: `relatorio-vendas-familia-${new Date().toISOString().split('T')[0]}`,
+        title: 'Relatório de Vendas por Família e Vendedor',
+        subtitle: `${empresaNome} • ${dataInicio} a ${dataFim}`,
+        filters: {
+          empresa: empresaNome,
+          dataInicio,
+          dataFim,
+          vendedor: filtroVendedor === 'TODOS' ? 'Todos' : filtroVendedor,
+          familia: filtroFamilia === 'TODAS' ? 'Todas' : filtroFamilia,
+          fornecedor: filtroFornecedor === 'TODOS' ? 'Todos' : filtroFornecedor,
+          busca: filtroBuscaTexto,
+        },
+        kpis: {
+          faturamento,
+          vendas,
+          pecas,
+          ticketMedio: vendas > 0 ? faturamento / vendas : 0,
+        },
+        rows: filteredData,
+        chartElement: chartRef.current,
+      });
+      toast.success('Relatório PDF gerado com sucesso');
+    } catch (err) {
+      console.error(err);
+      toast.error('Falha ao gerar o relatório PDF');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
@@ -106,13 +153,23 @@ export default function SalesFamilyDashboard() {
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1">
               <Users className="h-6 w-6 text-primary" />
               <h1 className="text-xl font-bold">Vendas por Família e Vendedor</h1>
             </div>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleExportFullReport}
+              disabled={generatingPdf || isLoading || filteredData.length === 0}
+            >
+              <FileDown className="h-4 w-4 mr-2" />
+              {generatingPdf ? 'Gerando…' : 'Relatório PDF'}
+            </Button>
           </div>
         </div>
       </header>
+
 
       <main className="container mx-auto px-4 py-6 space-y-6">
         {/* Loading Empresas */}
