@@ -11,6 +11,7 @@ import { SalesFamilyKPICards } from '@/components/sales-family/SalesFamilyKPICar
 import { SalesFamilyChart } from '@/components/sales-family/SalesFamilyChart';
 import { SalesFamilyTable } from '@/components/sales-family/SalesFamilyTable';
 import { exportSalesFamilyReport } from '@/utils/exportSalesFamilyReport';
+import type { PivotView } from '@/components/ui/pivot-table';
 import { toast } from 'sonner';
 
 // Helper para obter o primeiro dia do mês atual
@@ -99,6 +100,7 @@ export default function SalesFamilyDashboard() {
   // Ref do gráfico para captura no PDF
   const chartRef = useRef<HTMLDivElement | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pivotView, setPivotView] = useState<PivotView | null>(null);
 
   const handleExportFullReport = async () => {
     try {
