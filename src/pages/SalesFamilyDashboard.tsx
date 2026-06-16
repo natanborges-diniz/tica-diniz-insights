@@ -212,7 +212,7 @@ export default function SalesFamilyDashboard() {
                 <SalesFamilyFilters
                   empresas={empresas}
                   selectedEmpresaId={selectedEmpresaId}
-                  onEmpresaChange={setSelectedEmpresaId}
+                  onEmpresaChange={handleEmpresaChange}
                   canSeeAll={canSeeAll}
                   dataInicio={dataInicio}
                   dataFim={dataFim}
