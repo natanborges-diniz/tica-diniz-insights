@@ -369,16 +369,13 @@ export function PivotTable<T extends Record<string, any>>({
                     </div>
                   </TableHead>
                 ))}
-                {groupBy.length > 0 && (
-                  <TableHead className="text-right w-24">Registros</TableHead>
-                )}
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedData.length === 0 ? (
                 <TableRow>
-                  <TableCell 
-                    colSpan={visibleColumns.length + (groupBy.length > 0 ? 1 : 0)} 
+                  <TableCell
+                    colSpan={visibleColumns.length}
                     className="text-center text-muted-foreground py-8"
                   >
                     {emptyMessage}
@@ -403,13 +400,6 @@ export function PivotTable<T extends Record<string, any>>({
                         </TableCell>
                       );
                     })}
-                    {groupBy.length > 0 && (
-                      <TableCell className="text-right text-muted-foreground">
-                        <Badge variant="outline" className="text-xs">
-                          {row._count}
-                        </Badge>
-                      </TableCell>
-                    )}
                   </TableRow>
                 ))
               )}
