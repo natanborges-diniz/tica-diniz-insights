@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -23,6 +23,12 @@ export interface PivotColumn<T> {
   className?: string;
 }
 
+export interface PivotView {
+  groupBy: string[];
+  columns: { key: string; header: string; type: 'dimension' | 'measure'; format?: (v: any) => string }[];
+  rows: Record<string, any>[];
+}
+
 export interface PivotTableProps<T> {
   data: T[];
   columns: PivotColumn<T>[];
@@ -31,6 +37,7 @@ export interface PivotTableProps<T> {
   icon?: React.ReactNode;
   emptyMessage?: string;
   className?: string;
+  onViewChange?: (view: PivotView) => void;
 }
 
 // Componente de chip arrastável
@@ -134,6 +141,7 @@ export function PivotTable<T extends Record<string, any>>({
   icon,
   emptyMessage = 'Nenhum dado encontrado',
   className,
+  onViewChange,
 }: PivotTableProps<T>) {
   const [groupBy, setGroupBy] = useState<string[]>(defaultGroupBy as string[]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
