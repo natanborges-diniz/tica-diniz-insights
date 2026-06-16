@@ -156,6 +156,8 @@ export default function SalesFamilyDashboard() {
                   setFiltroVendedor={setFiltroVendedor}
                   filtroFamilia={filtroFamilia}
                   setFiltroFamilia={setFiltroFamilia}
+                  filtroFornecedor={filtroFornecedor}
+                  setFiltroFornecedor={setFiltroFornecedor}
                   filtroBuscaTexto={filtroBuscaTexto}
                   setFiltroBuscaTexto={setFiltroBuscaTexto}
                 />
