@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-  ComposedChart, Line, Legend,
+  ComposedChart, Line, Legend, LabelList,
 } from 'recharts';
 import { AnaliseFamiliaVendedor } from '@/services/vendasService';
 import { TrendingUp } from 'lucide-react';
@@ -122,14 +122,18 @@ export function SalesFamilyChart({ dados }: SalesFamilyChartProps) {
                 labelFormatter={(_, p) => p?.[0]?.payload?.familia || ''}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar yAxisId="left" dataKey="faturamento" name="Faturamento" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} maxBarSize={48} />
-              <Line yAxisId="right" type="monotone" dataKey="pecas" name="Peças" stroke="hsl(var(--chart-3))" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+              <Bar yAxisId="left" dataKey="faturamento" name="Faturamento" fill="hsl(var(--chart-1))" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                <LabelList dataKey="faturamento" position="top" formatter={fmtCurrencyShort} style={{ fontSize: 10, fill: 'hsl(var(--chart-1))', fontWeight: 600 }} />
+              </Bar>
+              <Line yAxisId="right" type="monotone" dataKey="pecas" name="Peças" stroke="hsl(var(--chart-3))" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }}>
+                <LabelList dataKey="pecas" position="top" formatter={fmtIntShort} style={{ fontSize: 10, fill: 'hsl(var(--chart-3))', fontWeight: 600 }} />
+              </Line>
             </ComposedChart>
           </ResponsiveContainer>
         ) : (
           /* ===== FATURAMENTO ou PEÇAS: barras horizontais coloridas ===== */
           <ResponsiveContainer width="100%" height={chartHeight}>
-            <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30, top: 10, bottom: 10 }} barCategoryGap="20%">
+            <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 70, top: 10, bottom: 10 }} barCategoryGap="20%">
               <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="hsl(var(--border))" />
               <XAxis
                 type="number"
@@ -153,6 +157,12 @@ export function SalesFamilyChart({ dados }: SalesFamilyChartProps) {
                 {chartData.map((_, index) => (
                   <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                 ))}
+                <LabelList
+                  dataKey={metric}
+                  position="right"
+                  formatter={metric === 'faturamento' ? fmtCurrencyShort : fmtIntShort}
+                  style={{ fontSize: 11, fill: 'hsl(var(--foreground))', fontWeight: 600 }}
+                />
               </Bar>
             </BarChart>
           </ResponsiveContainer>

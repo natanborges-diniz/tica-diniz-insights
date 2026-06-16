@@ -11,6 +11,7 @@ import { SalesFamilyKPICards } from '@/components/sales-family/SalesFamilyKPICar
 import { SalesFamilyChart } from '@/components/sales-family/SalesFamilyChart';
 import { SalesFamilyTable } from '@/components/sales-family/SalesFamilyTable';
 import { exportSalesFamilyReport } from '@/utils/exportSalesFamilyReport';
+import type { PivotView } from '@/components/ui/pivot-table';
 import { toast } from 'sonner';
 
 // Helper para obter o primeiro dia do mês atual
@@ -99,6 +100,7 @@ export default function SalesFamilyDashboard() {
   // Ref do gráfico para captura no PDF
   const chartRef = useRef<HTMLDivElement | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pivotView, setPivotView] = useState<PivotView | null>(null);
 
   const handleExportFullReport = async () => {
     try {
@@ -132,6 +134,7 @@ export default function SalesFamilyDashboard() {
           ticketMedio: vendas > 0 ? faturamento / vendas : 0,
         },
         rows: filteredData,
+        view: pivotView,
         chartElement: chartRef.current,
       });
       toast.success('Relatório PDF gerado com sucesso');
@@ -255,7 +258,7 @@ export default function SalesFamilyDashboard() {
                     <CardTitle>Detalhamento</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <SalesFamilyTable dados={filteredData} />
+                    <SalesFamilyTable dados={filteredData} onViewChange={setPivotView} />
                   </CardContent>
                 </Card>
               </>
