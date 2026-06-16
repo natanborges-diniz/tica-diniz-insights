@@ -952,7 +952,7 @@ export default function PlanoMensalPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className={`container ${step === 3 ? 'max-w-7xl' : 'max-w-5xl'} py-6`}>
+    <div className={step === 3 ? 'w-full py-6 px-2' : 'container max-w-5xl py-6'}>
       <h1 className="text-2xl font-bold mb-2">Plano Mensal de Compras</h1>
       <p className="text-muted-foreground text-sm mb-6">Motor V2 — participação proporcional por marca (Princípio #6)</p>
 
