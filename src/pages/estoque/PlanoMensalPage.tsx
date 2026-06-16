@@ -1154,7 +1154,7 @@ export default function PlanoMensalPage() {
                     );
                   })}
                 </TableBody>
-              </Table>
+              </table>
             </div>
           </CardContent>
         </Card>
