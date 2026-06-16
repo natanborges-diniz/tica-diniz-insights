@@ -1059,8 +1059,8 @@ export default function PlanoMensalPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="overflow-auto max-h-[calc(100vh-260px)] rounded-md border">
-              <Table>
+            <div className="overflow-auto max-h-[calc(100vh-260px)] rounded-md border relative">
+              <table className="w-full caption-bottom text-sm">
                 <TableHeader className="sticky top-0 z-20 bg-background shadow-sm">
                   <TableRow className="bg-background hover:bg-background">
                     <TableHead className="w-9 text-right text-muted-foreground bg-background">#</TableHead>
