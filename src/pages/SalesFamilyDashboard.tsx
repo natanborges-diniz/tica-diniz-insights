@@ -37,6 +37,7 @@ export default function SalesFamilyDashboard() {
   // Estados de filtros internos
   const [filtroVendedor, setFiltroVendedor] = useState('TODOS');
   const [filtroFamilia, setFiltroFamilia] = useState('TODAS');
+  const [filtroFornecedor, setFiltroFornecedor] = useState('TODOS');
   const [filtroBuscaTexto, setFiltroBuscaTexto] = useState('');
 
   // Selecionar empresa do profile (ou primeira disponível como fallback)
