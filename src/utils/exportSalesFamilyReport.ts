@@ -264,17 +264,6 @@ export async function exportSalesFamilyReport(opts: SalesFamilyReportOptions): P
     }
   }
 
-  // ===== Páginas seguintes: tabela =====
-  doc.addPage();
-  drawTable(doc, opts.rows, MARGIN.t + 12, opts.title, opts.subtitle, 2, { value: 0 });
-
-  // ===== Header/Footer em todas as páginas =====
-  const total = doc.getNumberOfPages();
-  for (let i = 1; i <= total; i++) {
-    doc.setPage(i);
-    drawHeader(doc, opts.title, opts.subtitle, i, total);
-    drawFooter(doc);
-  }
 
   // ===== Páginas seguintes: tabela (respeita agrupamento da tela) =====
   doc.addPage();
