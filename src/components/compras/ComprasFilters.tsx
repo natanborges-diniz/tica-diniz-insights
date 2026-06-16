@@ -48,10 +48,15 @@ function MultiSelect({
   filter: MultiFilter;
   onChange: (f: MultiFilter) => void;
 }) {
+  const [search, setSearch] = useState("");
   const toggle = (v: string) => {
     const has = filter.values.includes(v);
     onChange({ ...filter, values: has ? filter.values.filter(x => x !== v) : [...filter.values, v] });
   };
+  const filteredOptions = useMemo(
+    () => search.trim() ? options.filter(o => o.toLowerCase().includes(search.toLowerCase())) : options,
+    [options, search]
+  );
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
@@ -66,7 +71,11 @@ function MultiSelect({
             <ChevronDown className="h-4 w-4 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-80 p-3 max-h-96 overflow-auto z-50 bg-popover">
+        <PopoverContent
+          className="w-80 p-3 z-50 bg-popover"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           <div className="flex items-center justify-between mb-2">
             <Tabs value={filter.mode} onValueChange={(v) => onChange({ ...filter, mode: v as IncludeExclude })}>
               <TabsList className="h-8">
@@ -80,11 +89,23 @@ function MultiSelect({
               </Button>
             )}
           </div>
-          <div className="space-y-1">
-            {options.length === 0 ? (
+          <div className="relative mb-2">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar..."
+              className="h-8 pl-7 text-sm"
+            />
+          </div>
+          <div
+            className="space-y-1 max-h-64 overflow-y-auto overscroll-contain"
+            onWheel={(e) => e.stopPropagation()}
+          >
+            {filteredOptions.length === 0 ? (
               <p className="text-xs text-muted-foreground py-2">Sem opções</p>
             ) : (
-              options.map((opt) => (
+              filteredOptions.map((opt) => (
                 <label key={opt} className="flex items-center gap-2 text-sm hover:bg-muted/50 rounded px-2 py-1 cursor-pointer">
                   <input
                     type="checkbox"
