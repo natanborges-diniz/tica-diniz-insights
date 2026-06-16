@@ -231,7 +231,7 @@ function GrupoFornecedorCompra({
                   </span>
                 );
               })()}
-              <StatusBadge status={marca.status} />
+              <StatusBadge m={{ status: marca.status, estrategica: marca.estrategica }} recemIntroduzida={false} />
             </div>
             {marca.skusAlocados.length > 0 ? (
               <Table className="text-xs">
@@ -952,7 +952,7 @@ export default function PlanoMensalPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className={`container ${step === 3 ? 'max-w-7xl' : 'max-w-5xl'} py-6`}>
+    <div className={step === 3 ? 'w-full py-6 px-2' : 'container max-w-5xl py-6'}>
       <h1 className="text-2xl font-bold mb-2">Plano Mensal de Compras</h1>
       <p className="text-muted-foreground text-sm mb-6">Motor V2 — participação proporcional por marca (Princípio #6)</p>
 
@@ -1059,26 +1059,26 @@ export default function PlanoMensalPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="overflow-auto">
+            <div className="overflow-auto max-h-[calc(100vh-260px)] rounded-md border">
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-9 text-right text-muted-foreground">#</TableHead>
-                    <TableHead>Marca</TableHead>
-                    <TableHead>Fornecedor</TableHead>
-                    <TableHead className="text-right text-xs">Vend.</TableHead>
-                    <TableHead className="text-right text-xs text-blue-700">Vend.RX</TableHead>
-                    <TableHead className="text-right text-xs text-amber-600">Vend.Sol</TableHead>
-                    <TableHead className="text-right">Part. %</TableHead>
-                    <TableHead className="text-right">Mix Total</TableHead>
-                    <TableHead className="text-right">RX</TableHead>
-                    <TableHead className="text-right">Solar</TableHead>
-                    <TableHead className="text-right w-16">% Sol</TableHead>
-                    <TableHead className="text-right">Ef. Atual</TableHead>
-                    <TableHead className="text-right">Lacuna</TableHead>
-                    <TableHead className="text-center w-20">Estrat.</TableHead>
-                    <TableHead className="text-center w-20">Recém</TableHead>
-                    <TableHead>Status</TableHead>
+                <TableHeader className="sticky top-0 z-20 bg-background shadow-sm">
+                  <TableRow className="bg-background hover:bg-background">
+                    <TableHead className="w-9 text-right text-muted-foreground bg-background">#</TableHead>
+                    <TableHead className="bg-background">Marca</TableHead>
+                    <TableHead className="bg-background">Fornecedor</TableHead>
+                    <TableHead className="text-right text-xs bg-background">Vend.</TableHead>
+                    <TableHead className="text-right text-xs text-blue-700 bg-background">Vend.RX</TableHead>
+                    <TableHead className="text-right text-xs text-amber-600 bg-background">Vend.Sol</TableHead>
+                    <TableHead className="text-right bg-background">Part. %</TableHead>
+                    <TableHead className="text-right bg-background">Mix Total</TableHead>
+                    <TableHead className="text-right bg-background">RX</TableHead>
+                    <TableHead className="text-right bg-background">Solar</TableHead>
+                    <TableHead className="text-right w-16 bg-background">% Sol</TableHead>
+                    <TableHead className="text-right bg-background">Ef. Atual</TableHead>
+                    <TableHead className="text-right bg-background">Lacuna</TableHead>
+                    <TableHead className="text-center w-20 bg-background">Estrat.</TableHead>
+                    <TableHead className="text-center w-20 bg-background">Recém</TableHead>
+                    <TableHead className="bg-background">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
