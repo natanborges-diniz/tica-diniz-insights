@@ -247,7 +247,9 @@ export default function SalesFamilyDashboard() {
             {!isLoading && !error && (
               <>
                 <SalesFamilyKPICards dados={filteredData} />
-                <SalesFamilyChart dados={filteredData} />
+                <div ref={chartRef} className="bg-background">
+                  <SalesFamilyChart dados={filteredData} />
+                </div>
                 <Card>
                   <CardHeader>
                     <CardTitle>Detalhamento</CardTitle>
