@@ -11,6 +11,7 @@ import { useUserEmpresas } from '@/hooks/useUserEmpresas';
 import { getEstoqueCompleto } from '@/services/estoqueCompletoService';
 import { getAnaliseSku } from '@/services/vendasService';
 import { calcularMixIdealV2, type MixMarcaV2, type MarcaConfigV2 } from '@/lib/estoque/mix-ideal-v2';
+import { getStatusInfo } from '@/lib/estoque/status-mix-ideal';
 import { construirMixMarcasCompleto, calcularCortes } from '@/lib/estoque/mix-marcas-completo';
 import {
   derivarPlanoFinalInicial,
@@ -169,11 +170,9 @@ function PlanoColunaLiquidacao({ itens }: { itens: ItemLiquidacao[] }) {
   );
 }
 
-function StatusBadge({ status }: { status: MixMarcaV2['status'] }) {
-  if (status === 'OK') return <Badge className="bg-green-100 text-green-800 border-green-300">OK</Badge>;
-  if (status === 'ABAIXO_MINIMO_ESTRATEGICA') return <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-xs">Estratégica ↑25</Badge>;
-  if (status === 'SEM_VENDAS_180D') return <Badge className="bg-slate-100 text-slate-600 border-slate-300 text-xs">Sem vendas 180d</Badge>;
-  return <Badge className="bg-red-100 text-red-800 border-red-300 text-xs">Descontinuar?</Badge>;
+function StatusBadge({ m, recemIntroduzida }: { m: Pick<MixMarcaV2, 'status' | 'estrategica'>; recemIntroduzida: boolean }) {
+  const { label, className } = getStatusInfo(m, recemIntroduzida);
+  return <Badge className={className}>{label}</Badge>;
 }
 
 function MetricCard({ label, value, unit, color }: { label: string; value: number; unit: string; color: string }) {
@@ -953,7 +952,7 @@ export default function PlanoMensalPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="container max-w-5xl py-6">
+    <div className={`container ${step === 3 ? 'max-w-7xl' : 'max-w-5xl'} py-6`}>
       <h1 className="text-2xl font-bold mb-2">Plano Mensal de Compras</h1>
       <p className="text-muted-foreground text-sm mb-6">Motor V2 — participação proporcional por marca (Princípio #6)</p>
 
@@ -1135,18 +1134,7 @@ export default function PlanoMensalPage() {
                           </TableCell>
                           <TableCell className="text-right">{m.estoqueEfetivo}</TableCell>
                           <TableCell className={`text-right font-bold ${m.lacuna > 0 ? 'text-red-600' : m.mixTotal > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
-                            {m.mixTotal > 0 ? (
-                              <div
-                                title={m.lacuna > 0 ? `${m.lacunaRx ?? 0} SKUs RX + ${m.lacunaSolar ?? 0} SKUs Solar` : undefined}
-                              >
-                                {m.lacuna}
-                                {m.lacuna > 0 && (
-                                  <div className="text-xs font-normal text-muted-foreground tabular-nums">
-                                    {m.lacunaRx ?? 0} / {m.lacunaSolar ?? 0}
-                                  </div>
-                                )}
-                              </div>
-                            ) : '—'}
+                            {m.mixTotal > 0 ? m.lacuna : '—'}
                           </TableCell>
                           <TableCell className="text-center">
                             <Checkbox
@@ -1160,7 +1148,7 @@ export default function PlanoMensalPage() {
                               onCheckedChange={v => setOverride(m.marca, 'recem_introduzida', !!v)}
                             />
                           </TableCell>
-                          <TableCell><StatusBadge status={m.status} /></TableCell>
+                          <TableCell><StatusBadge m={m} recemIntroduzida={cfg.recem_introduzida} /></TableCell>
                         </TableRow>
                       </Fragment>
                     );
