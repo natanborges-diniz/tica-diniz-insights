@@ -135,7 +135,7 @@ export default function ComprasDashboard() {
           prazoMedio,
         },
         rows: filtered as unknown as Record<string, any>[],
-        view: pivotView,
+        view: pivotViewRef.current,
         chartElement: chartRef.current,
       });
       toast.success("Relatório PDF gerado");
@@ -237,7 +237,7 @@ export default function ComprasDashboard() {
                 <Card>
                   <CardHeader><CardTitle>Detalhamento</CardTitle></CardHeader>
                   <CardContent>
-                    <ComprasPivotTable notas={filtered} onViewChange={setPivotView} />
+                    <ComprasPivotTable notas={filtered} onViewChange={(v) => { pivotViewRef.current = v; }} />
                   </CardContent>
                 </Card>
               </>
