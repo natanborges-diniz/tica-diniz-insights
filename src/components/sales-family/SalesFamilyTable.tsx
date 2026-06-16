@@ -65,6 +65,7 @@ export function SalesFamilyTable({ dados, onViewChange }: SalesFamilyTableProps)
         title="Detalhamento por Família"
         icon={<LayoutGrid className="h-5 w-5" />}
         emptyMessage="Nenhum dado encontrado"
+        onViewChange={onViewChange}
       />
     </div>
   );
