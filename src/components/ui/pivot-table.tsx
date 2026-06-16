@@ -295,6 +295,22 @@ export function PivotTable<T extends Record<string, any>>({
     ...measures,
   ];
 
+  // Notificar mudanças de view (para exportações que devem refletir a tela)
+  useEffect(() => {
+    if (!onViewChange) return;
+    onViewChange({
+      groupBy,
+      columns: visibleColumns.map(c => ({
+        key: c.key as string,
+        header: c.header,
+        type: c.type,
+        format: c.format,
+      })),
+      rows: sortedData.map(r => r._data as Record<string, any>),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortedData, groupBy]);
+
   return (
     <Card className={className}>
       <CardHeader className="pb-3">
