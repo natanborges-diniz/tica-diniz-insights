@@ -231,7 +231,7 @@ function GrupoFornecedorCompra({
                   </span>
                 );
               })()}
-              <StatusBadge status={marca.status} />
+              <StatusBadge m={{ status: marca.status, estrategica: marca.estrategica }} recemIntroduzida={false} />
             </div>
             {marca.skusAlocados.length > 0 ? (
               <Table className="text-xs">
