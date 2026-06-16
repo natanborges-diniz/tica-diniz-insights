@@ -20,7 +20,7 @@ const columns: PivotColumn<AnaliseFamiliaVendedor>[] = [
   { key: 'familia', header: 'Família', type: 'dimension' },
   { key: 'fornecedor', header: 'Fornecedor', type: 'dimension' },
   { key: 'qtdTransacao', header: 'Transações', type: 'measure', format: formatNumber, aggregate: 'sum' },
-  { key: 'qtdProdutos', header: 'Produtos', type: 'measure', format: formatNumber, aggregate: 'sum' },
+  { key: 'qtdProdutos', header: 'Qtd.', type: 'measure', format: formatNumber, aggregate: 'sum' },
   { key: 'totalVendido', header: 'Total Vendido', type: 'measure', format: formatCurrency, aggregate: 'sum' },
 ];
 
@@ -30,7 +30,7 @@ const exportColumns = [
   { key: 'familia', header: 'Família' },
   { key: 'fornecedor', header: 'Fornecedor' },
   { key: 'qtdTransacao', header: 'Transações', format: formatters.number },
-  { key: 'qtdProdutos', header: 'Produtos', format: formatters.number },
+  { key: 'qtdProdutos', header: 'Qtd.', format: formatters.number },
   { key: 'totalVendido', header: 'Total Vendido', format: formatters.currency },
 ];
 
