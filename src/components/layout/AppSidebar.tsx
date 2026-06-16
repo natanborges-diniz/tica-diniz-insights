@@ -3,7 +3,8 @@ import {
   TrendingUp, BarChart3, Layers, Wallet,
   Package, ClipboardList, FileText, ArrowLeftRight,
   Target, Users, Brain, RefreshCw, Activity, Truck, FlaskConical,
-  Landmark, CreditCard, Receipt, FileSearch, Shield, Link2, Settings2
+  Landmark, CreditCard, Receipt, FileSearch, Shield, Link2, Settings2,
+  ShoppingCart
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
@@ -51,6 +52,14 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       label: "Inteligência",
       items: [
         { title: "Inteligência de Vendas", url: "/vendas/inteligencia", icon: TrendingUp },
+      ],
+    },
+  ],
+  compras: [
+    {
+      label: "Compras",
+      items: [
+        { title: "Compras por Fornecedor", url: "/compras", icon: ShoppingCart },
       ],
     },
   ],
