@@ -76,18 +76,23 @@ export default function SalesFamilyDashboard() {
       result = result.filter(item => item.familia === filtroFamilia);
     }
 
+    if (filtroFornecedor !== 'TODOS') {
+      result = result.filter(item => item.fornecedor === filtroFornecedor);
+    }
+
     if (filtroBuscaTexto.trim()) {
       const termo = filtroBuscaTexto.toLowerCase();
       result = result.filter(
         item =>
           item.empresa?.toLowerCase().includes(termo) ||
           item.vendedor?.toLowerCase().includes(termo) ||
-          item.familia?.toLowerCase().includes(termo)
+          item.familia?.toLowerCase().includes(termo) ||
+          item.fornecedor?.toLowerCase().includes(termo)
       );
     }
 
     return result;
-  }, [data, filtroVendedor, filtroFamilia, filtroBuscaTexto]);
+  }, [data, filtroVendedor, filtroFamilia, filtroFornecedor, filtroBuscaTexto]);
 
   return (
     <div className="min-h-screen bg-background">
