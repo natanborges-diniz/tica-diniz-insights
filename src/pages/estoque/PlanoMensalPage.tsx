@@ -1059,26 +1059,26 @@ export default function PlanoMensalPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="overflow-auto">
+            <div className="overflow-auto max-h-[calc(100vh-260px)] rounded-md border">
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-9 text-right text-muted-foreground">#</TableHead>
-                    <TableHead>Marca</TableHead>
-                    <TableHead>Fornecedor</TableHead>
-                    <TableHead className="text-right text-xs">Vend.</TableHead>
-                    <TableHead className="text-right text-xs text-blue-700">Vend.RX</TableHead>
-                    <TableHead className="text-right text-xs text-amber-600">Vend.Sol</TableHead>
-                    <TableHead className="text-right">Part. %</TableHead>
-                    <TableHead className="text-right">Mix Total</TableHead>
-                    <TableHead className="text-right">RX</TableHead>
-                    <TableHead className="text-right">Solar</TableHead>
-                    <TableHead className="text-right w-16">% Sol</TableHead>
-                    <TableHead className="text-right">Ef. Atual</TableHead>
-                    <TableHead className="text-right">Lacuna</TableHead>
-                    <TableHead className="text-center w-20">Estrat.</TableHead>
-                    <TableHead className="text-center w-20">Recém</TableHead>
-                    <TableHead>Status</TableHead>
+                <TableHeader className="sticky top-0 z-20 bg-background shadow-sm">
+                  <TableRow className="bg-background hover:bg-background">
+                    <TableHead className="w-9 text-right text-muted-foreground bg-background">#</TableHead>
+                    <TableHead className="bg-background">Marca</TableHead>
+                    <TableHead className="bg-background">Fornecedor</TableHead>
+                    <TableHead className="text-right text-xs bg-background">Vend.</TableHead>
+                    <TableHead className="text-right text-xs text-blue-700 bg-background">Vend.RX</TableHead>
+                    <TableHead className="text-right text-xs text-amber-600 bg-background">Vend.Sol</TableHead>
+                    <TableHead className="text-right bg-background">Part. %</TableHead>
+                    <TableHead className="text-right bg-background">Mix Total</TableHead>
+                    <TableHead className="text-right bg-background">RX</TableHead>
+                    <TableHead className="text-right bg-background">Solar</TableHead>
+                    <TableHead className="text-right w-16 bg-background">% Sol</TableHead>
+                    <TableHead className="text-right bg-background">Ef. Atual</TableHead>
+                    <TableHead className="text-right bg-background">Lacuna</TableHead>
+                    <TableHead className="text-center w-20 bg-background">Estrat.</TableHead>
+                    <TableHead className="text-center w-20 bg-background">Recém</TableHead>
+                    <TableHead className="bg-background">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
