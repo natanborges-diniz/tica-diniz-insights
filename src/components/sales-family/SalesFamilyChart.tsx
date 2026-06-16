@@ -133,7 +133,7 @@ export function SalesFamilyChart({ dados }: SalesFamilyChartProps) {
         ) : (
           /* ===== FATURAMENTO ou PEÇAS: barras horizontais coloridas ===== */
           <ResponsiveContainer width="100%" height={chartHeight}>
-            <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30, top: 10, bottom: 10 }} barCategoryGap="20%">
+            <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 70, top: 10, bottom: 10 }} barCategoryGap="20%">
               <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="hsl(var(--border))" />
               <XAxis
                 type="number"
