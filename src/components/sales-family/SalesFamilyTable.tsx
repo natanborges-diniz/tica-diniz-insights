@@ -18,6 +18,7 @@ const columns: PivotColumn<AnaliseFamiliaVendedor>[] = [
   { key: 'empresa', header: 'Empresa', type: 'dimension' },
   { key: 'vendedor', header: 'Vendedor', type: 'dimension' },
   { key: 'familia', header: 'Família', type: 'dimension' },
+  { key: 'fornecedor', header: 'Fornecedor', type: 'dimension' },
   
   // Medidas (valores agregados)
   { key: 'qtdTransacao', header: 'Transações', type: 'measure', format: formatNumber, aggregate: 'sum' },

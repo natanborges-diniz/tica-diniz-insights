@@ -194,6 +194,8 @@ interface AnaliseFamiliaVendedorRaw {
   cod_vendedor: number;
   vendedor: string;
   familia: string;
+  cod_fornecedor?: number;
+  fornecedor?: string;
   qtd_transacao: number;
   qtd_produtos: number;
   total_vendido: number;
@@ -205,6 +207,8 @@ export interface AnaliseFamiliaVendedor {
   codVendedor: number;
   vendedor: string;
   familia: string;
+  codFornecedor: number;
+  fornecedor: string;
   qtdTransacao: number;
   qtdProdutos: number;
   totalVendido: number;
@@ -237,6 +241,8 @@ export async function getAnaliseFamiliaVendedor(
     codVendedor: r.cod_vendedor ?? 0,
     vendedor: (r.vendedor ?? '').trim(),
     familia: r.familia ?? '',
+    codFornecedor: r.cod_fornecedor ?? 0,
+    fornecedor: (r.fornecedor ?? '').trim() || '—',
     qtdTransacao: r.qtd_transacao ?? 0,
     qtdProdutos: r.qtd_produtos ?? 0,
     totalVendido: r.total_vendido ?? 0,

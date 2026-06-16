@@ -37,6 +37,7 @@ export default function SalesFamilyDashboard() {
   // Estados de filtros internos
   const [filtroVendedor, setFiltroVendedor] = useState('TODOS');
   const [filtroFamilia, setFiltroFamilia] = useState('TODAS');
+  const [filtroFornecedor, setFiltroFornecedor] = useState('TODOS');
   const [filtroBuscaTexto, setFiltroBuscaTexto] = useState('');
 
   // Selecionar empresa do profile (ou primeira disponível como fallback)
@@ -52,6 +53,7 @@ export default function SalesFamilyDashboard() {
   useEffect(() => {
     setFiltroVendedor('TODOS');
     setFiltroFamilia('TODAS');
+    setFiltroFornecedor('TODOS');
     setFiltroBuscaTexto('');
   }, [selectedEmpresaId, dataInicio, dataFim]);
 
@@ -74,18 +76,23 @@ export default function SalesFamilyDashboard() {
       result = result.filter(item => item.familia === filtroFamilia);
     }
 
+    if (filtroFornecedor !== 'TODOS') {
+      result = result.filter(item => item.fornecedor === filtroFornecedor);
+    }
+
     if (filtroBuscaTexto.trim()) {
       const termo = filtroBuscaTexto.toLowerCase();
       result = result.filter(
         item =>
           item.empresa?.toLowerCase().includes(termo) ||
           item.vendedor?.toLowerCase().includes(termo) ||
-          item.familia?.toLowerCase().includes(termo)
+          item.familia?.toLowerCase().includes(termo) ||
+          item.fornecedor?.toLowerCase().includes(termo)
       );
     }
 
     return result;
-  }, [data, filtroVendedor, filtroFamilia, filtroBuscaTexto]);
+  }, [data, filtroVendedor, filtroFamilia, filtroFornecedor, filtroBuscaTexto]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -149,6 +156,8 @@ export default function SalesFamilyDashboard() {
                   setFiltroVendedor={setFiltroVendedor}
                   filtroFamilia={filtroFamilia}
                   setFiltroFamilia={setFiltroFamilia}
+                  filtroFornecedor={filtroFornecedor}
+                  setFiltroFornecedor={setFiltroFornecedor}
                   filtroBuscaTexto={filtroBuscaTexto}
                   setFiltroBuscaTexto={setFiltroBuscaTexto}
                 />
