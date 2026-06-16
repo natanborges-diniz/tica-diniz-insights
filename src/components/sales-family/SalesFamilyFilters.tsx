@@ -19,6 +19,8 @@ interface SalesFamilyFiltersProps {
   setFiltroVendedor: (value: string) => void;
   filtroFamilia: string;
   setFiltroFamilia: (value: string) => void;
+  filtroFornecedor: string;
+  setFiltroFornecedor: (value: string) => void;
   filtroBuscaTexto: string;
   setFiltroBuscaTexto: (value: string) => void;
 }
@@ -27,7 +29,9 @@ export function SalesFamilyFilters({
   empresas, selectedEmpresaId, onEmpresaChange, canSeeAll,
   dataInicio, dataFim, onDataInicioChange, onDataFimChange,
   dados, filtroVendedor, setFiltroVendedor,
-  filtroFamilia, setFiltroFamilia, filtroBuscaTexto, setFiltroBuscaTexto,
+  filtroFamilia, setFiltroFamilia,
+  filtroFornecedor, setFiltroFornecedor,
+  filtroBuscaTexto, setFiltroBuscaTexto,
 }: SalesFamilyFiltersProps) {
   const vendedores = useMemo(() => {
     const set = new Set(dados.map(item => item.vendedor).filter(Boolean));
@@ -39,8 +43,13 @@ export function SalesFamilyFilters({
     return Array.from(set).sort();
   }, [dados]);
 
+  const fornecedores = useMemo(() => {
+    const set = new Set(dados.map(item => item.fornecedor).filter(Boolean));
+    return Array.from(set).sort();
+  }, [dados]);
+
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
       <div className="space-y-2">
         <Label htmlFor="empresa">Empresa</Label>
         <select id="empresa" value={selectedEmpresaId !== null ? String(selectedEmpresaId) : 'ALL'} onChange={(e) => onEmpresaChange(e.target.value === 'ALL' ? null : Number(e.target.value))} className="w-full px-3 py-2 border rounded-md bg-background">
@@ -64,7 +73,14 @@ export function SalesFamilyFilters({
           {familias.map((f) => (<option key={f} value={f}>{f}</option>))}
         </select>
       </div>
-      <div className="space-y-2"><Label>Buscar</Label><Input type="text" placeholder="Vendedor, família..." value={filtroBuscaTexto} onChange={(e) => setFiltroBuscaTexto(e.target.value)} /></div>
+      <div className="space-y-2">
+        <Label>Fornecedor</Label>
+        <select value={filtroFornecedor} onChange={(e) => setFiltroFornecedor(e.target.value)} className="w-full px-3 py-2 border rounded-md bg-background">
+          <option value="TODOS">Todos</option>
+          {fornecedores.map((f) => (<option key={f} value={f}>{f}</option>))}
+        </select>
+      </div>
+      <div className="space-y-2"><Label>Buscar</Label><Input type="text" placeholder="Vendedor, família, fornecedor..." value={filtroBuscaTexto} onChange={(e) => setFiltroBuscaTexto(e.target.value)} /></div>
     </div>
   );
 }
