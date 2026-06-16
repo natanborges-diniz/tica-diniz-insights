@@ -258,7 +258,7 @@ export default function SalesFamilyDashboard() {
                     <CardTitle>Detalhamento</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <SalesFamilyTable dados={filteredData} />
+                    <SalesFamilyTable dados={filteredData} onViewChange={setPivotView} />
                   </CardContent>
                 </Card>
               </>

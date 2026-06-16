@@ -32,6 +32,13 @@ export interface ReportRow {
   qtdTransacao?: number;
   qtdProdutos?: number;
   totalVendido?: number;
+  [k: string]: any;
+}
+
+export interface ReportPivotView {
+  groupBy: string[];
+  columns: { key: string; header: string; type: 'dimension' | 'measure'; format?: (v: any) => string }[];
+  rows: Record<string, any>[];
 }
 
 export interface SalesFamilyReportOptions {
@@ -41,6 +48,7 @@ export interface SalesFamilyReportOptions {
   filters: ReportFilters;
   kpis: ReportKpis;
   rows: ReportRow[];
+  view?: ReportPivotView | null;
   chartElement?: HTMLElement | null;
 }
 
