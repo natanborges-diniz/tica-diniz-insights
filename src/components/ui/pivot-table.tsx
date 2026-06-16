@@ -370,7 +370,7 @@ export function PivotTable<T extends Record<string, any>>({
                   </TableHead>
                 ))}
                 {groupBy.length > 0 && (
-                  <TableHead className="text-right w-20">Qtd</TableHead>
+                  <TableHead className="text-right w-24">Registros</TableHead>
                 )}
               </TableRow>
             </TableHeader>
