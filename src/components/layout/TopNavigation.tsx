@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain, LogOut, Shield } from "lucide-react";
+import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain, LogOut, Shield, ShoppingCart } from "lucide-react";
 import logoInfoco from "@/assets/logo-infoco.png";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,6 +14,7 @@ interface TopNavigationProps {
 
 const allModules: { key: ModuleKey; label: string; icon: React.ElementType; defaultPath: string }[] = [
   { key: "vendas", label: "Vendas", icon: BarChart3, defaultPath: "/vendas" },
+  { key: "compras", label: "Compras", icon: ShoppingCart, defaultPath: "/compras" },
   { key: "estoque", label: "Estoque", icon: Package, defaultPath: "/estoque" },
   { key: "monitor", label: "Monitor", icon: ClipboardList, defaultPath: "/os" },
   { key: "financeiro", label: "Financeiro", icon: Wallet, defaultPath: "/financeiro" },

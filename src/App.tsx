@@ -18,6 +18,7 @@ import PlanoMensalPage from "./pages/estoque/PlanoMensalPage";
 import PlanoHistoricoPage from "./pages/estoque/PlanoHistoricoPage";
 import { EstoqueErrorBoundary } from "@/components/estoque/EstoqueErrorBoundary";
 import SalesFamilyDashboard from "./pages/SalesFamilyDashboard";
+import ComprasDashboard from "./pages/ComprasDashboard";
 import OsDashboard from "./pages/OsDashboard";
 import PedidoFornecedorPage from "./pages/PedidoFornecedorPage";
 import HoyaTrackingPage from "./pages/HoyaTrackingPage";
@@ -81,6 +82,11 @@ const App = () => (
                   <Route path="/vendas/familia" element={<SalesFamilyDashboard />} />
                   <Route path="/vendas-familia" element={<Navigate to="/vendas/familia" replace />} />
                   <Route path="/vendas/inteligencia" element={<InteligenciaVendasDashboard />} />
+                </Route>
+
+                {/* Compras */}
+                <Route element={<ModuleGuard module="compras" />}>
+                  <Route path="/compras" element={<ComprasDashboard />} />
                 </Route>
 
                 {/* Estoque */}
