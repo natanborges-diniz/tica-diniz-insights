@@ -201,21 +201,39 @@ function drawTable(
   doc: jsPDF,
   rows: ReportRow[],
   startY: number,
-  title: string,
-  subtitle: string | undefined,
-  pageOffset: number,
-  totalPagesRef: { value: number }
+  view?: ReportPivotView | null,
 ) {
-  const head = [['Empresa', 'Vendedor', 'Família', 'Fornecedor', 'Vendas', 'Peças', 'Faturamento']];
-  const body = rows.map((r) => [
-    r.empresa ?? '—',
-    r.vendedor ?? '—',
-    r.familia ?? '—',
-    r.fornecedor ?? '—',
-    formatters.number(r.qtdTransacao ?? 0),
-    formatters.number(r.qtdProdutos ?? 0),
-    formatters.currency(r.totalVendido ?? 0),
-  ]);
+  // Se houver view do pivot, usa as colunas/linhas visíveis (respeita agrupamento).
+  // Caso contrário, cai no layout padrão completo.
+  const hasView = view && view.columns.length > 0;
+
+  const columns = hasView
+    ? view!.columns
+    : [
+        { key: 'empresa', header: 'Empresa', type: 'dimension' as const },
+        { key: 'vendedor', header: 'Vendedor', type: 'dimension' as const },
+        { key: 'familia', header: 'Família', type: 'dimension' as const },
+        { key: 'fornecedor', header: 'Fornecedor', type: 'dimension' as const },
+        { key: 'qtdTransacao', header: 'Vendas', type: 'measure' as const, format: formatters.number },
+        { key: 'qtdProdutos', header: 'Peças', type: 'measure' as const, format: formatters.number },
+        { key: 'totalVendido', header: 'Faturamento', type: 'measure' as const, format: formatters.currency },
+      ];
+
+  const source = hasView ? view!.rows : (rows as Record<string, any>[]);
+
+  const head = [columns.map(c => c.header)];
+  const body = source.map(row =>
+    columns.map(c => {
+      const v = row[c.key];
+      if (v === null || v === undefined || v === '') return '—';
+      return c.format ? c.format(v) : String(v);
+    }),
+  );
+
+  const columnStyles: Record<number, any> = {};
+  columns.forEach((c, i) => {
+    if (c.type === 'measure') columnStyles[i] = { halign: 'right' };
+  });
 
   autoTable(doc, {
     head,
@@ -225,15 +243,8 @@ function drawTable(
     styles: { fontSize: 8, cellPadding: 1.8, overflow: 'linebreak' },
     headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [245, 247, 250] },
-    columnStyles: {
-      4: { halign: 'right' },
-      5: { halign: 'right' },
-      6: { halign: 'right' },
-    },
+    columnStyles,
     margin: { left: MARGIN.l, right: MARGIN.r, top: MARGIN.t + 10, bottom: MARGIN.b + 8 },
-    didDrawPage: () => {
-      // header/footer desenhados depois com numeração final
-    },
   });
 }
 
@@ -256,6 +267,18 @@ export async function exportSalesFamilyReport(opts: SalesFamilyReportOptions): P
   // ===== Páginas seguintes: tabela =====
   doc.addPage();
   drawTable(doc, opts.rows, MARGIN.t + 12, opts.title, opts.subtitle, 2, { value: 0 });
+
+  // ===== Header/Footer em todas as páginas =====
+  const total = doc.getNumberOfPages();
+  for (let i = 1; i <= total; i++) {
+    doc.setPage(i);
+    drawHeader(doc, opts.title, opts.subtitle, i, total);
+    drawFooter(doc);
+  }
+
+  // ===== Páginas seguintes: tabela (respeita agrupamento da tela) =====
+  doc.addPage();
+  drawTable(doc, opts.rows, MARGIN.t + 12, opts.view);
 
   // ===== Header/Footer em todas as páginas =====
   const total = doc.getNumberOfPages();
