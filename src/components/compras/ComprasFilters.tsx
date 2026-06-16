@@ -1,11 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, X, Search } from "lucide-react";
 import { Empresa } from "@/services/empresaService";
 import { ComprasNota } from "@/services/comprasService";
 
