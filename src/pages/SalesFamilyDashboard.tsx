@@ -134,6 +134,7 @@ export default function SalesFamilyDashboard() {
           ticketMedio: vendas > 0 ? faturamento / vendas : 0,
         },
         rows: filteredData,
+        view: pivotView,
         chartElement: chartRef.current,
       });
       toast.success('Relatório PDF gerado com sucesso');
