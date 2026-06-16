@@ -53,6 +53,7 @@ export default function SalesFamilyDashboard() {
   useEffect(() => {
     setFiltroVendedor('TODOS');
     setFiltroFamilia('TODAS');
+    setFiltroFornecedor('TODOS');
     setFiltroBuscaTexto('');
   }, [selectedEmpresaId, dataInicio, dataFim]);
 
