@@ -46,7 +46,7 @@ export function SalesFamilyTable({ dados }: SalesFamilyTableProps) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
           <strong>Vendas</strong>: cupons distintos · <strong>Peças</strong>: unidades vendidas ·
-          {' '}<strong>Faturamento</strong>: receita · <strong>Registros</strong>: linhas agrupadas
+          {' '}<strong>Faturamento</strong>: receita do período
         </p>
         <DataTableToolbar
           exportOptions={{
