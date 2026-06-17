@@ -165,7 +165,7 @@ Deno.serve(async (req) => {
         synced: totalUpserted,
         mode,
         empresas: empresasParam,
-        windows: { vencimento: { ini: vencIni, fim: vencFim }, emissao: { ini: emissaoIni, fim: todayStr } },
+        windows: { vencimento: { ini: vencIni, fim: vencFim }, emissao: { ini: emissaoIni, fim: emissaoFim } },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -173,6 +173,7 @@ Deno.serve(async (req) => {
     if (err instanceof Response) return err;
     console.error("[sync-parcelas] Error:", err);
     return new Response(
+
       JSON.stringify({ ok: false, error: err instanceof Error ? err.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
