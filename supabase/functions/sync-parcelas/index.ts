@@ -68,48 +68,60 @@ Deno.serve(async (req) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const url = new URL(req.url);
-    const mode = url.searchParams.get("mode") || "incremental";
-    const codEmpresa = url.searchParams.get("codEmpresa") || "ALL";
+    // Aceita params via query string OU body JSON (para supabase.functions.invoke)
+    let bodyParams: Record<string, string> = {};
+    if (req.method === "POST") {
+      try { bodyParams = await req.json().catch(() => ({})) as Record<string, string>; } catch { /* ignore */ }
+    }
+    const getParam = (k: string) => url.searchParams.get(k) ?? bodyParams[k] ?? null;
+
+    const mode = getParam("mode") || "incremental";
+    const codEmpresa = getParam("codEmpresa") || "ALL";
     const empresasParam = await resolveEmpresas(supabase, codEmpresa);
 
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
 
-    // Janela por VENCIMENTO (para Fluxo de Caixa / DRE realizado próximo)
-    let vencIni: string;
-    const vencFimDate = new Date(now); vencFimDate.setDate(vencFimDate.getDate() + 90);
-    const vencFim = vencFimDate.toISOString().slice(0, 10);
-    if (mode === "backfill") {
-      const s = new Date(now); s.setMonth(s.getMonth() - 6);
-      vencIni = s.toISOString().slice(0, 10);
+    // Modo RANGE: janela explícita por EMISSAO (auto-healing sob demanda)
+    let vencIni = "", vencFim = "", emissaoIni = "", emissaoFim = todayStr;
+    const fetchVencimento = mode !== "range";
+
+    if (mode === "range") {
+      const di = getParam("dataInicio");
+      const df = getParam("dataFim");
+      if (!di || !df) throw new Error("mode=range requer dataInicio e dataFim");
+      emissaoIni = di;
+      emissaoFim = df;
     } else {
-      const s = new Date(now); s.setDate(s.getDate() - 45);
-      vencIni = s.toISOString().slice(0, 10);
+      // Janela por VENCIMENTO (fluxo)
+      const vencFimDate = new Date(now); vencFimDate.setDate(vencFimDate.getDate() + 90);
+      vencFim = vencFimDate.toISOString().slice(0, 10);
+      if (mode === "backfill") {
+        const s = new Date(now); s.setMonth(s.getMonth() - 6);
+        vencIni = s.toISOString().slice(0, 10);
+        const e = new Date(now); e.setMonth(e.getMonth() - 24);
+        emissaoIni = e.toISOString().slice(0, 10);
+      } else {
+        const s = new Date(now); s.setDate(s.getDate() - 45);
+        vencIni = s.toISOString().slice(0, 10);
+        const e = new Date(now); e.setDate(e.getDate() - 90);
+        emissaoIni = e.toISOString().slice(0, 10);
+      }
     }
 
-    // Janela por EMISSAO (para Compras / DRE retroativo)
-    let emissaoIni: string;
-    if (mode === "backfill") {
-      const s = new Date(now); s.setMonth(s.getMonth() - 24);
-      emissaoIni = s.toISOString().slice(0, 10);
-    } else {
-      const s = new Date(now); s.setDate(s.getDate() - 90);
-      emissaoIni = s.toISOString().slice(0, 10);
-    }
-
-    console.log(`[sync-parcelas] Mode=${mode} Empresa=${codEmpresa} (${empresasParam.join(",")}) VENC=${vencIni}..${vencFim} EMISSAO=${emissaoIni}..${todayStr}`);
+    console.log(`[sync-parcelas] Mode=${mode} Empresa=${codEmpresa} (${empresasParam.join(",")}) VENC=${vencIni}..${vencFim} EMISSAO=${emissaoIni}..${emissaoFim}`);
 
     const recsVenc: Rec[] = [];
     const recsEmis: Rec[] = [];
     for (const empresaParam of empresasParam) {
-      const [venc, emis] = await Promise.all([
-        fetchFirebird("VENCIMENTO", vencIni, vencFim, empresaParam),
-        fetchFirebird("EMISSAO", emissaoIni, todayStr, empresaParam),
-      ]);
-      recsVenc.push(...venc);
-      recsEmis.push(...emis);
-      console.log(`[sync-parcelas] Empresa ${empresaParam}: VENC=${venc.length} EMISSAO=${emis.length}`);
+      const tasks: Promise<Rec[]>[] = [fetchFirebird("EMISSAO", emissaoIni, emissaoFim, empresaParam)];
+      if (fetchVencimento) tasks.unshift(fetchFirebird("VENCIMENTO", vencIni, vencFim, empresaParam));
+      const results = await Promise.all(tasks);
+      if (fetchVencimento) { recsVenc.push(...results[0]); recsEmis.push(...results[1]); }
+      else { recsEmis.push(...results[0]); }
+      console.log(`[sync-parcelas] Empresa ${empresaParam}: VENC=${fetchVencimento ? results[0].length : 0} EMISSAO=${results[fetchVencimento?1:0].length}`);
     }
+
 
     console.log(`[sync-parcelas] Fetched: VENC=${recsVenc.length} EMISSAO=${recsEmis.length}`);
 
