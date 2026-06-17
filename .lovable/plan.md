@@ -1,79 +1,44 @@
+# Plano: corrigir Compras (NF e extração)
 
-# Dashboard de Compras
+Confirmei no banco o problema relatado: o campo `documento` vem no formato `NUMERO/PARCELA` (ex.: `3080021/1`, `3080021/2`, `3080021/3`). Hoje o agregador trata cada parcela como uma NF diferente, inflando contagem de notas e quebrando a média de parcelas.
 
-Novo módulo independente em `/compras`, com a mesma experiência de "Vendas por Família": pivot arrastável + gráficos dinâmicos + exportação PDF completa.
+Também confirmei a limitação de extração: `sync-parcelas` filtra por `data_vencimento` numa janela de 45 dias passados / 90 dias futuros. Notas antigas cujos vencimentos já passaram dessa janela desaparecem do cache — por isso o ano inteiro de Coopervision aparece incompleto.
 
-## Fonte de dados
+## 1. Corrigir agrupamento de NF (frontend)
 
-- Base: `parcelas_cache` filtrando `tipo_lancamento = 'PAGAR'`.
-- **Reconstituição da Nota Fiscal**: agrupar parcelas pela chave `(cod_empresa, pessoa_nome, documento, data_emissao)`. Cada grupo = 1 compra. Valor da compra = `SUM(valor)` das parcelas, nº de parcelas = `COUNT(*)`.
-- Data da compra = `data_emissao` (conforme você confirmou). Filtros de período usam esse campo.
-- Sem filtro fixo por conta contábil — trazemos todos PAGAR e o usuário filtra/exclui livremente por fornecedor, conta, loja, forma de pagamento.
+Arquivo: `src/services/comprasService.ts` — função `aggregateNotas`.
 
-## Página `/compras` (novo módulo no menu)
+- Extrair o número-base da NF removendo o sufixo de parcela:
+  - `numeroNF = documento.split('/')[0].trim()` (fallback `(s/doc)` se vazio).
+- Nova chave de agrupamento: `cod_empresa | pessoa_nome | numeroNF | data_emissao`.
+- Campo `documento` exibido passa a ser apenas `numeroNF` (sem `/1`, `/2`...).
+- `qtdParcelas` continua sendo `arr.length` — agora reflete corretamente as 3 parcelas de 1 NF.
+- `prazoMedioDias` permanece como média dos `vencimento − emissao` das parcelas da mesma NF.
 
-Estrutura idêntica a `SalesFamilyDashboard`:
+Efeito: a tela passará a mostrar 2 NFs com 3 parcelas no exemplo, e a Média Parcelas/NF ficará em 3.
 
-1. **Filtros** (`ComprasFilters`):
-   - Empresa (com "Todas") · Período (data início/fim em `data_emissao`) · Quick filters (mês atual, mês anterior, últimos 30/90 dias, ano atual)
-   - **Fornecedor**: multi-select com modos **Incluir** / **Excluir**
-   - **Conta contábil**: multi-select com modos **Incluir** / **Excluir**
-   - **Forma de pagamento**: multi-select
-   - Toggle de comparativo: nenhum / MoM / YoY
+## 2. Ampliar janela do cache de parcelas (backend)
 
-2. **KPIs** (`ComprasKPICards`):
-   - Total Comprado (R$) · Nº de Notas · Nº de Fornecedores · Ticket Médio (R$/nota) · Nº Parcelas · Prazo Médio (dias entre emissão e vencimento médio)
-   - Cada KPI mostra variação vs período comparativo selecionado.
+Arquivo: `supabase/functions/sync-parcelas/index.ts`.
 
-3. **Gráficos dinâmicos** (`ComprasCharts`) — abas:
-   - **Top Fornecedores** (Top N configurável 5/10/20): barras horizontais com Valor + Nº Notas (modo "Ambos" usando ComposedChart com eixo duplo, igual `SalesFamilyChart`).
-   - **Evolução mensal**: linha/barra por mês de emissão, multi-séries por fornecedor selecionado (até 5) para comparativo direto.
-   - **Curva ABC**: Pareto de fornecedores (barras de valor + linha % acumulado, faixas A/B/C).
-   - **Comparativo Loja × Fornecedor**: heatmap (ou stacked bar) de valor por loja × top fornecedores.
-   - Labels visíveis no PDF (LabelList em todas as séries).
+Hoje a busca no Firebird usa `campoData=VENCIMENTO` numa janela curta. Para o dashboard de Compras (que filtra por `data_emissao`), precisamos garantir que toda NF emitida no período esteja no cache, independente de quando vence.
 
-4. **Tabela pivot** (`ComprasPivotTable`) reaproveitando `PivotTable`:
-   - Dimensões arrastáveis: Fornecedor, Loja, Mês, Conta contábil, Forma pgto
-   - Medidas: Valor total (R$), Nº de notas, Nº de parcelas, Ticket médio, Prazo médio
-   - `defaultGroupBy = ['fornecedor']`
-   - `onViewChange` integrado com export PDF (igual SalesFamily, respeita o agrupamento atual)
+Mudanças:
+- Adicionar uma segunda chamada ao Firebird usando `campoData=EMISSAO`, cobrindo a mesma janela que a UI permite consultar.
+  - Modo `incremental`: últimos 90 dias por emissão (além da janela atual por vencimento).
+  - Modo `backfill`: últimos 24 meses por emissão (hoje são apenas 6).
+- Fazer upsert por chave natural (`cod_empresa`, `documento`, `data_vencimento`, `pessoa_nome`) para evitar duplicar registros que vêm pelas duas janelas. Hoje o código faz `DELETE` por intervalo de `data_vencimento` antes do `INSERT`, o que apaga parcelas legítimas vindas pela query de emissão — substituir por upsert idempotente.
+- Manter `tipo_lancamento = 'PAGAR'` como prioridade na limpeza para não tocar em RECEBER.
 
-5. **Exportação PDF/CSV/Excel** (`exportComprasReport.ts`):
-   - Reaproveita estrutura de `exportSalesFamilyReport.ts`: capa com filtros aplicados, KPIs, snapshots dos gráficos (com labels), tabela pivot conforme view atual do usuário, quebras de página limpas.
+Observação: não vou alterar o contrato do endpoint Firebird; ele já aceita `campoData`.
 
-## Backend / dados
+## 3. Validação
 
-- Sem nova edge function nem migration. Tudo lido do `parcelas_cache` existente, agregando no cliente.
-- Novo service `src/services/comprasService.ts`:
-  - `getCompras(filters)` → consulta `parcelas_cache` com `tipo_lancamento='PAGAR'`, range em `data_emissao`, filtros de empresa/conta/fornecedor.
-  - `aggregateNotas(parcelas)` → reduz parcelas em registros de nota (chave acima).
-  - `aggregateComparativo(parcelas, modo)` → busca período anterior equivalente.
-- Novo hook `src/hooks/useCompras.ts` com cache React Query (mesma estratégia do useFinanceiroParcelas), respeitando regra `codEmpresa !== undefined`.
+- Recarregar `/compras` no período atual: NF `3080021` deve aparecer 1× com `qtdParcelas=3` para empresa 6, e `3075685` 1× com `qtdParcelas=3` para empresa 2.
+- KPI "Média Parcelas/NF" deve cair para próximo de 3 nos cenários típicos.
+- Rodar `sync-parcelas` manualmente em modo `incremental` e conferir contagem de NFs Coopervision ao longo de 2025–2026.
 
-## Navegação e permissões
+## Fora de escopo
 
-- Rota nova `/compras` em `App.tsx` protegida por `ModuleGuard`.
-- Item de menu próprio "Compras" em `AppSidebar.tsx` (ícone `ShoppingCart`), separado de Financeiro.
-- Novo módulo `compras` registrado em permissões (`user_module_permissions`), com fallback para admins. Documentar no registry de módulos.
-
-## Arquivos a criar
-
-- `src/pages/ComprasDashboard.tsx`
-- `src/components/compras/ComprasFilters.tsx`
-- `src/components/compras/ComprasKPICards.tsx`
-- `src/components/compras/ComprasCharts.tsx` (abas: Top, Evolução, ABC, Loja×Fornecedor)
-- `src/components/compras/ComprasPivotTable.tsx`
-- `src/services/comprasService.ts`
-- `src/hooks/useCompras.ts`
-- `src/utils/exportComprasReport.ts`
-
-## Arquivos a editar
-
-- `src/App.tsx` — rota `/compras`
-- `src/components/layout/AppSidebar.tsx` — item de menu
-- Registry de módulos / permissões (se houver lista hardcoded de módulos válidos)
-
-## Limitações conhecidas (a comunicar no UI)
-
-- A janela do `parcelas_cache` hoje é **45 dias passado + 90 dias futuro** em `data_vencimento`. Para análise histórica de compras (vários meses para trás por `data_emissao`), pode haver lacunas. Mostrar aviso quando o range pedido extrapolar o cache, e como evolução futura ampliar a janela de sync (ou criar `compras_cache` dedicado por `data_emissao`) — fica fora deste plano.
-- Como usamos parcelas, "Nº de notas" depende da chave (empresa+fornecedor+documento+emissão). Documentos vazios podem inflar a contagem; vamos tratar fallback (`documento || lancamento_id`) e sinalizar no glossário da tabela.
+- Não vou mudar UI de filtros, KPIs adicionais ou exportação PDF.
+- Não vou mudar o módulo Financeiro / Fluxo / DRE (mesma tabela, mas consumo diferente — só altero a estratégia de sync, que já beneficia ambos).
