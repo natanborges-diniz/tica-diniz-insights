@@ -41,6 +41,22 @@ async function fetchFirebird(campoData: "VENCIMENTO" | "EMISSAO", dataInicio: st
   return result.data ?? result.rows ?? (Array.isArray(result) ? result : []);
 }
 
+async function resolveEmpresas(supabase: ReturnType<typeof createClient>, codEmpresa: string): Promise<string[]> {
+  const normalized = codEmpresa.trim().toUpperCase();
+  if (normalized && normalized !== "ALL" && normalized !== "TODAS" && normalized !== "0") {
+    return codEmpresa.split(",").map((e) => e.trim()).filter(Boolean);
+  }
+
+  const { data, error } = await supabase
+    .from("empresa")
+    .select("cod_empresa")
+    .eq("ativa", true)
+    .order("cod_empresa", { ascending: true });
+
+  if (error) throw new Error(`Erro ao carregar empresas ativas: ${error.message}`);
+  return (data ?? []).map((e) => String(e.cod_empresa));
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -54,7 +70,7 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const mode = url.searchParams.get("mode") || "incremental";
     const codEmpresa = url.searchParams.get("codEmpresa") || "ALL";
-    const empresaParam = codEmpresa === "ALL" ? "TODAS" : codEmpresa;
+    const empresasParam = await resolveEmpresas(supabase, codEmpresa);
 
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
@@ -81,12 +97,19 @@ Deno.serve(async (req) => {
       emissaoIni = s.toISOString().slice(0, 10);
     }
 
-    console.log(`[sync-parcelas] Mode=${mode} Empresa=${codEmpresa} VENC=${vencIni}..${vencFim} EMISSAO=${emissaoIni}..${todayStr}`);
+    console.log(`[sync-parcelas] Mode=${mode} Empresa=${codEmpresa} (${empresasParam.join(",")}) VENC=${vencIni}..${vencFim} EMISSAO=${emissaoIni}..${todayStr}`);
 
-    const [recsVenc, recsEmis] = await Promise.all([
-      fetchFirebird("VENCIMENTO", vencIni, vencFim, empresaParam),
-      fetchFirebird("EMISSAO", emissaoIni, todayStr, empresaParam),
-    ]);
+    const recsVenc: Rec[] = [];
+    const recsEmis: Rec[] = [];
+    for (const empresaParam of empresasParam) {
+      const [venc, emis] = await Promise.all([
+        fetchFirebird("VENCIMENTO", vencIni, vencFim, empresaParam),
+        fetchFirebird("EMISSAO", emissaoIni, todayStr, empresaParam),
+      ]);
+      recsVenc.push(...venc);
+      recsEmis.push(...emis);
+      console.log(`[sync-parcelas] Empresa ${empresaParam}: VENC=${venc.length} EMISSAO=${emis.length}`);
+    }
 
     console.log(`[sync-parcelas] Fetched: VENC=${recsVenc.length} EMISSAO=${recsEmis.length}`);
 
@@ -129,6 +152,7 @@ Deno.serve(async (req) => {
         ok: true,
         synced: totalUpserted,
         mode,
+        empresas: empresasParam,
         windows: { vencimento: { ini: vencIni, fim: vencFim }, emissao: { ini: emissaoIni, fim: todayStr } },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
