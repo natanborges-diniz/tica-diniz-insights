@@ -99,14 +99,17 @@ Deno.serve(async (req) => {
 
     console.log(`[sync-parcelas] Mode=${mode} Empresa=${codEmpresa} (${empresasParam.join(",")}) VENC=${vencIni}..${vencFim} EMISSAO=${emissaoIni}..${todayStr}`);
 
-    const fetched = await Promise.all(
-      empresasParam.flatMap((empresaParam) => [
+    const recsVenc: Rec[] = [];
+    const recsEmis: Rec[] = [];
+    for (const empresaParam of empresasParam) {
+      const [venc, emis] = await Promise.all([
         fetchFirebird("VENCIMENTO", vencIni, vencFim, empresaParam),
         fetchFirebird("EMISSAO", emissaoIni, todayStr, empresaParam),
-      ])
-    );
-    const recsVenc = fetched.filter((_, idx) => idx % 2 === 0).flat();
-    const recsEmis = fetched.filter((_, idx) => idx % 2 === 1).flat();
+      ]);
+      recsVenc.push(...venc);
+      recsEmis.push(...emis);
+      console.log(`[sync-parcelas] Empresa ${empresaParam}: VENC=${venc.length} EMISSAO=${emis.length}`);
+    }
 
     console.log(`[sync-parcelas] Fetched: VENC=${recsVenc.length} EMISSAO=${recsEmis.length}`);
 
