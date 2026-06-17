@@ -72,12 +72,20 @@ export async function getComprasParcelas(params: GetComprasParams): Promise<Comp
  * Reduz parcelas em notas fiscais (1 nota = 1 compra).
  * Chave: empresa + fornecedor + documento + data_emissao
  */
+/** Extrai o número-base da NF removendo o sufixo de parcela (ex.: "3080021/1" -> "3080021"). */
+function baseDocumento(doc: string): string {
+  const limpo = (doc || "").trim();
+  if (!limpo) return "(s/doc)";
+  const idx = limpo.indexOf("/");
+  return idx >= 0 ? limpo.slice(0, idx).trim() || "(s/doc)" : limpo;
+}
+
 export function aggregateNotas(parcelas: ComprasParcela[]): ComprasNota[] {
   const groups = new Map<string, ComprasParcela[]>();
   for (const p of parcelas) {
     if (!p.dataEmissao) continue;
-    const doc = p.documento || `(s/doc)`;
-    const key = `${p.codEmpresa}|${p.pessoaNome}|${doc}|${p.dataEmissao}`;
+    const docBase = baseDocumento(p.documento);
+    const key = `${p.codEmpresa}|${p.pessoaNome}|${docBase}|${p.dataEmissao}`;
     const arr = groups.get(key) || [];
     arr.push(p);
     groups.set(key, arr);
