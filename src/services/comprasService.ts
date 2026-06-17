@@ -110,7 +110,7 @@ export function aggregateNotas(parcelas: ComprasParcela[]): ComprasNota[] {
       codEmpresa: first.codEmpresa,
       empresaNome: first.empresaNome || `Empresa ${first.codEmpresa}`,
       fornecedor: first.pessoaNome,
-      documento: first.documento || "(s/doc)",
+      documento: baseDocumento(first.documento),
       dataEmissao: first.dataEmissao!,
       mes: first.dataEmissao!.slice(0, 7),
       conta: first.contaDescricao || "—",
