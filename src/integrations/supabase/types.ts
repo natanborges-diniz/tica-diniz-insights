@@ -690,6 +690,93 @@ export type Database = {
         }
         Relationships: []
       }
+      estoque_sincronizado: {
+        Row: {
+          acao_sugerida: string | null
+          atualizado_em: string | null
+          categoria: string | null
+          cod_barras_interno: string | null
+          cod_empresa: number
+          cod_produto_tipo: number | null
+          cod_sku: number
+          custo_ultima_compra: number | null
+          data_ultima_compra: string | null
+          data_ultima_entrada: string | null
+          data_ultima_venda: string | null
+          desconto_sugerido: number | null
+          descricao: string | null
+          dias_desde_ultima_venda: number | null
+          dias_em_estoque: number | null
+          ean: string | null
+          faixa_saneamento: string | null
+          fornecedor: string | null
+          id: string
+          is_dead_stock: boolean | null
+          marca: string | null
+          origem_custo: string | null
+          qtd_vendidos_180d: number | null
+          quantidade_estoque: number
+          subcategoria: string | null
+          valor_estoque_custo: number | null
+        }
+        Insert: {
+          acao_sugerida?: string | null
+          atualizado_em?: string | null
+          categoria?: string | null
+          cod_barras_interno?: string | null
+          cod_empresa: number
+          cod_produto_tipo?: number | null
+          cod_sku: number
+          custo_ultima_compra?: number | null
+          data_ultima_compra?: string | null
+          data_ultima_entrada?: string | null
+          data_ultima_venda?: string | null
+          desconto_sugerido?: number | null
+          descricao?: string | null
+          dias_desde_ultima_venda?: number | null
+          dias_em_estoque?: number | null
+          ean?: string | null
+          faixa_saneamento?: string | null
+          fornecedor?: string | null
+          id?: string
+          is_dead_stock?: boolean | null
+          marca?: string | null
+          origem_custo?: string | null
+          qtd_vendidos_180d?: number | null
+          quantidade_estoque: number
+          subcategoria?: string | null
+          valor_estoque_custo?: number | null
+        }
+        Update: {
+          acao_sugerida?: string | null
+          atualizado_em?: string | null
+          categoria?: string | null
+          cod_barras_interno?: string | null
+          cod_empresa?: number
+          cod_produto_tipo?: number | null
+          cod_sku?: number
+          custo_ultima_compra?: number | null
+          data_ultima_compra?: string | null
+          data_ultima_entrada?: string | null
+          data_ultima_venda?: string | null
+          desconto_sugerido?: number | null
+          descricao?: string | null
+          dias_desde_ultima_venda?: number | null
+          dias_em_estoque?: number | null
+          ean?: string | null
+          faixa_saneamento?: string | null
+          fornecedor?: string | null
+          id?: string
+          is_dead_stock?: boolean | null
+          marca?: string | null
+          origem_custo?: string | null
+          qtd_vendidos_180d?: number | null
+          quantidade_estoque?: number
+          subcategoria?: string | null
+          valor_estoque_custo?: number | null
+        }
+        Relationships: []
+      }
       etl_controle: {
         Row: {
           atualizado_em: string | null
