@@ -7,7 +7,11 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
-import { firebirdGet } from '../_shared/firebirdApi.ts';
+
+const FIREBIRD_BASE_URL = (
+  Deno.env.get('FIREBIRD_API_BASE_URL') || 'https://firebird-bridge-production.up.railway.app'
+).replace(/\/+$/, '');
+const BRIDGE_FETCH_TIMEOUT_MS = 300_000;
 
 // ============================================================
 // CONFIG
@@ -74,11 +78,35 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function bridgeFetch(path: string, params: Record<string, any>): Promise<any> {
+  const url = new URL(path, FIREBIRD_BASE_URL + '/');
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+  });
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), BRIDGE_FETCH_TIMEOUT_MS);
+  try {
+    const resp = await fetch(url.toString(), {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      const body = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
+    }
+    return await resp.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function bridgeGetWithRetry(path: string, params: Record<string, any>): Promise<any> {
   let lastErr: any = null;
   for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
     try {
-      return await firebirdGet(path, params);
+      return await bridgeFetch(path, params);
     } catch (err) {
       lastErr = err;
       if (attempt === RETRY_MAX) break;
