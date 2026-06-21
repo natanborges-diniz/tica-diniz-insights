@@ -255,29 +255,23 @@ async function syncEmpresa(empresa: number, supabase: any, startedAt: string): P
 // HANDLER
 // ============================================================
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
-  const startedAt = new Date().toISOString();
-  console.log(`[sync-estoque] STARTED ${startedAt}`);
-
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-
-  // Permite ?empresa=N para sync de 1 loja só (debug/manual)
-  const url = new URL(req.url);
-  const empresaParam = url.searchParams.get('empresa');
-  const empresasParaSync = empresaParam
-    ? [parseInt(empresaParam, 10)]
-    : EMPRESAS_ATIVAS;
-
+async function processarTodasEmpresasBackground(
+  supabase: any,
+  empresasParaSync: number[],
+  startedAt: string,
+  runId: string,
+): Promise<void> {
   const resultados: Array<{ empresa: number; registros: number; erro: string | null; duracao_ms: number }> = [];
 
   for (let i = 0; i < empresasParaSync.length; i++) {
     const empresa = empresasParaSync[i];
-    const resultado = await syncEmpresa(empresa, supabase, startedAt);
-    resultados.push(resultado);
+    try {
+      const resultado = await syncEmpresa(empresa, supabase, startedAt);
+      resultados.push(resultado);
+    } catch (err: any) {
+      console.error(`[sync-estoque] background empresa ${empresa} falhou:`, err?.message ?? err);
+      resultados.push({ empresa, registros: 0, erro: err?.message ?? String(err), duracao_ms: 0 });
+    }
     if (i < empresasParaSync.length - 1) {
       await sleep(THROTTLE_ENTRE_LOJAS_MS);
     }
@@ -287,26 +281,57 @@ serve(async (req) => {
   const totalErros = resultados.filter(r => r.erro).length;
   const finishedAt = new Date().toISOString();
 
-  // Registrar em etl_controle
-  await supabase
-    .from('etl_controle')
-    .upsert({
-      entidade: 'estoque_sincronizado',
-      ultima_data: new Date().toISOString().split('T')[0],
-      atualizado_em: finishedAt,
-    }, { onConflict: 'entidade' });
+  try {
+    await supabase
+      .from('etl_controle')
+      .upsert({
+        entidade: 'estoque_sincronizado',
+        ultima_data: new Date().toISOString().split('T')[0],
+        atualizado_em: finishedAt,
+      }, { onConflict: 'entidade' });
+  } catch (err: any) {
+    console.error('[sync-estoque] erro ao atualizar etl_controle:', err?.message ?? err);
+  }
 
-  console.log(`[sync-estoque] FINISHED ${finishedAt}. Total: ${totalRegistros} registros, ${totalErros} erros.`);
+  console.log(
+    `[sync-estoque] BACKGROUND FINISHED run_id=${runId} ${finishedAt}. ` +
+    `Total: ${totalRegistros} registros, ${totalErros} erros. ` +
+    `Detalhe: ${JSON.stringify(resultados)}`
+  );
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  const startedAt = new Date().toISOString();
+  const runId = crypto.randomUUID();
+  console.log(`[sync-estoque] STARTED run_id=${runId} ${startedAt}`);
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+  const url = new URL(req.url);
+  const empresaParam = url.searchParams.get('empresa');
+  const empresasParaSync = empresaParam
+    ? [parseInt(empresaParam, 10)]
+    : EMPRESAS_ATIVAS;
+
+  // @ts-ignore - EdgeRuntime is available in Supabase Edge Functions runtime
+  EdgeRuntime.waitUntil(
+    processarTodasEmpresasBackground(supabase, empresasParaSync, startedAt, runId)
+  );
 
   return new Response(JSON.stringify({
-    ok: totalErros === 0,
+    ok: true,
+    mode: 'background',
+    run_id: runId,
     started_at: startedAt,
-    finished_at: finishedAt,
-    total_registros: totalRegistros,
-    total_erros: totalErros,
-    detalhe: resultados,
+    empresas: empresasParaSync,
+    message: 'Sync iniciado em background. Consulte etl_controle.entidade=estoque_sincronizado quando concluir.',
   }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    status: totalErros === 0 ? 200 : 207,
+    status: 200,
   });
 });
+
