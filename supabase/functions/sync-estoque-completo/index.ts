@@ -188,7 +188,7 @@ async function syncEmpresa(empresa: number, supabase: any, startedAt: string): P
           qtd_vendidos_180d: item.qtd_vendidos_180d ?? 0,
           is_dead_stock: isArmacao ? (item.is_dead_stock ?? false) : false,
           faixa_saneamento: faixa?.rotulo ?? null,
-          acao_sugerida: faixa?.acao ?? null,
+          acao_sugerida: faixa?.rotulo ?? null,
           desconto_sugerido: faixa?.desconto ?? null,
           atualizado_em: tsAtualizacao,
         };
