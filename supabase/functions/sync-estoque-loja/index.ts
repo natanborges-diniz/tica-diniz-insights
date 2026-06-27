@@ -76,15 +76,26 @@ Deno.serve(async (req) => {
     const itens: any[] = Array.isArray(bridgeResp) ? bridgeResp : (bridgeResp.data ?? bridgeResp.itens ?? []);
     console.log(`[sync-estoque-loja] empresa=${empresa} bridge retornou ${itens.length} itens`);
 
-    const comEstoque = itens.filter(i => Number(i.quantidade_estoque ?? 0) > 0);
+    const toInt = (v: any): number | null => {
+      if (v === null || v === undefined || v === '') return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.round(n) : null;
+    };
+    const toNum = (v: any): number | null => {
+      if (v === null || v === undefined || v === '') return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const comEstoque = itens.filter(i => (toNum(i.quantidade_estoque) ?? 0) > 0);
 
     const rows = comEstoque.map(i => {
-      const categoria = i.tipo ?? null;
+      const categoria = (i.tipo ?? '').toString().trim() || null;
       const isArmacao = categoria === 'ARMACOES';
-      const qtd = Number(i.quantidade_estoque ?? 0);
-      const precoCusto = Number(i.preco_custo ?? 0);
-      const dias_em_estoque = i.dias_estoque ?? null;
-      const dias_sem_venda = i.dias_sem_venda ?? null;
+      const qtd = toInt(i.quantidade_estoque) ?? 0;
+      const precoCusto = toNum(i.preco_custo) ?? 0;
+      const dias_em_estoque = toInt(i.dias_estoque);
+      const dias_sem_venda = toInt(i.dias_sem_venda);
       const is_dead_stock = isArmacao && qtd > 0 && (dias_sem_venda ?? 0) > 180;
 
       let faixa: typeof FAIXAS[number] | null = null;
@@ -94,11 +105,11 @@ Deno.serve(async (req) => {
 
       return {
         cod_empresa: empresa,
-        cod_sku: i.cod_sku,
+        cod_sku: toInt(i.cod_sku),
         marca: i.grife ?? null,
         fornecedor: i.fornecedor_nome ?? null,
         categoria,
-        subcategoria: i.subcategoria ?? null,
+        subcategoria: (i.subcategoria ?? '').toString().trim() || null,
         quantidade_estoque: qtd,
         custo_ultima_compra: precoCusto > 0 ? precoCusto : null,
         origem_custo: precoCusto > 0 ? 'PRODUTO' : null,
@@ -106,17 +117,18 @@ Deno.serve(async (req) => {
         data_ultima_compra: i.data_ultima_compra ?? null,
         dias_em_estoque,
         dias_desde_ultima_venda: dias_sem_venda,
-        qtd_vendidos_180d: i.pecas_vendidas_consideradas ?? 0,
+        qtd_vendidos_180d: toInt(i.pecas_vendidas_consideradas) ?? 0,
         is_dead_stock: isArmacao ? is_dead_stock : false,
         faixa_saneamento: isArmacao ? (faixa?.rotulo ?? null) : null,
         acao_sugerida: isArmacao ? (faixa?.rotulo ?? null) : null,
         desconto_sugerido: isArmacao ? (faixa?.desconto ?? null) : null,
         atualizado_em: new Date().toISOString(),
       };
-    });
+    }).filter(r => r.cod_sku !== null);
 
     let totalErros = 0;
     let totalRegistros = 0;
+    const errosDetalhes: string[] = [];
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const batch = rows.slice(i, i + BATCH_SIZE);
       const { error } = await supabase
@@ -124,7 +136,10 @@ Deno.serve(async (req) => {
         .upsert(batch, { onConflict: 'cod_empresa,cod_sku' });
       if (error) {
         totalErros++;
-        console.error(`[sync-estoque-loja] empresa=${empresa} upsert batch ${i}: ${error.message}`);
+        const sample = batch[0];
+        const msg = `batch ${i} (${batch.length} rows): ${error.message} | sample cod_sku=${sample?.cod_sku} qtd=${sample?.quantidade_estoque} dias_estoque=${sample?.dias_em_estoque} dias_sem_venda=${sample?.dias_desde_ultima_venda}`;
+        errosDetalhes.push(msg);
+        console.error(`[sync-estoque-loja] empresa=${empresa} upsert ${msg}`);
       } else {
         totalRegistros += batch.length;
       }
@@ -147,7 +162,8 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       ok, empresa, started_at: startedAt, finished_at: finishedAt, duracao_ms,
-      total_registros: totalRegistros, total_erros: totalErros, erro: null,
+      total_registros: totalRegistros, total_erros: totalErros,
+      erro: errosDetalhes.length ? errosDetalhes.join(' ; ') : null,
     }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (e: any) {
