@@ -1,10 +1,14 @@
 // src/services/estoqueCompletoService.ts
 // Service para endpoint /estoque/completo - retorna TODO inventário físico (estoque > 0)
 // Diferente de /vendas/analise-sku que retorna apenas SKUs com vendas no período
+//
+// SUB-ENTREGA 1.4.b — Dispatcher entre Bridge (legado) e Supabase (estoque_sincronizado).
+// Controlado por VITE_ESTOQUE_SOURCE=supabase|bridge (default: 'bridge').
 
 import { apiGet, EmpresaParam, formatEmpresaParam, ApiGetOptions } from './firebirdBridge';
 import { categorizarPorDescricao, subcategorizarProduto, subcategorizarPorDescricao, type SubcategoriaProduto } from '@/utils/categorizarProduto';
 import { classificarItemP31 } from '@/lib/estoque/faixas-saneamento';
+import { supabase } from '@/integrations/supabase/client';
 
 // ============================================
 // INTERFACES - Campos do backend (snake_case)
