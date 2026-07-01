@@ -707,6 +707,9 @@ export type Database = {
           descricao: string | null
           dias_desde_ultima_venda: number | null
           dias_em_estoque: number | null
+          dias_giro_mediano: number | null
+          dias_giro_medio: number | null
+          dias_giro_ultima_peca: number | null
           ean: string | null
           faixa_saneamento: string | null
           fornecedor: string | null
@@ -714,6 +717,8 @@ export type Database = {
           is_dead_stock: boolean | null
           marca: string | null
           origem_custo: string | null
+          pecas_giro_consideradas: number | null
+          preco_venda: number | null
           qtd_vendidos_180d: number | null
           quantidade_estoque: number
           subcategoria: string | null
@@ -735,6 +740,9 @@ export type Database = {
           descricao?: string | null
           dias_desde_ultima_venda?: number | null
           dias_em_estoque?: number | null
+          dias_giro_mediano?: number | null
+          dias_giro_medio?: number | null
+          dias_giro_ultima_peca?: number | null
           ean?: string | null
           faixa_saneamento?: string | null
           fornecedor?: string | null
@@ -742,6 +750,8 @@ export type Database = {
           is_dead_stock?: boolean | null
           marca?: string | null
           origem_custo?: string | null
+          pecas_giro_consideradas?: number | null
+          preco_venda?: number | null
           qtd_vendidos_180d?: number | null
           quantidade_estoque: number
           subcategoria?: string | null
@@ -763,6 +773,9 @@ export type Database = {
           descricao?: string | null
           dias_desde_ultima_venda?: number | null
           dias_em_estoque?: number | null
+          dias_giro_mediano?: number | null
+          dias_giro_medio?: number | null
+          dias_giro_ultima_peca?: number | null
           ean?: string | null
           faixa_saneamento?: string | null
           fornecedor?: string | null
@@ -770,6 +783,8 @@ export type Database = {
           is_dead_stock?: boolean | null
           marca?: string | null
           origem_custo?: string | null
+          pecas_giro_consideradas?: number | null
+          preco_venda?: number | null
           qtd_vendidos_180d?: number | null
           quantidade_estoque?: number
           subcategoria?: string | null
