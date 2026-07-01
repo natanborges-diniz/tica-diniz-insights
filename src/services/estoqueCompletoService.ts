@@ -89,14 +89,30 @@ export interface GetEstoqueCompletoParams {
 // ============================================
 
 /**
- * Busca TODO o inventário físico da loja (estoque > 0)
- * Independente de vendas - mostra itens parados também
+ * Dispatcher: escolhe fonte (Supabase ou Bridge) via feature flag VITE_ESTOQUE_SOURCE.
+ * Contrato de retorno idêntico para ambas as fontes.
  */
+const ESTOQUE_SOURCE = (import.meta.env.VITE_ESTOQUE_SOURCE ?? 'bridge').toLowerCase();
+
 export async function getEstoqueCompleto(
   params: GetEstoqueCompletoParams
 ): Promise<EstoqueCompleto[]> {
+  if (ESTOQUE_SOURCE === 'supabase') {
+    console.log('[estoqueCompletoService] Source: SUPABASE (estoque_sincronizado)');
+    return getEstoqueCompletoDoSupabase(params);
+  }
+  console.log('[estoqueCompletoService] Source: BRIDGE (Firebird ao vivo)');
+  return getEstoqueCompletoDoBridge(params);
+}
+
+/**
+ * Busca TODO o inventário físico da loja (estoque > 0) via Firebird Bridge (legado).
+ */
+async function getEstoqueCompletoDoBridge(
+  params: GetEstoqueCompletoParams
+): Promise<EstoqueCompleto[]> {
   const options: ApiGetOptions = { timeoutMs: 60000, ...(params.bypassCache ? { cache: false } : {}) };
-  
+
   const raw = await apiGet<EstoqueCompletoRaw>('/estoque/completo', {
     empresa: formatEmpresaParam(params.empresa),
   }, options);
