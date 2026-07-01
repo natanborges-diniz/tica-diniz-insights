@@ -271,6 +271,132 @@ async function getEstoqueCompletoDoBridge(
 }
 
 // ============================================
+// FONTE SUPABASE — estoque_sincronizado
+// ============================================
+
+interface EstoqueSincronizadoRow {
+  cod_empresa: number;
+  cod_sku: number;
+  descricao: string | null;
+  marca: string | null;
+  fornecedor: string | null;
+  categoria: string | null;
+  subcategoria: string | null;
+  cod_barras_interno: string | null;
+  ean: string | null;
+  quantidade_estoque: number | null;
+  valor_estoque_custo: number | null;
+  custo_ultima_compra: number | null;
+  preco_venda: number | null;
+  data_ultima_entrada: string | null;
+  data_ultima_venda: string | null;
+  dias_em_estoque: number | null;
+  dias_desde_ultima_venda: number | null;
+  is_dead_stock: boolean | null;
+  acao_sugerida: string | null;
+  dias_giro_medio: number | null;
+  dias_giro_mediano: number | null;
+  dias_giro_ultima_peca: number | null;
+  pecas_giro_consideradas: number | null;
+}
+
+/**
+ * Busca estoque completo direto da tabela Supabase estoque_sincronizado.
+ * Populada pelo cron sync-estoque-orchestrator (diariamente às 07:00).
+ */
+async function getEstoqueCompletoDoSupabase(
+  params: GetEstoqueCompletoParams
+): Promise<EstoqueCompleto[]> {
+  const t0 = performance.now();
+  const empresa = params.empresa;
+
+  let query = supabase
+    .from('estoque_sincronizado')
+    .select('*')
+    .order('cod_sku');
+
+  // 'ALL' | null => sem filtro (traz todas as lojas). Número => filtra loja.
+  if (empresa !== null && empresa !== undefined && empresa !== 'ALL') {
+    const empresaNum = Number(empresa);
+    if (!Number.isNaN(empresaNum)) {
+      query = query.eq('cod_empresa', empresaNum);
+    }
+  }
+
+  // Paginação defensiva: default do supabase-js é 1000 linhas.
+  const pageSize = 1000;
+  let from = 0;
+  const acc: EstoqueSincronizadoRow[] = [];
+  // Loop até esgotar
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await query.range(from, from + pageSize - 1);
+    if (error) throw new Error(`Erro Supabase estoque_sincronizado: ${error.message}`);
+    if (!data || data.length === 0) break;
+    acc.push(...(data as EstoqueSincronizadoRow[]));
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  const resultado: EstoqueCompleto[] = acc.map((row) => {
+    const descricao = (row.descricao ?? '').trim();
+    const tipo = (row.categoria ?? '').trim() || categorizarPorDescricao(descricao);
+
+    const subFromDb = (row.subcategoria ?? '').toUpperCase().trim();
+    const validSub: SubcategoriaProduto[] = ['AR_RX','AR_SOLAR','LENTES','LENTES_GRAU','LENTES_CONTATO','ACESSORIOS','OUTROS'];
+    const subcategoria: SubcategoriaProduto = validSub.includes(subFromDb as SubcategoriaProduto)
+      ? (subFromDb as SubcategoriaProduto)
+      : (subcategorizarProduto(tipo) !== 'OUTROS' ? subcategorizarProduto(tipo) : subcategorizarPorDescricao(descricao));
+
+    const quantidadeEstoque = row.quantidade_estoque ?? 0;
+    const precoCusto = Number(row.custo_ultima_compra ?? 0);
+    const valorEstoqueCusto = Number(row.valor_estoque_custo ?? quantidadeEstoque * precoCusto);
+    const diasEmEstoque = row.dias_em_estoque ?? 0;
+    const diasDesdeUltimaVenda = row.dias_desde_ultima_venda ?? 0;
+    const isDeadStock = row.is_dead_stock ?? (quantidadeEstoque > 0 && diasDesdeUltimaVenda > 180);
+
+    // Ação sugerida: prefere DB, senão recalcula pelo mesmo classificador do Bridge (P31).
+    const acaoSugerida = (row.acao_sugerida && row.acao_sugerida.trim())
+      ? row.acao_sugerida
+      : classificarItemP31({ isDeadStock, diasEmEstoque, diasDesdeUltimaVenda }).rotulo;
+
+    const forn = (row.fornecedor ?? '').trim();
+    const marca = (row.marca ?? '').trim();
+
+    return {
+      codSku: Number(row.cod_sku) || 0,
+      // MVP: sem campo dedicado no schema; usamos cod_sku como referência única.
+      codArmacao: Number(row.cod_sku) || null,
+      codigoBarra: (row.cod_barras_interno ?? '').trim(),
+      ean: row.ean?.trim() || null,
+      descricao,
+      fornecedor: !forn || forn.toUpperCase() === 'NULL' ? 'SEM FORNECEDOR' : forn,
+      marca: !marca || marca.toUpperCase() === 'NULL' ? 'SEM MARCA' : marca,
+      tipo,
+      quantidadeEstoque,
+      precoCusto,
+      precoVenda: Number(row.preco_venda ?? 0),
+      valorEstoqueCusto,
+      dataUltimaEntrada: row.data_ultima_entrada,
+      dataUltimaVenda: row.data_ultima_venda,
+      diasDesdeUltimaVenda,
+      diasEmEstoque,
+      acaoSugerida,
+      isDeadStock,
+      subcategoria,
+      diasGiroMedio: row.dias_giro_medio != null ? Number(row.dias_giro_medio) : null,
+      diasGiroMediano: row.dias_giro_mediano != null ? Number(row.dias_giro_mediano) : null,
+      diasGiroUltimaPeca: row.dias_giro_ultima_peca != null ? Number(row.dias_giro_ultima_peca) : null,
+      pecasGiroConsideradas: row.pecas_giro_consideradas ?? 0,
+    };
+  });
+
+  const dt = Math.round(performance.now() - t0);
+  console.log(`[estoqueCompletoService/supabase] ${resultado.length} SKUs em ${dt}ms (empresa=${String(empresa)})`);
+  return resultado;
+}
+
+// ============================================
 // INTERFACE PARA MÉTRICAS RESUMO
 // ============================================
 
