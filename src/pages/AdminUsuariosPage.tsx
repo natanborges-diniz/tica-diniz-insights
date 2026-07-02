@@ -922,6 +922,7 @@ export default function AdminUsuariosPage() {
         serverRoles={editRoles}
         serverModulePerms={editModPerms}
         serverEmpresaPerms={editEmpPerms}
+        serverPagePerms={editPagePerms}
         empresas={empresas}
         onSave={(data) => handleSaveUser(editUserId!, data)}
         onResetPassword={() => {
