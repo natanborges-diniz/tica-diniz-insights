@@ -15,8 +15,8 @@ export const moduleFromPath = (pathname: string): ModuleKey => {
   if (pathname.startsWith("/ia")) return "ia";
   if (pathname.startsWith("/config")) return "config";
   if (pathname.startsWith("/admin")) return "config";
-  if (pathname === "/home" || pathname === "/") return "vendas";
-  return "vendas";
+  if (pathname === "/home" || pathname === "/") return "comunicacao";
+  return "comunicacao";
 };
 
 export function AppLayout() {
