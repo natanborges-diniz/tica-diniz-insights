@@ -149,8 +149,21 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const sections = moduleMenus[activeModule] || [];
+  const rawSections = moduleMenus[activeModule] || [];
   const { countByFornecedor } = usePedidoAlertas();
+  const { hasPageAccess } = useModulePermissions();
+
+  // Filtra itens conforme permissão granular (módulo OU página específica liberada).
+  const sections = rawSections
+    .map((s) => ({
+      ...s,
+      items: s.items.filter((item) => {
+        const page = findPageByPath(item.url);
+        if (!page) return true;
+        return hasPageAccess(page.key, activeModule);
+      }),
+    }))
+    .filter((s) => s.items.length > 0);
 
   const getBadgeCount = (url: string): number => {
     if (url === "/os/tracking") return countByFornecedor["HOYA"] || 0;
@@ -159,8 +172,7 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
     return 0;
   };
 
-  // Hide sidebar entirely for modules with no menu items
-  if (sections.length === 0 || sections.every(s => s.items.length === 0)) {
+  if (sections.length === 0) {
     return null;
   }
 
