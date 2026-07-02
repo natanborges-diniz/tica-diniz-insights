@@ -66,7 +66,7 @@ export default function HomePage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const bridgeStatus = useBridgeStatus();
-  const { hasAccess, isLoading: permLoading } = useModulePermissions();
+  const { hasAnyPageInModule, hasPageAccess, isLoading: permLoading } = useModulePermissions();
   const [retrying, setRetrying] = useState(false);
   const [crossLogging, setCrossLogging] = useState(false);
 
