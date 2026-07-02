@@ -666,6 +666,7 @@ export default function AdminUsuariosPage() {
   const [userRoles, setUserRoles] = useState<RoleRow[]>([]);
   const [modulePerms, setModulePerms] = useState<ModulePermRow[]>([]);
   const [empresaPerms, setEmpresaPerms] = useState<EmpresaPermRow[]>([]);
+  const [pagePerms, setPagePerms] = useState<PagePermRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
@@ -673,16 +674,18 @@ export default function AdminUsuariosPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [profilesRes, rolesRes, permsRes, empresaPermsRes] = await Promise.all([
+    const [profilesRes, rolesRes, permsRes, empresaPermsRes, pagePermsRes] = await Promise.all([
       supabase.from("profiles").select("id, email, nome, cod_empresa"),
       supabase.from("user_roles").select("user_id, role"),
       supabase.from("user_module_permissions").select("user_id, module, access_level"),
       supabase.from("user_empresa_permissions").select("user_id, cod_empresa"),
+      supabase.from("user_page_permissions" as any).select("user_id, page_key"),
     ]);
     if (profilesRes.data) setProfiles(profilesRes.data);
     if (rolesRes.data) setUserRoles(rolesRes.data as RoleRow[]);
     if (permsRes.data) setModulePerms(permsRes.data as ModulePermRow[]);
     if (empresaPermsRes.data) setEmpresaPerms(empresaPermsRes.data as EmpresaPermRow[]);
+    if (pagePermsRes.data) setPagePerms(pagePermsRes.data as unknown as PagePermRow[]);
     setLoading(false);
   }, []);
 
