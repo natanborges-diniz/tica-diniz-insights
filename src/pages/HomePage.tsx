@@ -149,10 +149,9 @@ export default function HomePage() {
           // Resolve target path: se path padrão não está liberado, cai na primeira página permitida do módulo
           const resolvedPath = (() => {
             if (mod.path === "__cross_login__") return mod.path;
-            const { PAGES_BY_MODULE, findPageByPath } = require("@/lib/pageCatalog");
             const defaultPage = findPageByPath(mod.path);
             if (defaultPage && hasPageAccess(defaultPage.key, mod.key as any)) return mod.path;
-            const pages = (PAGES_BY_MODULE[mod.key] || []) as Array<{ key: string; path: string }>;
+            const pages = PAGES_BY_MODULE[mod.key as keyof typeof PAGES_BY_MODULE] || [];
             const first = pages.find(p => hasPageAccess(p.key, mod.key as any));
             return first ? first.path : mod.path;
           })();
