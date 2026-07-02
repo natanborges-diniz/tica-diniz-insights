@@ -788,6 +788,33 @@ export default function AdminUsuariosPage() {
       );
     }
 
+    // 5. Save page permissions (aditivo)
+    const currentPages = pagePerms.filter(p => p.user_id === userId).map(p => p.page_key);
+    const pagesToAdd = data.pageKeys.filter(k => !currentPages.includes(k));
+    const pagesToRemove = currentPages.filter(k => !data.pageKeys.includes(k));
+    if (pagesToAdd.length > 0) {
+      promises.push(
+        (async () => {
+          const { error } = await supabase
+            .from("user_page_permissions" as any)
+            .insert(pagesToAdd.map(k => ({ user_id: userId, page_key: k })) as any);
+          if (error) throw error;
+        })()
+      );
+    }
+    if (pagesToRemove.length > 0) {
+      promises.push(
+        (async () => {
+          const { error } = await supabase
+            .from("user_page_permissions" as any)
+            .delete()
+            .eq("user_id", userId)
+            .in("page_key", pagesToRemove);
+          if (error) throw error;
+        })()
+      );
+    }
+
     await Promise.all(promises);
     await fetchData();
   };
@@ -796,6 +823,7 @@ export default function AdminUsuariosPage() {
   const editRoles = editUserId ? userRoles.filter(r => r.user_id === editUserId).map(r => r.role) : [];
   const editModPerms = editUserId ? modulePerms.filter(mp => mp.user_id === editUserId) : [];
   const editEmpPerms = editUserId ? empresaPerms.filter(ep => ep.user_id === editUserId) : [];
+  const editPagePerms = editUserId ? pagePerms.filter(pp => pp.user_id === editUserId) : [];
 
   return (
     <TooltipProvider>
