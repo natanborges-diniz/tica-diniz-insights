@@ -10,7 +10,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Shield, Users, Eye, Store, Info, Plus, Lock, Undo2, Check } from "lucide-react";
+import { Loader2, Shield, Users, Eye, Store, Info, Plus, Lock, Undo2, Check, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Navigate } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
