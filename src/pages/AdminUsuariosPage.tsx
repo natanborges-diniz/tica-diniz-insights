@@ -345,9 +345,10 @@ function UserEditSheet({
     serverModulePerms.forEach(p => { map[p.module] = p.access_level; });
     setDraftModules(map);
     setDraftEmpresas(serverEmpresaPerms.map(p => p.cod_empresa));
+    setDraftPages(new Set(serverPagePerms.map(p => p.page_key)));
     setClean();
     setSaveStatus("idle");
-  }, [profile, serverRoles, serverModulePerms, serverEmpresaPerms, setClean]);
+  }, [profile, serverRoles, serverModulePerms, serverEmpresaPerms, serverPagePerms, setClean]);
 
   const isAdminUser = draftIsAdmin;
 
@@ -363,8 +364,11 @@ function UserEditSheet({
     const serverEmpCods = serverEmpresaPerms.map(p => p.cod_empresa).sort((a, b) => a - b);
     const draftEmpCods = [...draftEmpresas].sort((a, b) => a - b);
     if (JSON.stringify(draftEmpCods) !== JSON.stringify(serverEmpCods)) return true;
+    const serverPageKeys = serverPagePerms.map(p => p.page_key).sort();
+    const draftPageKeys = [...draftPages].sort();
+    if (JSON.stringify(serverPageKeys) !== JSON.stringify(draftPageKeys)) return true;
     return false;
-  }, [draftName, draftIsAdmin, draftModules, draftEmpresas, profile, serverRoles, serverModulePerms, serverEmpresaPerms]);
+  }, [draftName, draftIsAdmin, draftModules, draftEmpresas, draftPages, profile, serverRoles, serverModulePerms, serverEmpresaPerms, serverPagePerms]);
 
   // Sync dirty state
   useEffect(() => {
@@ -381,6 +385,7 @@ function UserEditSheet({
     serverModulePerms.forEach(p => { map[p.module] = p.access_level; });
     setDraftModules(map);
     setDraftEmpresas(serverEmpresaPerms.map(p => p.cod_empresa));
+    setDraftPages(new Set(serverPagePerms.map(p => p.page_key)));
   };
 
   const handleSave = async () => {
@@ -391,6 +396,7 @@ function UserEditSheet({
         isAdmin: draftIsAdmin,
         modules: draftModules,
         empresaCods: draftEmpresas,
+        pageKeys: [...draftPages],
       });
       setSaveStatus("success");
       toast({ title: "Permissões salvas com sucesso!" });
@@ -403,6 +409,16 @@ function UserEditSheet({
       toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
     }
   };
+
+  const togglePage = (pageKey: string) => {
+    setDraftPages(prev => {
+      const next = new Set(prev);
+      if (next.has(pageKey)) next.delete(pageKey);
+      else next.add(pageKey);
+      return next;
+    });
+  };
+
 
   const handleOpenChange = (v: boolean) => {
     if (guardClose(v)) onOpenChange(v);
