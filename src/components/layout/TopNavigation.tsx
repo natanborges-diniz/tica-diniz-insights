@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { usePedidoAlertas } from "@/hooks/usePedidoAlertas";
+import { PAGES_BY_MODULE, findPageByPath } from "@/lib/pageCatalog";
 import type { ModuleKey } from "./AppLayout";
 
 interface TopNavigationProps {
