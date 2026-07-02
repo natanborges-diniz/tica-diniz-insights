@@ -2498,6 +2498,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_page_permissions: {
+        Row: {
+          granted_at: string
+          granted_by: string | null
+          page_key: string
+          user_id: string
+        }
+        Insert: {
+          granted_at?: string
+          granted_by?: string | null
+          page_key: string
+          user_id: string
+        }
+        Update: {
+          granted_at?: string
+          granted_by?: string | null
+          page_key?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -2906,6 +2927,10 @@ export type Database = {
       }
       has_module_edit_access: {
         Args: { _module: string; _user_id: string }
+        Returns: boolean
+      }
+      has_page_access: {
+        Args: { _module: string; _page_key: string; _user_id: string }
         Returns: boolean
       }
       has_role: {
