@@ -309,6 +309,7 @@ function UserEditSheet({
   serverRoles,
   serverModulePerms,
   serverEmpresaPerms,
+  serverPagePerms,
   empresas,
   onSave,
   onResetPassword,
@@ -319,8 +320,9 @@ function UserEditSheet({
   serverRoles: AppRole[];
   serverModulePerms: ModulePermRow[];
   serverEmpresaPerms: EmpresaPermRow[];
+  serverPagePerms: PagePermRow[];
   empresas: { codEmpresa: number; nome: string }[];
-  onSave: (data: { nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[] }) => Promise<void>;
+  onSave: (data: { nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[]; pageKeys: string[] }) => Promise<void>;
   onResetPassword: () => void;
 }) {
   const { isDirty, setDirty, setClean, guardClose } = useDirtyGuard();
@@ -331,6 +333,7 @@ function UserEditSheet({
   const [draftIsAdmin, setDraftIsAdmin] = useState(false);
   const [draftModules, setDraftModules] = useState<Record<string, string>>({});
   const [draftEmpresas, setDraftEmpresas] = useState<number[]>([]);
+  const [draftPages, setDraftPages] = useState<Set<string>>(new Set());
 
   // Reset draft when profile/server data changes
   useEffect(() => {
