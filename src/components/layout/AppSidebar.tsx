@@ -9,6 +9,8 @@ import {
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { usePedidoAlertas } from "@/hooks/usePedidoAlertas";
+import { useModulePermissions } from "@/hooks/useModulePermissions";
+import { findPageByPath } from "@/lib/pageCatalog";
 import {
   Sidebar,
   SidebarContent,
