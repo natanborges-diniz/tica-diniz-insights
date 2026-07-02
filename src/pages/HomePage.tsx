@@ -143,8 +143,18 @@ export default function HomePage() {
         </div>
       ) : (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {modules.filter((mod) => hasAccess(mod.key as any)).map((mod) => {
+        {modules.filter((mod) => mod.key === "comunicacao" || hasAnyPageInModule(mod.key as any)).map((mod) => {
           const Icon = mod.icon;
+          // Resolve target path: se path padrão não está liberado, cai na primeira página permitida do módulo
+          const resolvedPath = (() => {
+            if (mod.path === "__cross_login__") return mod.path;
+            const { PAGES_BY_MODULE, findPageByPath } = require("@/lib/pageCatalog");
+            const defaultPage = findPageByPath(mod.path);
+            if (defaultPage && hasPageAccess(defaultPage.key, mod.key as any)) return mod.path;
+            const pages = (PAGES_BY_MODULE[mod.key] || []) as Array<{ key: string; path: string }>;
+            const first = pages.find(p => hasPageAccess(p.key, mod.key as any));
+            return first ? first.path : mod.path;
+          })();
           return (
             <Card
               key={mod.key}
@@ -152,11 +162,11 @@ export default function HomePage() {
               tabIndex={0}
               aria-label={`Abrir módulo ${mod.label}`}
               className={`cursor-pointer hover:shadow-card-hover hover:border-primary/30 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${mod.path === "__cross_login__" && crossLogging ? "opacity-60 pointer-events-none" : ""}`}
-              onClick={() => handleModuleClick(mod.path)}
+              onClick={() => handleModuleClick(resolvedPath)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  handleModuleClick(mod.path);
+                  handleModuleClick(resolvedPath);
                 }
               }}
             >
