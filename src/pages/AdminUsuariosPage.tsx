@@ -600,7 +600,59 @@ function UserEditSheet({
             </p>
           )}
         </div>
+
+        <Separator />
+
+        {/* Páginas específicas (aditivo — só relevantes quando o módulo NÃO está liberado) */}
+        <div>
+          <SectionHeader
+            icon={FileText}
+            title="Páginas específicas"
+            description="Libera páginas individuais mesmo sem acesso ao módulo inteiro"
+          />
+          <div className="space-y-3">
+            {ALL_MODULES.map((mod) => {
+              const pages = PAGES_BY_MODULE[mod.key] || [];
+              if (pages.length === 0) return null;
+              const moduleLevel = draftModules[mod.key] || "nenhum";
+              const moduleGrantsAll = isAdminUser || moduleLevel !== "nenhum";
+              return (
+                <div key={mod.key} className="p-2 rounded-md border">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-medium">{mod.label}</span>
+                    {moduleGrantsAll && (
+                      <span className="text-[10px] text-muted-foreground">Módulo liberado — todas as páginas incluídas</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    {pages.map((pg) => {
+                      const checked = moduleGrantsAll || draftPages.has(pg.key);
+                      return (
+                        <label
+                          key={pg.key}
+                          className={cn(
+                            "flex items-center gap-2 p-1.5 rounded-md hover:bg-accent/50 cursor-pointer transition-colors",
+                            moduleGrantsAll && "opacity-60 cursor-not-allowed"
+                          )}
+                        >
+                          <Checkbox
+                            checked={checked}
+                            disabled={moduleGrantsAll}
+                            onCheckedChange={() => togglePage(pg.key)}
+                            className="h-3.5 w-3.5"
+                          />
+                          <span className="text-sm">{pg.title}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
+
     </BaseSheet>
   );
 }
