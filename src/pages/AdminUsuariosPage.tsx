@@ -21,6 +21,12 @@ import { BaseDialog } from "@/components/system/BaseDialog";
 import { BaseSheet } from "@/components/system/BaseSheet";
 import { useDirtyGuard } from "@/components/system/dirty/useDirtyGuard";
 import type { ModuleKey } from "@/components/layout/AppLayout";
+import { PAGES_BY_MODULE } from "@/lib/pageCatalog";
+
+interface PagePermRow {
+  user_id: string;
+  page_key: string;
+}
 
 type AppRole = "admin";
 
