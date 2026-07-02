@@ -26,13 +26,21 @@ const allModules: { key: ModuleKey; label: string; icon: React.ElementType; defa
 export function TopNavigation({ activeModule }: TopNavigationProps) {
   const navigate = useNavigate();
   const { profile, isAdmin, signOut } = useAuth();
-  const { hasAccess } = useModulePermissions();
+  const { hasAnyPageInModule, hasPageAccess } = useModulePermissions();
   const { unacknowledgedCount } = usePedidoAlertas();
 
-  const modules = allModules.filter(m => hasAccess(m.key));
+  const modules = allModules.filter(m => hasAnyPageInModule(m.key));
 
   const handleModuleClick = (module: typeof allModules[0]) => {
-    navigate(module.defaultPath);
+    // Se o path padrão não estiver liberado, envia para a primeira página permitida do módulo
+    const defaultPage = findPageByPath(module.defaultPath);
+    if (defaultPage && hasPageAccess(defaultPage.key, module.key)) {
+      navigate(module.defaultPath);
+      return;
+    }
+    const pages = PAGES_BY_MODULE[module.key] || [];
+    const first = pages.find(p => hasPageAccess(p.key, module.key));
+    navigate(first ? first.path : module.defaultPath);
   };
 
   const handleSignOut = async () => {
