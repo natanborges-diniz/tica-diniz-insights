@@ -705,7 +705,7 @@ export default function AdminUsuariosPage() {
 
   const handleSaveUser = async (
     userId: string,
-    data: { nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[] }
+    data: { nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[]; pageKeys: string[] }
   ) => {
     const currentProfile = profiles.find(p => p.id === userId);
     const currentIsAdmin = userRoles.some(r => r.user_id === userId && r.role === "admin");
