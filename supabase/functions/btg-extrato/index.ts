@@ -114,6 +114,25 @@ function getParam(body: Record<string, unknown> | null, url: URL, key: string): 
   return url.searchParams.get(key);
 }
 
+// ─── Dedup helper ────────────────────────────────────────────
+async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// dedupe_key = sha256(cod_empresa|YYYY-MM-DD|valor 2 casas|tipo|descricao|n), onde n é o
+// índice de ocorrência da mesma combinação no dia. DEVE espelhar exatamente o backfill SQL
+// da migration 20260703120000 (E1 — SPEC_P1_CONCILIACAO_3VIAS.md).
+async function assignDedupeKeys(rows: Array<Record<string, unknown>>): Promise<void> {
+  const counters = new Map<string, number>();
+  for (const row of rows) {
+    const base = `${row.cod_empresa}|${row.data_lancamento}|${Number(row.valor).toFixed(2)}|${row.tipo}|${row.descricao ?? ""}`;
+    const n = counters.get(base) ?? 0;
+    counters.set(base, n + 1);
+    row.dedupe_key = await sha256Hex(`${base}|${n}`);
+  }
+}
+
 // ─── ACTION: contas (construir e salvar account_id) ─────────
 async function handleContas(body: Record<string, unknown> | null, url: URL, userId: string) {
   await requireAdminRole(userId);
@@ -228,6 +247,7 @@ function normalizeMovement(l: Record<string, unknown>, codEmpresa: number) {
     : Number(rawAmount);
   const balanceAfter = l.balance_after || l.balanceAfterTransaction || l.saldo_apos || null;
   const rawType = l.type || l.creditDebitIndicator || l.tipo || "";
+  const txnId = l.transactionId || l.entryId || l.transactionIdentification || l.id || null;
 
   const isCredit = String(rawType).toLowerCase() === "credit" ||
     String(rawType).toUpperCase().includes("CRED") ||
@@ -243,6 +263,9 @@ function normalizeMovement(l: Record<string, unknown>, codEmpresa: number) {
     tipo: isCredit ? "CREDITO" : "DEBITO",
     saldo_apos: balanceAfter != null ? Number(balanceAfter) : null,
     conciliado: false,
+    status_conciliacao: "PENDENTE",
+    transaction_id: txnId != null ? String(txnId) : null,
+    dados_extras: l,
   };
 }
 
@@ -304,9 +327,17 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
 
   const cod_empresa = Number(body.cod_empresa);
-  const data_inicio = body.data_inicio ? String(body.data_inicio) : null;
+  let data_inicio = body.data_inicio ? String(body.data_inicio) : null;
   const data_fim = body.data_fim ? String(body.data_fim) : null;
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
+
+  // Overlap de 3 dias na janela: com dedup por dedupe_key, reimportar é seguro e
+  // garante que movimentos tardios do fim da janela anterior não se percam.
+  if (data_inicio) {
+    const d = new Date(`${data_inicio}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 3);
+    data_inicio = d.toISOString().slice(0, 10);
+  }
 
   const { apiBase, isSandbox } = await getBtgConfig();
 
@@ -356,16 +387,23 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     .map((l) => normalizeMovement(l, cod_empresa))
     .filter((r) => r.data_lancamento && r.valor > 0);
 
-  if (rows.length === 0) return json({ success: true, importados: 0, raw_count: rawItems.length });
+  if (rows.length === 0) return json({ success: true, importados: 0, duplicados: 0, raw_count: rawItems.length });
 
+  await assignDedupeKeys(rows as Array<Record<string, unknown>>);
+
+  // Upsert por dedupe_key: duplicata é ignorada e preserva o status_conciliacao existente.
   const db = getServiceClient();
-  const { error } = await db.from("btg_extrato").insert(rows);
+  const { data: inserted, error } = await db
+    .from("btg_extrato")
+    .upsert(rows, { onConflict: "dedupe_key", ignoreDuplicates: true })
+    .select("id");
   if (error) {
-    console.error("[btg-extrato] Insert error:", error);
+    console.error("[btg-extrato] Upsert error:", error);
     return json({ error: "Erro ao importar lançamentos", details: error.message }, 500);
   }
 
-  return json({ success: true, importados: rows.length });
+  const importados = inserted?.length ?? 0;
+  return json({ success: true, importados, duplicados: rows.length - importados });
 }
 
 // ─── ACTION: listar ──────────────────────────────────────────
@@ -421,8 +459,13 @@ async function handleConciliar(body: Record<string, unknown>, userId: string) {
   if (!id) return json({ error: "id obrigatório" }, 400);
 
   const db = getServiceClient();
+  const marcando = conciliado !== false;
   const updateData: Record<string, unknown> = {
-    conciliado: conciliado !== false,
+    conciliado: marcando,
+    status_conciliacao: marcando ? "CONCILIADO_MANUAL" : "PENDENTE",
+    metodo_conciliacao: marcando ? "MANUAL" : null,
+    conciliado_por: marcando ? userId : null,
+    conciliado_em: marcando ? new Date().toISOString() : null,
     updated_at: new Date().toISOString(),
   };
   if (referencia_id) updateData.referencia_id = String(referencia_id);
@@ -542,6 +585,9 @@ async function handleConciliarAutoLancamentos(body: Record<string, unknown>, use
         // Update extrato as reconciled
         await db.from("btg_extrato").update({
           conciliado: true,
+          status_conciliacao: "CONCILIADO_AUTO",
+          metodo_conciliacao: "TOLERANCIA",
+          conciliado_em: new Date().toISOString(),
           referencia_id: match.id as string,
         }).eq("id", entry.id);
 
@@ -601,7 +647,12 @@ async function handleConciliarAutoLancamentos(body: Record<string, unknown>, use
         });
 
         // Mark extrato as conciliado
-        await db.from("btg_extrato").update({ conciliado: true }).eq("id", entry.id);
+        await db.from("btg_extrato").update({
+          conciliado: true,
+          status_conciliacao: "CONCILIADO_AUTO",
+          metodo_conciliacao: "REGRA",
+          conciliado_em: new Date().toISOString(),
+        }).eq("id", entry.id);
 
         lancamentosCriados++;
       }
