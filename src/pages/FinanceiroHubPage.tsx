@@ -86,6 +86,7 @@ const BORDERO_STATUS: Record<string, { label: string; variant: "default" | "seco
   APROVADO: { label: "Aprovado", variant: "default" },
   ENVIADO: { label: "Enviado BTG", variant: "outline" },
   PROCESSADO: { label: "Processado", variant: "default" },
+  PROCESSADO_PARCIAL: { label: "Processado c/ Rejeições", variant: "destructive" },
   CANCELADO: { label: "Cancelado", variant: "destructive" },
 };
 

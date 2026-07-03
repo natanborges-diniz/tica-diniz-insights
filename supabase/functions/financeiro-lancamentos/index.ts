@@ -480,9 +480,18 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       btg_batch_id: mockBatchId,
     }).eq("id", bordero_id);
 
-    await supabase.from("lancamentos_financeiros").update({
-      status: "PROCESSANDO",
-    }).eq("bordero_id", bordero_id).eq("status", "AUTORIZADO");
+    // Correlação por pagamento também no sandbox, para o btg-poll-status simular a baixa
+    for (const lanc of (lancamentos || [])) {
+      const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
+      await supabase.from("lancamentos_financeiros").update({
+        status: "PROCESSANDO",
+        dados_extras: {
+          ...dados,
+          btg_batch_id: mockBatchId,
+          btg_payment_id: `sandbox-pay-${lanc.id.slice(0, 8)}`,
+        },
+      }).eq("id", lanc.id);
+    }
 
     return json({ ok: true, status: "ENVIADO", btg_batch_id: mockBatchId, sandbox: true });
   }
@@ -527,10 +536,15 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   const batchData = await batchRes.json();
   const batchId = batchData.batchId || batchData.id;
 
-  // 2. Add each payment to the batch — auto-detect type from dados_extras
+  // 2. Add each payment to the batch — auto-detect type from dados_extras.
+  // A resposta de cada POST é capturada para guardar o btg_payment_id no lançamento:
+  // é essa correlação que permite baixa automática por polling/webhook (SPEC P1 §5.5).
+  let aceitos = 0;
+  let falhas = 0;
+
   for (const lanc of (lancamentos || [])) {
     const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
-    
+
     // Auto-detect payment type: DDA-linked → BANKSLIP, otherwise use configured type
     let paymentType = String(dados.btg_payment_type || "PIX_KEY");
     const paymentDetails: Record<string, unknown> = {};
@@ -550,7 +564,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     };
     if (dados.scheduledDate) paymentPayload.scheduledDate = dados.scheduledDate;
 
-    await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}/payments`, {
+    const payRes = await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}/payments`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
@@ -558,6 +572,33 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       },
       body: JSON.stringify(paymentPayload),
     });
+
+    if (payRes.ok) {
+      const payData = await payRes.json().catch(() => ({} as Record<string, unknown>));
+      const btgPaymentId = payData.paymentId || payData.id || payData.transactionId || null;
+      await supabase.from("lancamentos_financeiros").update({
+        status: "PROCESSANDO",
+        dados_extras: {
+          ...dados,
+          btg_batch_id: batchId,
+          btg_payment_id: btgPaymentId != null ? String(btgPaymentId) : null,
+          btg_payment_response: payData,
+        },
+      }).eq("id", lanc.id);
+      aceitos++;
+    } else {
+      const errText = await payRes.text();
+      console.error(`[financeiro-lancamentos] Pagamento rejeitado no batch (lanc ${lanc.id}):`, payRes.status, errText);
+      await supabase.from("lancamentos_financeiros").update({
+        requer_validacao: true,
+        observacao: `Falha ao incluir no batch BTG (${payRes.status}): ${errText.slice(0, 300)}`,
+      }).eq("id", lanc.id);
+      falhas++;
+    }
+  }
+
+  if (aceitos === 0) {
+    throw new Error(`Nenhum pagamento foi aceito pelo BTG (${falhas} falhas). Borderô mantido em APROVADO — revise os lançamentos marcados.`);
   }
 
   // 3. Process the batch
@@ -576,11 +617,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     btg_batch_id: batchId,
   }).eq("id", bordero_id);
 
-  await supabase.from("lancamentos_financeiros").update({
-    status: "PROCESSANDO",
-  }).eq("bordero_id", bordero_id).eq("status", "AUTORIZADO");
-
-  return json({ ok: true, status: "ENVIADO", btg_batch_id: batchId });
+  return json({ ok: true, status: "ENVIADO", btg_batch_id: batchId, aceitos, falhas });
 }
 
 async function cancelarBordero(body: Record<string, unknown>) {

@@ -96,3 +96,6 @@ verify_jwt = false
 [functions.os-status-public]
 verify_jwt = false
 
+
+[functions.btg-poll-status]
+verify_jwt = false
