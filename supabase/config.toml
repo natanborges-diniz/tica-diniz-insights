@@ -99,3 +99,6 @@ verify_jwt = false
 
 [functions.btg-poll-status]
 verify_jwt = false
+
+[functions.conciliar-extrato]
+verify_jwt = false
