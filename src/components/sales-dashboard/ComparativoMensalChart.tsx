@@ -111,15 +111,20 @@ function defaultMeses(): MesRef[] {
 
 export function ComparativoMensalChart({ empresa }: Props) {
   const { dados, loading, error, anosDisponiveis, fetchComparativo } = useComparativoMensal();
+  const { empresas } = useUserEmpresas();
 
   const [meses, setMeses] = useState<MesRef[]>(defaultMeses());
   const [indicador, setIndicador] = useState<IndicadorComparativo>('totalVendido');
 
   useEffect(() => {
     if (meses.length > 0) {
-      fetchComparativo({ empresa, meses });
+      fetchComparativo({
+        empresa,
+        meses,
+        empresasCatalogo: empresas.map((e) => ({ codEmpresa: e.codEmpresa, nome: e.nome })),
+      });
     }
-  }, [empresa, meses, fetchComparativo]);
+  }, [empresa, meses, empresas, fetchComparativo]);
 
   const addMes = () => {
     if (meses.length >= MAX_MESES) return;
