@@ -280,4 +280,38 @@ export function empresaFilterList(empresa: EmpresaParam): number[] | null {
   return null;
 }
 
+/**
+ * Aplica filtro de empresa a uma query supabase (.eq quando 1 valor, .in quando N).
+ * Aceita array, string, number, 'ALL' ou null.
+ */
+export function aplicarFiltroEmpresaSupabase<Q extends { eq: any; in: any }>(
+  query: Q,
+  empresa: EmpresaParam,
+  coluna: string = 'cod_empresa'
+): Q {
+  if (empresa === null || empresa === undefined || empresa === 'ALL') return query;
+  if (Array.isArray(empresa)) {
+    if (empresa.length === 0) return query;
+    if (empresa.length === 1) return query.eq(coluna, empresa[0]);
+    return query.in(coluna, empresa);
+  }
+  const cod = typeof empresa === 'string' ? parseInt(empresa, 10) : empresa;
+  if (Number.isNaN(cod)) return query;
+  return query.eq(coluna, cod);
+}
+
+/**
+ * Converte EmpresaParam para o tipo legado `number | string | null` usado
+ * por serviços que ainda não suportam multi-empresa (pega o primeiro).
+ */
+export function toLegacyEmpresaParam(empresa: EmpresaParam): number | string | null {
+  if (empresa === null || empresa === undefined) return null;
+  if (empresa === 'ALL') return 'ALL';
+  if (Array.isArray(empresa)) {
+    if (empresa.length === 0) return 'ALL';
+    return empresa[0];
+  }
+  return empresa;
+}
+
 export { FIREBIRD_BRIDGE_BASE_URL };
