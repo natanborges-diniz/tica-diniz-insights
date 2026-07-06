@@ -4,7 +4,7 @@
 // COM POLÍTICA DE DADOS FECHADOS
 
 import { supabase } from "@/integrations/supabase/client";
-import { EmpresaParam } from "./firebirdBridge";
+import { EmpresaParam, aplicarFiltroEmpresaSupabase } from "./firebirdBridge";
 
 // ============================================
 // TIPOS E INTERFACES
