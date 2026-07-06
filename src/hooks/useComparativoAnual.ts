@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { EmpresaParam } from '@/services/firebirdBridge';
+import { EmpresaParam, aplicarFiltroEmpresaSupabase } from '@/services/firebirdBridge';
 
 // ============================================
 // TIPOS
