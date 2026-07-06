@@ -62,7 +62,7 @@ export function useFinanceiroDre(initialFilters?: Partial<DreFilters>) {
 
     try {
       const linhas = await getFinanceiroDre({
-        empresa: filters.empresa,
+        empresa: Array.isArray(filters.empresa) ? (filters.empresa[0] ?? null) : filters.empresa,
         dataInicio: filters.dataIni,
         dataFim: filters.dataFim,
         modo: filters.modo,
