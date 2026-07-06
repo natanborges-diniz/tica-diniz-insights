@@ -602,15 +602,13 @@ export function VendasDashboardLayout({
                 />
               </div>
 
-              {/* Comparativo Anual */}
-              <ComparativoAnualChart
+              {/* Comparativo unificado (Base = filtro, Comparação = escolhida no painel) */}
+              <ComparativoPanel
                 dataInicio={filters.dataInicio}
                 dataFim={filters.dataFim}
                 empresa={filters.empresa}
               />
 
-              {/* Comparativo Mensal (meses arbitrários) */}
-              <ComparativoMensalChart empresa={filters.empresa} />
             </TabsContent>
 
             <TabsContent value="diario" className="mt-6">
