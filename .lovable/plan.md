@@ -1,60 +1,67 @@
+## Diagnóstico
+
+Hoje existem dois cards separados (`ComparativoAnualChart` e `ComparativoMensalChart`), cada um com sua lógica de seleção de anos/meses. Quando várias lojas estão selecionadas no filtro global, o eixo X mistura período + loja no mesmo rótulo (`"2024 · Loja X"`), o que fica visualmente confuso e às vezes o nome não aparece porque:
+
+- Quando o filtro global está em `"todas"` (sem multi-select real), o hook trata como agregado único e não itera por loja → some o nome.
+- Quando há multi-select mas o rótulo é longo, o `XAxis` corta o texto.
 
 ## Objetivo
 
-No Dashboard de Vendas, adicionar uma nova análise que permita **comparar qualquer mês contra qualquer outro mês** (independente do ano), usando o mesmo filtro de empresa e a mesma bateria de indicadores já usados no Comparativo Anual (Faturamento, Venda Bruta, Desconto, % Desconto, Qtd. Transações, Ticket Médio).
+Substituir os dois cards por **um único painel "Comparativo"** com:
 
-Hoje o dashboard já tem o "Comparativo Anual" (mesmo período em anos diferentes). Falta a granularidade mês-a-mês.
+1. **Período base** = período do filtro global da página (sempre). Mostrado como leitura, não editável no painel.
+2. **Período de comparação** = escolhido pelo usuário no próprio painel, com presets rápidos (mesmo período ano anterior, mês anterior, mês customizado, ano customizado) + opção livre "data inicial → data final".
+3. **Lojas** = as do filtro global. Se >1, gera séries lado a lado.
+4. **Indicador** = seletor (faturamento, ticket, qtd, desconto, etc).
 
-## Como o usuário vai usar
+## Layout do gráfico (chave da clareza)
 
-1. Abre `/vendas`, aplica os filtros normais (empresa, período).
-2. Um novo card **"Comparativo Mensal"** aparece abaixo do Comparativo Anual.
-3. Escolhe o **indicador** (mesmo dropdown do anual).
-4. Adiciona 2 ou mais **meses** via seletores ano+mês (chips "+ Adicionar mês"), podendo remover cada um.
-   - Default inicial: mês corrente + mês anterior.
-   - Sem restrição — pode comparar Mar/2024 vs Nov/2025 vs Jul/2023, por exemplo.
-5. Vê barras lado a lado (uma por mês selecionado), variações percentuais entre pares consecutivos, e uma tabela resumo.
+Agrupamento por **loja** no eixo X, com duas barras coladas por loja (base vs comparação). Assim o nome da loja aparece uma única vez, grande, e a comparação fica visualmente óbvia.
 
-Empresa vem sempre do filtro global do dashboard (mesma regra do Anual).
+```text
+Faturamento
+│
+│  ██ ▓▓        ██ ▓▓        ██ ▓▓
+│  ██ ▓▓        ██ ▓▓        ██ ▓▓
+│  ██ ▓▓        ██ ▓▓        ██ ▓▓
+└──Loja Centro──Loja Sul────Loja Norte──
+     ██ Base (21/nov–20/dez 2026)
+     ▓▓ Comparação (21/nov–20/dez 2025)
+```
 
-## Escopo técnico
+Quando só há 1 loja, o mesmo layout funciona — mostra uma única categoria no X.
+Quando o usuário escolhe "TOTAL agregado" no seletor do painel, mostra apenas uma categoria "Todas as lojas" com 2 barras.
 
-### Novo hook `src/hooks/useComparativoMensal.ts`
-- Espelha `useComparativoAnual`, mas o parâmetro é uma lista `mesesComparar: { ano: number; mes: number }[]`.
-- Para cada item, calcula início/fim do mês (dia 1 ao último dia) e chama a mesma função `buscarAgregadosPeriodo` (ler do cache `vendas_agregado_diario`, mesma lógica de exclusão de DEVOLUCAO/CREDITOS já existente).
-- Retorna array `DadosMensais` com `{ ano, mes, label: "MMM/YY", totalVendido, totalBruto, totalDesconto, percentualDesconto, qtdVendas, ticketMedio }`, ordenado cronologicamente.
-- Reaproveita `IndicadorComparativo` e `INDICADORES_LABELS` já exportados por `useComparativoAnual`.
+Abaixo do gráfico:
+- Chips de variação % por loja (Base vs Comparação), com cor verde/vermelha respeitando semântica do indicador.
+- Tabela detalhada: uma linha por loja, colunas Base | Comparação | Δ absoluto | Δ %.
 
-Nota: `buscarAgregadosPeriodo` está privado dentro de `useComparativoAnual.ts`. Refatoração leve: extrair essa função (e o toggle DEVOLUCAO/CREDITO) para `src/services/agregadosService.ts` (arquivo já existe) e reusar nos dois hooks. Nenhuma mudança de comportamento no Anual.
+## Controles do painel
 
-### Novo componente `src/components/sales-dashboard/ComparativoMensalChart.tsx`
-- Estrutura visual idêntica ao `ComparativoAnualChart` (mesmo Card/BarChart/tabela/variações), trocando "anos" por "meses".
-- Controles:
-  - Select de Indicador (reusa `INDICADORES_LABELS`).
-  - Lista de meses selecionados, cada um com dois `Select` (Ano, Mês) e botão remover.
-  - Botão "+ Adicionar mês" (limite prático: 6).
-- Label do eixo X: `"Mai/25"`, `"Abr/25"`, etc.
-- Variações percentuais: comparação sequencial entre meses ordenados (igual anual).
-- Empresa vem por prop, igual ao Anual.
+```text
+┌─ Comparativo ─────────────────────────────────────────────┐
+│ Base: 21/nov → 20/dez 2026  ·  3 lojas (do filtro)        │
+│                                                            │
+│ Comparar com: [Ano anterior ▾]   Indicador: [Faturamento▾]│
+│   presets: [Ano anterior] [Mês anterior] [Personalizado…] │
+│                                                            │
+│ Agrupar: (•) Por loja  ( ) Total agregado                 │
+└────────────────────────────────────────────────────────────┘
+```
 
-### Integração no layout
-- Em `src/components/sales-dashboard/VendasDashboardLayout.tsx`, inserir `<ComparativoMensalChart dataInicio={...} dataFim={...} empresa={...} />` logo abaixo do `<ComparativoAnualChart />` existente, recebendo os mesmos props (empresa e datas do filtro atual — datas são só referência de contexto, não limitam os meses escolhidos).
+"Personalizado…" abre dois date pickers (data inicial / data final) — sem limite de duração, mas alerta se o range for muito diferente do base.
 
-### Não muda
-- Nada em Firebird Bridge, sync, RLS, ou tabelas.
-- Todos os dados vêm do cache `vendas_agregado_diario` já em uso.
-- Nenhuma mudança no Comparativo Anual (só extração da helper para o service).
+## Mudanças técnicas
 
-## Arquivos afetados
+1. **Novo componente** `src/components/sales-dashboard/ComparativoPanel.tsx` — substitui os dois cards atuais no `VendasDashboardLayout`.
+2. **Novo hook** `src/hooks/useComparativoPeriodos.ts` — recebe `{ baseInicio, baseFim, compInicio, compFim, empresas[], empresasCatalogo }`, faz 2×N queries (`buscarAgregadosPeriodo` já existe em `useComparativoAnual.ts`, extrair para service) e retorna `{ porLoja: [{ empresaCod, empresaNome, base, comp, deltaAbs, deltaPct }], totalBase, totalComp }`.
+3. **Remover uso** de `ComparativoAnualChart` e `ComparativoMensalChart` do `VendasDashboardLayout.tsx` (mantém os arquivos por ora para não quebrar imports externos, mas fora do layout).
+4. **Presets de período de comparação** — helpers puros: `deslocarAno(-1)`, `deslocarMes(-1)`, mantendo dia inicial/final.
+5. **Eixo X sempre mostra nome da loja** vindo de `useUserEmpresas`, com fallback `"Loja {cod}"`. `interval={0}` e altura extra quando >4 lojas.
+6. **Legenda fixa** identificando cor da barra Base e cor da barra Comparação — não misturar cor por loja (evita confusão anterior).
 
-- `src/services/agregadosService.ts` — adicionar/expor `buscarAgregadosPeriodo`.
-- `src/hooks/useComparativoAnual.ts` — passa a importar helper do service (sem mudança de comportamento).
-- `src/hooks/useComparativoMensal.ts` — **novo**.
-- `src/components/sales-dashboard/ComparativoMensalChart.tsx` — **novo**.
-- `src/components/sales-dashboard/VendasDashboardLayout.tsx` — inserir o novo card.
+## Fora do escopo
 
-## Fora de escopo
-
-- Comparar meses de empresas diferentes no mesmo gráfico.
-- Persistir seleção de meses entre sessões.
-- Exportação específica desse card (usa a exportação global do dashboard se já existir).
+- Não altera filtros globais, hooks de KPI, tabelas diárias, DRE, fluxo de caixa.
+- Não mexe em `firebirdBridge` nem `vendasService`.
+- Mantém regra de exclusão `DEVOLUCAO`/`CREDITOS` já existente no `buscarAgregadosPeriodo`.
