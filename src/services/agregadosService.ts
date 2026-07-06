@@ -237,12 +237,7 @@ export async function getVendasAgregado(
     .select('*')
     .in('data', rangeMensal.mesesAbrangidos);
   
-  if (params.empresa !== 'ALL') {
-    const codEmpresa = typeof params.empresa === 'string' 
-      ? parseInt(params.empresa, 10) 
-      : params.empresa;
-    queryMensal = queryMensal.eq('cod_empresa', codEmpresa);
-  }
+  queryMensal = aplicarFiltroEmpresaSupabase(queryMensal, params.empresa);
   
   const { data: dataMensal, error: errorMensal } = await queryMensal;
   
