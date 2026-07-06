@@ -3,7 +3,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { EmpresaParam } from "@/services/firebirdBridge";
+import { EmpresaParam, aplicarFiltroEmpresaSupabase } from "@/services/firebirdBridge";
 
 // ============================================
 // INTERFACES
@@ -92,12 +92,7 @@ export function useVendasDiarias(params: UseVendasDiariasParams): UseVendasDiari
         .lte('data', params.dataFim)
         .order('data', { ascending: false });
       
-      if (params.empresa !== 'ALL') {
-        const codEmpresa = typeof params.empresa === 'string' 
-          ? parseInt(params.empresa, 10) 
-          : params.empresa;
-        query = query.eq('cod_empresa', codEmpresa);
-      }
+      query = aplicarFiltroEmpresaSupabase(query, params.empresa);
       
       const { data, error: queryError } = await query;
       

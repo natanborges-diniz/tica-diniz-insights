@@ -32,6 +32,7 @@ import {
   MesRef,
 } from '@/hooks/useComparativoMensal';
 import { EmpresaParam } from '@/services/firebirdBridge';
+import { useUserEmpresas } from '@/hooks/useUserEmpresas';
 
 const MESES = [
   { value: 1, label: 'Janeiro' },
@@ -110,15 +111,20 @@ function defaultMeses(): MesRef[] {
 
 export function ComparativoMensalChart({ empresa }: Props) {
   const { dados, loading, error, anosDisponiveis, fetchComparativo } = useComparativoMensal();
+  const { empresas } = useUserEmpresas();
 
   const [meses, setMeses] = useState<MesRef[]>(defaultMeses());
   const [indicador, setIndicador] = useState<IndicadorComparativo>('totalVendido');
 
   useEffect(() => {
     if (meses.length > 0) {
-      fetchComparativo({ empresa, meses });
+      fetchComparativo({
+        empresa,
+        meses,
+        empresasCatalogo: empresas.map((e) => ({ codEmpresa: e.codEmpresa, nome: e.nome })),
+      });
     }
-  }, [empresa, meses, fetchComparativo]);
+  }, [empresa, meses, empresas, fetchComparativo]);
 
   const addMes = () => {
     if (meses.length >= MAX_MESES) return;
@@ -168,14 +174,24 @@ export function ComparativoMensalChart({ empresa }: Props) {
 
   const variacoes = useMemo(() => {
     if (dados.length < 2) return [];
+    // Agrupar por empresa (ou total) e comparar meses consecutivos dentro do grupo
+    const grupos = new Map<string | number, typeof dados>();
+    dados.forEach((d) => {
+      const chave = d.empresaCod ?? 'total';
+      if (!grupos.has(chave)) grupos.set(chave, [] as any);
+      (grupos.get(chave) as any).push(d);
+    });
     const result: Array<{ labelRef: string; labelComp: string; variacao: number | null }> = [];
-    for (let i = 1; i < dados.length; i++) {
-      result.push({
-        labelRef: dados[i].label,
-        labelComp: dados[i - 1].label,
-        variacao: calcVariacao(dados[i][indicador], dados[i - 1][indicador]),
-      });
-    }
+    grupos.forEach((lista) => {
+      const arr = [...lista].sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
+      for (let i = 1; i < arr.length; i++) {
+        result.push({
+          labelRef: arr[i].label,
+          labelComp: arr[i - 1].label,
+          variacao: calcVariacao(arr[i][indicador], arr[i - 1][indicador]),
+        });
+      }
+    });
     return result;
   }, [dados, indicador]);
 
@@ -190,7 +206,13 @@ export function ComparativoMensalChart({ empresa }: Props) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => fetchComparativo({ empresa, meses })}
+            onClick={() =>
+              fetchComparativo({
+                empresa,
+                meses,
+                empresasCatalogo: empresas.map((e) => ({ codEmpresa: e.codEmpresa, nome: e.nome })),
+              })
+            }
             disabled={loading}
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -285,9 +307,17 @@ export function ComparativoMensalChart({ empresa }: Props) {
           <>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} barCategoryGap="20%">
+                <BarChart data={chartData} barCategoryGap="15%">
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: 600 }} className="fill-foreground" />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 11, fontWeight: 600 }}
+                    className="fill-foreground"
+                    interval={0}
+                    angle={chartData.length > 4 ? -20 : 0}
+                    textAnchor={chartData.length > 4 ? 'end' : 'middle'}
+                    height={chartData.length > 4 ? 70 : 30}
+                  />
                   <YAxis
                     tickFormatter={(v) =>
                       indicador === 'percentualDesconto'
@@ -382,7 +412,7 @@ export function ComparativoMensalChart({ empresa }: Props) {
                 </thead>
                 <tbody>
                   {dados.map((d) => (
-                    <tr key={`${d.ano}-${d.mes}`} className="border-b border-border/50 hover:bg-muted/30">
+                    <tr key={d.key} className="border-b border-border/50 hover:bg-muted/30">
                       <td className="py-2 px-3 font-semibold">{d.label}</td>
                       <td className="py-2 px-3 text-right">{formatCurrency(d.totalVendido)}</td>
                       <td className="py-2 px-3 text-right">{formatNumber(d.qtdVendas)}</td>

@@ -82,7 +82,7 @@ export function useFluxoCaixa(initialFilters?: Partial<FluxoCaixaFilters>) {
 
     try {
       const lancamentos = await getFluxoCaixa({
-        empresa: filters.empresa,
+        empresa: Array.isArray(filters.empresa) ? (filters.empresa[0] ?? null) : filters.empresa,
         dataInicio: filters.dataIni,
         dataFim: filters.dataFim,
         apenasBaixado: false, // includes projections
