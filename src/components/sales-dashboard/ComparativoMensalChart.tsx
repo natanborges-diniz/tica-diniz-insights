@@ -174,14 +174,24 @@ export function ComparativoMensalChart({ empresa }: Props) {
 
   const variacoes = useMemo(() => {
     if (dados.length < 2) return [];
+    // Agrupar por empresa (ou total) e comparar meses consecutivos dentro do grupo
+    const grupos = new Map<string | number, typeof dados>();
+    dados.forEach((d) => {
+      const chave = d.empresaCod ?? 'total';
+      if (!grupos.has(chave)) grupos.set(chave, [] as any);
+      (grupos.get(chave) as any).push(d);
+    });
     const result: Array<{ labelRef: string; labelComp: string; variacao: number | null }> = [];
-    for (let i = 1; i < dados.length; i++) {
-      result.push({
-        labelRef: dados[i].label,
-        labelComp: dados[i - 1].label,
-        variacao: calcVariacao(dados[i][indicador], dados[i - 1][indicador]),
-      });
-    }
+    grupos.forEach((lista) => {
+      const arr = [...lista].sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
+      for (let i = 1; i < arr.length; i++) {
+        result.push({
+          labelRef: arr[i].label,
+          labelComp: arr[i - 1].label,
+          variacao: calcVariacao(arr[i][indicador], arr[i - 1][indicador]),
+        });
+      }
+    });
     return result;
   }, [dados, indicador]);
 
