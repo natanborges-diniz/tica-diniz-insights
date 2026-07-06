@@ -404,7 +404,7 @@ export function ComparativoMensalChart({ empresa }: Props) {
                 </thead>
                 <tbody>
                   {dados.map((d) => (
-                    <tr key={`${d.ano}-${d.mes}`} className="border-b border-border/50 hover:bg-muted/30">
+                    <tr key={d.key} className="border-b border-border/50 hover:bg-muted/30">
                       <td className="py-2 px-3 font-semibold">{d.label}</td>
                       <td className="py-2 px-3 text-right">{formatCurrency(d.totalVendido)}</td>
                       <td className="py-2 px-3 text-right">{formatNumber(d.qtdVendas)}</td>
