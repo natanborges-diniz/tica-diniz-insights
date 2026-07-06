@@ -785,10 +785,7 @@ export function useVendasDashboard() {
         .gte('data', dataInicio)
         .lte('data', dataFim);
 
-      if (empresa !== 'ALL') {
-        const codEmpresa = typeof empresa === 'string' ? parseInt(empresa, 10) : empresa;
-        queryCache = queryCache.eq('cod_empresa', codEmpresa);
-      }
+      queryCache = aplicarFiltroEmpresaSupabase(queryCache, empresa);
 
       const { data: cacheData, error: cacheError } = await queryCache;
 
