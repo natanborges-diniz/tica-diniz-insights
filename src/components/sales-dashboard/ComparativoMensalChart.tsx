@@ -307,9 +307,17 @@ export function ComparativoMensalChart({ empresa }: Props) {
           <>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} barCategoryGap="20%">
+                <BarChart data={chartData} barCategoryGap="15%">
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="name" tick={{ fontSize: 13, fontWeight: 600 }} className="fill-foreground" />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 11, fontWeight: 600 }}
+                    className="fill-foreground"
+                    interval={0}
+                    angle={chartData.length > 4 ? -20 : 0}
+                    textAnchor={chartData.length > 4 ? 'end' : 'middle'}
+                    height={chartData.length > 4 ? 70 : 30}
+                  />
                   <YAxis
                     tickFormatter={(v) =>
                       indicador === 'percentualDesconto'
