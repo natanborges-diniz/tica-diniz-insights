@@ -27,6 +27,7 @@ import { PaymentMethodsChart } from "./PaymentMethodsChart";
 import { PaymentMethodsTable } from "./PaymentMethodsTable";
 import { VendasDiariasTable } from "./VendasDiariasTable";
 import { ComparativoAnualChart } from "./ComparativoAnualChart";
+import { ComparativoMensalChart } from "./ComparativoMensalChart";
 import { useModuleInsights } from "@/hooks/useModuleInsights";
 import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
 import { registerAction, unregisterAction, createNavigationHandler } from "@/lib/actionCatalog";
@@ -597,6 +598,9 @@ export function VendasDashboardLayout({
                 dataFim={filters.dataFim}
                 empresa={filters.empresa}
               />
+
+              {/* Comparativo Mensal (meses arbitrários) */}
+              <ComparativoMensalChart empresa={filters.empresa} />
             </TabsContent>
 
             <TabsContent value="diario" className="mt-6">

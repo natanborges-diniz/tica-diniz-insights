@@ -1,46 +1,60 @@
+
 ## Objetivo
-Permitir liberar **páginas/relatórios específicos** para um usuário mesmo sem dar acesso ao módulo inteiro. Modelo **aditivo**: nada muda para quem já tem permissão de módulo — só ganha um "extra" para casos como "Roseane vê Vendas por Família, mas nada mais em Vendas".
 
-## Como funciona
+No Dashboard de Vendas, adicionar uma nova análise que permita **comparar qualquer mês contra qualquer outro mês** (independente do ano), usando o mesmo filtro de empresa e a mesma bateria de indicadores já usados no Comparativo Anual (Faturamento, Venda Bruta, Desconto, % Desconto, Qtd. Transações, Ticket Médio).
 
-1. Se o usuário tem acesso ao módulo (`user_module_permissions` ≥ consulta) → vê tudo como hoje.
-2. Se NÃO tem o módulo, mas tem a página liberada em `user_page_permissions` → o item aparece no menu daquele módulo e a rota abre normalmente (só leitura por padrão).
-3. Admin continua vendo tudo.
+Hoje o dashboard já tem o "Comparativo Anual" (mesmo período em anos diferentes). Falta a granularidade mês-a-mês.
 
-## Banco (migration)
+## Como o usuário vai usar
 
-Nova tabela `user_page_permissions`:
-- `user_id` (fk auth.users)
-- `page_key` (text — ex: `vendas.familia`, `vendas.inteligencia`, `financeiro.dre`)
-- `granted_at`, `granted_by`
-- PK composta `(user_id, page_key)`
-- RLS: usuário lê as próprias; admin gerencia todas.
-- GRANTs para `authenticated` e `service_role`.
+1. Abre `/vendas`, aplica os filtros normais (empresa, período).
+2. Um novo card **"Comparativo Mensal"** aparece abaixo do Comparativo Anual.
+3. Escolhe o **indicador** (mesmo dropdown do anual).
+4. Adiciona 2 ou mais **meses** via seletores ano+mês (chips "+ Adicionar mês"), podendo remover cada um.
+   - Default inicial: mês corrente + mês anterior.
+   - Sem restrição — pode comparar Mar/2024 vs Nov/2025 vs Jul/2023, por exemplo.
+5. Vê barras lado a lado (uma por mês selecionado), variações percentuais entre pares consecutivos, e uma tabela resumo.
 
-Function `has_page_access(_user_id, _page_key)` (security definer): retorna true se admin, ou se módulo liberado, ou se linha existe em `user_page_permissions`.
+Empresa vem sempre do filtro global do dashboard (mesma regra do Anual).
 
-## Frontend
+## Escopo técnico
 
-**Catálogo de páginas** (`src/lib/pageCatalog.ts`, novo): lista central `{ key, module, title, path }` cobrindo todas as rotas dos 8 módulos — fonte de verdade única compartilhada por sidebar e admin.
+### Novo hook `src/hooks/useComparativoMensal.ts`
+- Espelha `useComparativoAnual`, mas o parâmetro é uma lista `mesesComparar: { ano: number; mes: number }[]`.
+- Para cada item, calcula início/fim do mês (dia 1 ao último dia) e chama a mesma função `buscarAgregadosPeriodo` (ler do cache `vendas_agregado_diario`, mesma lógica de exclusão de DEVOLUCAO/CREDITOS já existente).
+- Retorna array `DadosMensais` com `{ ano, mes, label: "MMM/YY", totalVendido, totalBruto, totalDesconto, percentualDesconto, qtdVendas, ticketMedio }`, ordenado cronologicamente.
+- Reaproveita `IndicadorComparativo` e `INDICADORES_LABELS` já exportados por `useComparativoAnual`.
 
-**Hook `useModulePermissions`**: adicionar `allowedPages: Set<string>` + método `hasPageAccess(pageKey)`. Fetch paralelo de `user_module_permissions` e `user_page_permissions`.
+Nota: `buscarAgregadosPeriodo` está privado dentro de `useComparativoAnual.ts`. Refatoração leve: extrair essa função (e o toggle DEVOLUCAO/CREDITO) para `src/services/agregadosService.ts` (arquivo já existe) e reusar nos dois hooks. Nenhuma mudança de comportamento no Anual.
 
-**`AppSidebar`**: filtrar `moduleMenus` por `hasPageAccess(pageKey)`. Renderizar seção do módulo mesmo sem `hasAccess(module)` desde que exista ≥1 página liberada.
+### Novo componente `src/components/sales-dashboard/ComparativoMensalChart.tsx`
+- Estrutura visual idêntica ao `ComparativoAnualChart` (mesmo Card/BarChart/tabela/variações), trocando "anos" por "meses".
+- Controles:
+  - Select de Indicador (reusa `INDICADORES_LABELS`).
+  - Lista de meses selecionados, cada um com dois `Select` (Ano, Mês) e botão remover.
+  - Botão "+ Adicionar mês" (limite prático: 6).
+- Label do eixo X: `"Mai/25"`, `"Abr/25"`, etc.
+- Variações percentuais: comparação sequencial entre meses ordenados (igual anual).
+- Empresa vem por prop, igual ao Anual.
 
-**`ModuleGuard`**: permitir entrada se qualquer página do módulo estiver liberada; guard por rota individual fica em um novo `PageGuard` fino aplicado nas rotas do `App.tsx` (ou dentro do próprio `ModuleGuard` recebendo `pageKey` opcional).
+### Integração no layout
+- Em `src/components/sales-dashboard/VendasDashboardLayout.tsx`, inserir `<ComparativoMensalChart dataInicio={...} dataFim={...} empresa={...} />` logo abaixo do `<ComparativoAnualChart />` existente, recebendo os mesmos props (empresa e datas do filtro atual — datas são só referência de contexto, não limitam os meses escolhidos).
 
-**AdminUsuariosPage — sheet de edição**: abaixo do bloco de módulos, nova seção "Páginas específicas" agrupada por módulo, com checkboxes por página. Só aparece marcado como "extra" quando o módulo pai não estiver liberado. Salva delta contra `user_page_permissions` (insert/delete) no mesmo submit já existente.
+### Não muda
+- Nada em Firebird Bridge, sync, RLS, ou tabelas.
+- Todos os dados vêm do cache `vendas_agregado_diario` já em uso.
+- Nenhuma mudança no Comparativo Anual (só extração da helper para o service).
 
-## Escopo de páginas (todas)
-Vendas (3), Compras (1), Estoque (5), Monitor (3), Financeiro (13), IA (1), Config (7). Catálogo derivado direto de `AppSidebar.moduleMenus`.
+## Arquivos afetados
 
-## Fora do escopo
-- Não altera níveis (`consulta/edita/total`) — página liberada = consulta. Se precisar granularidade de edição por página depois, adicionamos coluna `access_level` na tabela.
-- Não mexe em RLS de tabelas de dados (permissão é de UI/navegação; dados continuam por `cod_empresa`).
+- `src/services/agregadosService.ts` — adicionar/expor `buscarAgregadosPeriodo`.
+- `src/hooks/useComparativoAnual.ts` — passa a importar helper do service (sem mudança de comportamento).
+- `src/hooks/useComparativoMensal.ts` — **novo**.
+- `src/components/sales-dashboard/ComparativoMensalChart.tsx` — **novo**.
+- `src/components/sales-dashboard/VendasDashboardLayout.tsx` — inserir o novo card.
 
-## Entregáveis
-1. Migration `user_page_permissions` + função `has_page_access`.
-2. `src/lib/pageCatalog.ts`.
-3. Update `useModulePermissions` + novo `PageGuard`.
-4. `AppSidebar` filtrado por página.
-5. UI de admin (nova seção no sheet de edição de usuário).
+## Fora de escopo
+
+- Comparar meses de empresas diferentes no mesmo gráfico.
+- Persistir seleção de meses entre sessões.
+- Exportação específica desse card (usa a exportação global do dashboard se já existir).
