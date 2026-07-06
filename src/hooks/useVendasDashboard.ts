@@ -636,7 +636,7 @@ export function useVendasDashboard() {
       console.log(`[useVendasDashboard] 🔥 Firebird em background (cache ${cacheEstavaCheio ? 'disponível' : 'vazio'})...`);
       
       try {
-        const dadosFirebird = await Promise.race([
+        const dadosFirebirdRaw = await Promise.race([
           getResumoFormasPagamento({
             empresa,
             dataInicio,
@@ -655,6 +655,12 @@ export function useVendasDashboard() {
           console.log('[useVendasDashboard] Firebird retornou mas filtro já mudou, descartando');
           return;
         }
+
+        // Multi-empresa: bridge devolve todas as empresas, filtramos client-side
+        const filterList = empresaFilterList(empresa);
+        const dadosFirebird = filterList
+          ? dadosFirebirdRaw.filter((d) => filterList.includes(d.codEmpresa))
+          : dadosFirebirdRaw;
         
         if (dadosFirebird.length > 0) {
           const dadosAgregados = agregarDados(dadosFirebird);
@@ -671,7 +677,8 @@ export function useVendasDashboard() {
           console.log(`[useVendasDashboard] ✓ Firebird: ${dadosAgregados.length} registros em ${tempoMs}ms`);
           
           // Salvar no cache Supabase para próxima vez (fire-and-forget)
-          salvarNoCache(dadosFirebird, dataInicio, dataFim).catch(() => {});
+          // Salva sempre os dados brutos (não-filtrados) — o cache é global por empresa
+          salvarNoCache(dadosFirebirdRaw, dataInicio, dataFim).catch(() => {});
         } else if (!cacheEstavaCheio) {
           // Firebird retornou vazio E cache estava vazio
           setDadosFormasPagamento([]);
