@@ -211,12 +211,7 @@ export async function getVendasAgregado(
     .gte('data', params.dataInicio)
     .lte('data', params.dataFim);
   
-  if (params.empresa !== 'ALL') {
-    const codEmpresa = typeof params.empresa === 'string' 
-      ? parseInt(params.empresa, 10) 
-      : params.empresa;
-    query = query.eq('cod_empresa', codEmpresa);
-  }
+  query = aplicarFiltroEmpresaSupabase(query, params.empresa);
   
   const { data, error } = await query;
   
