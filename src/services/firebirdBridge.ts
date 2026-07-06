@@ -262,7 +262,22 @@ export async function apiGet<T>(
 export function formatEmpresaParam(empresa: EmpresaParam): string | undefined {
   if (empresa === null || empresa === undefined) return undefined;
   if (empresa === 'ALL') return 'ALL';
+  if (Array.isArray(empresa)) {
+    if (empresa.length === 0) return 'ALL';
+    if (empresa.length === 1) return String(empresa[0]);
+    // Multi-empresa: bridge não aceita lista — buscamos ALL e filtramos client-side
+    return 'ALL';
+  }
   return String(empresa);
+}
+
+/**
+ * Retorna a lista de códigos de empresa quando a seleção é multi-empresa,
+ * ou null quando a seleção é single/ALL/vazia (não precisa filtrar client-side).
+ */
+export function empresaFilterList(empresa: EmpresaParam): number[] | null {
+  if (Array.isArray(empresa) && empresa.length > 1) return empresa;
+  return null;
 }
 
 export { FIREBIRD_BRIDGE_BASE_URL };
