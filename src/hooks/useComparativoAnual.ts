@@ -96,10 +96,8 @@ async function buscarAgregadosPeriodo(
     .gte('data', dataInicio)
     .lte('data', dataFim);
 
-  if (empresa !== 'ALL') {
-    const codEmpresa = typeof empresa === 'string' ? parseInt(empresa, 10) : empresa;
-    query = query.eq('cod_empresa', codEmpresa);
-  }
+  const { aplicarFiltroEmpresaSupabase } = await import('@/services/firebirdBridge');
+  query = aplicarFiltroEmpresaSupabase(query, empresa);
 
   const { data, error } = await query;
 
