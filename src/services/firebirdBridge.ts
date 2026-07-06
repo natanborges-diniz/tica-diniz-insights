@@ -32,7 +32,7 @@ export interface ApiEnvelope<T> {
 // TIPO PARA PARÂMETRO EMPRESA
 // ============================================
 
-export type EmpresaParam = 'ALL' | string | number | null;
+export type EmpresaParam = 'ALL' | string | number | number[] | null;
 
 // ============================================
 // HELPER PARA CONVERTER CAMPOS PARA CAMELCASE
