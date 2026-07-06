@@ -196,7 +196,13 @@ export function ComparativoMensalChart({ empresa }: Props) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => fetchComparativo({ empresa, meses })}
+            onClick={() =>
+              fetchComparativo({
+                empresa,
+                meses,
+                empresasCatalogo: empresas.map((e) => ({ codEmpresa: e.codEmpresa, nome: e.nome })),
+              })
+            }
             disabled={loading}
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
