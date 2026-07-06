@@ -598,6 +598,9 @@ export function VendasDashboardLayout({
                 dataFim={filters.dataFim}
                 empresa={filters.empresa}
               />
+
+              {/* Comparativo Mensal (meses arbitrários) */}
+              <ComparativoMensalChart empresa={filters.empresa} />
             </TabsContent>
 
             <TabsContent value="diario" className="mt-6">
