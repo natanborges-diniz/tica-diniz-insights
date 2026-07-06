@@ -32,6 +32,7 @@ import {
   MesRef,
 } from '@/hooks/useComparativoMensal';
 import { EmpresaParam } from '@/services/firebirdBridge';
+import { useUserEmpresas } from '@/hooks/useUserEmpresas';
 
 const MESES = [
   { value: 1, label: 'Janeiro' },
