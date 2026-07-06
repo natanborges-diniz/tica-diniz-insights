@@ -12,7 +12,7 @@ import {
   ResumoFormaPagamento,
   ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
-import { EmpresaParam } from "@/services/firebirdBridge";
+import { EmpresaParam, aplicarFiltroEmpresaSupabase, empresaFilterList } from "@/services/firebirdBridge";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
