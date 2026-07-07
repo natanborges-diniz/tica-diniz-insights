@@ -61,16 +61,23 @@ serve(async (req) => {
         if (!cod_empresa || !valor || !descricao) throw new Error("cod_empresa, valor e descricao são obrigatórios");
 
         // Validate that the store has a valid PV configured
-        const { data: adqConfig } = await admin
+        const codEmpresaNum = Number(cod_empresa);
+        const { data: adqConfig, error: adqError } = await admin
           .from("adquirentes_config")
           .select("merchant_id, merchant_id_production, ambiente, ativo")
-          .eq("cod_empresa", cod_empresa)
+          .eq("cod_empresa", codEmpresaNum)
           .eq("adquirente", "REDE")
           .eq("ativo", true)
-          .single();
+          .maybeSingle();
+
+        if (adqError) {
+          console.error(`[payment-links] adquirentes_config query error loja=${codEmpresaNum}:`, adqError);
+          throw new Error(`Erro ao consultar configuração da loja ${codEmpresaNum}: ${adqError.message}`);
+        }
 
         if (!adqConfig) {
-          throw new Error(`Loja ${cod_empresa} não possui configuração de adquirente ativa.`);
+          console.warn(`[payment-links] Nenhuma config REDE ativa para cod_empresa=${codEmpresaNum} (raw=${cod_empresa} tipo=${typeof cod_empresa})`);
+          throw new Error(`Loja ${codEmpresaNum} não possui configuração de adquirente ativa.`);
         }
 
         const activePv = adqConfig.ambiente === "production"
