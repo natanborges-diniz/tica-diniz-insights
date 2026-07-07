@@ -57,7 +57,7 @@ serve(async (req) => {
 
     switch (action) {
       case "criar": {
-        const { cod_empresa, valor, descricao, parcelas_max, cliente_nome, cliente_documento, cliente_telefone, origem, origem_ref } = params;
+        const { cod_empresa, valor, descricao, parcelas_max, parcelas_fixas, cliente_nome, cliente_documento, cliente_telefone, origem, origem_ref } = params;
         if (!cod_empresa || !valor || !descricao) throw new Error("cod_empresa, valor e descricao são obrigatórios");
 
         // Validate that the store has a valid PV configured
@@ -84,13 +84,17 @@ serve(async (req) => {
         const linkOrigem = origem || (auth.isService ? "CHATBOT" : "MANUAL");
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
+        const parcelasFixasNum = parcelas_fixas != null ? Number(parcelas_fixas) : null;
+        const parcelasMaxNum = parcelasFixasNum ?? (parcelas_max || 1);
+
         // Save payment link with system-generated URL (no Rede call needed at creation)
         const linkRecord = {
           cod_empresa,
           adquirente: "REDE",
           valor,
           descricao,
-          parcelas_max: parcelas_max || 1,
+          parcelas_max: parcelasMaxNum,
+          parcelas_fixas: parcelasFixasNum,
           expira_em: expiresAt,
           status: "ATIVO",
           cliente_nome: cliente_nome || null,
@@ -187,7 +191,7 @@ serve(async (req) => {
 
         const { data, error } = await admin
           .from("payment_links")
-          .select("id, valor, descricao, parcelas_max, status, expira_em, cliente_nome, adquirente")
+          .select("id, valor, descricao, parcelas_max, parcelas_fixas, status, expira_em, cliente_nome, adquirente")
           .eq("id", link_id)
           .single();
 
@@ -227,6 +231,17 @@ serve(async (req) => {
           throw new Error("Link expirado");
         }
 
+        // Enforce fixed installments when link.parcelas_fixas is set
+        const requestedInstallments = installments != null ? Number(installments) : null;
+        if (link.parcelas_fixas != null && requestedInstallments != null && requestedInstallments !== link.parcelas_fixas) {
+          return new Response(JSON.stringify({
+            error: `Este link exige pagamento em ${link.parcelas_fixas}x. Não é possível alterar o número de parcelas.`,
+            errorCategory: "MERCHANT",
+            retryable: false,
+          }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const effectiveInstallments = link.parcelas_fixas ?? requestedInstallments ?? link.parcelas_max ?? 1;
+
         // Call rede-proxy to process payment
         const reference = `PL-${link.cod_empresa}-${link_id.slice(0, 8)}`;
         const redeRes = await fetch(`${SUPABASE_URL}/functions/v1/rede-proxy`, {
@@ -240,7 +255,7 @@ serve(async (req) => {
             cod_empresa: link.cod_empresa,
             amount: link.valor,
             reference,
-            installments: installments || link.parcelas_max || 1,
+            installments: effectiveInstallments,
             kind: "credit",
             capture: true,
             cardNumber,

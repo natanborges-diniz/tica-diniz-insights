@@ -24,6 +24,7 @@ interface LinkData {
   valor: number;
   descricao: string;
   parcelas_max: number;
+  parcelas_fixas?: number | null;
   cliente_nome: string | null;
 }
 
@@ -146,8 +147,11 @@ export default function CheckoutForm({ linkData, linkId, fmtCurrency, onSuccess 
 
 
 
-  const maxParcelas = linkData.parcelas_max || 1;
-  const parcelaOptions = Array.from({ length: maxParcelas }, (_, i) => i + 1);
+  const isFixed = linkData.parcelas_fixas != null && linkData.parcelas_fixas > 0;
+  const maxParcelas = isFixed ? linkData.parcelas_fixas! : (linkData.parcelas_max || 1);
+  const parcelaOptions = isFixed
+    ? [linkData.parcelas_fixas!]
+    : Array.from({ length: maxParcelas }, (_, i) => i + 1);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center p-4">
