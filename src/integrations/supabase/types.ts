@@ -1819,6 +1819,7 @@ export type Database = {
           origem: string
           origem_ref: string | null
           pago_em: string | null
+          parcelas_fixas: number | null
           parcelas_max: number | null
           qr_code_pix: string | null
           status: string
@@ -1843,6 +1844,7 @@ export type Database = {
           origem?: string
           origem_ref?: string | null
           pago_em?: string | null
+          parcelas_fixas?: number | null
           parcelas_max?: number | null
           qr_code_pix?: string | null
           status?: string
@@ -1867,6 +1869,7 @@ export type Database = {
           origem?: string
           origem_ref?: string | null
           pago_em?: string | null
+          parcelas_fixas?: number | null
           parcelas_max?: number | null
           qr_code_pix?: string | null
           status?: string
