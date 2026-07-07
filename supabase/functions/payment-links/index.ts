@@ -60,17 +60,33 @@ serve(async (req) => {
         const { cod_empresa, valor, descricao, parcelas_max, parcelas_fixas, cliente_nome, cliente_documento, cliente_telefone, origem, origem_ref } = params;
         if (!cod_empresa || !valor || !descricao) throw new Error("cod_empresa, valor e descricao são obrigatórios");
 
-        // Validate that the store has a valid PV configured
-        const { data: adqConfig } = await admin
-          .from("adquirentes_config")
-          .select("merchant_id, merchant_id_production, ambiente, ativo")
-          .eq("cod_empresa", cod_empresa)
-          .eq("adquirente", "REDE")
-          .eq("ativo", true)
-          .single();
+        // Validate that the store has a valid PV configured (com retry para timeouts transientes do PostgREST)
+        const codEmpresaNum = Number(cod_empresa);
+        let adqConfig: any = null;
+        let adqError: any = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const res = await admin
+            .from("adquirentes_config")
+            .select("merchant_id, merchant_id_production, ambiente, ativo")
+            .eq("cod_empresa", codEmpresaNum)
+            .eq("adquirente", "REDE")
+            .eq("ativo", true)
+            .maybeSingle();
+          adqConfig = res.data;
+          adqError = res.error;
+          if (!adqError) break;
+          console.warn(`[payment-links] adquirentes_config tentativa ${attempt}/3 falhou loja=${codEmpresaNum}: ${adqError.message}`);
+          if (attempt < 3) await new Promise(r => setTimeout(r, 500 * attempt));
+        }
+
+        if (adqError) {
+          console.error(`[payment-links] adquirentes_config erro persistente loja=${codEmpresaNum}:`, adqError);
+          throw new Error(`Falha temporária ao consultar configuração da loja ${codEmpresaNum}. Tente novamente em alguns instantes.`);
+        }
 
         if (!adqConfig) {
-          throw new Error(`Loja ${cod_empresa} não possui configuração de adquirente ativa.`);
+          console.warn(`[payment-links] Sem config REDE ativa loja=${codEmpresaNum}`);
+          throw new Error(`Loja ${codEmpresaNum} não possui configuração de adquirente ativa.`);
         }
 
         const activePv = adqConfig.ambiente === "production"
