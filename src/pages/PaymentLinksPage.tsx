@@ -73,6 +73,7 @@ export default function PaymentLinksPage() {
     valor: "",
     descricao: "",
     parcelas_max: "1",
+    parcelas_travadas: false,
     cliente_nome: "",
     cliente_telefone: "",
   });
@@ -117,11 +118,13 @@ export default function PaymentLinksPage() {
       if (!Number.isFinite(valorNum) || valorNum <= 0) {
         throw new Error("Valor inválido. Use números com vírgula ou ponto (ex.: 150,00 ou 150.00).");
       }
+      const parcelasNum = parseInt(newLink.parcelas_max);
       return invokeAction("criar", {
         cod_empresa: newLinkEmpresa,
         valor: valorNum,
         descricao: newLink.descricao,
-        parcelas_max: parseInt(newLink.parcelas_max),
+        parcelas_max: parcelasNum,
+        parcelas_fixas: newLink.parcelas_travadas ? parcelasNum : undefined,
         cliente_nome: newLink.cliente_nome || undefined,
         cliente_telefone: newLink.cliente_telefone || undefined,
       });
@@ -129,7 +132,7 @@ export default function PaymentLinksPage() {
     onSuccess: (data: { url_pagamento?: string; tid?: string }) => {
       toast.success(`Link criado${data?.tid ? ` — TID: ${data.tid}` : ""}`);
       setDialogOpen(false);
-      setNewLink({ valor: "", descricao: "", parcelas_max: "1", cliente_nome: "", cliente_telefone: "" });
+      setNewLink({ valor: "", descricao: "", parcelas_max: "1", parcelas_travadas: false, cliente_nome: "", cliente_telefone: "" });
       queryClient.invalidateQueries({ queryKey: ["payment-links"] });
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao criar link"),
@@ -222,6 +225,17 @@ export default function PaymentLinksPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 accent-primary"
+                        checked={newLink.parcelas_travadas}
+                        onChange={e => setNewLink(f => ({ ...f, parcelas_travadas: e.target.checked }))}
+                      />
+                      <span className="text-[11px] text-muted-foreground">
+                        Travar parcelas para o cliente ({newLink.parcelas_max}x fixo)
+                      </span>
+                    </label>
                   </div>
                 </div>
                 <div className="space-y-1">
@@ -335,7 +349,7 @@ export default function PaymentLinksPage() {
               ) : (
                 links.map((link: {
                   id: string; descricao: string; cliente_nome: string | null; cliente_telefone: string | null;
-                  valor: number; parcelas_max: number; status: string; origem: string;
+                  valor: number; parcelas_max: number; parcelas_fixas: number | null; status: string; origem: string;
                   url_pagamento: string | null; tid: string | null; created_at: string;
                   dados_extras: any;
                 }) => {
@@ -356,7 +370,13 @@ export default function PaymentLinksPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right font-mono font-medium">{fmtCurrency(Number(link.valor))}</TableCell>
-                      <TableCell className="text-center">{link.parcelas_max}x</TableCell>
+                      <TableCell className="text-center">
+                        {link.parcelas_fixas != null ? (
+                          <Badge variant="secondary" className="text-[10px]">{link.parcelas_fixas}x fixo</Badge>
+                        ) : (
+                          <span>{link.parcelas_max}x</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={st.variant} className="gap-1">
                           <Icon className="h-3 w-3" />
