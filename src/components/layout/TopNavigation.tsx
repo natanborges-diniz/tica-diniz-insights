@@ -30,6 +30,7 @@ export function TopNavigation({ activeModule }: TopNavigationProps) {
   const { profile, isAdmin, signOut } = useAuth();
   const { hasAnyPageInModule, hasPageAccess } = useModulePermissions();
   const { unacknowledgedCount } = usePedidoAlertas();
+  const [passwordOpen, setPasswordOpen] = useState(false);
 
   const modules = allModules.filter(m => hasAnyPageInModule(m.key));
 
