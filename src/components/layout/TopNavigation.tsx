@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain, LogOut, Shield, ShoppingCart } from "lucide-react";
+import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain, LogOut, Shield, ShoppingCart, KeyRound } from "lucide-react";
 import logoInfoco from "@/assets/logo-infoco.png";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { usePedidoAlertas } from "@/hooks/usePedidoAlertas";
 import { PAGES_BY_MODULE, findPageByPath } from "@/lib/pageCatalog";
+import { ChangePasswordDialog } from "@/components/auth/ChangePasswordDialog";
 import type { ModuleKey } from "./AppLayout";
 
 interface TopNavigationProps {
