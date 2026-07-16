@@ -132,8 +132,6 @@ export function TopNavigation({ activeModule }: TopNavigationProps) {
         </div>
       </div>
       <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
-        </div>
-      </div>
     </header>
   );
 }
