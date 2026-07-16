@@ -123,9 +123,15 @@ export function TopNavigation({ activeModule }: TopNavigationProps) {
           <span className="text-xs text-muted-foreground hidden sm:inline truncate max-w-[150px]">
             {profile?.email}
           </span>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPasswordOpen(true)} title="Alterar minha senha">
+            <KeyRound className="h-4 w-4" />
+          </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSignOut} title="Sair">
             <LogOut className="h-4 w-4" />
           </Button>
+        </div>
+      </div>
+      <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
         </div>
       </div>
     </header>
