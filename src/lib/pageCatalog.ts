@@ -23,6 +23,8 @@ export const PAGE_CATALOG: PageEntry[] = [
   { key: "estoque.planos-historico", module: "estoque", title: "Histórico de Planos", path: "/estoque/planos-historico" },
   { key: "estoque.capacidades", module: "estoque", title: "Capacidade Expositor", path: "/estoque/capacidades" },
   // Monitor
+  { key: "monitor.dashboard", module: "monitor", title: "Monitor de OS", path: "/os" },
+
   { key: "monitor.tracking-hoya", module: "monitor", title: "Tracking Hoya", path: "/os/tracking" },
   { key: "monitor.tracking-zeiss", module: "monitor", title: "Tracking Zeiss", path: "/os/tracking-zeiss" },
   { key: "monitor.tracking-haytek", module: "monitor", title: "Tracking Haytek", path: "/os/tracking-haytek" },
