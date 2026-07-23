@@ -21,6 +21,7 @@ interface CapacidadeRow {
   cod_empresa: number;
   capacidade_total: number;
   percentual_solar: number;
+  mix_minimo: number | null;
 }
 
 interface MarcaConfigRow {
@@ -85,7 +86,7 @@ export default function CapacidadesExpositorPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("capacidade_expositor")
-        .select("id, cod_empresa, capacidade_total, percentual_solar")
+        .select("id, cod_empresa, capacidade_total, percentual_solar, mix_minimo")
         .order("cod_empresa");
       if (error) throw error;
       return data as CapacidadeRow[];
@@ -100,7 +101,11 @@ export default function CapacidadesExpositorPage() {
     }
   }, [data, setClean]);
 
-  const update = (id: string, field: "capacidade_total" | "percentual_solar", value: number) => {
+  const update = (
+    id: string,
+    field: "capacidade_total" | "percentual_solar" | "mix_minimo",
+    value: number | null,
+  ) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
     setDirty();
   };
@@ -109,7 +114,12 @@ export default function CapacidadesExpositorPage() {
     const origMap = new Map(original.map((r) => [r.id, r]));
     return rows.filter((r) => {
       const o = origMap.get(r.id);
-      return !o || o.capacidade_total !== r.capacidade_total || o.percentual_solar !== r.percentual_solar;
+      return (
+        !o ||
+        o.capacidade_total !== r.capacidade_total ||
+        o.percentual_solar !== r.percentual_solar ||
+        o.mix_minimo !== r.mix_minimo
+      );
     });
   }, [rows, original]);
 
@@ -118,12 +128,13 @@ export default function CapacidadesExpositorPage() {
       !Number.isFinite(r.capacidade_total) ||
       r.capacidade_total < 0 ||
       r.percentual_solar < 0 ||
-      r.percentual_solar > 100,
+      r.percentual_solar > 100 ||
+      (r.mix_minimo !== null && (!Number.isFinite(r.mix_minimo) || r.mix_minimo < 0)),
   );
 
   const handleSave = async () => {
     if (hasInvalid) {
-      toastPatterns.warning("Valores inválidos", "Capacidade ≥ 0 e Solar entre 0 e 100.");
+      toastPatterns.warning("Valores inválidos", "Capacidade e Mín. do Mix ≥ 0; Solar entre 0 e 100.");
       return;
     }
     setStatus("loading");
@@ -134,6 +145,7 @@ export default function CapacidadesExpositorPage() {
           .update({
             capacidade_total: r.capacidade_total,
             percentual_solar: r.percentual_solar,
+            mix_minimo: r.mix_minimo,
           })
           .eq("id", r.id);
         if (error) throw error;
@@ -258,6 +270,9 @@ export default function CapacidadesExpositorPage() {
                   <TableHead>Loja</TableHead>
                   <TableHead className="w-[160px] text-right">Capacidade Total</TableHead>
                   <TableHead className="w-[140px] text-right">% Solar</TableHead>
+                  <TableHead className="w-[140px] text-right" title="Mínimo de peças por marca. Deixe vazio para usar o padrão do sistema (25).">
+                    Mín. do Mix
+                  </TableHead>
                   <TableHead className="w-[120px] text-right text-muted-foreground">RX</TableHead>
                   <TableHead className="w-[120px] text-right text-muted-foreground">Solar</TableHead>
                 </TableRow>
@@ -267,11 +282,16 @@ export default function CapacidadesExpositorPage() {
                   const origMap = new Map(original.map((o) => [o.id, o]));
                   const o = origMap.get(r.id);
                   const isChanged =
-                    o && (o.capacidade_total !== r.capacidade_total || o.percentual_solar !== r.percentual_solar);
+                    o &&
+                    (o.capacidade_total !== r.capacidade_total ||
+                      o.percentual_solar !== r.percentual_solar ||
+                      o.mix_minimo !== r.mix_minimo);
                   const solar = calcularCapacidadePorCategoria(r, 'AR_SOLAR');
                   const rx = calcularCapacidadePorCategoria(r, 'AR_RX');
                   const invalidPct = r.percentual_solar < 0 || r.percentual_solar > 100;
                   const invalidTot = !Number.isFinite(r.capacidade_total) || r.capacidade_total < 0;
+                  const invalidMin =
+                    r.mix_minimo !== null && (!Number.isFinite(r.mix_minimo) || r.mix_minimo < 0);
 
                   return (
                     <TableRow key={r.id} className={isChanged ? "bg-warning-soft/40" : ""}>
@@ -296,6 +316,19 @@ export default function CapacidadesExpositorPage() {
                           value={r.percentual_solar}
                           onChange={(e) => update(r.id, "percentual_solar", parseInt(e.target.value || "0", 10))}
                           className={`h-9 text-right ${invalidPct ? "border-danger" : ""}`}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder="25"
+                          value={r.mix_minimo ?? ""}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            update(r.id, "mix_minimo", raw === "" ? null : parseInt(raw, 10));
+                          }}
+                          className={`h-9 text-right ${invalidMin ? "border-danger" : ""}`}
                         />
                       </TableCell>
                       <TableCell className="text-right font-mono tabular-nums">{rx.toLocaleString("pt-BR")}</TableCell>
@@ -466,7 +499,7 @@ export default function CapacidadesExpositorPage() {
                   onCheckedChange={(v) => setForm((f) => ({ ...f, estrategica: Boolean(v) }))}
                 />
                 <Label htmlFor="mc-estrategica" className="cursor-pointer">
-                  Estratégica <span className="text-muted-foreground text-xs">(garante mín. 25 peças)</span>
+                  Estratégica <span className="text-muted-foreground text-xs">(garante o mínimo da loja mesmo abaixo da participação)</span>
                 </Label>
               </div>
 

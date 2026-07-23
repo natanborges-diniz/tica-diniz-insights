@@ -209,6 +209,7 @@ export interface MetricasEstoque {
 
 interface CapacidadeExpositorRow extends CapacidadeConfig {
   cod_empresa: number;
+  mix_minimo: number | null;
 }
 
 interface MapeamentoFornecedor {
@@ -222,12 +223,14 @@ interface MarcaConfigRow {
   pct_solar: number | null;
   estrategica: boolean;
   recem_introduzida: boolean;
+  minimo_proprio: number | null;
 }
 
 export interface MarcaConfig {
   pctSolar: number | null;
   estrategica: boolean;
   recemIntroduzida: boolean;
+  minimoProprio: number | null;
 }
 
 // Re-export para consumers
@@ -340,7 +343,7 @@ export function useEstoqueUnificado() {
       try {
         const { data, error } = await supabase
           .from('capacidade_expositor')
-          .select('cod_empresa, capacidade_total, percentual_solar');
+          .select('cod_empresa, capacidade_total, percentual_solar, mix_minimo');
         if (error) throw error;
         if (data) setConfigCapacidade(data as CapacidadeExpositorRow[]);
       } catch (err) {
@@ -362,7 +365,7 @@ export function useEstoqueUnificado() {
       try {
         let query = supabase
           .from('marca_config')
-          .select('cod_empresa, marca, pct_solar, estrategica, recem_introduzida');
+          .select('cod_empresa, marca, pct_solar, estrategica, recem_introduzida, minimo_proprio');
         if (filters.empresa !== 'ALL') {
           const codEmpresa = typeof filters.empresa === 'number' ? filters.empresa : parseInt(String(filters.empresa));
           query = query.eq('cod_empresa', codEmpresa);
@@ -391,6 +394,7 @@ export function useEstoqueUnificado() {
         pctSolar: r.pct_solar,
         estrategica: r.estrategica,
         recemIntroduzida: r.recem_introduzida,
+        minimoProprio: r.minimo_proprio,
       });
     });
     return map;
@@ -757,6 +761,7 @@ export function useEstoqueUnificado() {
         pctSolar: cfg.pctSolar,
         estrategica: cfg.estrategica,
         recemIntroduzida: cfg.recemIntroduzida,
+        minimoProprio: cfg.minimoProprio,
       });
     });
     return calcularMixIdealV2({
@@ -774,6 +779,7 @@ export function useEstoqueUnificado() {
       capacidadeTotal: capacidadeEmpresa.capacidade_total,
       marcaConfigs: configsV2,
       pctSolarDefault: capacidadeEmpresa.percentual_solar,
+      minimoLoja: capacidadeEmpresa.mix_minimo,
     });
   }, [itensFiltrados, capacidadeEmpresa, marcaConfigMap, marcaConfigFlagsByName]);
 
