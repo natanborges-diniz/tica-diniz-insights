@@ -1,79 +1,111 @@
 # Estado real do estoque materializado no Supabase
 
-**Data da apuração:** 2026-07-23
-**Contexto:** auditoria pré-Entrega 2 da Fase 2.0b (motor multi-loja).
+**Data da apuração:** 2026-07-23 (reescrito após merge de `origin/main` na feature branch — a versão anterior desta doc estava desatualizada porque foi produzida contra uma main local sem 150+ commits de trabalho do Lovable).
 
-## Corrigindo a crença sobre o "Sprint Estoque Materializado"
+## TL;DR
 
-O sprint entregou **otimização do endpoint** `/estoque/completo` do Firebird
-Bridge (cache, meta de `dias_giro_*`, subcategoria vinda do backend). Ele **não**
-materializou o estoque no Supabase.
+**O estoque materializado no Supabase EXISTE.** Foi implementado pelo Lovable ao longo de junho/julho de 2026 e o frontend já tem um dispatcher com feature flag para alternar entre fontes.
 
-## Fatos verificados no repo
+## Infraestrutura pronta
 
-- **`stg.estoque` (schema em `20251130211629_...sql:81`)**: tabela existe com
-  `PK (cod_produto, cod_empresa)`. Está vazia.
-- **`etl_controle` (mesma migration, l.98-103)**: `('estoque', 'pending')` desde
-  a criação — nunca foi promovido.
-- **Nenhuma edge function `sync-estoque`**. Existem `sync-produtos`,
-  `sync-vendas`, `sync-agregados-{diarios,mensal,semanal}`, `sync-clientes`,
-  `sync-empresas`, `sync-os-hub`, `sync-parcelas`, `sync-vendas-cartao`.
-- **Nenhum `dw.fato_estoque_snapshot`** ou view equivalente.
-- Consumidores atuais (`useEstoqueUnificado.ts:1068`, `PlanoMensalPage.tsx:542`)
-  chamam `getEstoqueCompleto` → Firebird Bridge, uma empresa por vez.
+### Tabela `public.estoque_sincronizado`
 
-## Medição empírica — `/estoque/completo?empresa=ALL`
+Criada via Lovable UI (não versionada em migration — só o commit `84ea0ab` reflete o tipo em `src/integrations/supabase/types.ts`). Uma alteração posterior `20260701033048_04fcce32-31b0-4c7e-9626-4f3183b87ee5.sql` adiciona colunas de giro. Schema atual (31 colunas):
 
-Chamadas contra o bridge em produção
-(`firebird-bridge-production.up.railway.app`), cache desligado.
+- Identificação: `id`, `cod_empresa`, `cod_sku`, `cod_produto_tipo`, `cod_barras_interno`, `ean`
+- Descritivo: `descricao`, `marca`, `fornecedor`, `categoria`, `subcategoria`
+- Estoque: `quantidade_estoque`, `valor_estoque_custo`, `custo_ultima_compra`, `preco_venda`
+- Temporais: `data_ultima_compra`, `data_ultima_entrada`, `data_ultima_venda`, `dias_em_estoque`, `dias_desde_ultima_venda`
+- Estado: `is_dead_stock`, `acao_sugerida`, `faixa_saneamento`, `desconto_sugerido`, `origem_custo`
+- Giro: `dias_giro_medio`, `dias_giro_mediano`, `dias_giro_ultima_peca`, `pecas_giro_consideradas`
+- Vendas 180d: `qtd_vendidos_180d`
+- Metadata: `atualizado_em`
 
-| Métrica                 | `empresa=1`        | `empresa=ALL`      |
-|-------------------------|--------------------|--------------------|
-| HTTP                    | 200                | 200                |
-| Tempo total (1 amostra) | **21.8 s**         | **66.6 s**         |
-| Payload                 | 0.79 MB            | **7.79 MB**        |
-| Linhas retornadas       | 1 036              | 10 246             |
-| SKUs distintos          | 1 036              | 5 524              |
-| Duplicatas por SKU      | nenhuma            | até 8 (2 000 SKUs) |
+**`cod_empresa` está no schema** — resolve o problema do bridge `empresa=ALL` sem discriminação.
 
-Exemplo: SKU `3293456` aparece **8 vezes** em `empresa=ALL` com quantidades
-distintas (`[213, 249, 208, 223, 207, 207, 206, 216]`). Cada linha corresponde
-a uma loja.
+### Edge functions de sync
 
-### Achado crítico
+Três funções trabalham juntas para popular a tabela:
 
-**As linhas retornadas por `empresa=ALL` NÃO trazem `cod_empresa`.** O bridge
-devolve as N cópias (uma por loja) mas sem discriminar qual linha é qual loja.
+**`sync-estoque-completo/index.ts`** (337 linhas)
+- Loop pelas 12 empresas ativas (`[1,2,4,6,9,10,13,14,15,16,17,18]`)
+- Para cada uma: lê `/estoque/completo` + `/estoque/ultimo-custo` do Bridge
+- UPSERT idempotente em `estoque_sincronizado` com `BATCH_SIZE=500`
+- Timeout de 300s por chamada ao Bridge, throttle 1s entre lojas
+- Classificação de faixas de saneamento inline (espelho de `src/lib/estoque/faixas-saneamento.ts`)
 
-Chaves da linha de `empresa=ALL`:
+**`sync-estoque-loja/index.ts`** (190 linhas)
+- Versão "1 loja por vez" (chamada individual, sem loop de empresas)
+- Mesma lógica de classificação P31
+- Timeout de 90s
+
+**`sync-estoque-orchestrator/index.ts`** (127 linhas)
+- Orquestra `sync-estoque-loja` em 3 batches de 4 lojas cada
+- Auto-reagenda entre batches (throttle 30s, timeout 120s por loja)
+- Serve requests via HTTP (POST/GET)
+
+### Cron
+
+Comentário no `estoqueCompletoService.ts:305` afirma "diariamente às 07:00". **Não achei `cron.schedule` em nenhuma migration versionada** — provavelmente agendado via Supabase Dashboard (pg_cron) sem versionamento. Precisa validar no dashboard ou perguntar ao Lovable.
+
+### Dispatcher no frontend
+
+`src/services/estoqueCompletoService.ts` foi refatorado em "SUB-ENTREGA 1.4.b":
+
+```ts
+const ESTOQUE_SOURCE = (import.meta.env.VITE_ESTOQUE_SOURCE ?? 'bridge').toLowerCase();
+
+export async function getEstoqueCompleto(params) {
+  if (ESTOQUE_SOURCE === 'supabase') return getEstoqueCompletoDoSupabase(params);
+  return getEstoqueCompletoDoBridge(params);
+}
 ```
-cod_sku, cod_barras_interno, codigo_barras, ean, descricao, tipo,
-subcategoria, fornecedor_nome, grife, quantidade_estoque, preco_custo,
-preco_venda, data_ultima_compra, data_ultima_entrada, data_ultima_venda,
-dias_giro_medio, dias_giro_mediano, dias_giro_ultima_peca,
-pecas_vendidas_consideradas, dias_estoque, dias_sem_venda, acao_sugerida
-```
 
-Sem `cod_empresa` na resposta, `empresa=ALL` é inútil para alimentar o motor
-multi-loja (`calcularMixIdealMultiLoja`) — não dá para atribuir linhas a lojas.
+- Contrato de retorno idêntico entre as duas fontes (`EstoqueCompleto[]`)
+- Default é `bridge` — a feature flag ainda **não está ativada** para os usuários
+- `getEstoqueCompletoDoSupabase` paginação defensiva de 1000 linhas, suporta `empresa=null`/`ALL` (trazer todas as lojas de uma vez ✅)
 
-## Consequências para as próximas entregas
+## O que a auditoria anterior errou
 
-**Para alimentar `calcularMixIdealMultiLoja` hoje**, o consumidor precisa
-fazer **N chamadas** (uma por loja ativa). Com 8 lojas ativas × ~22 s por
-chamada = **~3 min sequencial**. Em paralelo com concorrência razoável (4-6),
-cai para ~45-60 s + risco de o bridge saturar.
+O documento anterior (commit `1be73a5`) afirmou:
+> "stg.estoque continua vazio; não existe sync-estoque; não existe fato_estoque_snapshot."
 
-**Alternativas para o stakeholder decidir no checkpoint:**
+**Verdadeiro para o main local desatualizado** (base era `35a0778`, de 2026-07-03). **Falso para o origin/main atual**:
 
-1. **Adicionar `cod_empresa` na resposta de `empresa=ALL`** no bridge (mudança
-   pequena no SQL da Firebird). Uma única chamada de ~66 s, 8 MB — servível.
-2. **Criar `sync-estoque` + `dw.fato_estoque_snapshot`** no Supabase, com
-   política de refresh (a cada X min). Trabalho grande. Único benefício claro:
-   queries agregadas por marca × loja no Postgres em ms em vez de segundos, e
-   Bridge deixa de ser dependência crítica de leitura em tempo real.
-3. **Manter status quo** (N chamadas em paralelo do frontend) — para a Entrega 2
-   funcionar, exige gerenciamento de N loading states e possível backpressure.
+| Afirmação anterior | Realidade em origin/main |
+|---|---|
+| `stg.estoque` vazio | Ainda vazio, mas irrelevante — nova tabela é `public.estoque_sincronizado` |
+| Não existe sync-estoque | Existem 3 edge functions (`sync-estoque-completo/loja/orchestrator`) |
+| Não existe `fato_estoque_snapshot` | Não existe com esse nome — `estoque_sincronizado` cumpre o papel |
+| Bridge `empresa=ALL` sem `cod_empresa` inutilizado | Ainda verdade, mas contornado — Supabase substitui essa via para leitura multi-loja |
 
-Nenhuma dessas é pré-requisito do motor puro do Passo 4 — ele aceita
-`LojaInput[]` independentemente de como o consumidor monta o input.
+A medição de tempo (66.6s / 7.79MB / 10 246 rows) do bridge `empresa=ALL` continua útil como referência histórica, mas **não é mais o caminho recomendado** para leitura multi-loja.
+
+## O que ficou em aberto (para verificar/decidir)
+
+1. **Cron está rodando?** Preciso ver o Supabase Dashboard → `pg_cron` para confirmar. Se sim, a tabela deve ter dados de 2026-07-23 07:00.
+
+2. **A tabela tem dados?** Query anônima retornou `content-range: */0` — pode ser RLS bloqueando anon OU zero linhas. Precisa consulta com service role ou UI logada.
+
+3. **Feature flag deve virar padrão?** `VITE_ESTOQUE_SOURCE=supabase` está pronto pra ativar. Impacto:
+   - Tempo de resposta cai de ~22s (Bridge por loja) para query Postgres (~ms)
+   - `empresa=ALL` passa a funcionar de verdade (com `cod_empresa` discriminado)
+   - Perde-se atualização em tempo real — mostra estado do último cron (7h da manhã)
+   - Motor multi-loja da Fase 2.0b (`calcularMixIdealMultiLoja`) ganha alimentação natural
+
+4. **Falta uma migration versionada** criando `estoque_sincronizado`? Se sim, deploy em ambiente novo (staging futuro) não recria a tabela. Vale versionar via `pg_dump --schema-only` do Supabase remoto.
+
+## Implicação para a Entrega 1.5 (que estava planejada)
+
+A Entrega 1.5 mencionada no brief original visava **fechar a lacuna de leitura multi-loja para o modo único da Entrega 2** — via uma das três opções listadas em `docs/ESTADO_ESTOQUE_MATERIALIZADO.md` anterior (adicionar `cod_empresa` no bridge, criar sync-estoque, ou N chamadas paralelas).
+
+**Opção "criar sync-estoque" JÁ FOI IMPLEMENTADA.** O que sobra para a Entrega 1.5 é bem menor:
+- Ativar `VITE_ESTOQUE_SOURCE=supabase` (uma linha em env var, gradual por ambiente)
+- Adaptar `useEstoqueUnificado` para carregar todas as lojas de uma vez quando `empresa=ALL` (o dispatcher já suporta)
+- Integrar `calcularMixIdealMultiLoja` (motor puro do Passo 4) no hook — sem mudar assinatura, só passar `LojaInput[]` por empresa
+- Testar performance com o dataset real
+
+**Entrega 1.5 permanece suspensa até o stakeholder confirmar:**
+- Cron está rodando e tabela populada?
+- Dados batendo com bridge dentro de tolerância aceitável?
+- Aprovação para ativar a feature flag em produção?
