@@ -32,7 +32,7 @@ export interface ApiEnvelope<T> {
 // TIPO PARA PARÂMETRO EMPRESA
 // ============================================
 
-export type EmpresaParam = 'ALL' | string | number | null;
+export type EmpresaParam = 'ALL' | string | number | number[] | null;
 
 // ============================================
 // HELPER PARA CONVERTER CAMPOS PARA CAMELCASE
@@ -262,7 +262,56 @@ export async function apiGet<T>(
 export function formatEmpresaParam(empresa: EmpresaParam): string | undefined {
   if (empresa === null || empresa === undefined) return undefined;
   if (empresa === 'ALL') return 'ALL';
+  if (Array.isArray(empresa)) {
+    if (empresa.length === 0) return 'ALL';
+    if (empresa.length === 1) return String(empresa[0]);
+    // Multi-empresa: bridge não aceita lista — buscamos ALL e filtramos client-side
+    return 'ALL';
+  }
   return String(empresa);
+}
+
+/**
+ * Retorna a lista de códigos de empresa quando a seleção é multi-empresa,
+ * ou null quando a seleção é single/ALL/vazia (não precisa filtrar client-side).
+ */
+export function empresaFilterList(empresa: EmpresaParam): number[] | null {
+  if (Array.isArray(empresa) && empresa.length > 1) return empresa;
+  return null;
+}
+
+/**
+ * Aplica filtro de empresa a uma query supabase (.eq quando 1 valor, .in quando N).
+ * Aceita array, string, number, 'ALL' ou null.
+ */
+export function aplicarFiltroEmpresaSupabase<Q extends { eq: any; in: any }>(
+  query: Q,
+  empresa: EmpresaParam,
+  coluna: string = 'cod_empresa'
+): Q {
+  if (empresa === null || empresa === undefined || empresa === 'ALL') return query;
+  if (Array.isArray(empresa)) {
+    if (empresa.length === 0) return query;
+    if (empresa.length === 1) return query.eq(coluna, empresa[0]);
+    return query.in(coluna, empresa);
+  }
+  const cod = typeof empresa === 'string' ? parseInt(empresa, 10) : empresa;
+  if (Number.isNaN(cod)) return query;
+  return query.eq(coluna, cod);
+}
+
+/**
+ * Converte EmpresaParam para o tipo legado `number | string | null` usado
+ * por serviços que ainda não suportam multi-empresa (pega o primeiro).
+ */
+export function toLegacyEmpresaParam(empresa: EmpresaParam): number | string | null {
+  if (empresa === null || empresa === undefined) return null;
+  if (empresa === 'ALL') return 'ALL';
+  if (Array.isArray(empresa)) {
+    if (empresa.length === 0) return 'ALL';
+    return empresa[0];
+  }
+  return empresa;
 }
 
 export { FIREBIRD_BRIDGE_BASE_URL };

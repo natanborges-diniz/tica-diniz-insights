@@ -1,0 +1,1 @@
+ALTER TABLE public.payment_links ADD COLUMN IF NOT EXISTS parcelas_fixas integer NULL;

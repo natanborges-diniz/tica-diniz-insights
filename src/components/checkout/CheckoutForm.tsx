@@ -24,6 +24,7 @@ interface LinkData {
   valor: number;
   descricao: string;
   parcelas_max: number;
+  parcelas_fixas?: number | null;
   cliente_nome: string | null;
 }
 
@@ -51,7 +52,7 @@ export default function CheckoutForm({ linkData, linkId, fmtCurrency, onSuccess 
     cardholderName: "",
     expiry: "",
     securityCode: "",
-    installments: "1",
+    installments: linkData.parcelas_fixas ? String(linkData.parcelas_fixas) : "1",
   });
 
   const setLocalError = (message: string, opts?: Partial<PaymentError>) =>
@@ -146,8 +147,11 @@ export default function CheckoutForm({ linkData, linkId, fmtCurrency, onSuccess 
 
 
 
-  const maxParcelas = linkData.parcelas_max || 1;
-  const parcelaOptions = Array.from({ length: maxParcelas }, (_, i) => i + 1);
+  const isFixed = linkData.parcelas_fixas != null && linkData.parcelas_fixas > 0;
+  const maxParcelas = isFixed ? linkData.parcelas_fixas! : (linkData.parcelas_max || 1);
+  const parcelaOptions = isFixed
+    ? [linkData.parcelas_fixas!]
+    : Array.from({ length: maxParcelas }, (_, i) => i + 1);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center p-4">
@@ -225,7 +229,19 @@ export default function CheckoutForm({ linkData, linkId, fmtCurrency, onSuccess 
               </div>
             </div>
 
-            {maxParcelas > 1 && (
+            {isFixed ? (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-600">Parcelas</Label>
+                <div className="border rounded-md px-3 py-2.5 bg-slate-50 text-slate-700 text-sm flex items-center justify-between">
+                  <span className="font-medium">
+                    {linkData.parcelas_fixas}x de {fmtCurrency(linkData.valor / linkData.parcelas_fixas!)}
+                    {linkData.parcelas_fixas === 1 ? " (à vista)" : ""}
+                  </span>
+                  <span className="text-xs text-slate-500">Total: {fmtCurrency(linkData.valor)}</span>
+                </div>
+                <p className="text-[10px] text-slate-400">Parcelamento definido pela loja e não pode ser alterado.</p>
+              </div>
+            ) : maxParcelas > 1 && (
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-600">Parcelas</Label>
                 <Select value={form.installments} onValueChange={v => setForm(f => ({ ...f, installments: v }))}>

@@ -1,0 +1,1 @@
+ALTER VIEW public.v_conciliacao_loja_resumo SET (security_invoker = on);

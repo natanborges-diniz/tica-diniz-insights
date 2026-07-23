@@ -4,7 +4,7 @@
 // COM POLÍTICA DE DADOS FECHADOS
 
 import { supabase } from "@/integrations/supabase/client";
-import { EmpresaParam } from "./firebirdBridge";
+import { EmpresaParam, aplicarFiltroEmpresaSupabase } from "./firebirdBridge";
 
 // ============================================
 // TIPOS E INTERFACES
@@ -211,12 +211,7 @@ export async function getVendasAgregado(
     .gte('data', params.dataInicio)
     .lte('data', params.dataFim);
   
-  if (params.empresa !== 'ALL') {
-    const codEmpresa = typeof params.empresa === 'string' 
-      ? parseInt(params.empresa, 10) 
-      : params.empresa;
-    query = query.eq('cod_empresa', codEmpresa);
-  }
+  query = aplicarFiltroEmpresaSupabase(query, params.empresa);
   
   const { data, error } = await query;
   
@@ -242,12 +237,7 @@ export async function getVendasAgregado(
     .select('*')
     .in('data', rangeMensal.mesesAbrangidos);
   
-  if (params.empresa !== 'ALL') {
-    const codEmpresa = typeof params.empresa === 'string' 
-      ? parseInt(params.empresa, 10) 
-      : params.empresa;
-    queryMensal = queryMensal.eq('cod_empresa', codEmpresa);
-  }
+  queryMensal = aplicarFiltroEmpresaSupabase(queryMensal, params.empresa);
   
   const { data: dataMensal, error: errorMensal } = await queryMensal;
   

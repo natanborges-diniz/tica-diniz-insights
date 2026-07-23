@@ -26,7 +26,7 @@ import { StoreTable } from "./StoreTable";
 import { PaymentMethodsChart } from "./PaymentMethodsChart";
 import { PaymentMethodsTable } from "./PaymentMethodsTable";
 import { VendasDiariasTable } from "./VendasDiariasTable";
-import { ComparativoAnualChart } from "./ComparativoAnualChart";
+import { ComparativoPanel } from "./ComparativoPanel";
 import { useModuleInsights } from "@/hooks/useModuleInsights";
 import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
 import { registerAction, unregisterAction, createNavigationHandler } from "@/lib/actionCatalog";
@@ -397,13 +397,24 @@ export function VendasDashboardLayout({
       <SalesFilters
         dataInicio={filters.dataInicio}
         dataFim={filters.dataFim}
-        empresa={filters.empresa === "ALL" ? "ALL" : String(filters.empresa)}
         onDataInicioChange={(v) => setFilters((p) => ({ ...p, dataInicio: v }))}
         onDataFimChange={(v) => setFilters((p) => ({ ...p, dataFim: v }))}
-        onEmpresaChange={(v) => setFilters((p) => ({ ...p, empresa: v === "ALL" ? "ALL" : Number(v) }))}
         onRefresh={reload}
         isLoading={isLoading}
         alertaPeriodo={alertaPeriodo}
+        multi
+        selectedEmpresas={
+          filters.empresa === 'ALL'
+            ? 'ALL'
+            : Array.isArray(filters.empresa)
+              ? filters.empresa
+              : typeof filters.empresa === 'number'
+                ? [filters.empresa]
+                : typeof filters.empresa === 'string' && filters.empresa !== ''
+                  ? [Number(filters.empresa)]
+                  : []
+        }
+        onSelectedEmpresasChange={(v) => setFilters((p) => ({ ...p, empresa: v }))}
       />
 
       {/* Toggle de Visão e Toggle de Créditos */}
@@ -591,12 +602,13 @@ export function VendasDashboardLayout({
                 />
               </div>
 
-              {/* Comparativo Anual */}
-              <ComparativoAnualChart
+              {/* Comparativo unificado (Base = filtro, Comparação = escolhida no painel) */}
+              <ComparativoPanel
                 dataInicio={filters.dataInicio}
                 dataFim={filters.dataFim}
                 empresa={filters.empresa}
               />
+
             </TabsContent>
 
             <TabsContent value="diario" className="mt-6">
