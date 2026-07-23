@@ -517,6 +517,7 @@ export type Database = {
           cod_empresa: number
           created_at: string
           id: string
+          mix_minimo: number | null
           percentual_solar: number
           updated_at: string
         }
@@ -525,6 +526,7 @@ export type Database = {
           cod_empresa: number
           created_at?: string
           id?: string
+          mix_minimo?: number | null
           percentual_solar: number
           updated_at?: string
         }
@@ -533,6 +535,7 @@ export type Database = {
           cod_empresa?: number
           created_at?: string
           id?: string
+          mix_minimo?: number | null
           percentual_solar?: number
           updated_at?: string
         }
@@ -1294,6 +1297,7 @@ export type Database = {
           estrategica: boolean
           id: string
           marca: string
+          minimo_proprio: number | null
           pct_solar: number | null
           recem_introduzida: boolean
           updated_at: string
@@ -1304,6 +1308,7 @@ export type Database = {
           estrategica?: boolean
           id?: string
           marca: string
+          minimo_proprio?: number | null
           pct_solar?: number | null
           recem_introduzida?: boolean
           updated_at?: string
@@ -1314,6 +1319,7 @@ export type Database = {
           estrategica?: boolean
           id?: string
           marca?: string
+          minimo_proprio?: number | null
           pct_solar?: number | null
           recem_introduzida?: boolean
           updated_at?: string
