@@ -79,6 +79,12 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
   ],
   monitor: [
     {
+      label: "Monitor",
+      items: [
+        { title: "Monitor de OS", url: "/os", icon: Truck },
+      ],
+    },
+    {
       label: "Acompanhamento",
       items: [
         { title: "Tracking Hoya", url: "/os/tracking", icon: Truck },
@@ -87,6 +93,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       ],
     },
   ],
+
   financeiro: [
     {
       label: "Visão Geral",
