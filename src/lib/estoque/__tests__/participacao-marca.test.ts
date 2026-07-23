@@ -46,10 +46,10 @@ describe('calcularParticipacaoMarca', () => {
     expect(rb.pctFaturamento).toBeCloseTo(6000 / 12000, 10);
   });
 
-  it('participacao RAYBAN = 0.6*0.6 + 0.4*0.5 = 0.56', () => {
+  it('participacao RAYBAN = 0.5*0.6 + 0.5*0.5 = 0.55', () => {
     const r = calcularParticipacaoMarca(MOCK);
     const rb = r.get('RAYBAN')!;
-    expect(rb.participacao).toBeCloseTo(0.6 * 0.6 + 0.4 * 0.5, 10);
+    expect(rb.participacao).toBeCloseTo(0.5 * 0.6 + 0.5 * 0.5, 10);
   });
 
   it('soma das participacoes = 1 (excluindo marcas sem vendas)', () => {

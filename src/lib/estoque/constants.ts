@@ -1,6 +1,6 @@
-// Pesos para o cálculo de participação de marca (Princípio #6)
-export const PESO_PECAS = 0.6;
-export const PESO_FATURAMENTO = 0.4;
+// Pesos para o cálculo de participação de marca (Fase 2.0b — média simples)
+export const PESO_PECAS = 0.5;
+export const PESO_FATURAMENTO = 0.5;
 
 // Janela temporal para cálculo de participação (dias)
 export const JANELA_PARTICIPACAO_DIAS = 180;

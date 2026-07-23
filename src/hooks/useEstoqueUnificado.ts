@@ -729,9 +729,9 @@ export function useEstoqueUnificado() {
   }, [itensFiltrados, marcaConfigFlagsByName]);
 
   // ============================================
-  // FASE 2.0 — PARTICIPAÇÃO POR MARCA (Princípio #6)
+  // FASE 2.0 — PARTICIPAÇÃO POR MARCA
   // ============================================
-  // Participação proporcional = 60% peças + 40% faturamento (apenas Armações).
+  // Participação proporcional = média simples 50/50 entre % peças e % faturamento (apenas Armações).
   // Consumível pelo Wizard Plano Mensal e por qualquer view que precise do
   // share-of-sales por marca.
   const participacaoMarca = useMemo((): Map<string, ParticipacaoMarca> => {

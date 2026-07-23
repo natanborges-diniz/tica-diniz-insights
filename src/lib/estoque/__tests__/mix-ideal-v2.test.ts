@@ -1,7 +1,7 @@
 /**
  * Testes — D₃ (Sub-Entrega D)
  *
- * calcularMixIdealV2: participação proporcional por marca (Princípio #6).
+ * calcularMixIdealV2: participação proporcional por marca (Fase 2.0b: 50/50, Math.floor).
  * Cenários: marca<25 estratégica, marca<25 não-estratégica, override solar,
  *           alocação por passadas, estouro de capacidade, dead stock.
  */
@@ -10,10 +10,10 @@ import { calcularMixIdealV2, type StatusMixV2 } from '../mix-ideal-v2';
 import { MIX_MINIMO_MARCA } from '../constants';
 
 // ─── Dataset base — 3 marcas, capacidade 200 ─────────────────────────────────
-// RAYBAN:     60 peças, R$6000  → part = 0.6×0.6 + 0.4×0.5    = 0.56
-// OAKLEY:     30 peças, R$4000  → part = 0.6×0.3 + 0.4×0.333  ≈ 0.313
-// SILHOUETTE: 10 peças, R$2000  → part = 0.6×0.1 + 0.4×0.167  ≈ 0.127
-// Com cap=200: RB=112, OAK=63, SIL=25 → todos OK
+// RAYBAN:     60 peças, R$6000  → part = 0.5×0.6 + 0.5×0.5    = 0.55
+// OAKLEY:     30 peças, R$4000  → part = 0.5×0.3 + 0.5×0.333  ≈ 0.317
+// SILHOUETTE: 10 peças, R$2000  → part = 0.5×0.1 + 0.5×0.167  ≈ 0.133
+// Com cap=200 (Math.floor): RB=110, OAK=63, SIL=26 → todos OK
 
 const CAP = 200;
 const BASE = [

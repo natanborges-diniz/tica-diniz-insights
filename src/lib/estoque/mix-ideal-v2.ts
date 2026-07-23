@@ -243,7 +243,7 @@ export function calcularMixIdealV2({
     const estrategica = config.estrategica ?? false;
     const pctSolar = config.pctSolar != null ? config.pctSolar : pctSolarDefault;
 
-    const mixTotalRaw = Math.round(capacidadeTotal * part.participacao);
+    const mixTotalRaw = Math.floor(capacidadeTotal * part.participacao);
 
     let mixTotal: number;
     let status: StatusMixV2;
