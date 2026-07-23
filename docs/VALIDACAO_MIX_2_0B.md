@@ -1,6 +1,8 @@
 # Validação Fase 2.0b — Motor de Mix (checkpoint Entrega 1)
 
 **Data:** 2026-07-23
+**Status:** ⚠️ **NÃO APROVADO** — capacidades usadas são referenciais. Os status `SUGERIR_DESCONTINUAR` e `OK` dependem do limiar do mínimo (25) contra `capacidade × participação`; com capacidades erradas, o mapa de status muda. **Regenerar assim que o stakeholder passar as capacidades reais das duas lojas.**
+
 **Objetivo:** comparar mix ideal ANTES (60/40 pesos, `Math.round`) × DEPOIS (50/50, `Math.floor`) usando dados reais.
 
 ## Metodologia

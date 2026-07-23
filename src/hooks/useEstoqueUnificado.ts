@@ -19,7 +19,7 @@ import { isAbortError } from "@/lib/isAbortError";
 import { useEstoqueStore, type EstoqueFilters } from "@/stores/useEstoqueStore";
 import { classificarItemP31, toFaixaDoente, type FaixaDoente } from "@/lib/estoque/faixas-saneamento";
 import { calcularCurvaABC } from "@/lib/estoque/curva-abc";
-import { calcularMixIdealCategoria, calcularMixIdealMarcas, type DecisaoMarca as DecisaoMarcaType, type MixMarca as MixMarcaType, type MixComparativo as MixComparativoType, type MarcaConfigFlags } from "@/lib/estoque/mix-ideal";
+import { calcularMixIdealCategoria, type MixComparativo as MixComparativoType } from "@/lib/estoque/mix-ideal";
 import { calcularDecisaoSku, type DecisaoSku as DecisaoSkuType } from "@/lib/estoque/decisao-sku";
 import { distribuirLacuna, type MotivoQtd as MotivoQtdType, type SkuParaPool } from "@/lib/estoque/lacuna";
 import { calcularCapacidadePorCategoria, type CapacidadeConfig } from "@/lib/estoque/capacidade";
@@ -73,8 +73,9 @@ export interface ItemEstoque {
   decisaoSku: DecisaoSku;
 }
 
-// DecisaoMarca defined in @/lib/estoque/mix-ideal and re-exported here for consumers
-export type DecisaoMarca = DecisaoMarcaType;
+// Decisão da marca, derivada do motor V2. RENOVAR_COLECAO fica no union por
+// compatibilidade com estado persistido antigo, mas o motor não gera mais.
+export type DecisaoMarca = 'REPOR_REFERENCIA' | 'RENOVAR_COLECAO' | 'AVALIAR_DESCONTINUACAO' | 'SEM_HISTORICO';
 
 // DecisaoSku defined in @/lib/estoque/decisao-sku and re-exported here for consumers
 export type DecisaoSku = DecisaoSkuType;
@@ -110,9 +111,6 @@ export interface SkuARepor {
   decisaoSku: DecisaoSku;
   motivoQtd?: MotivoQtd;
 }
-
-// MixMarca defined in @/lib/estoque/mix-ideal and re-exported here for consumers
-export type MixMarca = MixMarcaType;
 
 // Lacuna que sobrou após esgotar o pool de SKUs bons
 export interface LacunaNaoPreenchivel {
@@ -259,14 +257,6 @@ const COBERTURA_ALVO_DIAS: Record<SubcategoriaProduto, number> = {
 // gira rápido o suficiente para entrar no pool de recompra.
 // Acima disso o SKU é excluído do plano (vai para Observar / Avaliar troca).
 const GIRO_BOM_MAX_DIAS = 90;
-
-// Cobertura-alvo (dias) por curva da MARCA — quanto de estoque a marca deve manter.
-// Marcas A merecem maior giro (cobertura menor); marcas C maior cobertura (menos compra).
-const COBERTURA_ALVO_MARCA: Record<'A' | 'B' | 'C', number> = {
-  A: 60,
-  B: 75,
-  C: 90,
-};
 
 // Peso da curva ABC do SKU no score de prioridade dentro do pool da marca.
 const PESO_CURVA: Record<'A' | 'B' | 'C', number> = {
@@ -694,45 +684,6 @@ export function useEstoqueUnificado() {
   }, [itensProcessados]);
 
   // ============================================
-  // FASE 1 — MIX IDEAL POR MARCA (top-down)
-  // ============================================
-  // Decide quais marcas compõem o mix e quanto de estoque cada uma deve ter.
-  // SKU não entra aqui. A saída alimenta a Fase 2 (distribuição da lacuna).
-
-  // Repassa as flags estrategica/recem_introduzida (marca_config) pro motor V1.
-  // Chave em uppercase pra bater com a normalização feita ao montar marcaConfigMap.
-  const marcaConfigFlagsMap = useMemo((): Map<string, MarcaConfigFlags> => {
-    const m = new Map<string, MarcaConfigFlags>();
-    marcaConfigMap.forEach((cfg, marcaKey) => {
-      m.set(marcaKey, { estrategica: cfg.estrategica, recemIntroduzida: cfg.recemIntroduzida });
-    });
-    return m;
-  }, [marcaConfigMap]);
-
-  // calcularMixIdealMarcas usa o nome cru da marca como chave; normalizamos
-  // o map de flags para casar com a forma que o motor consulta.
-  const marcaConfigFlagsByName = useMemo((): Map<string, MarcaConfigFlags> => {
-    const m = new Map<string, MarcaConfigFlags>();
-    const visto = new Set<string>();
-    itensFiltrados.forEach(i => {
-      const nome = (i.marca || 'SEM MARCA');
-      if (visto.has(nome)) return;
-      visto.add(nome);
-      const cfg = marcaConfigFlagsMap.get(nome.trim().toUpperCase());
-      if (cfg) m.set(nome, cfg);
-    });
-    return m;
-  }, [itensFiltrados, marcaConfigFlagsMap]);
-
-  const mixIdealMarcas = useMemo((): MixMarca[] => {
-    return calcularMixIdealMarcas(itensFiltrados, {
-      diasPeriodo: DIAS_PERIODO,
-      coberturaAlvo: COBERTURA_ALVO_MARCA,
-      marcaConfigs: marcaConfigFlagsByName,
-    });
-  }, [itensFiltrados, marcaConfigFlagsByName]);
-
-  // ============================================
   // FASE 2.0 — PARTICIPAÇÃO POR MARCA
   // ============================================
   // Participação proporcional = média simples 50/50 entre % peças e % faturamento (apenas Armações).
@@ -832,7 +783,29 @@ export function useEstoqueUnificado() {
   const resumoPorMarca = useMemo((): ResumoMarca[] => {
     if (itensFiltrados.length === 0) return [];
 
-    const mixMap = new Map(mixIdealMarcas.map(m => [m.marca, m]));
+    // Autoridade única: motor V2 (participação × capacidade + cascata de mínimos).
+    // Cada linha do V2 é a saída oficial da marca.
+    const mixV2Map = new Map(mixIdealV2.map(m => [m.marca, m]));
+
+    // Curva ABC da MARCA (V1 legado calculava com decisão; V2 não expõe curva).
+    // Reproduzimos aqui como ranking cumulativo de faturamento (A ≤80%, B ≤95%, C resto).
+    // Serve para a coluna "Curva" na AnaliseOTBPage e para ordenação de relatórios.
+    const curvaMarcaMap = new Map<string, 'A' | 'B' | 'C'>();
+    const faturamentoPorMarca = new Map<string, number>();
+    itensFiltrados.forEach(i => {
+      const k = i.marca || 'SEM MARCA';
+      faturamentoPorMarca.set(k, (faturamentoPorMarca.get(k) ?? 0) + i.totalVendido);
+    });
+    const totalFat = Array.from(faturamentoPorMarca.values()).reduce((s, v) => s + v, 0);
+    const ordenadasPorFat = Array.from(faturamentoPorMarca.entries()).sort((a, b) => b[1] - a[1]);
+    let acumFat = 0;
+    ordenadasPorFat.forEach(([m, fat]) => {
+      acumFat += fat;
+      const pct = totalFat > 0 ? (acumFat / totalFat) * 100 : 100;
+      if (pct <= 80) curvaMarcaMap.set(m, 'A');
+      else if (pct <= 95) curvaMarcaMap.set(m, 'B');
+      else curvaMarcaMap.set(m, 'C');
+    });
 
     const porMarca = new Map<string, ItemEstoque[]>();
     itensFiltrados.forEach(item => {
@@ -842,7 +815,7 @@ export function useEstoqueUnificado() {
     });
 
     return Array.from(porMarca.entries()).map(([marca, skus]) => {
-      const mix = mixMap.get(marca);
+      const mix = mixV2Map.get(marca);
       const comEstoque = skus.filter(s => s.estoqueAtual > 0);
       const pecasEstoque = comEstoque.reduce((acc, s) => acc + s.estoqueAtual, 0);
       const valorEstoque = comEstoque.reduce((acc, s) => acc + s.valorEstoqueCusto, 0);
@@ -867,12 +840,24 @@ export function useEstoqueUnificado() {
         ? skusComVendaArr.reduce((acc, s) => acc + s.diasEmEstoque, 0) / skusComVendaArr.length
         : 999;
 
-      // Decisão e mix vêm da Fase 1 (autoridade única)
-      const decisao: DecisaoMarca = mix?.decisao ?? 'SEM_HISTORICO';
-      const curvaMarca = mix?.curvaMarca ?? 'C';
-      const pecasIdeais = mix?.pecasIdeais ?? 0;
+      // Mapeamento status V2 → decisão V1 (para preservar o vocabulário das telas
+      // enquanto a Entrega 2 não reforma). RENOVAR_COLECAO deixa de ser gerado.
+      let decisao: DecisaoMarca;
+      if (!mix) {
+        // Sem entrada no V2 = marca sem participação (sem vendas) OU capacidade não configurada.
+        decisao = 'SEM_HISTORICO';
+      } else if (mix.status === 'SUGERIR_DESCONTINUAR') {
+        decisao = 'AVALIAR_DESCONTINUACAO';
+      } else if (mix.status === 'SEM_VENDAS_180D') {
+        decisao = 'SEM_HISTORICO';
+      } else {
+        // OK e ABAIXO_MINIMO_ESTRATEGICA (marca mantida no mix)
+        decisao = 'REPOR_REFERENCIA';
+      }
+      const curvaMarca = curvaMarcaMap.get(marca) ?? 'C';
+      const pecasIdeais = mix?.mixTotal ?? 0;
       const lacuna = mix?.lacuna ?? 0;
-      const incluidaNoMix = mix?.incluidaNoMix ?? false;
+      const incluidaNoMix = pecasIdeais > 0;
 
       // ============= FASE 2 — DISTRIBUIÇÃO DA LACUNA =============
       // Só rodamos se a marca está no mix E há lacuna (estoque < ideal).
@@ -919,10 +904,9 @@ export function useEstoqueUnificado() {
           });
       }
 
-      // TROCAR só faz sentido em marca RENOVAR
-      const skusATrocar: SkuARepor[] = decisao === 'RENOVAR_COLECAO'
-        ? skus.filter(s => s.decisaoSku === 'TROCAR').map(s => buildSkuView(s, undefined, 0, undefined)).sort((a, b) => b.diasEmEstoque - a.diasEmEstoque)
-        : [];
+      // TROCAR era usado só em marca RENOVAR (V1). Motor V2 não gera RENOVAR;
+      // a seção some da UI. Mantemos o campo vazio para preservar o tipo.
+      const skusATrocar: SkuARepor[] = [];
 
       // OBSERVAR: SKUs com venda mas que ficaram fora do plano (giro >90, sem giro real, ou marca sem lacuna)
       const skusObservar: SkuARepor[] = incluidaNoMix
@@ -976,7 +960,7 @@ export function useEstoqueUnificado() {
       };
       return ordem[a.decisao] - ordem[b.decisao] || b.totalVendido6m - a.totalVendido6m;
     });
-  }, [itensFiltrados, mixIdealMarcas]);
+  }, [itensFiltrados, mixIdealV2]);
 
   // Lacunas que sobraram após esgotar o pool de SKUs bons (Fase 2)
   const lacunasNaoPreenchiveis = useMemo((): LacunaNaoPreenchivel[] => {
@@ -1131,7 +1115,7 @@ export function useEstoqueUnificado() {
     metricas, contagemPorCategoria, diasPeriodo: DIAS_PERIODO,
     estoqueEfetivoArmacoes,
     listaFornecedores, listaMarcas, listaAcoes, marcasSemFornecedor,
-    mixIdealCategoria, mixIdealMarca, mixIdealMarcas, lacunasNaoPreenchiveis,
+    mixIdealCategoria, mixIdealMarca, lacunasNaoPreenchiveis,
     resumoPorMarca, estoqueDoenteAgrupado, listaCompraFlat,
     // Fase 2.0 — participação proporcional + V2
     participacaoMarca, mixIdealV2, marcaConfigMap, capacidadeEmpresa,

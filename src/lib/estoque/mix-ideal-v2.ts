@@ -1,7 +1,7 @@
 // src/lib/estoque/mix-ideal-v2.ts
-// Motor de Plano de Compra V2 — participação proporcional por marca (Princípio #6).
-//
-// NÃO modifica calcularMixIdealMarcas (legado OTB). Função nova e isolada.
+// Motor de Plano de Compra — participação proporcional por marca × capacidade,
+// com cascata de mínimo (minimoProprio ?? minimoLoja ?? MIX_MINIMO_MARCA).
+// Fonte única de mix por loja desde a Fase 2.0b.
 
 import { calcularParticipacaoMarca } from './participacao-marca';
 import { MIX_MINIMO_MARCA } from './constants';
@@ -174,10 +174,8 @@ function alocarSplit(
 // ── Função principal ──────────────────────────────────────────────────────────
 
 /**
- * Calcula o mix ideal de marcas (V2) usando participação proporcional.
- *
+ * Calcula o mix ideal de marcas usando participação proporcional × capacidade.
  * Apenas Armações entram no cálculo.
- * Legado OTB: usa calcularMixIdealMarcas (mix-ideal.ts) — não alterado.
  */
 export function calcularMixIdealV2({
   itens,

@@ -20,7 +20,7 @@ import {
   ShoppingCart, AlertCircle, Info, RefreshCw, BoxIcon,
   ChevronDown, ChevronRight, Target, Download,
   Repeat, Sparkles, XCircle, AlertTriangle, Package, TrendingUp, DollarSign,
-  Eye, HelpCircle, Replace
+  Eye, HelpCircle
 } from "lucide-react";
 
 // ============================================
@@ -251,44 +251,6 @@ function MarcaExpandida({ r }: { r: ResumoMarca }) {
         </div>
       )}
 
-      {/* Bloco TROCAR (só em marca RENOVAR) */}
-      {r.skusATrocar.length > 0 && (
-        <div className="rounded-lg border border-blue-200 dark:border-blue-800 p-3">
-          <h5 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2 flex items-center gap-1.5">
-            <Replace className="h-4 w-4" />
-            TROCAR ({r.skusATrocar.length} SKUs · liberar exposição)
-          </h5>
-          <p className="text-xs text-muted-foreground mb-2">
-            Referências sem venda há ≥180d numa marca que ainda performa — substituir por novo modelo no próximo pedido.
-          </p>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-muted-foreground">
-                <th className="text-left p-1">Código</th>
-                <th className="text-left p-1">Descrição</th>
-                <th className="text-right p-1">Estoque</th>
-                <th className="text-right p-1">Dias parado</th>
-                <th className="text-left p-1">Sugestão</th>
-              </tr>
-            </thead>
-            <tbody>
-              {r.skusATrocar.slice(0, 10).map(s => (
-                <tr key={s.codSku} className="border-t border-muted">
-                  <td className="p-1 font-mono">{s.codigoBarra || s.codSku}</td>
-                  <td className="p-1 truncate max-w-[200px]" title={s.descricao}>{s.descricao}</td>
-                  <td className="p-1 text-right">{s.estoqueAtual}</td>
-                  <td className="p-1 text-right text-muted-foreground">{s.diasEmEstoque}d</td>
-                  <td className="p-1 text-blue-700 dark:text-blue-400">substituir por novo modelo</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {r.skusATrocar.length > 10 && (
-            <p className="text-xs text-muted-foreground text-center mt-2">+{r.skusATrocar.length - 10} itens</p>
-          )}
-        </div>
-      )}
-
       {/* Bloco OBSERVAR — só contador */}
       {r.skusObservar.length > 0 && (
         <div className="rounded-lg border p-2 flex items-center gap-2 text-xs text-muted-foreground">
@@ -333,7 +295,7 @@ function MarcaExpandida({ r }: { r: ResumoMarca }) {
       )}
 
       {/* Sem ações — mensagem clara */}
-      {!ctxSemHist && r.skusARepor.length === 0 && r.skusATrocar.length === 0 && r.itensDoentes.length === 0 && (
+      {!ctxSemHist && r.skusARepor.length === 0 && r.itensDoentes.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-2">
           Estoque saudável — sem reposição, troca ou liquidação pendentes nos últimos 180 dias.
         </p>
@@ -363,7 +325,6 @@ function RelatorioMarcas({ resumo }: { resumo: ResumoMarca[] }) {
 
   const totais = useMemo(() => ({
     repor: resumo.filter(r => r.decisao === 'REPOR_REFERENCIA').length,
-    renovar: resumo.filter(r => r.decisao === 'RENOVAR_COLECAO').length,
     descontinuar: resumo.filter(r => r.decisao === 'AVALIAR_DESCONTINUACAO').length,
     semHistorico: resumo.filter(r => r.decisao === 'SEM_HISTORICO').length,
   }), [resumo]);
@@ -378,7 +339,7 @@ function RelatorioMarcas({ resumo }: { resumo: ResumoMarca[] }) {
               Relatório por Marca
             </CardTitle>
             <CardDescription>
-              {resumo.length} marcas • {totais.repor} repor · {totais.renovar} renovar · {totais.descontinuar} descontinuar{totais.semHistorico > 0 && <> · {totais.semHistorico} sem histórico</>}
+              {resumo.length} marcas • {totais.repor} repor · {totais.descontinuar} descontinuar{totais.semHistorico > 0 && <> · {totais.semHistorico} sem histórico</>}
             </CardDescription>
           </div>
           <DataTableToolbar
@@ -426,8 +387,8 @@ function RelatorioMarcas({ resumo }: { resumo: ResumoMarca[] }) {
                           <td className="p-3 text-right">{r.qtdVendidos6m}</td>
                           <td className="p-3 text-right">{r.pecasEstoque}</td>
                           <td className="p-3 text-right">
-                            {r.skusARepor.reduce((a, s) => a + s.qtdAComprar, 0) + r.pecasARenovar > 0 ? (
-                              <span className="text-primary font-medium">+{r.skusARepor.reduce((a, s) => a + s.qtdAComprar, 0) + r.pecasARenovar}</span>
+                            {r.skusARepor.reduce((a, s) => a + s.qtdAComprar, 0) > 0 ? (
+                              <span className="text-primary font-medium">+{r.skusARepor.reduce((a, s) => a + s.qtdAComprar, 0)}</span>
                             ) : '-'}
                           </td>
                           <td className="p-3 text-right">
@@ -478,7 +439,7 @@ export default function AnaliseOTBPage() {
     metricas,
     marcasSemFornecedor,
     mixIdealCategoria,
-    mixIdealMarcas,
+    mixIdealV2,
     lacunasNaoPreenchiveis,
     resumoPorMarca,
     listaCompraFlat,
@@ -623,8 +584,8 @@ export default function AnaliseOTBPage() {
           {/* KPIs */}
           <KPICards metricas={metricas} comprar={comprarKpi} />
 
-          {/* Mix Ideal por Marca (Fase 1) */}
-          {mixIdealMarcas.length > 0 && (
+          {/* Mix Ideal por Marca (motor V2 — participação × capacidade) */}
+          {mixIdealV2.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -632,7 +593,7 @@ export default function AnaliseOTBPage() {
                   Mix Ideal por Marca
                 </CardTitle>
                 <CardDescription>
-                  Define quanto de estoque cada marca deve ter (antes de olhar SKU). Marcas com lacuna = 0 não geram compra, mesmo com SKUs zerados.
+                  Participação de cada marca × capacidade do expositor. Marcas abaixo do mínimo (padrão 25) são sugeridas para descontinuação.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -641,39 +602,43 @@ export default function AnaliseOTBPage() {
                     <thead className="bg-muted/50 text-xs">
                       <tr>
                         <th className="text-left p-2">Marca</th>
-                        <th className="text-left p-2">Curva</th>
+                        <th className="text-right p-2">Participação</th>
                         <th className="text-right p-2">Vendas 6m</th>
-                        <th className="text-right p-2">Estoque ideal</th>
-                        <th className="text-right p-2">Estoque atual</th>
+                        <th className="text-right p-2">Mix ideal</th>
+                        <th className="text-right p-2">Estoque efetivo</th>
                         <th className="text-right p-2 font-bold">Lacuna</th>
                         <th className="text-left p-2">Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {mixIdealMarcas.slice(0, 30).map(m => (
-                        <tr key={m.marca} className="border-t hover:bg-muted/30">
-                          <td className="p-2 font-medium">{m.marca}</td>
-                          <td className="p-2"><Badge variant={m.curvaMarca === 'A' ? 'default' : 'secondary'} className="text-[10px]">{m.curvaMarca}</Badge></td>
-                          <td className="p-2 text-right">{m.pecasVendidas6m}</td>
-                          <td className="p-2 text-right">{m.incluidaNoMix ? m.pecasIdeais : '—'}</td>
-                          <td className="p-2 text-right">{m.pecasAtuais}</td>
-                          <td className="p-2 text-right font-bold">
-                            {!m.incluidaNoMix ? <span className="text-muted-foreground">fora do mix</span>
-                              : m.lacuna > 0 ? <span className="text-primary">+{m.lacuna}</span>
-                              : <span className="text-emerald-600">0</span>}
-                          </td>
-                          <td className="p-2 text-xs">
-                            {!m.incluidaNoMix ? <span className="text-muted-foreground">não compõe mix</span>
-                              : m.lacuna === 0 ? <span className="text-emerald-700 dark:text-emerald-400">estoque suficiente — sem compra</span>
-                              : <span className="text-primary">comprar até {m.lacuna} pç</span>}
-                          </td>
-                        </tr>
-                      ))}
+                      {mixIdealV2.slice(0, 30).map(m => {
+                        const incluida = m.mixTotal > 0;
+                        return (
+                          <tr key={m.marca} className="border-t hover:bg-muted/30">
+                            <td className="p-2 font-medium">{m.marca}</td>
+                            <td className="p-2 text-right tabular-nums">{(m.participacao * 100).toFixed(1)}%</td>
+                            <td className="p-2 text-right">{m.pecasVendidas}</td>
+                            <td className="p-2 text-right">{incluida ? m.mixTotal : '—'}</td>
+                            <td className="p-2 text-right">{m.estoqueEfetivo}</td>
+                            <td className="p-2 text-right font-bold">
+                              {!incluida ? <span className="text-muted-foreground">fora do mix</span>
+                                : m.lacuna > 0 ? <span className="text-primary">+{m.lacuna}</span>
+                                : <span className="text-emerald-600">0</span>}
+                            </td>
+                            <td className="p-2 text-xs">
+                              {m.status === 'SUGERIR_DESCONTINUAR' ? <span className="text-muted-foreground">sugerir descontinuar</span>
+                                : m.status === 'ABAIXO_MINIMO_ESTRATEGICA' ? <span className="text-blue-700 dark:text-blue-400">estratégica no mínimo</span>
+                                : m.lacuna === 0 ? <span className="text-emerald-700 dark:text-emerald-400">estoque suficiente</span>
+                                : <span className="text-primary">comprar até {m.lacuna} pç</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
-                {mixIdealMarcas.length > 30 && (
-                  <p className="text-xs text-muted-foreground text-center mt-2">+{mixIdealMarcas.length - 30} marcas</p>
+                {mixIdealV2.length > 30 && (
+                  <p className="text-xs text-muted-foreground text-center mt-2">+{mixIdealV2.length - 30} marcas</p>
                 )}
               </CardContent>
             </Card>
