@@ -329,42 +329,129 @@ export type Database = {
         Row: {
           cod_empresa: number
           conciliado: boolean
+          conciliado_em: string | null
+          conciliado_por: string | null
           created_at: string
+          dados_extras: Json
           data_lancamento: string
+          dedupe_key: string
           descricao: string | null
           id: string
+          metodo_conciliacao: string | null
           natureza: string | null
           referencia_id: string | null
           saldo_apos: number | null
+          status_conciliacao: string
           tipo: string
+          transaction_id: string | null
           updated_at: string
           valor: number
         }
         Insert: {
           cod_empresa: number
           conciliado?: boolean
+          conciliado_em?: string | null
+          conciliado_por?: string | null
           created_at?: string
+          dados_extras?: Json
           data_lancamento: string
+          dedupe_key: string
           descricao?: string | null
           id?: string
+          metodo_conciliacao?: string | null
           natureza?: string | null
           referencia_id?: string | null
           saldo_apos?: number | null
+          status_conciliacao?: string
           tipo?: string
+          transaction_id?: string | null
           updated_at?: string
           valor: number
         }
         Update: {
           cod_empresa?: number
           conciliado?: boolean
+          conciliado_em?: string | null
+          conciliado_por?: string | null
           created_at?: string
+          dados_extras?: Json
           data_lancamento?: string
+          dedupe_key?: string
           descricao?: string | null
           id?: string
+          metodo_conciliacao?: string | null
           natureza?: string | null
           referencia_id?: string | null
           saldo_apos?: number | null
+          status_conciliacao?: string
           tipo?: string
+          transaction_id?: string | null
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: []
+      }
+      btg_extrato_dedup_backup: {
+        Row: {
+          cod_empresa: number
+          conciliado: boolean
+          conciliado_em: string | null
+          conciliado_por: string | null
+          created_at: string
+          dados_extras: Json
+          data_lancamento: string
+          dedupe_key: string | null
+          descricao: string | null
+          id: string
+          metodo_conciliacao: string | null
+          natureza: string | null
+          referencia_id: string | null
+          saldo_apos: number | null
+          status_conciliacao: string
+          tipo: string
+          transaction_id: string | null
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          cod_empresa: number
+          conciliado?: boolean
+          conciliado_em?: string | null
+          conciliado_por?: string | null
+          created_at?: string
+          dados_extras?: Json
+          data_lancamento: string
+          dedupe_key?: string | null
+          descricao?: string | null
+          id?: string
+          metodo_conciliacao?: string | null
+          natureza?: string | null
+          referencia_id?: string | null
+          saldo_apos?: number | null
+          status_conciliacao?: string
+          tipo?: string
+          transaction_id?: string | null
+          updated_at?: string
+          valor: number
+        }
+        Update: {
+          cod_empresa?: number
+          conciliado?: boolean
+          conciliado_em?: string | null
+          conciliado_por?: string | null
+          created_at?: string
+          dados_extras?: Json
+          data_lancamento?: string
+          dedupe_key?: string | null
+          descricao?: string | null
+          id?: string
+          metodo_conciliacao?: string | null
+          natureza?: string | null
+          referencia_id?: string | null
+          saldo_apos?: number | null
+          status_conciliacao?: string
+          tipo?: string
+          transaction_id?: string | null
           updated_at?: string
           valor?: number
         }
@@ -540,6 +627,56 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      conciliacao_extrato: {
+        Row: {
+          alvo_id: string | null
+          alvo_tipo: string
+          cod_empresa: number
+          created_at: string
+          criado_por: string | null
+          extrato_id: string
+          id: string
+          metodo: string
+          observacao: string | null
+          score: number | null
+          valor_alocado: number
+        }
+        Insert: {
+          alvo_id?: string | null
+          alvo_tipo: string
+          cod_empresa: number
+          created_at?: string
+          criado_por?: string | null
+          extrato_id: string
+          id?: string
+          metodo: string
+          observacao?: string | null
+          score?: number | null
+          valor_alocado: number
+        }
+        Update: {
+          alvo_id?: string | null
+          alvo_tipo?: string
+          cod_empresa?: number
+          created_at?: string
+          criado_por?: string | null
+          extrato_id?: string
+          id?: string
+          metodo?: string
+          observacao?: string | null
+          score?: number | null
+          valor_alocado?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conciliacao_extrato_extrato_id_fkey"
+            columns: ["extrato_id"]
+            isOneToOne: false
+            referencedRelation: "btg_extrato"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       conciliacao_vendas: {
         Row: {
@@ -816,6 +953,48 @@ export type Database = {
           id?: string
           pagina_atual?: number | null
           ultima_data?: string | null
+        }
+        Relationships: []
+      }
+      extrato_regras_classificacao: {
+        Row: {
+          ativo: boolean
+          auto_conciliar: boolean
+          categoria: string | null
+          cod_empresa: number | null
+          created_at: string
+          criado_por: string | null
+          id: string
+          natureza: string
+          padrao_descricao: string
+          tipo: string
+          valor_max: number | null
+        }
+        Insert: {
+          ativo?: boolean
+          auto_conciliar?: boolean
+          categoria?: string | null
+          cod_empresa?: number | null
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          natureza: string
+          padrao_descricao: string
+          tipo: string
+          valor_max?: number | null
+        }
+        Update: {
+          ativo?: boolean
+          auto_conciliar?: boolean
+          categoria?: string | null
+          cod_empresa?: number | null
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          natureza?: string
+          padrao_descricao?: string
+          tipo?: string
+          valor_max?: number | null
         }
         Relationships: []
       }
