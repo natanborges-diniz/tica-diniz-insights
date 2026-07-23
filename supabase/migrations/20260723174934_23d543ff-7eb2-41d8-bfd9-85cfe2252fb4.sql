@@ -1,11 +1,3 @@
--- E1 — Conciliação 3 vias: fundação (docs/SPEC_P1_CONCILIACAO_3VIAS.md)
--- 1) Novas colunas em btg_extrato (dedup + estado de conciliação)
--- 2) Dedup heurístico do legado (duplicatas de reimportação → tabela de backup)
--- 3) dedupe_key determinística + índice único
--- 4) Tabela conciliacao_extrato (alocações N:1 extrato → alvo tipado)
--- 5) Tabela extrato_regras_classificacao + seeds de tarifas
--- 6) Backfill de status e alocações retroativas
-
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 -- ─── 1. Novas colunas ────────────────────────────────────────
@@ -19,10 +11,6 @@ ALTER TABLE public.btg_extrato
   ADD COLUMN IF NOT EXISTS dados_extras JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 -- ─── 2. Dedup do legado ──────────────────────────────────────
--- Heurística: mesma (empresa, data, valor, tipo, descricao, saldo_apos) = reimportação.
--- Dois PIX legítimos idênticos no mesmo dia têm saldo_apos distinto e sobrevivem.
--- Duplicatas vão para backup (não são apagadas às cegas); vence a mais antiga,
--- preferindo a que já estava conciliada.
 CREATE TABLE IF NOT EXISTS public.btg_extrato_dedup_backup
   (LIKE public.btg_extrato INCLUDING DEFAULTS);
 
@@ -62,7 +50,6 @@ BEGIN
 
   RAISE NOTICE 'E1 dedup: % linhas duplicadas movidas para btg_extrato_dedup_backup', v_dups;
 
-  -- Relatório (item 7.3 da spec): lançamentos auto-criados pelo conciliar_auto antigo
   SELECT count(*) INTO v_pendentes_revisao
   FROM public.lancamentos_financeiros
   WHERE origem = 'EXTRATO' AND requer_validacao = true;
@@ -71,9 +58,6 @@ BEGIN
 END $$;
 
 -- ─── 3. dedupe_key determinística ────────────────────────────
--- Formato: sha256(cod_empresa|YYYY-MM-DD|valor 2 casas|tipo|descricao|n)
--- n = índice de ocorrência da mesma combinação no dia (0,1,2...).
--- DEVE espelhar exatamente o cálculo em supabase/functions/btg-extrato/index.ts.
 WITH numbered AS (
   SELECT id,
     row_number() OVER (
@@ -107,13 +91,13 @@ CREATE TABLE public.conciliacao_extrato (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   cod_empresa INTEGER NOT NULL,
   extrato_id UUID NOT NULL REFERENCES public.btg_extrato(id) ON DELETE CASCADE,
-  alvo_tipo TEXT NOT NULL,          -- LANCAMENTO | PAGAMENTO_BTG | COBRANCA_BTG | RECEBIVEL_CARTAO | TARIFA
-  alvo_id UUID,                     -- NULL apenas para TARIFA criada por regra
+  alvo_tipo TEXT NOT NULL,
+  alvo_id UUID,
   valor_alocado NUMERIC NOT NULL,
-  metodo TEXT NOT NULL,             -- EXATO | TOLERANCIA | AGRUPADO | REGRA | MANUAL
+  metodo TEXT NOT NULL,
   score NUMERIC,
   observacao TEXT,
-  criado_por UUID,                  -- NULL = motor automático
+  criado_por UUID,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -141,13 +125,13 @@ CREATE POLICY "Tenant read conciliacao_extrato"
 -- ─── 5. extrato_regras_classificacao ─────────────────────────
 CREATE TABLE public.extrato_regras_classificacao (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  cod_empresa INTEGER,              -- NULL = regra global
-  padrao_descricao TEXT NOT NULL,   -- regex JS (case-insensitive), aplicada pelo motor conciliar-extrato em btg_extrato.descricao
-  tipo TEXT NOT NULL,               -- CREDITO | DEBITO
+  cod_empresa INTEGER,
+  padrao_descricao TEXT NOT NULL,
+  tipo TEXT NOT NULL,
   natureza TEXT NOT NULL,
   categoria TEXT,
   auto_conciliar BOOLEAN NOT NULL DEFAULT true,
-  valor_max NUMERIC,                -- regra só aplica até este valor (NULL = sem teto)
+  valor_max NUMERIC,
   ativo BOOLEAN NOT NULL DEFAULT true,
   criado_por UUID,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -175,14 +159,12 @@ VALUES
   (NULL, '\bIOF\b',                                        'DEBITO', 'DESPESAS_FINANCEIRAS', 'TARIFA_BANCARIA', true, 500),
   (NULL, '\bJUROS\b',                                      'DEBITO', 'DESPESAS_FINANCEIRAS', 'JUROS',           true, 500);
 
--- ─── 6. Backfill de status e alocações retroativas ───────────
--- Linhas conciliadas no fluxo antigo (checkbox) viram CONCILIADO_MANUAL.
+-- ─── 6. Backfill ─────────────────────────────────────────────
 UPDATE public.btg_extrato
 SET status_conciliacao = 'CONCILIADO_MANUAL',
     metodo_conciliacao = 'MANUAL'
 WHERE conciliado = true;
 
--- Quem tinha referencia_id apontando para um lançamento ganha alocação retroativa.
 INSERT INTO public.conciliacao_extrato
   (cod_empresa, extrato_id, alvo_tipo, alvo_id, valor_alocado, metodo, observacao)
 SELECT e.cod_empresa, e.id, 'LANCAMENTO', e.referencia_id, e.valor, 'MANUAL',
@@ -192,7 +174,6 @@ WHERE e.conciliado = true
   AND e.referencia_id IS NOT NULL
   AND EXISTS (SELECT 1 FROM public.lancamentos_financeiros l WHERE l.id = e.referencia_id);
 
--- Conciliado sem referência resolvível: marca a origem para auditoria futura.
 UPDATE public.btg_extrato e
 SET dados_extras = e.dados_extras || '{"backfill_e1": "legado_sem_referencia"}'::jsonb
 WHERE e.conciliado = true

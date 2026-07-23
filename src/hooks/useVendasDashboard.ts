@@ -12,7 +12,7 @@ import {
   ResumoFormaPagamento,
   ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
-import { EmpresaParam } from "@/services/firebirdBridge";
+import { EmpresaParam, aplicarFiltroEmpresaSupabase, empresaFilterList } from "@/services/firebirdBridge";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
@@ -593,12 +593,7 @@ export function useVendasDashboard() {
           .gte('data', dataInicio)
           .lte('data', dataFim);
         
-        if (empresa !== 'ALL') {
-          const codEmpresa = typeof empresa === 'string' 
-            ? parseInt(empresa, 10) 
-            : empresa;
-          queryCache = queryCache.eq('cod_empresa', codEmpresa);
-        }
+        queryCache = aplicarFiltroEmpresaSupabase(queryCache, empresa);
         
         const { data: cacheData, error: cacheError } = await queryCache;
         
@@ -641,7 +636,7 @@ export function useVendasDashboard() {
       console.log(`[useVendasDashboard] 🔥 Firebird em background (cache ${cacheEstavaCheio ? 'disponível' : 'vazio'})...`);
       
       try {
-        const dadosFirebird = await Promise.race([
+        const dadosFirebirdRaw = await Promise.race([
           getResumoFormasPagamento({
             empresa,
             dataInicio,
@@ -660,6 +655,12 @@ export function useVendasDashboard() {
           console.log('[useVendasDashboard] Firebird retornou mas filtro já mudou, descartando');
           return;
         }
+
+        // Multi-empresa: bridge devolve todas as empresas, filtramos client-side
+        const filterList = empresaFilterList(empresa);
+        const dadosFirebird = filterList
+          ? dadosFirebirdRaw.filter((d) => filterList.includes(d.codEmpresa))
+          : dadosFirebirdRaw;
         
         if (dadosFirebird.length > 0) {
           const dadosAgregados = agregarDados(dadosFirebird);
@@ -676,7 +677,8 @@ export function useVendasDashboard() {
           console.log(`[useVendasDashboard] ✓ Firebird: ${dadosAgregados.length} registros em ${tempoMs}ms`);
           
           // Salvar no cache Supabase para próxima vez (fire-and-forget)
-          salvarNoCache(dadosFirebird, dataInicio, dataFim).catch(() => {});
+          // Salva sempre os dados brutos (não-filtrados) — o cache é global por empresa
+          salvarNoCache(dadosFirebirdRaw, dataInicio, dataFim).catch(() => {});
         } else if (!cacheEstavaCheio) {
           // Firebird retornou vazio E cache estava vazio
           setDadosFormasPagamento([]);
@@ -790,10 +792,7 @@ export function useVendasDashboard() {
         .gte('data', dataInicio)
         .lte('data', dataFim);
 
-      if (empresa !== 'ALL') {
-        const codEmpresa = typeof empresa === 'string' ? parseInt(empresa, 10) : empresa;
-        queryCache = queryCache.eq('cod_empresa', codEmpresa);
-      }
+      queryCache = aplicarFiltroEmpresaSupabase(queryCache, empresa);
 
       const { data: cacheData, error: cacheError } = await queryCache;
 

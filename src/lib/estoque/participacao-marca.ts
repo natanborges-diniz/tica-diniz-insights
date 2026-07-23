@@ -2,7 +2,7 @@
 // Módulo PURO — sem React, sem Supabase.
 // Calcula a participação de cada marca no mix de Armações.
 //
-// Princípio #6: participação = 60% peças + 40% faturamento
+// Fase 2.0b: participação = média simples 50/50 (% peças + % faturamento)
 
 import { PESO_PECAS, PESO_FATURAMENTO } from './constants';
 

@@ -7,6 +7,7 @@ import { BridgeStatusBanner } from "@/components/ui/bridge-status-banner";
 import { useBridgeStatus } from "@/hooks/useBridgeStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
+import { PAGES_BY_MODULE, findPageByPath } from "@/lib/pageCatalog";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { toast } from "sonner";
 
@@ -66,7 +67,7 @@ export default function HomePage() {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const bridgeStatus = useBridgeStatus();
-  const { hasAccess, isLoading: permLoading } = useModulePermissions();
+  const { hasAnyPageInModule, hasPageAccess, isLoading: permLoading } = useModulePermissions();
   const [retrying, setRetrying] = useState(false);
   const [crossLogging, setCrossLogging] = useState(false);
 
@@ -143,8 +144,17 @@ export default function HomePage() {
         </div>
       ) : (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {modules.filter((mod) => hasAccess(mod.key as any)).map((mod) => {
+        {modules.filter((mod) => mod.key === "comunicacao" || hasAnyPageInModule(mod.key as any)).map((mod) => {
           const Icon = mod.icon;
+          // Resolve target path: se path padrão não está liberado, cai na primeira página permitida do módulo
+          const resolvedPath = (() => {
+            if (mod.path === "__cross_login__") return mod.path;
+            const defaultPage = findPageByPath(mod.path);
+            if (defaultPage && hasPageAccess(defaultPage.key, mod.key as any)) return mod.path;
+            const pages = PAGES_BY_MODULE[mod.key as keyof typeof PAGES_BY_MODULE] || [];
+            const first = pages.find(p => hasPageAccess(p.key, mod.key as any));
+            return first ? first.path : mod.path;
+          })();
           return (
             <Card
               key={mod.key}
@@ -152,11 +162,11 @@ export default function HomePage() {
               tabIndex={0}
               aria-label={`Abrir módulo ${mod.label}`}
               className={`cursor-pointer hover:shadow-card-hover hover:border-primary/30 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${mod.path === "__cross_login__" && crossLogging ? "opacity-60 pointer-events-none" : ""}`}
-              onClick={() => handleModuleClick(mod.path)}
+              onClick={() => handleModuleClick(resolvedPath)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  handleModuleClick(mod.path);
+                  handleModuleClick(resolvedPath);
                 }
               }}
             >

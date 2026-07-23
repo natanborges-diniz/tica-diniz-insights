@@ -1,7 +1,7 @@
 /**
  * Testes — D₃ (Sub-Entrega D)
  *
- * calcularMixIdealV2: participação proporcional por marca (Princípio #6).
+ * calcularMixIdealV2: participação proporcional por marca (Fase 2.0b: 50/50, Math.floor).
  * Cenários: marca<25 estratégica, marca<25 não-estratégica, override solar,
  *           alocação por passadas, estouro de capacidade, dead stock.
  */
@@ -10,10 +10,10 @@ import { calcularMixIdealV2, type StatusMixV2 } from '../mix-ideal-v2';
 import { MIX_MINIMO_MARCA } from '../constants';
 
 // ─── Dataset base — 3 marcas, capacidade 200 ─────────────────────────────────
-// RAYBAN:     60 peças, R$6000  → part = 0.6×0.6 + 0.4×0.5    = 0.56
-// OAKLEY:     30 peças, R$4000  → part = 0.6×0.3 + 0.4×0.333  ≈ 0.313
-// SILHOUETTE: 10 peças, R$2000  → part = 0.6×0.1 + 0.4×0.167  ≈ 0.127
-// Com cap=200: RB=112, OAK=63, SIL=25 → todos OK
+// RAYBAN:     60 peças, R$6000  → part = 0.5×0.6 + 0.5×0.5    = 0.55
+// OAKLEY:     30 peças, R$4000  → part = 0.5×0.3 + 0.5×0.333  ≈ 0.317
+// SILHOUETTE: 10 peças, R$2000  → part = 0.5×0.1 + 0.5×0.167  ≈ 0.133
+// Com cap=200 (Math.floor): RB=110, OAK=63, SIL=26 → todos OK
 
 const CAP = 200;
 const BASE = [
@@ -74,6 +74,105 @@ describe('calcularMixIdealV2 — status e MIX_MINIMO_MARCA', () => {
     expect(p.mixTotal).toBe(0);
     expect(p.lacuna).toBe(0);
     expect(p.skusAlocados).toHaveLength(0);
+  });
+});
+
+// ─── Cascata do mínimo (Fase 2.0b — Passo 3) ─────────────────────────────────
+
+describe('calcularMixIdealV2 — cascata minimoProprio > minimoLoja > MIX_MINIMO_MARCA', () => {
+  // Marca pequena que ficaria abaixo do mínimo padrão (25).
+  // participacao ≈ 1/101 → mixTotalRaw = floor(200 * ~0.01) = 1
+  const itensCascata = [
+    { marca: 'PEQUENA', qtdVendidos:   1, totalVendido:   100, estoqueAtual:  5, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 10, descricao: 'PEQ', diasGiroUltimaPeca: 30 },
+    { marca: 'GRANDE',  qtdVendidos: 100, totalVendido: 10000, estoqueAtual: 80, isDeadStock: false, categoria: 'ARMACOES' as const, codSku: 11, descricao: 'GRA', diasGiroUltimaPeca:  5 },
+  ];
+
+  it('sem overrides → minimoEfetivo = MIX_MINIMO_MARCA (25)', () => {
+    const r = calcularMixIdealV2({ itens: itensCascata, capacidadeTotal: CAP });
+    const p = r.find(m => m.marca === 'PEQUENA')!;
+    expect(p.minimoEfetivo).toBe(MIX_MINIMO_MARCA);
+  });
+
+  it('minimoLoja=40 → minimoEfetivo=40 quando marca não tem minimoProprio', () => {
+    const r = calcularMixIdealV2({ itens: itensCascata, capacidadeTotal: CAP, minimoLoja: 40 });
+    const p = r.find(m => m.marca === 'PEQUENA')!;
+    expect(p.minimoEfetivo).toBe(40);
+  });
+
+  it('minimoProprio da marca vence minimoLoja', () => {
+    const r = calcularMixIdealV2({
+      itens: itensCascata,
+      capacidadeTotal: CAP,
+      minimoLoja: 40,
+      marcaConfigs: new Map([['PEQUENA', { minimoProprio: 60 }]]),
+    });
+    const p = r.find(m => m.marca === 'PEQUENA')!;
+    expect(p.minimoEfetivo).toBe(60);
+  });
+
+  it('minimoProprio=null herda minimoLoja', () => {
+    const r = calcularMixIdealV2({
+      itens: itensCascata,
+      capacidadeTotal: CAP,
+      minimoLoja: 40,
+      marcaConfigs: new Map([['PEQUENA', { minimoProprio: null }]]),
+    });
+    const p = r.find(m => m.marca === 'PEQUENA')!;
+    expect(p.minimoEfetivo).toBe(40);
+  });
+
+  it('estratégica com minimoProprio=50 → mixTotal forçado a 50 (não a 25)', () => {
+    const r = calcularMixIdealV2({
+      itens: itensCascata,
+      capacidadeTotal: CAP,
+      marcaConfigs: new Map([['PEQUENA', { estrategica: true, minimoProprio: 50 }]]),
+    });
+    const p = r.find(m => m.marca === 'PEQUENA')!;
+    expect(p.status).toBe('ABAIXO_MINIMO_ESTRATEGICA');
+    expect(p.mixTotal).toBe(50);
+    expect(p.minimoEfetivo).toBe(50);
+  });
+
+  it('estratégica com minimoLoja=30 (sem minimoProprio) → mixTotal forçado a 30', () => {
+    const r = calcularMixIdealV2({
+      itens: itensCascata,
+      capacidadeTotal: CAP,
+      minimoLoja: 30,
+      marcaConfigs: new Map([['PEQUENA', { estrategica: true }]]),
+    });
+    const p = r.find(m => m.marca === 'PEQUENA')!;
+    expect(p.status).toBe('ABAIXO_MINIMO_ESTRATEGICA');
+    expect(p.mixTotal).toBe(30);
+  });
+
+  it('não-estratégica abaixo do minimoEfetivo custom → SUGERIR_DESCONTINUAR', () => {
+    // Sem overrides, PEQUENA já é SUGERIR_DESCONTINUAR. Mas se elevo o mínimo para 100,
+    // uma marca que ANTES estava OK também vira SUGERIR_DESCONTINUAR (mixTotalRaw < 100).
+    const r = calcularMixIdealV2({
+      itens: itensCascata,
+      capacidadeTotal: CAP,
+      minimoLoja: 100,
+    });
+    const g = r.find(m => m.marca === 'GRANDE')!;
+    // GRANDE tem participacao ~0.99 → mixTotalRaw = floor(200 * 0.99) = 198 → passa
+    expect(g.status).toBe('OK');
+    const p = r.find(m => m.marca === 'PEQUENA')!;
+    expect(p.status).toBe('SUGERIR_DESCONTINUAR');
+    expect(p.mixTotal).toBe(0);
+    expect(p.minimoEfetivo).toBe(100);
+  });
+
+  it('minimoProprio=0 (permite marca sem piso) → mixTotalRaw é mantido mesmo que baixo', () => {
+    // Caso extremo: gestor quer deixar a marca com o mix que a participação der.
+    const r = calcularMixIdealV2({
+      itens: itensCascata,
+      capacidadeTotal: CAP,
+      marcaConfigs: new Map([['PEQUENA', { minimoProprio: 0 }]]),
+    });
+    const p = r.find(m => m.marca === 'PEQUENA')!;
+    // mixTotalRaw >= 0 sempre; status = OK porque 0 >= 0
+    expect(p.minimoEfetivo).toBe(0);
+    expect(p.status).toBe('OK');
   });
 });
 

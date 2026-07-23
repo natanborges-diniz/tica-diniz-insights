@@ -13,6 +13,7 @@ interface LinkData {
   valor: number;
   descricao: string;
   parcelas_max: number;
+  parcelas_fixas: number | null;
   status: string;
   expira_em: string | null;
   cliente_nome: string | null;

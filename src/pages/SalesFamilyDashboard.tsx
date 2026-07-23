@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Users } from 'lucide-react';
+import { ArrowLeft, FileDown, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useUserEmpresas } from '@/hooks/useUserEmpresas';
@@ -10,6 +10,9 @@ import { SalesFamilyFilters } from '@/components/sales-family/SalesFamilyFilters
 import { SalesFamilyKPICards } from '@/components/sales-family/SalesFamilyKPICards';
 import { SalesFamilyChart } from '@/components/sales-family/SalesFamilyChart';
 import { SalesFamilyTable } from '@/components/sales-family/SalesFamilyTable';
+import { exportSalesFamilyReport } from '@/utils/exportSalesFamilyReport';
+import type { PivotView } from '@/components/ui/pivot-table';
+import { toast } from 'sonner';
 
 // Helper para obter o primeiro dia do mês atual
 function getFirstDayOfMonth(): string {
@@ -27,6 +30,7 @@ export default function SalesFamilyDashboard() {
   // Estado de empresa — default do profile
   const { codEmpresa: profileEmpresa } = useDefaultEmpresa();
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<number | null>(null);
+  const [empresaTouched, setEmpresaTouched] = useState(false);
 
   const { empresas, isLoading: loadingEmpresas, error: errorEmpresas, canSeeAll } = useUserEmpresas();
 
@@ -37,21 +41,27 @@ export default function SalesFamilyDashboard() {
   // Estados de filtros internos
   const [filtroVendedor, setFiltroVendedor] = useState('TODOS');
   const [filtroFamilia, setFiltroFamilia] = useState('TODAS');
+  const [filtroFornecedor, setFiltroFornecedor] = useState('TODOS');
   const [filtroBuscaTexto, setFiltroBuscaTexto] = useState('');
 
-  // Selecionar empresa do profile (ou primeira disponível como fallback)
+  // Selecionar empresa do profile (ou primeira disponível) apenas no carregamento inicial
   useEffect(() => {
-    if (!loadingEmpresas && !errorEmpresas && empresas.length > 0 && selectedEmpresaId === null) {
-      // Prefere empresa do profile
+    if (!loadingEmpresas && !errorEmpresas && empresas.length > 0 && !empresaTouched && selectedEmpresaId === null) {
       const profileMatch = profileEmpresa ? empresas.find(e => e.codEmpresa === profileEmpresa) : null;
       setSelectedEmpresaId(profileMatch ? profileMatch.codEmpresa : empresas[0].codEmpresa);
     }
-  }, [empresas, loadingEmpresas, errorEmpresas, selectedEmpresaId, profileEmpresa]);
+  }, [empresas, loadingEmpresas, errorEmpresas, selectedEmpresaId, profileEmpresa, empresaTouched]);
+
+  const handleEmpresaChange = (id: number | null) => {
+    setEmpresaTouched(true);
+    setSelectedEmpresaId(id);
+  };
 
   // Limpar filtros ao trocar de empresa ou datas
   useEffect(() => {
     setFiltroVendedor('TODOS');
     setFiltroFamilia('TODAS');
+    setFiltroFornecedor('TODOS');
     setFiltroBuscaTexto('');
   }, [selectedEmpresaId, dataInicio, dataFim]);
 
@@ -74,18 +84,72 @@ export default function SalesFamilyDashboard() {
       result = result.filter(item => item.familia === filtroFamilia);
     }
 
+    if (filtroFornecedor !== 'TODOS') {
+      result = result.filter(item => item.fornecedor === filtroFornecedor);
+    }
+
     if (filtroBuscaTexto.trim()) {
       const termo = filtroBuscaTexto.toLowerCase();
       result = result.filter(
         item =>
           item.empresa?.toLowerCase().includes(termo) ||
           item.vendedor?.toLowerCase().includes(termo) ||
-          item.familia?.toLowerCase().includes(termo)
+          item.familia?.toLowerCase().includes(termo) ||
+          item.fornecedor?.toLowerCase().includes(termo)
       );
     }
 
     return result;
-  }, [data, filtroVendedor, filtroFamilia, filtroBuscaTexto]);
+  }, [data, filtroVendedor, filtroFamilia, filtroFornecedor, filtroBuscaTexto]);
+
+  // Ref do gráfico para captura no PDF
+  const chartRef = useRef<HTMLDivElement | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pivotView, setPivotView] = useState<PivotView | null>(null);
+
+  const handleExportFullReport = async () => {
+    try {
+      setGeneratingPdf(true);
+      const empresaNome =
+        selectedEmpresaId === null
+          ? 'Todas as Empresas'
+          : empresas.find(e => e.codEmpresa === selectedEmpresaId)?.nome ?? '—';
+
+      const faturamento = filteredData.reduce((a, i) => a + (i.totalVendido || 0), 0);
+      const vendas = filteredData.reduce((a, i) => a + (i.qtdTransacao || 0), 0);
+      const pecas = filteredData.reduce((a, i) => a + (i.qtdProdutos || 0), 0);
+
+      await exportSalesFamilyReport({
+        filename: `relatorio-vendas-familia-${new Date().toISOString().split('T')[0]}`,
+        title: 'Relatório de Vendas por Família e Vendedor',
+        subtitle: `${empresaNome} • ${dataInicio} a ${dataFim}`,
+        filters: {
+          empresa: empresaNome,
+          dataInicio,
+          dataFim,
+          vendedor: filtroVendedor === 'TODOS' ? 'Todos' : filtroVendedor,
+          familia: filtroFamilia === 'TODAS' ? 'Todas' : filtroFamilia,
+          fornecedor: filtroFornecedor === 'TODOS' ? 'Todos' : filtroFornecedor,
+          busca: filtroBuscaTexto,
+        },
+        kpis: {
+          faturamento,
+          vendas,
+          pecas,
+          ticketMedio: vendas > 0 ? faturamento / vendas : 0,
+        },
+        rows: filteredData,
+        view: pivotView,
+        chartElement: chartRef.current,
+      });
+      toast.success('Relatório PDF gerado com sucesso');
+    } catch (err) {
+      console.error(err);
+      toast.error('Falha ao gerar o relatório PDF');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -97,13 +161,23 @@ export default function SalesFamilyDashboard() {
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1">
               <Users className="h-6 w-6 text-primary" />
               <h1 className="text-xl font-bold">Vendas por Família e Vendedor</h1>
             </div>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleExportFullReport}
+              disabled={generatingPdf || isLoading || filteredData.length === 0}
+            >
+              <FileDown className="h-4 w-4 mr-2" />
+              {generatingPdf ? 'Gerando…' : 'Relatório PDF'}
+            </Button>
           </div>
         </div>
       </header>
+
 
       <main className="container mx-auto px-4 py-6 space-y-6">
         {/* Loading Empresas */}
@@ -138,7 +212,7 @@ export default function SalesFamilyDashboard() {
                 <SalesFamilyFilters
                   empresas={empresas}
                   selectedEmpresaId={selectedEmpresaId}
-                  onEmpresaChange={setSelectedEmpresaId}
+                  onEmpresaChange={handleEmpresaChange}
                   canSeeAll={canSeeAll}
                   dataInicio={dataInicio}
                   dataFim={dataFim}
@@ -149,6 +223,8 @@ export default function SalesFamilyDashboard() {
                   setFiltroVendedor={setFiltroVendedor}
                   filtroFamilia={filtroFamilia}
                   setFiltroFamilia={setFiltroFamilia}
+                  filtroFornecedor={filtroFornecedor}
+                  setFiltroFornecedor={setFiltroFornecedor}
                   filtroBuscaTexto={filtroBuscaTexto}
                   setFiltroBuscaTexto={setFiltroBuscaTexto}
                 />
@@ -179,13 +255,15 @@ export default function SalesFamilyDashboard() {
             {!isLoading && !error && (
               <>
                 <SalesFamilyKPICards dados={filteredData} />
-                <SalesFamilyChart dados={filteredData} />
+                <div ref={chartRef} className="bg-background">
+                  <SalesFamilyChart dados={filteredData} />
+                </div>
                 <Card>
                   <CardHeader>
                     <CardTitle>Detalhamento</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <SalesFamilyTable dados={filteredData} />
+                    <SalesFamilyTable dados={filteredData} onViewChange={setPivotView} />
                   </CardContent>
                 </Card>
               </>

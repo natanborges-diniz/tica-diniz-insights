@@ -3,11 +3,14 @@ import {
   TrendingUp, BarChart3, Layers, Wallet,
   Package, ClipboardList, FileText, ArrowLeftRight,
   Target, Users, Brain, RefreshCw, Activity, Truck, FlaskConical,
-  Landmark, CreditCard, Receipt, FileSearch, Shield, Link2, Settings2
+  Landmark, CreditCard, Receipt, FileSearch, Shield, Link2, Settings2,
+  ShoppingCart
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { usePedidoAlertas } from "@/hooks/usePedidoAlertas";
+import { useModulePermissions } from "@/hooks/useModulePermissions";
+import { findPageByPath } from "@/lib/pageCatalog";
 import {
   Sidebar,
   SidebarContent,
@@ -54,6 +57,14 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       ],
     },
   ],
+  compras: [
+    {
+      label: "Compras",
+      items: [
+        { title: "Compras por Fornecedor", url: "/compras", icon: ShoppingCart },
+      ],
+    },
+  ],
   estoque: [
     {
       label: "Gestão de Estoque",
@@ -68,6 +79,12 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
   ],
   monitor: [
     {
+      label: "Monitor",
+      items: [
+        { title: "Monitor de OS", url: "/os", icon: Truck },
+      ],
+    },
+    {
       label: "Acompanhamento",
       items: [
         { title: "Tracking Hoya", url: "/os/tracking", icon: Truck },
@@ -76,6 +93,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       ],
     },
   ],
+
   financeiro: [
     {
       label: "Visão Geral",
@@ -140,8 +158,21 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
-  const sections = moduleMenus[activeModule] || [];
+  const rawSections = moduleMenus[activeModule] || [];
   const { countByFornecedor } = usePedidoAlertas();
+  const { hasPageAccess } = useModulePermissions();
+
+  // Filtra itens conforme permissão granular (módulo OU página específica liberada).
+  const sections = rawSections
+    .map((s) => ({
+      ...s,
+      items: s.items.filter((item) => {
+        const page = findPageByPath(item.url);
+        if (!page) return true;
+        return hasPageAccess(page.key, activeModule);
+      }),
+    }))
+    .filter((s) => s.items.length > 0);
 
   const getBadgeCount = (url: string): number => {
     if (url === "/os/tracking") return countByFornecedor["HOYA"] || 0;
@@ -150,8 +181,7 @@ export function AppSidebar({ activeModule }: AppSidebarProps) {
     return 0;
   };
 
-  // Hide sidebar entirely for modules with no menu items
-  if (sections.length === 0 || sections.every(s => s.items.length === 0)) {
+  if (sections.length === 0) {
     return null;
   }
 

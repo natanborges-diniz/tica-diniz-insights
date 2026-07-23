@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -23,6 +23,12 @@ export interface PivotColumn<T> {
   className?: string;
 }
 
+export interface PivotView {
+  groupBy: string[];
+  columns: { key: string; header: string; type: 'dimension' | 'measure'; format?: (v: any) => string }[];
+  rows: Record<string, any>[];
+}
+
 export interface PivotTableProps<T> {
   data: T[];
   columns: PivotColumn<T>[];
@@ -31,6 +37,7 @@ export interface PivotTableProps<T> {
   icon?: React.ReactNode;
   emptyMessage?: string;
   className?: string;
+  onViewChange?: (view: PivotView) => void;
 }
 
 // Componente de chip arrastável
@@ -134,6 +141,7 @@ export function PivotTable<T extends Record<string, any>>({
   icon,
   emptyMessage = 'Nenhum dado encontrado',
   className,
+  onViewChange,
 }: PivotTableProps<T>) {
   const [groupBy, setGroupBy] = useState<string[]>(defaultGroupBy as string[]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -287,6 +295,22 @@ export function PivotTable<T extends Record<string, any>>({
     ...measures,
   ];
 
+  // Notificar mudanças de view (para exportações que devem refletir a tela)
+  useEffect(() => {
+    if (!onViewChange) return;
+    onViewChange({
+      groupBy,
+      columns: visibleColumns.map(c => ({
+        key: c.key as string,
+        header: c.header,
+        type: c.type,
+        format: c.format,
+      })),
+      rows: sortedData.map(r => r._data as Record<string, any>),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortedData, groupBy]);
+
   return (
     <Card className={className}>
       <CardHeader className="pb-3">
@@ -369,16 +393,13 @@ export function PivotTable<T extends Record<string, any>>({
                     </div>
                   </TableHead>
                 ))}
-                {groupBy.length > 0 && (
-                  <TableHead className="text-right w-20">Qtd</TableHead>
-                )}
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedData.length === 0 ? (
                 <TableRow>
-                  <TableCell 
-                    colSpan={visibleColumns.length + (groupBy.length > 0 ? 1 : 0)} 
+                  <TableCell
+                    colSpan={visibleColumns.length}
                     className="text-center text-muted-foreground py-8"
                   >
                     {emptyMessage}
@@ -403,13 +424,6 @@ export function PivotTable<T extends Record<string, any>>({
                         </TableCell>
                       );
                     })}
-                    {groupBy.length > 0 && (
-                      <TableCell className="text-right text-muted-foreground">
-                        <Badge variant="outline" className="text-xs">
-                          {row._count}
-                        </Badge>
-                      </TableCell>
-                    )}
                   </TableRow>
                 ))
               )}

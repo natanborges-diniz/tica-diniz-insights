@@ -329,42 +329,129 @@ export type Database = {
         Row: {
           cod_empresa: number
           conciliado: boolean
+          conciliado_em: string | null
+          conciliado_por: string | null
           created_at: string
+          dados_extras: Json
           data_lancamento: string
+          dedupe_key: string
           descricao: string | null
           id: string
+          metodo_conciliacao: string | null
           natureza: string | null
           referencia_id: string | null
           saldo_apos: number | null
+          status_conciliacao: string
           tipo: string
+          transaction_id: string | null
           updated_at: string
           valor: number
         }
         Insert: {
           cod_empresa: number
           conciliado?: boolean
+          conciliado_em?: string | null
+          conciliado_por?: string | null
           created_at?: string
+          dados_extras?: Json
           data_lancamento: string
+          dedupe_key: string
           descricao?: string | null
           id?: string
+          metodo_conciliacao?: string | null
           natureza?: string | null
           referencia_id?: string | null
           saldo_apos?: number | null
+          status_conciliacao?: string
           tipo?: string
+          transaction_id?: string | null
           updated_at?: string
           valor: number
         }
         Update: {
           cod_empresa?: number
           conciliado?: boolean
+          conciliado_em?: string | null
+          conciliado_por?: string | null
           created_at?: string
+          dados_extras?: Json
           data_lancamento?: string
+          dedupe_key?: string
           descricao?: string | null
           id?: string
+          metodo_conciliacao?: string | null
           natureza?: string | null
           referencia_id?: string | null
           saldo_apos?: number | null
+          status_conciliacao?: string
           tipo?: string
+          transaction_id?: string | null
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: []
+      }
+      btg_extrato_dedup_backup: {
+        Row: {
+          cod_empresa: number
+          conciliado: boolean
+          conciliado_em: string | null
+          conciliado_por: string | null
+          created_at: string
+          dados_extras: Json
+          data_lancamento: string
+          dedupe_key: string | null
+          descricao: string | null
+          id: string
+          metodo_conciliacao: string | null
+          natureza: string | null
+          referencia_id: string | null
+          saldo_apos: number | null
+          status_conciliacao: string
+          tipo: string
+          transaction_id: string | null
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          cod_empresa: number
+          conciliado?: boolean
+          conciliado_em?: string | null
+          conciliado_por?: string | null
+          created_at?: string
+          dados_extras?: Json
+          data_lancamento: string
+          dedupe_key?: string | null
+          descricao?: string | null
+          id?: string
+          metodo_conciliacao?: string | null
+          natureza?: string | null
+          referencia_id?: string | null
+          saldo_apos?: number | null
+          status_conciliacao?: string
+          tipo?: string
+          transaction_id?: string | null
+          updated_at?: string
+          valor: number
+        }
+        Update: {
+          cod_empresa?: number
+          conciliado?: boolean
+          conciliado_em?: string | null
+          conciliado_por?: string | null
+          created_at?: string
+          dados_extras?: Json
+          data_lancamento?: string
+          dedupe_key?: string | null
+          descricao?: string | null
+          id?: string
+          metodo_conciliacao?: string | null
+          natureza?: string | null
+          referencia_id?: string | null
+          saldo_apos?: number | null
+          status_conciliacao?: string
+          tipo?: string
+          transaction_id?: string | null
           updated_at?: string
           valor?: number
         }
@@ -517,6 +604,7 @@ export type Database = {
           cod_empresa: number
           created_at: string
           id: string
+          mix_minimo: number | null
           percentual_solar: number
           updated_at: string
         }
@@ -525,6 +613,7 @@ export type Database = {
           cod_empresa: number
           created_at?: string
           id?: string
+          mix_minimo?: number | null
           percentual_solar: number
           updated_at?: string
         }
@@ -533,10 +622,61 @@ export type Database = {
           cod_empresa?: number
           created_at?: string
           id?: string
+          mix_minimo?: number | null
           percentual_solar?: number
           updated_at?: string
         }
         Relationships: []
+      }
+      conciliacao_extrato: {
+        Row: {
+          alvo_id: string | null
+          alvo_tipo: string
+          cod_empresa: number
+          created_at: string
+          criado_por: string | null
+          extrato_id: string
+          id: string
+          metodo: string
+          observacao: string | null
+          score: number | null
+          valor_alocado: number
+        }
+        Insert: {
+          alvo_id?: string | null
+          alvo_tipo: string
+          cod_empresa: number
+          created_at?: string
+          criado_por?: string | null
+          extrato_id: string
+          id?: string
+          metodo: string
+          observacao?: string | null
+          score?: number | null
+          valor_alocado: number
+        }
+        Update: {
+          alvo_id?: string | null
+          alvo_tipo?: string
+          cod_empresa?: number
+          created_at?: string
+          criado_por?: string | null
+          extrato_id?: string
+          id?: string
+          metodo?: string
+          observacao?: string | null
+          score?: number | null
+          valor_alocado?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conciliacao_extrato_extrato_id_fkey"
+            columns: ["extrato_id"]
+            isOneToOne: false
+            referencedRelation: "btg_extrato"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       conciliacao_vendas: {
         Row: {
@@ -690,6 +830,108 @@ export type Database = {
         }
         Relationships: []
       }
+      estoque_sincronizado: {
+        Row: {
+          acao_sugerida: string | null
+          atualizado_em: string | null
+          categoria: string | null
+          cod_barras_interno: string | null
+          cod_empresa: number
+          cod_produto_tipo: number | null
+          cod_sku: number
+          custo_ultima_compra: number | null
+          data_ultima_compra: string | null
+          data_ultima_entrada: string | null
+          data_ultima_venda: string | null
+          desconto_sugerido: number | null
+          descricao: string | null
+          dias_desde_ultima_venda: number | null
+          dias_em_estoque: number | null
+          dias_giro_mediano: number | null
+          dias_giro_medio: number | null
+          dias_giro_ultima_peca: number | null
+          ean: string | null
+          faixa_saneamento: string | null
+          fornecedor: string | null
+          id: string
+          is_dead_stock: boolean | null
+          marca: string | null
+          origem_custo: string | null
+          pecas_giro_consideradas: number | null
+          preco_venda: number | null
+          qtd_vendidos_180d: number | null
+          quantidade_estoque: number
+          subcategoria: string | null
+          valor_estoque_custo: number | null
+        }
+        Insert: {
+          acao_sugerida?: string | null
+          atualizado_em?: string | null
+          categoria?: string | null
+          cod_barras_interno?: string | null
+          cod_empresa: number
+          cod_produto_tipo?: number | null
+          cod_sku: number
+          custo_ultima_compra?: number | null
+          data_ultima_compra?: string | null
+          data_ultima_entrada?: string | null
+          data_ultima_venda?: string | null
+          desconto_sugerido?: number | null
+          descricao?: string | null
+          dias_desde_ultima_venda?: number | null
+          dias_em_estoque?: number | null
+          dias_giro_mediano?: number | null
+          dias_giro_medio?: number | null
+          dias_giro_ultima_peca?: number | null
+          ean?: string | null
+          faixa_saneamento?: string | null
+          fornecedor?: string | null
+          id?: string
+          is_dead_stock?: boolean | null
+          marca?: string | null
+          origem_custo?: string | null
+          pecas_giro_consideradas?: number | null
+          preco_venda?: number | null
+          qtd_vendidos_180d?: number | null
+          quantidade_estoque: number
+          subcategoria?: string | null
+          valor_estoque_custo?: number | null
+        }
+        Update: {
+          acao_sugerida?: string | null
+          atualizado_em?: string | null
+          categoria?: string | null
+          cod_barras_interno?: string | null
+          cod_empresa?: number
+          cod_produto_tipo?: number | null
+          cod_sku?: number
+          custo_ultima_compra?: number | null
+          data_ultima_compra?: string | null
+          data_ultima_entrada?: string | null
+          data_ultima_venda?: string | null
+          desconto_sugerido?: number | null
+          descricao?: string | null
+          dias_desde_ultima_venda?: number | null
+          dias_em_estoque?: number | null
+          dias_giro_mediano?: number | null
+          dias_giro_medio?: number | null
+          dias_giro_ultima_peca?: number | null
+          ean?: string | null
+          faixa_saneamento?: string | null
+          fornecedor?: string | null
+          id?: string
+          is_dead_stock?: boolean | null
+          marca?: string | null
+          origem_custo?: string | null
+          pecas_giro_consideradas?: number | null
+          preco_venda?: number | null
+          qtd_vendidos_180d?: number | null
+          quantidade_estoque?: number
+          subcategoria?: string | null
+          valor_estoque_custo?: number | null
+        }
+        Relationships: []
+      }
       etl_controle: {
         Row: {
           atualizado_em: string | null
@@ -711,6 +953,48 @@ export type Database = {
           id?: string
           pagina_atual?: number | null
           ultima_data?: string | null
+        }
+        Relationships: []
+      }
+      extrato_regras_classificacao: {
+        Row: {
+          ativo: boolean
+          auto_conciliar: boolean
+          categoria: string | null
+          cod_empresa: number | null
+          created_at: string
+          criado_por: string | null
+          id: string
+          natureza: string
+          padrao_descricao: string
+          tipo: string
+          valor_max: number | null
+        }
+        Insert: {
+          ativo?: boolean
+          auto_conciliar?: boolean
+          categoria?: string | null
+          cod_empresa?: number | null
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          natureza: string
+          padrao_descricao: string
+          tipo: string
+          valor_max?: number | null
+        }
+        Update: {
+          ativo?: boolean
+          auto_conciliar?: boolean
+          categoria?: string | null
+          cod_empresa?: number | null
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          natureza?: string
+          padrao_descricao?: string
+          tipo?: string
+          valor_max?: number | null
         }
         Relationships: []
       }
@@ -1192,6 +1476,7 @@ export type Database = {
           estrategica: boolean
           id: string
           marca: string
+          minimo_proprio: number | null
           pct_solar: number | null
           recem_introduzida: boolean
           updated_at: string
@@ -1202,6 +1487,7 @@ export type Database = {
           estrategica?: boolean
           id?: string
           marca: string
+          minimo_proprio?: number | null
           pct_solar?: number | null
           recem_introduzida?: boolean
           updated_at?: string
@@ -1212,6 +1498,7 @@ export type Database = {
           estrategica?: boolean
           id?: string
           marca?: string
+          minimo_proprio?: number | null
           pct_solar?: number | null
           recem_introduzida?: boolean
           updated_at?: string
@@ -1717,6 +2004,7 @@ export type Database = {
           origem: string
           origem_ref: string | null
           pago_em: string | null
+          parcelas_fixas: number | null
           parcelas_max: number | null
           qr_code_pix: string | null
           status: string
@@ -1741,6 +2029,7 @@ export type Database = {
           origem?: string
           origem_ref?: string | null
           pago_em?: string | null
+          parcelas_fixas?: number | null
           parcelas_max?: number | null
           qr_code_pix?: string | null
           status?: string
@@ -1765,6 +2054,7 @@ export type Database = {
           origem?: string
           origem_ref?: string | null
           pago_em?: string | null
+          parcelas_fixas?: number | null
           parcelas_max?: number | null
           qr_code_pix?: string | null
           status?: string
@@ -2396,6 +2686,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_page_permissions: {
+        Row: {
+          granted_at: string
+          granted_by: string | null
+          page_key: string
+          user_id: string
+        }
+        Insert: {
+          granted_at?: string
+          granted_by?: string | null
+          page_key: string
+          user_id: string
+        }
+        Update: {
+          granted_at?: string
+          granted_by?: string | null
+          page_key?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -2804,6 +3115,10 @@ export type Database = {
       }
       has_module_edit_access: {
         Args: { _module: string; _user_id: string }
+        Returns: boolean
+      }
+      has_page_access: {
+        Args: { _module: string; _page_key: string; _user_id: string }
         Returns: boolean
       }
       has_role: {

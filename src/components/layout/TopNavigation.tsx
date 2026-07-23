@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain, LogOut, Shield } from "lucide-react";
+import { BarChart3, Package, ClipboardList, Wallet, Settings, Brain, LogOut, Shield, ShoppingCart, KeyRound } from "lucide-react";
 import logoInfoco from "@/assets/logo-infoco.png";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { usePedidoAlertas } from "@/hooks/usePedidoAlertas";
+import { PAGES_BY_MODULE, findPageByPath } from "@/lib/pageCatalog";
+import { ChangePasswordDialog } from "@/components/auth/ChangePasswordDialog";
 import type { ModuleKey } from "./AppLayout";
 
 interface TopNavigationProps {
@@ -14,6 +17,7 @@ interface TopNavigationProps {
 
 const allModules: { key: ModuleKey; label: string; icon: React.ElementType; defaultPath: string }[] = [
   { key: "vendas", label: "Vendas", icon: BarChart3, defaultPath: "/vendas" },
+  { key: "compras", label: "Compras", icon: ShoppingCart, defaultPath: "/compras" },
   { key: "estoque", label: "Estoque", icon: Package, defaultPath: "/estoque" },
   { key: "monitor", label: "Monitor", icon: ClipboardList, defaultPath: "/os" },
   { key: "financeiro", label: "Financeiro", icon: Wallet, defaultPath: "/financeiro" },
@@ -24,13 +28,22 @@ const allModules: { key: ModuleKey; label: string; icon: React.ElementType; defa
 export function TopNavigation({ activeModule }: TopNavigationProps) {
   const navigate = useNavigate();
   const { profile, isAdmin, signOut } = useAuth();
-  const { hasAccess } = useModulePermissions();
+  const { hasAnyPageInModule, hasPageAccess } = useModulePermissions();
   const { unacknowledgedCount } = usePedidoAlertas();
+  const [passwordOpen, setPasswordOpen] = useState(false);
 
-  const modules = allModules.filter(m => hasAccess(m.key));
+  const modules = allModules.filter(m => hasAnyPageInModule(m.key));
 
   const handleModuleClick = (module: typeof allModules[0]) => {
-    navigate(module.defaultPath);
+    // Se o path padrão não estiver liberado, envia para a primeira página permitida do módulo
+    const defaultPage = findPageByPath(module.defaultPath);
+    if (defaultPage && hasPageAccess(defaultPage.key, module.key)) {
+      navigate(module.defaultPath);
+      return;
+    }
+    const pages = PAGES_BY_MODULE[module.key] || [];
+    const first = pages.find(p => hasPageAccess(p.key, module.key));
+    navigate(first ? first.path : module.defaultPath);
   };
 
   const handleSignOut = async () => {
@@ -110,11 +123,15 @@ export function TopNavigation({ activeModule }: TopNavigationProps) {
           <span className="text-xs text-muted-foreground hidden sm:inline truncate max-w-[150px]">
             {profile?.email}
           </span>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPasswordOpen(true)} title="Alterar minha senha">
+            <KeyRound className="h-4 w-4" />
+          </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleSignOut} title="Sair">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
       </div>
+      <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
     </header>
   );
 }

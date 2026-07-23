@@ -1,7 +1,7 @@
 // src/lib/estoque/mix-ideal-v2.ts
-// Motor de Plano de Compra V2 — participação proporcional por marca (Princípio #6).
-//
-// NÃO modifica calcularMixIdealMarcas (legado OTB). Função nova e isolada.
+// Motor de Plano de Compra — participação proporcional por marca × capacidade,
+// com cascata de mínimo (minimoProprio ?? minimoLoja ?? MIX_MINIMO_MARCA).
+// Fonte única de mix por loja desde a Fase 2.0b.
 
 import { calcularParticipacaoMarca } from './participacao-marca';
 import { MIX_MINIMO_MARCA } from './constants';
@@ -25,9 +25,10 @@ export interface ItemMixV2 {
 }
 
 export interface MarcaConfigV2 {
-  pctSolar?: number | null;   // 0-100; null → usa pctSolarDefault
+  pctSolar?: number | null;      // 0-100; null → usa pctSolarDefault
   estrategica?: boolean;
   recemIntroduzida?: boolean;
+  minimoProprio?: number | null; // override do mínimo para esta marca; null → herda minimoLoja
 }
 
 // ── Interfaces de saída ────────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ export interface MixMarcaV2 {
   lacuna: number;              // max(0, mixTotal − estoqueEfetivo)
   status: StatusMixV2;
   estrategica: boolean;
+  minimoEfetivo: number;       // mínimo aplicado a esta marca (cascata: minimoProprio ?? minimoLoja ?? MIX_MINIMO_MARCA)
   skusAlocados: SkuAlocado[];  // alocação por passadas (diasGiroUltimaPeca ASC)
   // Volume vendido 180d (Onda 2.B — Princípio #26)
   vendido180dTotal?: number;
@@ -78,6 +80,7 @@ export interface CalcMixIdealV2Params {
   capacidadeTotal: number;
   marcaConfigs?: Map<string, MarcaConfigV2>;
   pctSolarDefault?: number;    // 0-100, default 30
+  minimoLoja?: number | null;  // capacidade_expositor.mix_minimo; null → herda MIX_MINIMO_MARCA
 }
 
 // ── Tipo interno para candidatos ──────────────────────────────────────────────
@@ -171,16 +174,15 @@ function alocarSplit(
 // ── Função principal ──────────────────────────────────────────────────────────
 
 /**
- * Calcula o mix ideal de marcas (V2) usando participação proporcional.
- *
+ * Calcula o mix ideal de marcas usando participação proporcional × capacidade.
  * Apenas Armações entram no cálculo.
- * Legado OTB: usa calcularMixIdealMarcas (mix-ideal.ts) — não alterado.
  */
 export function calcularMixIdealV2({
   itens,
   capacidadeTotal,
   marcaConfigs = new Map(),
   pctSolarDefault = 30,
+  minimoLoja = null,
 }: CalcMixIdealV2Params): MixMarcaV2[] {
   if (itens.length === 0 || capacidadeTotal <= 0) return [];
 
@@ -242,15 +244,16 @@ export function calcularMixIdealV2({
     const config = marcaConfigs.get(marca) ?? {};
     const estrategica = config.estrategica ?? false;
     const pctSolar = config.pctSolar != null ? config.pctSolar : pctSolarDefault;
+    const minimoEfetivo = config.minimoProprio ?? minimoLoja ?? MIX_MINIMO_MARCA;
 
-    const mixTotalRaw = Math.round(capacidadeTotal * part.participacao);
+    const mixTotalRaw = Math.floor(capacidadeTotal * part.participacao);
 
     let mixTotal: number;
     let status: StatusMixV2;
 
-    if (mixTotalRaw < MIX_MINIMO_MARCA) {
+    if (mixTotalRaw < minimoEfetivo) {
       if (estrategica) {
-        mixTotal = MIX_MINIMO_MARCA;
+        mixTotal = minimoEfetivo;
         status = 'ABAIXO_MINIMO_ESTRATEGICA';
       } else {
         mixTotal = 0;
@@ -290,6 +293,7 @@ export function calcularMixIdealV2({
       lacuna,
       status,
       estrategica,
+      minimoEfetivo,
       skusAlocados,
       vendido180dTotal: vend.total,
       vendido180dRx: vend.rx,

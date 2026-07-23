@@ -1,5 +1,5 @@
 // src/components/sales-dashboard/ComparativoAnualChart.tsx
-// Gráfico de barras lado a lado para comparativo entre anos
+// Comparativo entre anos, com suporte a multi-empresa (barras por ano×loja).
 
 import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,7 +23,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   Cell,
   LabelList,
@@ -32,28 +31,21 @@ import {
   useComparativoAnual,
   IndicadorComparativo,
   INDICADORES_LABELS,
-  DadosAnuais,
 } from '@/hooks/useComparativoAnual';
 import { EmpresaParam } from '@/services/firebirdBridge';
-
-// ============================================
-// HELPERS
-// ============================================
+import { useUserEmpresas } from '@/hooks/useUserEmpresas';
 
 function formatCurrency(value: number): string {
   if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `R$ ${(value / 1_000).toFixed(1)}K`;
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
-
 function formatNumber(value: number): string {
   return new Intl.NumberFormat('pt-BR').format(value);
 }
-
 function formatPercent(value: number): string {
   return `${value.toFixed(2)}%`;
 }
-
 function formatValue(value: number, indicador: IndicadorComparativo): string {
   switch (indicador) {
     case 'totalVendido':
@@ -69,23 +61,19 @@ function formatValue(value: number, indicador: IndicadorComparativo): string {
       return String(value);
   }
 }
-
 function calcVariacao(atual: number, anterior: number): number | null {
   if (anterior === 0) return atual > 0 ? 100 : null;
   return ((atual - anterior) / anterior) * 100;
 }
 
-// Cores por ano (até 4 anos)
-const CORES_ANOS = [
+const CORES = [
   'hsl(var(--chart-1))',
   'hsl(var(--chart-2))',
   'hsl(var(--chart-3))',
   'hsl(var(--chart-4))',
+  'hsl(var(--chart-5))',
+  'hsl(var(--primary))',
 ];
-
-// ============================================
-// COMPONENT
-// ============================================
 
 interface ComparativoAnualChartProps {
   dataInicio: string;
@@ -93,82 +81,74 @@ interface ComparativoAnualChartProps {
   empresa: EmpresaParam;
 }
 
-export function ComparativoAnualChart({
-  dataInicio,
-  dataFim,
-  empresa,
-}: ComparativoAnualChartProps) {
+export function ComparativoAnualChart({ dataInicio, dataFim, empresa }: ComparativoAnualChartProps) {
   const { dados, loading, error, anosDisponiveis, fetchComparativo } = useComparativoAnual();
+  const { empresas } = useUserEmpresas();
 
-  const anoAtual = new Date().getFullYear();
   const anoFiltro = new Date(dataInicio + 'T12:00:00').getFullYear();
-
-  // Estado: anos selecionados (default: ano do filtro + ano anterior)
   const [anosSelecionados, setAnosSelecionados] = useState<number[]>([anoFiltro, anoFiltro - 1]);
   const [indicador, setIndicador] = useState<IndicadorComparativo>('totalVendido');
 
-  // Atualizar anos selecionados quando o filtro mudar
   useEffect(() => {
     const novoAno = new Date(dataInicio + 'T12:00:00').getFullYear();
-    setAnosSelecionados(prev => {
-      // Se o ano do filtro mudou, resetar para incluir o novo ano + anterior
-      if (!prev.includes(novoAno)) {
-        return [novoAno, novoAno - 1];
-      }
-      return prev;
-    });
+    setAnosSelecionados((prev) => (prev.includes(novoAno) ? prev : [novoAno, novoAno - 1]));
   }, [dataInicio]);
 
-  // Buscar dados quando parâmetros mudam
   useEffect(() => {
     if (anosSelecionados.length > 0 && dataInicio && dataFim) {
-      fetchComparativo({ dataInicio, dataFim, empresa, anosComparar: anosSelecionados });
+      fetchComparativo({
+        dataInicio,
+        dataFim,
+        empresa,
+        anosComparar: anosSelecionados,
+        empresasCatalogo: empresas.map((e) => ({ codEmpresa: e.codEmpresa, nome: e.nome })),
+      });
     }
-  }, [dataInicio, dataFim, empresa, anosSelecionados, fetchComparativo]);
+  }, [dataInicio, dataFim, empresa, anosSelecionados, empresas, fetchComparativo]);
 
   const toggleAno = (ano: number) => {
-    setAnosSelecionados(prev => {
+    setAnosSelecionados((prev) => {
       if (prev.includes(ano)) {
-        // Não permitir desmarcar todos
         if (prev.length <= 1) return prev;
-        return prev.filter(a => a !== ano);
+        return prev.filter((a) => a !== ano);
       }
       return [...prev, ano].sort((a, b) => a - b);
     });
   };
 
-  // Preparar dados do gráfico
-  const chartData = useMemo(() => {
-    if (dados.length === 0) return [];
+  const chartData = useMemo(
+    () =>
+      dados.map((d, idx) => ({
+        name: d.label,
+        valor: d[indicador],
+        fill: CORES[idx % CORES.length],
+      })),
+    [dados, indicador]
+  );
 
-    // Cada barra é um ano, mostrando o indicador selecionado
-    return dados.map((d, idx) => ({
-      name: d.label,
-      valor: d[indicador],
-      ano: d.ano,
-      fill: CORES_ANOS[idx % CORES_ANOS.length],
-    }));
-  }, [dados, indicador]);
-
-  // Calcular variações (sempre comparando com o ano mais antigo selecionado)
+  // Variações: por empresa (ou total), comparando anos consecutivos
   const variacoes = useMemo(() => {
     if (dados.length < 2) return [];
-
-    const result: Array<{ anoRef: number; anoComp: number; variacao: number | null }> = [];
-    // Comparar cada ano com o anterior na sequência
-    for (let i = 1; i < dados.length; i++) {
-      const atual = dados[i][indicador];
-      const anterior = dados[i - 1][indicador];
-      result.push({
-        anoRef: dados[i].ano,
-        anoComp: dados[i - 1].ano,
-        variacao: calcVariacao(atual, anterior),
-      });
-    }
+    const grupos = new Map<string | number, typeof dados>();
+    dados.forEach((d) => {
+      const chave = d.empresaCod ?? 'total';
+      if (!grupos.has(chave)) grupos.set(chave, [] as any);
+      (grupos.get(chave) as any).push(d);
+    });
+    const result: Array<{ labelRef: string; labelComp: string; variacao: number | null }> = [];
+    grupos.forEach((lista) => {
+      const arr = [...lista].sort((a, b) => a.ano - b.ano);
+      for (let i = 1; i < arr.length; i++) {
+        result.push({
+          labelRef: arr[i].label,
+          labelComp: arr[i - 1].label,
+          variacao: calcVariacao(arr[i][indicador], arr[i - 1][indicador]),
+        });
+      }
+    });
     return result;
   }, [dados, indicador]);
 
-  // Formatar período para exibição
   const periodoLabel = useMemo(() => {
     const ini = new Date(dataInicio + 'T12:00:00');
     const fim = new Date(dataFim + 'T12:00:00');
@@ -191,7 +171,15 @@ export function ComparativoAnualChart({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => fetchComparativo({ dataInicio, dataFim, empresa, anosComparar: anosSelecionados })}
+            onClick={() =>
+              fetchComparativo({
+                dataInicio,
+                dataFim,
+                empresa,
+                anosComparar: anosSelecionados,
+                empresasCatalogo: empresas.map((e) => ({ codEmpresa: e.codEmpresa, nome: e.nome })),
+              })
+            }
             disabled={loading}
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -199,9 +187,7 @@ export function ComparativoAnualChart({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Filtros */}
         <div className="flex flex-wrap items-end gap-4">
-          {/* Seletor de indicador */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-muted-foreground">Indicador</Label>
             <Select value={indicador} onValueChange={(v) => setIndicador(v as IndicadorComparativo)}>
@@ -218,7 +204,6 @@ export function ComparativoAnualChart({
             </Select>
           </div>
 
-          {/* Checkboxes de anos */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-muted-foreground">Anos para comparar</Label>
             <div className="flex items-center gap-3">
@@ -235,29 +220,25 @@ export function ComparativoAnualChart({
           </div>
         </div>
 
-        {/* Loading */}
-        {loading && (
-          <div className="space-y-3">
-            <Skeleton className="h-64 w-full" />
-          </div>
-        )}
-
-        {/* Error */}
+        {loading && <Skeleton className="h-64 w-full" />}
         {error && !loading && (
           <div className="text-sm text-destructive text-center py-4">{error}</div>
         )}
 
-        {/* Chart */}
         {!loading && !error && chartData.length > 0 && (
           <>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} barCategoryGap="20%">
+                <BarChart data={chartData} barCategoryGap="15%">
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis
                     dataKey="name"
-                    tick={{ fontSize: 14, fontWeight: 600 }}
+                    tick={{ fontSize: 11, fontWeight: 600 }}
                     className="fill-foreground"
+                    interval={0}
+                    angle={dados.length > 4 ? -20 : 0}
+                    textAnchor={dados.length > 4 ? 'end' : 'middle'}
+                    height={dados.length > 4 ? 70 : 30}
                   />
                   <YAxis
                     tickFormatter={(v) =>
@@ -280,38 +261,34 @@ export function ComparativoAnualChart({
                     }}
                     labelStyle={{ color: 'hsl(var(--foreground))' }}
                   />
-                  <Bar dataKey="valor" radius={[6, 6, 0, 0]} maxBarSize={80}>
-                    {chartData.map((entry, idx) => (
+                  <Bar dataKey="valor" radius={[6, 6, 0, 0]} maxBarSize={70}>
+                    {chartData.map((entry) => (
                       <Cell key={entry.name} fill={entry.fill} />
                     ))}
                     <LabelList
                       dataKey="valor"
                       position="top"
                       formatter={(v: number) => formatValue(v, indicador)}
-                      style={{ fontSize: 12, fontWeight: 600, fill: 'hsl(var(--foreground))' }}
+                      style={{ fontSize: 11, fontWeight: 600, fill: 'hsl(var(--foreground))' }}
                     />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
-            {/* Variações percentuais */}
             {variacoes.length > 0 && (
-              <div className="flex flex-wrap gap-3 justify-center pt-2">
-                {variacoes.map((v) => {
+              <div className="flex flex-wrap gap-2 justify-center pt-2">
+                {variacoes.map((v, i) => {
                   const isPositive = v.variacao !== null && v.variacao > 0;
                   const isNegative = v.variacao !== null && v.variacao < 0;
                   const isNeutral = v.variacao === null || v.variacao === 0;
-
-                  // Para desconto, variação positiva é ruim
                   const isGood = indicador === 'totalDesconto' || indicador === 'percentualDesconto'
                     ? isNegative
                     : isPositive;
-
                   return (
                     <div
-                      key={`${v.anoRef}-${v.anoComp}`}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
+                      key={i}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs ${
                         isGood
                           ? 'bg-success-soft border-success/30'
                           : isNeutral
@@ -320,17 +297,17 @@ export function ComparativoAnualChart({
                       }`}
                     >
                       {isPositive ? (
-                        <TrendingUp className={`h-4 w-4 ${isGood ? 'text-success' : 'text-danger'}`} />
+                        <TrendingUp className={`h-3.5 w-3.5 ${isGood ? 'text-success' : 'text-danger'}`} />
                       ) : isNegative ? (
-                        <TrendingDown className={`h-4 w-4 ${isGood ? 'text-success' : 'text-danger'}`} />
+                        <TrendingDown className={`h-3.5 w-3.5 ${isGood ? 'text-success' : 'text-danger'}`} />
                       ) : (
-                        <Minus className="h-4 w-4 text-muted-foreground" />
+                        <Minus className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
-                      <span className="text-sm font-medium">
-                        {v.anoRef} vs {v.anoComp}:
+                      <span className="font-medium">
+                        {v.labelRef} vs {v.labelComp}:
                       </span>
                       <span
-                        className={`text-sm font-bold ${
+                        className={`font-bold ${
                           isGood ? 'text-success' : isNeutral ? 'text-muted-foreground' : 'text-danger'
                         }`}
                       >
@@ -344,12 +321,11 @@ export function ComparativoAnualChart({
               </div>
             )}
 
-            {/* Tabela resumida */}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left py-2 px-3 text-muted-foreground font-medium">Ano</th>
+                    <th className="text-left py-2 px-3 text-muted-foreground font-medium">Série</th>
                     <th className="text-right py-2 px-3 text-muted-foreground font-medium">Faturamento</th>
                     <th className="text-right py-2 px-3 text-muted-foreground font-medium">Transações</th>
                     <th className="text-right py-2 px-3 text-muted-foreground font-medium">Ticket Médio</th>
@@ -357,9 +333,9 @@ export function ComparativoAnualChart({
                   </tr>
                 </thead>
                 <tbody>
-                  {dados.map((d, idx) => (
-                    <tr key={d.ano} className="border-b border-border/50 hover:bg-muted/30">
-                      <td className="py-2 px-3 font-semibold">{d.ano}</td>
+                  {dados.map((d) => (
+                    <tr key={d.key} className="border-b border-border/50 hover:bg-muted/30">
+                      <td className="py-2 px-3 font-semibold">{d.label}</td>
                       <td className="py-2 px-3 text-right">{formatCurrency(d.totalVendido)}</td>
                       <td className="py-2 px-3 text-right">{formatNumber(d.qtdVendas)}</td>
                       <td className="py-2 px-3 text-right">{formatCurrency(d.ticketMedio)}</td>
@@ -372,12 +348,10 @@ export function ComparativoAnualChart({
           </>
         )}
 
-        {/* Sem dados */}
         {!loading && !error && chartData.length === 0 && (
           <div className="text-center text-muted-foreground py-8">
             <BarChart3 className="h-10 w-10 mx-auto mb-2 opacity-40" />
             <p className="text-sm">Sem dados disponíveis no cache para os anos selecionados.</p>
-            <p className="text-xs mt-1">Verifique se há sincronização para os períodos históricos.</p>
           </div>
         )}
       </CardContent>

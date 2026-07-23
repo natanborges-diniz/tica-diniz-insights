@@ -1,10 +1,11 @@
 // src/hooks/useComparativoAnual.ts
-// Hook para comparativo de indicadores entre períodos equivalentes em anos diferentes
-// Utiliza cache vendas_agregado_diario (mesma lógica do dashboard principal)
+// Hook para comparativo entre períodos equivalentes em anos diferentes.
+// Suporta multi-empresa: gera uma série por combinação (ano × empresa)
+// quando mais de uma empresa é selecionada.
 
 import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { EmpresaParam } from '@/services/firebirdBridge';
+import { EmpresaParam, aplicarFiltroEmpresaSupabase } from '@/services/firebirdBridge';
 
 // ============================================
 // TIPOS
@@ -27,9 +28,17 @@ export const INDICADORES_LABELS: Record<IndicadorComparativo, string> = {
   ticketMedio: 'Ticket Médio',
 };
 
+export interface EmpresaCatalog {
+  codEmpresa: number;
+  nome: string;
+}
+
 export interface DadosAnuais {
+  key: string;
+  label: string;
   ano: number;
-  label: string; // e.g. "2024", "2023"
+  empresaCod: number | null; // null => todas somadas
+  empresaNome: string | null;
   totalVendido: number;
   totalBruto: number;
   totalDesconto: number;
@@ -48,6 +57,7 @@ export interface ComparativoResult {
     dataFim: string;
     empresa: EmpresaParam;
     anosComparar: number[];
+    empresasCatalogo?: EmpresaCatalog[];
   }) => Promise<void>;
 }
 
@@ -55,32 +65,21 @@ export interface ComparativoResult {
 // HELPERS
 // ============================================
 
-/**
- * Desloca um período para um ano diferente mantendo mes/dia
- */
 function deslocarPeriodoParaAno(dataInicio: string, dataFim: string, anoAlvo: number): { inicio: string; fim: string } {
   const ini = new Date(dataInicio + 'T12:00:00');
   const fim = new Date(dataFim + 'T12:00:00');
-  
-  const anoOriginal = ini.getFullYear();
-  const diff = anoAlvo - anoOriginal;
-  
+  const diff = anoAlvo - ini.getFullYear();
   const novoIni = new Date(ini);
   novoIni.setFullYear(novoIni.getFullYear() + diff);
-  
   const novoFim = new Date(fim);
   novoFim.setFullYear(novoFim.getFullYear() + diff);
-  
   return {
     inicio: novoIni.toISOString().split('T')[0],
     fim: novoFim.toISOString().split('T')[0],
   };
 }
 
-/**
- * Busca dados agregados do cache para um período específico
- */
-async function buscarAgregadosPeriodo(
+export async function buscarAgregadosPeriodo(
   dataInicio: string,
   dataFim: string,
   empresa: EmpresaParam
@@ -96,17 +95,10 @@ async function buscarAgregadosPeriodo(
     .gte('data', dataInicio)
     .lte('data', dataFim);
 
-  if (empresa !== 'ALL') {
-    const codEmpresa = typeof empresa === 'string' ? parseInt(empresa, 10) : empresa;
-    query = query.eq('cod_empresa', codEmpresa);
-  }
+  query = aplicarFiltroEmpresaSupabase(query, empresa);
 
   const { data, error } = await query;
-
-  if (error) {
-    console.error('[useComparativoAnual] Erro:', error);
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 
   let totalVendido = 0;
   let totalBruto = 0;
@@ -117,7 +109,6 @@ async function buscarAgregadosPeriodo(
     const fp = (d.forma_pagamento || '').toUpperCase().trim();
     const isDevolucao = fp === 'DEVOLUCAO';
     const isCredito = fp === 'CREDITOS' || fp === 'CREDITO';
-
     if (!isDevolucao && !isCredito) {
       totalVendido += Number(d.total_vendido) || 0;
       totalBruto += Number(d.total_bruto) || 0;
@@ -130,7 +121,7 @@ async function buscarAgregadosPeriodo(
 }
 
 // ============================================
-// HOOK PRINCIPAL
+// HOOK
 // ============================================
 
 export function useComparativoAnual(): ComparativoResult {
@@ -138,7 +129,6 @@ export function useComparativoAnual(): ComparativoResult {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Anos disponíveis para comparação (ano atual até 3 anos atrás)
   const anosDisponiveis = useMemo(() => {
     const anoAtual = new Date().getFullYear();
     return [anoAtual, anoAtual - 1, anoAtual - 2, anoAtual - 3];
@@ -149,9 +139,9 @@ export function useComparativoAnual(): ComparativoResult {
     dataFim: string;
     empresa: EmpresaParam;
     anosComparar: number[];
+    empresasCatalogo?: EmpresaCatalog[];
   }) => {
-    const { dataInicio, dataFim, empresa, anosComparar } = params;
-    
+    const { dataInicio, dataFim, empresa, anosComparar, empresasCatalogo = [] } = params;
     if (anosComparar.length === 0) {
       setDados([]);
       return;
@@ -160,39 +150,47 @@ export function useComparativoAnual(): ComparativoResult {
     setLoading(true);
     setError(null);
 
+    // Determinar empresas a iterar
+    const multiEmpresa = Array.isArray(empresa) && empresa.length > 1;
+    const empresasIter: (number | null)[] = multiEmpresa ? (empresa as number[]) : [null];
+
     try {
-      const anoOriginal = new Date(dataInicio + 'T12:00:00').getFullYear();
-      
-      const promises = anosComparar.map(async (ano) => {
+      const tasks: Promise<DadosAnuais>[] = [];
+      for (const ano of anosComparar) {
         const periodo = deslocarPeriodoParaAno(dataInicio, dataFim, ano);
-        const resultado = await buscarAgregadosPeriodo(periodo.inicio, periodo.fim, empresa);
+        for (const emp of empresasIter) {
+          const empParaFetch: EmpresaParam = emp === null ? empresa : emp;
+          const nome = emp === null
+            ? null
+            : empresasCatalogo.find((e) => e.codEmpresa === emp)?.nome ?? `Loja ${emp}`;
+          const label = emp === null ? String(ano) : `${ano} · ${nome}`;
+          tasks.push(
+            buscarAgregadosPeriodo(periodo.inicio, periodo.fim, empParaFetch).then((r) => {
+              const percentualDesconto = r.totalBruto > 0 ? (r.totalDesconto / r.totalBruto) * 100 : 0;
+              const ticketMedio = r.qtdVendas > 0 ? r.totalVendido / r.qtdVendas : 0;
+              return {
+                key: `${ano}-${emp ?? 'all'}`,
+                label,
+                ano,
+                empresaCod: emp,
+                empresaNome: nome,
+                totalVendido: r.totalVendido,
+                totalBruto: r.totalBruto,
+                totalDesconto: r.totalDesconto,
+                percentualDesconto,
+                qtdVendas: r.qtdVendas,
+                ticketMedio,
+              } as DadosAnuais;
+            })
+          );
+        }
+      }
 
-        const percentualDesconto = resultado.totalBruto > 0
-          ? (resultado.totalDesconto / resultado.totalBruto) * 100
-          : 0;
-        const ticketMedio = resultado.qtdVendas > 0
-          ? resultado.totalVendido / resultado.qtdVendas
-          : 0;
-
-        return {
-          ano,
-          label: String(ano),
-          totalVendido: resultado.totalVendido,
-          totalBruto: resultado.totalBruto,
-          totalDesconto: resultado.totalDesconto,
-          percentualDesconto,
-          qtdVendas: resultado.qtdVendas,
-          ticketMedio,
-        } as DadosAnuais;
-      });
-
-      const resultados = await Promise.all(promises);
-      // Ordenar por ano crescente
-      resultados.sort((a, b) => a.ano - b.ano);
+      const resultados = await Promise.all(tasks);
+      resultados.sort((a, b) => (a.ano - b.ano) || ((a.empresaCod ?? 0) - (b.empresaCod ?? 0)));
       setDados(resultados);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro ao buscar comparativo';
-      setError(msg);
+      setError(err instanceof Error ? err.message : 'Erro ao buscar comparativo');
       setDados([]);
     } finally {
       setLoading(false);

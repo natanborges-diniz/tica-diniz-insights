@@ -36,7 +36,6 @@ const curvaOpcoes: Array<{ key: 'A' | 'B' | 'C' | null; label: string }> = [
 const decisaoOpcoes = [
   { key: 'TODAS' as const, label: 'Todas' },
   { key: 'REPOR_REFERENCIA' as const, label: 'Repor' },
-  { key: 'RENOVAR_COLECAO' as const, label: 'Renovar' },
   { key: 'AVALIAR_DESCONTINUACAO' as const, label: 'Descontinuar' },
 ];
 

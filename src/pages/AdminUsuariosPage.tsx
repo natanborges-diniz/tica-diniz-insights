@@ -10,7 +10,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
-import { Loader2, Shield, Users, Eye, Store, Info, Plus, Lock, Undo2, Check } from "lucide-react";
+import { Loader2, Shield, Users, Eye, Store, Info, Plus, Lock, Undo2, Check, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Navigate } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -21,6 +21,12 @@ import { BaseDialog } from "@/components/system/BaseDialog";
 import { BaseSheet } from "@/components/system/BaseSheet";
 import { useDirtyGuard } from "@/components/system/dirty/useDirtyGuard";
 import type { ModuleKey } from "@/components/layout/AppLayout";
+import { PAGES_BY_MODULE } from "@/lib/pageCatalog";
+
+interface PagePermRow {
+  user_id: string;
+  page_key: string;
+}
 
 type AppRole = "admin";
 
@@ -303,6 +309,7 @@ function UserEditSheet({
   serverRoles,
   serverModulePerms,
   serverEmpresaPerms,
+  serverPagePerms,
   empresas,
   onSave,
   onResetPassword,
@@ -313,8 +320,9 @@ function UserEditSheet({
   serverRoles: AppRole[];
   serverModulePerms: ModulePermRow[];
   serverEmpresaPerms: EmpresaPermRow[];
+  serverPagePerms: PagePermRow[];
   empresas: { codEmpresa: number; nome: string }[];
-  onSave: (data: { nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[] }) => Promise<void>;
+  onSave: (data: { nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[]; pageKeys: string[] }) => Promise<void>;
   onResetPassword: () => void;
 }) {
   const { isDirty, setDirty, setClean, guardClose } = useDirtyGuard();
@@ -325,6 +333,7 @@ function UserEditSheet({
   const [draftIsAdmin, setDraftIsAdmin] = useState(false);
   const [draftModules, setDraftModules] = useState<Record<string, string>>({});
   const [draftEmpresas, setDraftEmpresas] = useState<number[]>([]);
+  const [draftPages, setDraftPages] = useState<Set<string>>(new Set());
 
   // Reset draft when profile/server data changes
   useEffect(() => {
@@ -336,9 +345,10 @@ function UserEditSheet({
     serverModulePerms.forEach(p => { map[p.module] = p.access_level; });
     setDraftModules(map);
     setDraftEmpresas(serverEmpresaPerms.map(p => p.cod_empresa));
+    setDraftPages(new Set(serverPagePerms.map(p => p.page_key)));
     setClean();
     setSaveStatus("idle");
-  }, [profile, serverRoles, serverModulePerms, serverEmpresaPerms, setClean]);
+  }, [profile, serverRoles, serverModulePerms, serverEmpresaPerms, serverPagePerms, setClean]);
 
   const isAdminUser = draftIsAdmin;
 
@@ -354,8 +364,11 @@ function UserEditSheet({
     const serverEmpCods = serverEmpresaPerms.map(p => p.cod_empresa).sort((a, b) => a - b);
     const draftEmpCods = [...draftEmpresas].sort((a, b) => a - b);
     if (JSON.stringify(draftEmpCods) !== JSON.stringify(serverEmpCods)) return true;
+    const serverPageKeys = serverPagePerms.map(p => p.page_key).sort();
+    const draftPageKeys = [...draftPages].sort();
+    if (JSON.stringify(serverPageKeys) !== JSON.stringify(draftPageKeys)) return true;
     return false;
-  }, [draftName, draftIsAdmin, draftModules, draftEmpresas, profile, serverRoles, serverModulePerms, serverEmpresaPerms]);
+  }, [draftName, draftIsAdmin, draftModules, draftEmpresas, draftPages, profile, serverRoles, serverModulePerms, serverEmpresaPerms, serverPagePerms]);
 
   // Sync dirty state
   useEffect(() => {
@@ -372,6 +385,7 @@ function UserEditSheet({
     serverModulePerms.forEach(p => { map[p.module] = p.access_level; });
     setDraftModules(map);
     setDraftEmpresas(serverEmpresaPerms.map(p => p.cod_empresa));
+    setDraftPages(new Set(serverPagePerms.map(p => p.page_key)));
   };
 
   const handleSave = async () => {
@@ -382,6 +396,7 @@ function UserEditSheet({
         isAdmin: draftIsAdmin,
         modules: draftModules,
         empresaCods: draftEmpresas,
+        pageKeys: [...draftPages],
       });
       setSaveStatus("success");
       toast({ title: "Permissões salvas com sucesso!" });
@@ -394,6 +409,16 @@ function UserEditSheet({
       toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
     }
   };
+
+  const togglePage = (pageKey: string) => {
+    setDraftPages(prev => {
+      const next = new Set(prev);
+      if (next.has(pageKey)) next.delete(pageKey);
+      else next.add(pageKey);
+      return next;
+    });
+  };
+
 
   const handleOpenChange = (v: boolean) => {
     if (guardClose(v)) onOpenChange(v);
@@ -575,7 +600,59 @@ function UserEditSheet({
             </p>
           )}
         </div>
+
+        <Separator />
+
+        {/* Páginas específicas (aditivo — só relevantes quando o módulo NÃO está liberado) */}
+        <div>
+          <SectionHeader
+            icon={FileText}
+            title="Páginas específicas"
+            description="Libera páginas individuais mesmo sem acesso ao módulo inteiro"
+          />
+          <div className="space-y-3">
+            {ALL_MODULES.map((mod) => {
+              const pages = PAGES_BY_MODULE[mod.key] || [];
+              if (pages.length === 0) return null;
+              const moduleLevel = draftModules[mod.key] || "nenhum";
+              const moduleGrantsAll = isAdminUser || moduleLevel !== "nenhum";
+              return (
+                <div key={mod.key} className="p-2 rounded-md border">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-medium">{mod.label}</span>
+                    {moduleGrantsAll && (
+                      <span className="text-[10px] text-muted-foreground">Módulo liberado — todas as páginas incluídas</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    {pages.map((pg) => {
+                      const checked = moduleGrantsAll || draftPages.has(pg.key);
+                      return (
+                        <label
+                          key={pg.key}
+                          className={cn(
+                            "flex items-center gap-2 p-1.5 rounded-md hover:bg-accent/50 cursor-pointer transition-colors",
+                            moduleGrantsAll && "opacity-60 cursor-not-allowed"
+                          )}
+                        >
+                          <Checkbox
+                            checked={checked}
+                            disabled={moduleGrantsAll}
+                            onCheckedChange={() => togglePage(pg.key)}
+                            className="h-3.5 w-3.5"
+                          />
+                          <span className="text-sm">{pg.title}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
+
     </BaseSheet>
   );
 }
@@ -589,6 +666,7 @@ export default function AdminUsuariosPage() {
   const [userRoles, setUserRoles] = useState<RoleRow[]>([]);
   const [modulePerms, setModulePerms] = useState<ModulePermRow[]>([]);
   const [empresaPerms, setEmpresaPerms] = useState<EmpresaPermRow[]>([]);
+  const [pagePerms, setPagePerms] = useState<PagePermRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
@@ -596,16 +674,18 @@ export default function AdminUsuariosPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [profilesRes, rolesRes, permsRes, empresaPermsRes] = await Promise.all([
+    const [profilesRes, rolesRes, permsRes, empresaPermsRes, pagePermsRes] = await Promise.all([
       supabase.from("profiles").select("id, email, nome, cod_empresa"),
       supabase.from("user_roles").select("user_id, role"),
       supabase.from("user_module_permissions").select("user_id, module, access_level"),
       supabase.from("user_empresa_permissions").select("user_id, cod_empresa"),
+      supabase.from("user_page_permissions" as any).select("user_id, page_key"),
     ]);
     if (profilesRes.data) setProfiles(profilesRes.data);
     if (rolesRes.data) setUserRoles(rolesRes.data as RoleRow[]);
     if (permsRes.data) setModulePerms(permsRes.data as ModulePermRow[]);
     if (empresaPermsRes.data) setEmpresaPerms(empresaPermsRes.data as EmpresaPermRow[]);
+    if (pagePermsRes.data) setPagePerms(pagePermsRes.data as unknown as PagePermRow[]);
     setLoading(false);
   }, []);
 
@@ -625,7 +705,7 @@ export default function AdminUsuariosPage() {
 
   const handleSaveUser = async (
     userId: string,
-    data: { nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[] }
+    data: { nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[]; pageKeys: string[] }
   ) => {
     const currentProfile = profiles.find(p => p.id === userId);
     const currentIsAdmin = userRoles.some(r => r.user_id === userId && r.role === "admin");
@@ -708,6 +788,33 @@ export default function AdminUsuariosPage() {
       );
     }
 
+    // 5. Save page permissions (aditivo)
+    const currentPages = pagePerms.filter(p => p.user_id === userId).map(p => p.page_key);
+    const pagesToAdd = data.pageKeys.filter(k => !currentPages.includes(k));
+    const pagesToRemove = currentPages.filter(k => !data.pageKeys.includes(k));
+    if (pagesToAdd.length > 0) {
+      promises.push(
+        (async () => {
+          const { error } = await supabase
+            .from("user_page_permissions" as any)
+            .insert(pagesToAdd.map(k => ({ user_id: userId, page_key: k })) as any);
+          if (error) throw error;
+        })()
+      );
+    }
+    if (pagesToRemove.length > 0) {
+      promises.push(
+        (async () => {
+          const { error } = await supabase
+            .from("user_page_permissions" as any)
+            .delete()
+            .eq("user_id", userId)
+            .in("page_key", pagesToRemove);
+          if (error) throw error;
+        })()
+      );
+    }
+
     await Promise.all(promises);
     await fetchData();
   };
@@ -716,6 +823,7 @@ export default function AdminUsuariosPage() {
   const editRoles = editUserId ? userRoles.filter(r => r.user_id === editUserId).map(r => r.role) : [];
   const editModPerms = editUserId ? modulePerms.filter(mp => mp.user_id === editUserId) : [];
   const editEmpPerms = editUserId ? empresaPerms.filter(ep => ep.user_id === editUserId) : [];
+  const editPagePerms = editUserId ? pagePerms.filter(pp => pp.user_id === editUserId) : [];
 
   return (
     <TooltipProvider>
@@ -814,6 +922,7 @@ export default function AdminUsuariosPage() {
         serverRoles={editRoles}
         serverModulePerms={editModPerms}
         serverEmpresaPerms={editEmpPerms}
+        serverPagePerms={editPagePerms}
         empresas={empresas}
         onSave={(data) => handleSaveUser(editUserId!, data)}
         onResetPassword={() => {
