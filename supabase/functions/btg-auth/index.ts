@@ -583,6 +583,10 @@ async function handleCallback(req: Request) {
   const contaUpdate: Record<string, unknown> = {};
   if (companyIdFinal) contaUpdate.company_id = companyIdFinal;
   if (cnpjEsperado) contaUpdate.cnpj = cnpjEsperado;
+  const det = verificacao.accountDetails;
+  if (det?.accountId) contaUpdate.account_id = det.accountId;
+  if (det?.agencia) contaUpdate.agencia = det.agencia;
+  if (det?.conta) contaUpdate.conta = det.conta;
 
   if (Object.keys(contaUpdate).length > 0) {
     const { error: contaError } = await db
