@@ -15,7 +15,7 @@ export type FormaCategoria =
   | 'CARTAO_DEBITO'
   | 'CREDIARIO'
   | 'CREDITOS'
-  | 'BANCO'
+  | 'PIX'
   | 'OUTROS';
 
 export type OrigemRecebimento = 'VENDA_PERIODO' | 'SALDO_ANTERIOR';
