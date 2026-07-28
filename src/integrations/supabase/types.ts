@@ -3350,6 +3350,21 @@ export type Database = {
       }
       cleanup_rate_limits: { Args: never; Returns: undefined }
       executar_transformacao_dw: { Args: never; Returns: Json }
+      fn_conciliar_extrato: {
+        Args: {
+          p_alocacoes: Json
+          p_extrato_id: string
+          p_metodo: string
+          p_score: number
+          p_status: string
+          p_user: string
+        }
+        Returns: Json
+      }
+      fn_desconciliar_extrato: {
+        Args: { p_extrato_id: string; p_user: string }
+        Returns: Json
+      }
       get_user_empresa: { Args: { _user_id: string }; Returns: number }
       has_module_access: {
         Args: { _module: string; _user_id: string }
