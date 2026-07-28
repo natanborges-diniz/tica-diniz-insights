@@ -173,7 +173,8 @@ export default function BankingExtratoDashboard() {
       const params: Record<string, unknown> = {
         action: "listar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim,
       };
-      if (filtroStatus !== "todos") params.status_conciliacao = filtroStatus;
+      if (filtroStatus === "PENDENTE") params.status_conciliacao = "PENDENTE,CLASSIFICADO";
+      else if (filtroStatus !== "todos") params.status_conciliacao = filtroStatus;
       const { data, error } = await supabase.functions.invoke("btg-extrato", { body: params });
       if (error) {
         const message = await getFunctionErrorMessage(error);
