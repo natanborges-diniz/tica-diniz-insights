@@ -330,6 +330,7 @@ async function handleListar(body: Record<string, unknown> | null, url: URL, user
   const dataFim = getParam(body, url, "data_fim");
   const tipo = getParam(body, url, "tipo");
   const conciliado = getParam(body, url, "conciliado");
+  const statusConciliacao = getParam(body, url, "status_conciliacao");
   const limit = Number(getParam(body, url, "limit") || "200");
 
   const admin = await isAdmin(userId);
@@ -351,6 +352,7 @@ async function handleListar(body: Record<string, unknown> | null, url: URL, user
   if (conciliado !== null && conciliado !== undefined && conciliado !== "") {
     query = query.eq("conciliado", conciliado === "true");
   }
+  if (statusConciliacao) query = query.eq("status_conciliacao", statusConciliacao);
 
   const { data, error } = await query;
   if (error) return json({ error: "Erro ao listar extrato", details: error.message }, 500);
@@ -422,6 +424,24 @@ async function handleResumo(body: Record<string, unknown> | null, url: URL) {
     porNatureza[nat].total += l.tipo === "DEBITO" ? -Number(l.valor) : Number(l.valor);
   });
 
+  // E4 — breakdown por método de conciliação + fila de pendentes por idade
+  const porMetodo: Record<string, number> = {};
+  let totalPendente = 0;
+  let pendentesAntigos = 0; // PENDENTE com mais de 7 dias
+  const corte7d = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  lancamentos.forEach((l: { status_conciliacao?: string | null; metodo_conciliacao?: string | null; data_lancamento: string }) => {
+    const status = l.status_conciliacao || "PENDENTE";
+    if (status === "PENDENTE") {
+      totalPendente++;
+      if (String(l.data_lancamento).slice(0, 10) < corte7d) pendentesAntigos++;
+    } else if (status === "CONCILIADO_AUTO" || status === "CONCILIADO_MANUAL") {
+      const metodo = l.metodo_conciliacao || "MANUAL";
+      porMetodo[metodo] = (porMetodo[metodo] || 0) + 1;
+    } else if (status === "IGNORADO") {
+      porMetodo.IGNORADO = (porMetodo.IGNORADO || 0) + 1;
+    }
+  });
+
   return json({
     cod_empresa: codEmpresa,
     total_lancamentos: lancamentos.length,
@@ -432,6 +452,9 @@ async function handleResumo(body: Record<string, unknown> | null, url: URL) {
     total_nao_conciliado: totalNaoConciliado,
     percentual_conciliado: lancamentos.length > 0 ? Math.round((totalConciliado / lancamentos.length) * 100) : 0,
     por_natureza: porNatureza,
+    por_metodo: porMetodo,
+    total_pendente: totalPendente,
+    pendentes_antigos: pendentesAntigos,
   });
 }
 
