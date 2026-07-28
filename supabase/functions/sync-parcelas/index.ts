@@ -69,7 +69,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    await authGuard(req, { requiredRole: "admin" });
+    // P2/E2 — cron (pg_cron chama com anon key) é caller interno permitido,
+    // mesmo padrão do conciliar-extrato; usuários continuam exigindo admin.
+    const rawToken = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+    let internalRole = "";
+    try {
+      const payload = JSON.parse(atob(rawToken.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/") ?? ""));
+      internalRole = String(payload?.role ?? "");
+    } catch { /* token ausente/ilegível → cai no authGuard */ }
+    if (internalRole !== "anon" && internalRole !== "service_role") {
+      await authGuard(req, { requiredRole: "admin" });
+    }
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
