@@ -142,8 +142,7 @@ interface PoolsPorLado {
   credito: Pools;
 }
 
-// deno-lint-ignore no-explicit-any
-async function carregarPools(db: any, codEmpresa: number): Promise<PoolsPorLado> {
+async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa: number): Promise<PoolsPorLado> {
   // Alvos já alocados nunca são candidatos de novo
   const { data: alocados } = await db
     .from("conciliacao_extrato")
@@ -265,8 +264,7 @@ async function carregarPools(db: any, codEmpresa: number): Promise<PoolsPorLado>
 }
 
 // ─── ACTION: executar ────────────────────────────────────────
-// deno-lint-ignore no-explicit-any
-async function handleExecutar(db: any, body: Record<string, unknown> | null) {
+async function handleExecutar(db: ReturnType<typeof getServiceClient>, body: Record<string, unknown> | null) {
   const codEmpresaFiltro = body?.cod_empresa ? Number(body.cod_empresa) : null;
 
   let empresas: number[];
@@ -345,8 +343,7 @@ async function handleExecutar(db: any, body: Record<string, unknown> | null) {
 }
 
 // ─── ACTION: sugestoes ───────────────────────────────────────
-// deno-lint-ignore no-explicit-any
-async function handleSugestoes(db: any, body: Record<string, unknown>) {
+async function handleSugestoes(db: ReturnType<typeof getServiceClient>, body: Record<string, unknown>) {
   const extratoId = String(body.extrato_id ?? "");
   if (!extratoId) return json({ error: "extrato_id obrigatório" }, 400);
 
@@ -374,8 +371,7 @@ async function handleSugestoes(db: any, body: Record<string, unknown>) {
 }
 
 // ─── ACTION: confirmar ───────────────────────────────────────
-// deno-lint-ignore no-explicit-any
-async function handleConfirmar(db: any, body: Record<string, unknown>, userId: string | null) {
+async function handleConfirmar(db: ReturnType<typeof getServiceClient>, body: Record<string, unknown>, userId: string | null) {
   const extratoId = String(body.extrato_id ?? "");
   const alocacoes = body.alocacoes as Alocacao[] | undefined;
   if (!extratoId || !Array.isArray(alocacoes) || alocacoes.length === 0) {
@@ -395,8 +391,7 @@ async function handleConfirmar(db: any, body: Record<string, unknown>, userId: s
 }
 
 // ─── ACTION: ignorar ─────────────────────────────────────────
-// deno-lint-ignore no-explicit-any
-async function handleIgnorar(db: any, body: Record<string, unknown>, userId: string | null) {
+async function handleIgnorar(db: ReturnType<typeof getServiceClient>, body: Record<string, unknown>, userId: string | null) {
   const extratoId = String(body.extrato_id ?? "");
   if (!extratoId) return json({ error: "extrato_id obrigatório" }, 400);
 
@@ -420,8 +415,7 @@ async function handleIgnorar(db: any, body: Record<string, unknown>, userId: str
 }
 
 // ─── ACTION: criar_lancamento ────────────────────────────────
-// deno-lint-ignore no-explicit-any
-async function handleCriarLancamento(db: any, body: Record<string, unknown>, userId: string | null) {
+async function handleCriarLancamento(db: ReturnType<typeof getServiceClient>, body: Record<string, unknown>, userId: string | null) {
   const extratoId = String(body.extrato_id ?? "");
   const natureza = body.natureza ? String(body.natureza) : null;
   if (!extratoId || !natureza) return json({ error: "extrato_id e natureza são obrigatórios" }, 400);
@@ -452,8 +446,7 @@ async function handleCriarLancamento(db: any, body: Record<string, unknown>, use
 }
 
 // ─── ACTION: desfazer ────────────────────────────────────────
-// deno-lint-ignore no-explicit-any
-async function handleDesfazer(db: any, body: Record<string, unknown>, userId: string | null) {
+async function handleDesfazer(db: ReturnType<typeof getServiceClient>, body: Record<string, unknown>, userId: string | null) {
   const extratoId = String(body.extrato_id ?? "");
   if (!extratoId) return json({ error: "extrato_id obrigatório" }, 400);
 
