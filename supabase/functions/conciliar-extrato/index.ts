@@ -448,7 +448,7 @@ async function handleCriarLancamento(db: ReturnType<typeof getServiceClient>, bo
   });
   if (error) return json({ error: error.message }, 400);
 
-  const { replicadas, empresas } = await replicarNaturezaParaIguais(db, entry, natureza, new Date().toISOString());
+  const { replicadas, empresas } = await replicarNaturezaParaIguais(db, entry, natureza, userId, new Date().toISOString());
   return json({ success: true, ...data, replicadas, empresas });
 }
 
