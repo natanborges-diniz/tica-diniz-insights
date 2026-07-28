@@ -182,11 +182,56 @@ function findCompanyId(node: unknown, depth = 0): string | null {
 
 type VerificationStatus = "match" | "mismatch" | "inconclusive";
 
+interface AccountDetails {
+  accountId: string | null;
+  agencia: string | null;
+  conta: string | null;
+}
+
 interface VerificationResult {
   status: VerificationStatus;
   companyId: string | null;
   motivo: string;
   cnpjEncontrados: string[];
+  accountDetails?: AccountDetails;
+}
+
+const ACCOUNT_ID_KEYS = ["accountId", "account_id", "accountID", "id"];
+const AGENCY_KEYS = ["agency", "agencia", "agencyNumber", "branch", "branchNumber", "agenciaNumero"];
+const ACCOUNT_KEYS = ["account", "conta", "accountNumber", "contaNumero", "number"];
+
+function pickString(obj: Record<string, unknown>, keys: string[]): string | null {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v === "number") return String(v);
+  }
+  return null;
+}
+
+/** Extrai o primeiro registro de conta bancária da resposta /accounts do BTG. */
+function extractAccountDetails(node: unknown, depth = 0): AccountDetails | null {
+  if (depth > 6 || node == null) return null;
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const found = extractAccountDetails(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof node !== "object") return null;
+  const obj = node as Record<string, unknown>;
+  const agencia = pickString(obj, AGENCY_KEYS);
+  const conta = pickString(obj, ACCOUNT_KEYS);
+  const accountId = pickString(obj, ACCOUNT_ID_KEYS);
+  if (agencia && conta) {
+    return { accountId, agencia, conta };
+  }
+  for (const value of Object.values(obj)) {
+    const found = extractAccountDetails(value, depth + 1);
+    if (found) return found;
+  }
+  return null;
 }
 
 /** CNPJ da empresa: btg_contas_bancarias tem precedência, empresa é fallback. */
@@ -306,12 +351,17 @@ async function verificarIdentidadeEmpresa(
     const accounts = await res.json();
     console.log("[btg-auth][verify] /accounts keys:", JSON.stringify(Object.keys(accounts || {})));
     companyId = companyId || findCompanyId(accounts);
+    const accountDetails = extractAccountDetails(accounts) || undefined;
+    if (accountDetails) {
+      console.log("[btg-auth][verify] conta extraída:", JSON.stringify(accountDetails));
+    }
 
     return {
       status: "match",
       companyId,
       motivo: "Acesso às contas do CNPJ confirmado via API do BTG.",
       cnpjEncontrados: [cnpjEsperado],
+      accountDetails,
     };
   } catch (e) {
     return {
@@ -533,6 +583,10 @@ async function handleCallback(req: Request) {
   const contaUpdate: Record<string, unknown> = {};
   if (companyIdFinal) contaUpdate.company_id = companyIdFinal;
   if (cnpjEsperado) contaUpdate.cnpj = cnpjEsperado;
+  const det = verificacao.accountDetails;
+  if (det?.accountId) contaUpdate.account_id = det.accountId;
+  if (det?.agencia) contaUpdate.agencia = det.agencia;
+  if (det?.conta) contaUpdate.conta = det.conta;
 
   if (Object.keys(contaUpdate).length > 0) {
     const { error: contaError } = await db
