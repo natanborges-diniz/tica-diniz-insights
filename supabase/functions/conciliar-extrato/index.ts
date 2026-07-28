@@ -193,6 +193,33 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
     (l.tipo === "RECEBER" ? fortesCredito : fortesDebito).push(cand);
   }
 
+  // Ambos ← títulos do ERP já baixados (pagos por fora do BTG: caixa, débito
+  // automático, DDA no banco) sem linha de extrato vinculada. É o caso da
+  // maioria das linhas históricas do extrato — sem este pool, tudo "sem match".
+  // Referência forte: valor exato + data_pagamento ±2 dias (fase 1).
+  const { data: lancErp } = await db
+    .from("lancamentos_financeiros")
+    .select("id, valor, valor_pago, data_pagamento, descricao, tipo")
+    .eq("cod_empresa", codEmpresa)
+    .eq("status", "BAIXADO")
+    .eq("origem", "ERP")
+    .is("btg_extrato_id", null)
+    .is("dados_extras->>btg_payment_id", null) // sem duplicar o pool acima
+    .not("data_pagamento", "is", null)
+    .gte("data_pagamento", new Date(Date.now() - 180 * 86400000).toISOString().slice(0, 10))
+    .limit(4000);
+  for (const l of (lancErp || [])) {
+    if (usados.has(`LANCAMENTO|${l.id}`)) continue;
+    const cand: CandidatoForte = {
+      alvo_tipo: "LANCAMENTO",
+      id: l.id,
+      valor: Number(l.valor_pago ?? l.valor),
+      data: l.data_pagamento,
+      label: `Título ERP pago: ${l.descricao ?? ""}`.trim(),
+    };
+    (l.tipo === "RECEBER" ? fortesCredito : fortesDebito).push(cand);
+  }
+
   // Crédito ← cobranças (boletos nossos) pagas
   const { data: cobrancas } = await db
     .from("btg_cobrancas")
