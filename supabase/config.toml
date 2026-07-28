@@ -105,3 +105,6 @@ verify_jwt = false
 
 [functions.sync-recebimentos-diario]
 verify_jwt = false
+
+[functions.btg-webhook]
+verify_jwt = false

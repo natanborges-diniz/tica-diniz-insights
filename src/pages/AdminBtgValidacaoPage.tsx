@@ -508,6 +508,36 @@ export default function AdminBtgValidacaoPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── 4. Webhook de retorno (E5 — passo manual) ─────── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Settings2 className="h-4 w-4 text-primary" />
+            Webhook de retorno BTG
+          </CardTitle>
+          <CardDescription>
+            Baixa automática em tempo real (o polling de 30 min continua como garantia de consistência).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-sm space-y-2">
+          <p>
+            1. Configure os secrets <code className="font-mono text-xs bg-muted px-1 rounded">BTG_WEBHOOK_TOKEN</code>{" "}
+            (obrigatório) e <code className="font-mono text-xs bg-muted px-1 rounded">BTG_WEBHOOK_SECRET</code>{" "}
+            (HMAC — quando o formato de assinatura for confirmado na doc BTG) no Supabase.
+          </p>
+          <p>
+            2. Registre no portal BTG a URL:{" "}
+            <code className="font-mono text-xs bg-muted px-1 rounded break-all">
+              https://&lt;projeto&gt;.supabase.co/functions/v1/btg-webhook?t=&lt;BTG_WEBHOOK_TOKEN&gt;
+            </code>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Eventos recebidos ficam em <code className="font-mono">btg_webhook_events</code>; falhas de
+            processamento são reprocessadas pelo btg-poll-status (cron). Sandbox não emite webhook.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

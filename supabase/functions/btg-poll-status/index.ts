@@ -8,6 +8,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { flattenStatements, normalizeMovement, assignDedupeKeys } from "../_shared/btgExtrato.ts";
+import { reprocessarEventosPendentes } from "../_shared/btgEventos.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -441,8 +442,10 @@ Deno.serve(async (req) => {
       const borderos = await pollBorderos(db, apiBase, isSandbox);
       const pagamentos = await pollPagamentos(db, apiBase, isSandbox);
       const cobrancas = await pollCobrancas(db, apiBase, isSandbox);
-      console.log("[btg-poll-status] executar:", JSON.stringify({ borderos, pagamentos, cobrancas }));
-      return json({ success: true, borderos, pagamentos, cobrancas });
+      // E5 — cron de segurança: reprocessa eventos de webhook parados >10 min (spec §5.2)
+      const eventos = await reprocessarEventosPendentes(db, 10);
+      console.log("[btg-poll-status] executar:", JSON.stringify({ borderos, pagamentos, cobrancas, eventos }));
+      return json({ success: true, borderos, pagamentos, cobrancas, eventos });
     }
 
     return json({ error: `Ação desconhecida: '${action}'. Use: executar, importar_extratos` }, 400);
