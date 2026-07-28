@@ -102,3 +102,6 @@ verify_jwt = false
 
 [functions.conciliar-extrato]
 verify_jwt = false
+
+[functions.sync-recebimentos-diario]
+verify_jwt = false
