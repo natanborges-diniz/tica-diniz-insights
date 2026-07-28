@@ -458,7 +458,7 @@ export default function BankingExtratoDashboard() {
             <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="PENDENTE">A conciliar</SelectItem>
-              <SelectItem value="CLASSIFICADO">Classificadas</SelectItem>
+              
               <SelectItem value="CONCILIADO_AUTO">Conciliadas (auto)</SelectItem>
               <SelectItem value="CONCILIADO_MANUAL">Conciliadas (manual)</SelectItem>
               <SelectItem value="IGNORADO">Ignoradas</SelectItem>
