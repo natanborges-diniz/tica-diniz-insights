@@ -351,12 +351,17 @@ async function verificarIdentidadeEmpresa(
     const accounts = await res.json();
     console.log("[btg-auth][verify] /accounts keys:", JSON.stringify(Object.keys(accounts || {})));
     companyId = companyId || findCompanyId(accounts);
+    const accountDetails = extractAccountDetails(accounts) || undefined;
+    if (accountDetails) {
+      console.log("[btg-auth][verify] conta extraída:", JSON.stringify(accountDetails));
+    }
 
     return {
       status: "match",
       companyId,
       motivo: "Acesso às contas do CNPJ confirmado via API do BTG.",
       cnpjEncontrados: [cnpjEsperado],
+      accountDetails,
     };
   } catch (e) {
     return {
