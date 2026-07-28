@@ -42,10 +42,12 @@ export type TipoEvento = "PAGAMENTO" | "COBRANCA" | "DDA" | "DESCONHECIDO";
 export function classificarEvento(eventType: string, payload: Record<string, unknown>): TipoEvento {
   // Normaliza separadores ("PIX_SENT" → "PIX SENT") para o \b funcionar;
   // \b evita falsos positivos por substring (ex.: "UPDATED" contém "TED").
+  // Grupos reais do painel BTG: payments.*, transfers.*, automatic-pix.*,
+  // bank-slips.*, collections.*, instant-collections.*, authorized-direct-debits.*
   const t = eventType.toUpperCase().replace(/[_\-.]/g, " ");
+  if (/DDA|DIRECT DEBIT/.test(t)) return "DDA";
+  if (/COLLECTION|BOLETO|BANK SLIP|CHARGE|COBRANCA|INVOICE|RECEIVABLE/.test(t)) return "COBRANCA";
   if (/PAYMENT|\bPIX\b|TRANSFER|\bTED\b|BATCH/.test(t)) return "PAGAMENTO";
-  if (/COLLECTION|BOLETO|CHARGE|COBRANCA|INVOICE|RECEIVABLE/.test(t)) return "COBRANCA";
-  if (/DDA/.test(t)) return "DDA";
   if (payload.paymentId || payload.batchId) return "PAGAMENTO";
   if (payload.collectionId || payload.boletoId) return "COBRANCA";
   return "DESCONHECIDO";
@@ -105,8 +107,16 @@ export interface ResultadoEvento {
 }
 
 // deno-lint-ignore no-explicit-any
-export async function processarEvento(db: any, eventType: string, payload: Record<string, unknown>): Promise<ResultadoEvento> {
+export async function processarEvento(db: any, eventType: string, rawPayload: Record<string, unknown>): Promise<ResultadoEvento> {
   const hoje = new Date().toISOString().slice(0, 10);
+  // Formato BTG: {webhookId, event, data:{...}} — os campos úteis vêm em `data`.
+  // Achatamos data por cima do envelope; se `status` não vier, o nome do evento
+  // resolve (ex.: "payments.failed" → FALHA via normStatus).
+  const data = (rawPayload.data && typeof rawPayload.data === "object")
+    ? (rawPayload.data as Record<string, unknown>)
+    : {};
+  const payload: Record<string, unknown> = { ...rawPayload, ...data };
+  if (payload.status == null) payload.status = eventType;
   const tipo = classificarEvento(eventType, payload);
 
   if (tipo === "PAGAMENTO") {

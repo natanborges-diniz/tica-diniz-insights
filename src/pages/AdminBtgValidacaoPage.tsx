@@ -522,19 +522,26 @@ export default function AdminBtgValidacaoPage() {
         </CardHeader>
         <CardContent className="text-sm space-y-2">
           <p>
-            1. Configure os secrets <code className="font-mono text-xs bg-muted px-1 rounded">BTG_WEBHOOK_TOKEN</code>{" "}
-            (obrigatório) e <code className="font-mono text-xs bg-muted px-1 rounded">BTG_WEBHOOK_SECRET</code>{" "}
-            (HMAC — quando o formato de assinatura for confirmado na doc BTG) no Supabase.
+            1. Configure o secret <code className="font-mono text-xs bg-muted px-1 rounded">BTG_WEBHOOK_TOKEN</code>{" "}
+            nas Edge Functions do Supabase.
           </p>
           <p>
-            2. Registre no portal BTG a URL:{" "}
+            2. Na Área do Desenvolvedor BTG (app.empresas.btgpactual.com/aplicativos → seu aplicativo →
+            Webhooks), cadastre o endpoint{" "}
             <code className="font-mono text-xs bg-muted px-1 rounded break-all">
-              https://&lt;projeto&gt;.supabase.co/functions/v1/btg-webhook?t=&lt;BTG_WEBHOOK_TOKEN&gt;
-            </code>
+              https://&lt;projeto&gt;.supabase.co/functions/v1/btg-webhook
+            </code>{" "}
+            com o <strong>mesmo valor</strong> do token no campo de secret do webhook (o BTG o envia como{" "}
+            <code className="font-mono text-xs bg-muted px-1 rounded">Authorization: Bearer</code>).
+          </p>
+          <p>
+            3. Assine os eventos: payments.*, transfers.*, bank-slips.*, collections.*,
+            instant-collections.*, automatic-pix.*, authorized-direct-debits.*.
           </p>
           <p className="text-xs text-muted-foreground">
             Eventos recebidos ficam em <code className="font-mono">btg_webhook_events</code>; falhas de
             processamento são reprocessadas pelo btg-poll-status (cron). Sandbox não emite webhook.
+            Só chegam eventos de escopos que já passaram pelo fluxo de token do aplicativo.
           </p>
         </CardContent>
       </Card>

@@ -1,9 +1,16 @@
 // E5 — Webhook de retorno automático BTG (SPEC_P1_CONCILIACAO_3VIAS.md §5.1/§5.4)
-// verify_jwt=false (o BTG não manda JWT Supabase). Segurança em duas camadas:
-//   1. Token estático na URL (?t=<BTG_WEBHOOK_TOKEN>) — defesa mínima obrigatória
-//   2. HMAC-SHA256 do corpo bruto com BTG_WEBHOOK_SECRET, se configurado
-//      (header e algoritmo exatos do BTG são pendência de descoberta — aceitamos
-//       x-btg-signature | x-signature | x-hub-signature-256, hex ou base64)
+// verify_jwt=false (o BTG não manda JWT Supabase).
+//
+// DESCOBERTA (doc BTG, resolve pendência §5.4): o BTG NÃO assina com HMAC —
+// ele envia o "webhook secret" cadastrado no painel do aplicativo como
+// `Authorization: Bearer <secret>`, e o payload tem formato
+// {webhookId, event, data} com header x-correlation-id estável entre retries.
+// Fonte: developers.empresas.btgpactual.com/docs/utilize-webhooks-para-receber-atualizações-sobre-produtos-conectados
+//
+// Autenticação aceita (qualquer uma vale):
+//   1. `Authorization: Bearer <BTG_WEBHOOK_TOKEN>` — caminho oficial BTG
+//   2. Token estático na URL (?t=<BTG_WEBHOOK_TOKEN>) — fallback
+//   3. HMAC-SHA256 com BTG_WEBHOOK_SECRET — mantido caso o BTG adote assinatura
 //
 // Fluxo: valida → INSERT idempotente em btg_webhook_events → 200 imediato →
 // processamento best-effort; se falhar, o evento fica processed=false e o
@@ -48,9 +55,9 @@ async function hmacSha256(secret: string, body: string): Promise<{ hex: string; 
   return { hex, base64 };
 }
 
-async function validarAssinatura(req: Request, rawBody: string): Promise<boolean> {
+async function validarHmac(req: Request, rawBody: string): Promise<boolean> {
   const secret = Deno.env.get("BTG_WEBHOOK_SECRET");
-  if (!secret) return true; // HMAC ainda não configurado — só o token protege
+  if (!secret) return false;
 
   const header =
     req.headers.get("x-btg-signature") ??
@@ -63,6 +70,19 @@ async function validarAssinatura(req: Request, rawBody: string): Promise<boolean
   return timingSafeEqual(recebida.toLowerCase(), hex) || timingSafeEqual(recebida, base64);
 }
 
+// O BTG preenche `Authorization: Bearer <webhook secret do painel>` — cadastre
+// o mesmo valor de BTG_WEBHOOK_TOKEN no campo de secret do webhook no painel.
+function validarToken(req: Request, url: URL): boolean {
+  const tokenEsperado = Deno.env.get("BTG_WEBHOOK_TOKEN");
+  if (!tokenEsperado) return false;
+
+  const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+  if (bearer && timingSafeEqual(bearer, tokenEsperado)) return true;
+
+  const t = url.searchParams.get("t") ?? "";
+  return t.length > 0 && timingSafeEqual(t, tokenEsperado);
+}
+
 // ─── MAIN ────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -70,21 +90,15 @@ Deno.serve(async (req) => {
   try {
     // 1. Autenticidade — falhou: 401, não grava nada (spec §5.1)
     const url = new URL(req.url);
-    const tokenEsperado = Deno.env.get("BTG_WEBHOOK_TOKEN");
-    const secret = Deno.env.get("BTG_WEBHOOK_SECRET");
-    if (!tokenEsperado && !secret) {
+    if (!Deno.env.get("BTG_WEBHOOK_TOKEN") && !Deno.env.get("BTG_WEBHOOK_SECRET")) {
       console.error("[btg-webhook] BTG_WEBHOOK_TOKEN/SECRET não configurados — rejeitando (fail closed)");
       return json({ error: "Webhook não configurado" }, 401);
     }
-    if (tokenEsperado) {
-      const t = url.searchParams.get("t") ?? "";
-      if (!timingSafeEqual(t, tokenEsperado)) return json({ error: "Unauthorized" }, 401);
-    }
 
     const rawBody = await req.text();
-    if (!(await validarAssinatura(req, rawBody))) {
-      console.warn("[btg-webhook] Assinatura HMAC inválida");
-      return json({ error: "Invalid signature" }, 401);
+    if (!validarToken(req, url) && !(await validarHmac(req, rawBody))) {
+      console.warn("[btg-webhook] Autenticação inválida (Bearer/token/HMAC)");
+      return json({ error: "Unauthorized" }, 401);
     }
 
     let payload: Record<string, unknown>;
@@ -94,7 +108,18 @@ Deno.serve(async (req) => {
       return json({ error: "Invalid JSON" }, 400);
     }
 
-    const eventType = String(payload.eventType ?? payload.type ?? payload.event ?? "desconhecido");
+    // Formato BTG: {webhookId, event, data} — `event` é o tipo; dados ficam em `data`.
+    const eventType = String(payload.event ?? payload.eventType ?? payload.type ?? "desconhecido");
+
+    // Idempotência: payload->>'id' tem unique parcial. webhookId NÃO serve (é o id
+    // da assinatura, igual em todo evento) — usamos transactionId/id do data ou o
+    // x-correlation-id (estável entre retentativas do BTG).
+    if (payload.id == null) {
+      const data = (payload.data ?? {}) as Record<string, unknown>;
+      const dedupId = data.transactionId ?? data.id ?? req.headers.get("x-correlation-id");
+      if (dedupId) payload.id = String(dedupId);
+    }
+
     const db = getServiceClient();
 
     // 2. INSERT idempotente (unique parcial em payload->>'id')

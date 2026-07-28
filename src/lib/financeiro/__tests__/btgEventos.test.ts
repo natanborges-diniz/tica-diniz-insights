@@ -26,6 +26,16 @@ describe('classificarEvento', () => {
     expect(classificarEvento('dda.new', {})).toBe('DDA');
   });
 
+  it('cobre os grupos reais do painel BTG', () => {
+    expect(classificarEvento('payments.approval-authorized', {})).toBe('PAGAMENTO');
+    expect(classificarEvento('transfers.failed', {})).toBe('PAGAMENTO');
+    expect(classificarEvento('automatic-pix.paid', {})).toBe('PAGAMENTO');
+    expect(classificarEvento('bank-slips.paid', {})).toBe('COBRANCA');
+    expect(classificarEvento('collections.settled', {})).toBe('COBRANCA');
+    expect(classificarEvento('instant-collections.paid', {})).toBe('COBRANCA');
+    expect(classificarEvento('authorized-direct-debits.created', {})).toBe('DDA');
+  });
+
   it('cai no payload quando o event_type não ajuda', () => {
     expect(classificarEvento('desconhecido', { paymentId: 'abc' })).toBe('PAGAMENTO');
     expect(classificarEvento('desconhecido', { collectionId: 'abc' })).toBe('COBRANCA');
