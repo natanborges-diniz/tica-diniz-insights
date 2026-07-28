@@ -251,7 +251,7 @@ describe('prioridade do waterfall', () => {
 });
 
 describe('dedupe_key (E1 — btgExtrato)', () => {
-  const row = (over: Record<string, unknown> = {}) => ({
+  const row = (over: Record<string, unknown> = {}): Record<string, any> => ({
     cod_empresa: 1,
     data_lancamento: '2026-07-01',
     valor: 100,
