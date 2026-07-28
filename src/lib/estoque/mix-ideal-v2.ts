@@ -62,7 +62,7 @@ export interface MixMarcaV2 {
   lacuna: number;              // max(0, mixTotal − estoqueEfetivo)
   status: StatusMixV2;
   estrategica: boolean;
-  minimoEfetivo: number;       // mínimo aplicado a esta marca (cascata: minimoProprio ?? minimoLoja ?? MIX_MINIMO_MARCA)
+  minimoEfetivo?: number;      // mínimo aplicado a esta marca (cascata: minimoProprio ?? minimoLoja ?? MIX_MINIMO_MARCA)
   skusAlocados: SkuAlocado[];  // alocação por passadas (diasGiroUltimaPeca ASC)
   // Volume vendido 180d (Onda 2.B — Princípio #26)
   vendido180dTotal?: number;
