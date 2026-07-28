@@ -197,8 +197,8 @@ interface VerificationResult {
 }
 
 const ACCOUNT_ID_KEYS = ["accountId", "account_id", "accountID", "id"];
-const AGENCY_KEYS = ["agency", "agencia", "agencyNumber", "branch", "branchNumber", "agenciaNumero"];
-const ACCOUNT_KEYS = ["account", "conta", "accountNumber", "contaNumero", "number"];
+const AGENCY_KEYS = ["branchCode", "agency", "agencia", "agencyNumber", "branch", "branchNumber", "agenciaNumero"];
+const ACCOUNT_KEYS = ["number", "accountNumber", "account", "conta", "contaNumero"];
 
 function pickString(obj: Record<string, unknown>, keys: string[]): string | null {
   for (const k of keys) {
