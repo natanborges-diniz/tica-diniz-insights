@@ -362,15 +362,59 @@ async function handleListar(body: Record<string, unknown> | null, url: URL, user
 }
 
 // ─── ACTION: classificar ────────────────────────────────────
+// Aplica a natureza na linha alvo e replica em todas as PENDENTE da mesma empresa
+// com descrição idêntica (trim + case-insensitive) que ainda não tenham natureza.
 async function handleClassificar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
   const { id, natureza } = body;
   if (!id || !natureza) return json({ error: "id e natureza obrigatórios" }, 400);
 
   const db = getServiceClient();
-  const { error } = await db.from("btg_extrato").update({ natureza: String(natureza), updated_at: new Date().toISOString() }).eq("id", String(id));
-  if (error) return json({ error: "Erro ao classificar", details: error.message }, 500);
-  return json({ success: true });
+  const nat = String(natureza);
+  const nowIso = new Date().toISOString();
+
+  const { data: alvo, error: errAlvo } = await db
+    .from("btg_extrato")
+    .select("id, cod_empresa, descricao")
+    .eq("id", String(id))
+    .single();
+  if (errAlvo || !alvo) {
+    return json({ error: "Lançamento não encontrado", details: errAlvo?.message }, 404);
+  }
+
+  const { error: errUpd } = await db
+    .from("btg_extrato")
+    .update({ natureza: nat, updated_at: nowIso })
+    .eq("id", String(id));
+  if (errUpd) return json({ error: "Erro ao classificar", details: errUpd.message }, 500);
+
+  let replicadas = 0;
+  const descNorm = String(alvo.descricao || "").trim();
+  if (descNorm.length > 0) {
+    const { data: irmas, error: errSel } = await db
+      .from("btg_extrato")
+      .select("id, descricao, natureza")
+      .eq("cod_empresa", alvo.cod_empresa)
+      .eq("status_conciliacao", "PENDENTE")
+      .neq("id", String(id));
+    if (!errSel && irmas) {
+      const alvos = (irmas as Array<{ id: string; descricao: string | null; natureza: string | null }>)
+        .filter((r) =>
+          String(r.descricao || "").trim().toLowerCase() === descNorm.toLowerCase() &&
+          (!r.natureza || r.natureza.trim() === "")
+        )
+        .map((r) => r.id);
+      if (alvos.length > 0) {
+        const { error: errBatch } = await db
+          .from("btg_extrato")
+          .update({ natureza: nat, updated_at: nowIso })
+          .in("id", alvos);
+        if (!errBatch) replicadas = alvos.length;
+      }
+    }
+  }
+
+  return json({ success: true, replicadas });
 }
 
 // ─── ACTION: conciliar ──────────────────────────────────────
