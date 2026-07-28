@@ -53,8 +53,7 @@ function normalizarDescricaoExtrato(descricao: unknown): string {
     .toUpperCase();
 }
 
-// deno-lint-ignore no-explicit-any
-async function replicarNaturezaParaIguais(db: any, alvo: { id: string; descricao: string | null; tipo: string | null }, natureza: string, nowIso: string) {
+async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient>, alvo: { id: string; descricao: string | null; tipo: string | null }, natureza: string, nowIso: string) {
   const descNorm = normalizarDescricaoExtrato(alvo.descricao);
   if (!descNorm || !alvo.tipo) return { replicadas: 0, empresas: 0 };
 
