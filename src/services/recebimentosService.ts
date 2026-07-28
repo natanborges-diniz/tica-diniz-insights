@@ -176,7 +176,7 @@ export interface UltimoSyncRecebimentos {
  * no frontend — plano §4).
  */
 export async function getUltimoSyncRecebimentos(): Promise<UltimoSyncRecebimentos | null> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('sync_log')
     .select('executado_em, status, periodo_inicio, periodo_fim, linhas')
     .eq('sync_tipo', 'recebimentos_diario')
