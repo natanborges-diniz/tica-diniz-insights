@@ -8,6 +8,7 @@ import { format, subDays, differenceInCalendarDays } from "date-fns";
 import {
   ArrowDownCircle, ArrowUpCircle, Download, Landmark, TrendingUp, TrendingDown,
   PieChart, CheckCircle2, Sparkles, Search, EyeOff, FilePlus2, Undo2, Clock, Settings2,
+  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -20,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { BaseDialog } from "@/components/system/BaseDialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { ExtratoRegrasDialog } from "@/components/banking/ExtratoRegrasDialog";
@@ -67,6 +69,25 @@ interface SaldoResponse {
   sandbox?: boolean;
 }
 
+const getFunctionErrorMessage = async (error: unknown): Promise<string> => {
+  const context = (error as { context?: Response })?.context;
+  if (context) {
+    try {
+      const payload = await context.clone().json() as { error?: unknown; details?: unknown };
+      if (typeof payload.error === "string") return payload.error;
+      if (typeof payload.details === "string") return payload.details;
+    } catch {
+      // Fallback abaixo quando o body já foi consumido ou não é JSON.
+    }
+  }
+
+  if (error instanceof Error) return error.message;
+  return "Erro ao comunicar com o BTG";
+};
+
+const isBtgAuthMissing = (message: string) =>
+  /Empresa \d+ não autenticada no BTG/i.test(message) || /Token BTG expirado/i.test(message);
+
 const STATUS_LABEL: Record<string, string> = {
   PENDENTE: "Pendente",
   CONCILIADO_AUTO: "Auto",
@@ -111,9 +132,13 @@ export default function BankingExtratoDashboard() {
   const [dataFim, setDataFim] = useState(format(new Date(), "yyyy-MM-dd"));
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
   const [filtroStatus, setFiltroStatus] = useState<string>("PENDENTE");
+  const [btgAccessIssue, setBtgAccessIssue] = useState<string | null>(null);
 
   const [autoImported, setAutoImported] = useState(false);
-  useEffect(() => setAutoImported(false), [codEmpresa]);
+  useEffect(() => {
+    setAutoImported(false);
+    setBtgAccessIssue(null);
+  }, [codEmpresa]);
 
   // Dialogs
   const [candidatosFor, setCandidatosFor] = useState<ExtratoItem | null>(null);
@@ -154,7 +179,15 @@ export default function BankingExtratoDashboard() {
       };
       if (filtroStatus !== "todos") params.status_conciliacao = filtroStatus;
       const { data, error } = await supabase.functions.invoke("btg-extrato", { body: params });
-      if (error) throw error;
+      if (error) {
+        const message = await getFunctionErrorMessage(error);
+        if (isBtgAuthMissing(message)) {
+          setBtgAccessIssue(message);
+          return [];
+        }
+        throw new Error(message);
+      }
+      setBtgAccessIssue(null);
       let items: ExtratoItem[] = Array.isArray(data) ? data : [];
 
       // Auto-import na primeira visita sem dados (persiste e relê — nada de linha "live")
@@ -185,18 +218,32 @@ export default function BankingExtratoDashboard() {
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
         body: { action: "resumo", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
       });
-      if (error) throw error;
+      if (error) {
+        const message = await getFunctionErrorMessage(error);
+        if (isBtgAuthMissing(message)) {
+          setBtgAccessIssue(message);
+          return null;
+        }
+        throw new Error(message);
+      }
       return data as ResumoExtrato;
     },
   });
 
-  const { data: saldo } = useQuery<SaldoResponse>({
+  const { data: saldo } = useQuery<SaldoResponse | null>({
     queryKey: ["btg-saldo", codEmpresa],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
         body: { action: "saldo", cod_empresa: codEmpresa },
       });
-      if (error) throw error;
+      if (error) {
+        const message = await getFunctionErrorMessage(error);
+        if (isBtgAuthMissing(message)) {
+          setBtgAccessIssue(message);
+          return null;
+        }
+        throw new Error(message);
+      }
       return data as SaldoResponse;
     },
   });
@@ -207,14 +254,18 @@ export default function BankingExtratoDashboard() {
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
         body: { action: "importar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
       });
-      if (error) throw error;
+      if (error) {
+        const message = await getFunctionErrorMessage(error);
+        if (isBtgAuthMissing(message)) setBtgAccessIssue(message);
+        throw new Error(message);
+      }
       return data;
     },
     onSuccess: (data) => {
       toast.success(`${data.importados} importados, ${data.duplicados ?? 0} duplicados ignorados`);
       invalidate();
     },
-    onError: () => toast.error("Erro ao importar extrato"),
+    onError: (e: Error) => toast.error(e.message || "Erro ao importar extrato"),
   });
 
   const executarMotorMutation = useMutation({
@@ -297,7 +348,7 @@ export default function BankingExtratoDashboard() {
       const { error } = await supabase.functions.invoke("btg-extrato", {
         body: { action: "classificar", id, natureza },
       });
-      if (error) throw error;
+      if (error) throw new Error(await getFunctionErrorMessage(error));
     },
     onSuccess: invalidate,
   });
