@@ -12,6 +12,9 @@ interface ResumoEmpresaVendedorRaw {
   empresa: string;
   empresa_cod_logico: number;
   empresa_nome_logico: string;
+  /** Código real do vendedor (PESSOA.COD_PESSOA via SAIDA.COD_VENDEDOR).
+   *  O bridge devolve chaves minúsculas (lowercase_keys: true no node-firebird). */
+  cod_vendedor?: number;
   vendedor: string;
   qtd_transacao: number;
   qtd_produtos: number;
@@ -28,6 +31,8 @@ export interface ResumoEmpresaVendedor {
   empresa: string;
   empresaCodLogico: number;
   empresaNomeLogico: string;
+  /** Código real do vendedor (0 = desconhecido/não informado pela fonte) */
+  codVendedor: number;
   vendedor: string;
   qtdTransacao: number;
   qtdProdutos: number;
@@ -81,6 +86,8 @@ export async function getResumoEmpresaVendedor(
       empresa: (r.empresa ?? '').trim(),
       empresaCodLogico: r.empresa_cod_logico ?? 0,
       empresaNomeLogico: (r.empresa_nome_logico ?? r.empresa ?? '').trim(),
+      // F1: mapeamento tolerante — usa o código real quando o bridge devolver
+      codVendedor: Number(r.cod_vendedor) || 0,
       vendedor: (r.vendedor ?? '').trim(),
       qtdTransacao,
       qtdProdutos: r.qtd_produtos ?? 0,

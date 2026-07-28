@@ -73,9 +73,19 @@ export function useMetasVendas() {
       const vendedoresUnicos = new Map<string, VendedorOption>();
       result.forEach((r: ResumoEmpresaVendedor) => {
         if (r.vendedor && r.vendedor.trim()) {
-          const key = `${r.empresaCodLogico}-${r.vendedor}`;
+          // F1: usar o COD_VENDEDOR real (o bridge expõe cod_vendedor).
+          // Antes gravava-se o código da LOJA como codVendedor, e o
+          // UNIQUE(tipo, cod_referencia, ano, mes) colapsava todos os
+          // vendedores da loja numa meta só.
+          // Dedup por código real quando disponível; fallback tolerante por
+          // empresa+nome quando a API (versão antiga do bridge) não devolver.
+          // TODO: quando o bridge em produção garantir cod_vendedor sempre
+          // preenchido, remover o fallback por nome.
+          const key = r.codVendedor > 0
+            ? `cod:${r.codVendedor}`
+            : `nome:${r.empresaCodLogico}-${r.vendedor}`;
           vendedoresUnicos.set(key, {
-            codVendedor: r.empresaCodLogico || 0,
+            codVendedor: r.codVendedor > 0 ? r.codVendedor : (r.empresaCodLogico || 0),
             vendedor: r.vendedor,
             nome: r.vendedor,
             empresa: r.empresaNomeLogico || r.empresa,

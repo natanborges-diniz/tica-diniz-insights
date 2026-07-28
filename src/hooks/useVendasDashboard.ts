@@ -305,6 +305,8 @@ function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedo
       empresa: item.empresa,
       empresaCodLogico: item.empresaCodLogico,
       empresaNomeLogico: item.empresa,
+      // Agregado por forma de pagamento não carrega o código do vendedor
+      codVendedor: 0,
       vendedor: item.vendedor,
       qtdTransacao: item.qtdTransacao,
       qtdProdutos: 0,
