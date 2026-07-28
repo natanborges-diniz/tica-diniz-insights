@@ -628,6 +628,24 @@ export type Database = {
         }
         Relationships: []
       }
+      comissao_taxas: {
+        Row: {
+          atualizado_em: string
+          forma_categoria: string
+          percentual: number
+        }
+        Insert: {
+          atualizado_em?: string
+          forma_categoria: string
+          percentual?: number
+        }
+        Update: {
+          atualizado_em?: string
+          forma_categoria?: string
+          percentual?: number
+        }
+        Relationships: []
+      }
       conciliacao_extrato: {
         Row: {
           alvo_id: string | null
@@ -724,6 +742,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      divisao_semanal: {
+        Row: {
+          atualizado_em: string
+          cod_empresa: number
+          id: string
+          num_vendedores: number
+          percentual_divisao: number
+          semana_inicio: string
+        }
+        Insert: {
+          atualizado_em?: string
+          cod_empresa: number
+          id?: string
+          num_vendedores?: number
+          percentual_divisao?: number
+          semana_inicio: string
+        }
+        Update: {
+          atualizado_em?: string
+          cod_empresa?: number
+          id?: string
+          num_vendedores?: number
+          percentual_divisao?: number
+          semana_inicio?: string
+        }
+        Relationships: []
       }
       dre_plano_contas: {
         Row: {
@@ -1108,6 +1153,50 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      grupos_lojas: {
+        Row: {
+          atualizado_em: string
+          cod_grupo: number
+          nome: string
+        }
+        Insert: {
+          atualizado_em?: string
+          cod_grupo?: number
+          nome: string
+        }
+        Update: {
+          atualizado_em?: string
+          cod_grupo?: number
+          nome?: string
+        }
+        Relationships: []
+      }
+      grupos_lojas_membros: {
+        Row: {
+          cod_empresa: number
+          cod_grupo: number
+          id: string
+        }
+        Insert: {
+          cod_empresa: number
+          cod_grupo: number
+          id?: string
+        }
+        Update: {
+          cod_empresa?: number
+          cod_grupo?: number
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "grupos_lojas_membros_cod_grupo_fkey"
+            columns: ["cod_grupo"]
+            isOneToOne: false
+            referencedRelation: "grupos_lojas"
+            referencedColumns: ["cod_grupo"]
+          },
+        ]
       }
       haytek_empresa_config: {
         Row: {
@@ -1541,6 +1630,54 @@ export type Database = {
           mes_fim?: number | null
           mes_inicio?: number | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      metas_semanais: {
+        Row: {
+          ano: number
+          atualizado_em: string
+          cod_empresa: number | null
+          cod_referencia: number
+          dias_uteis: number
+          id: string
+          mes: number
+          meta_valor: number
+          nome_referencia: string | null
+          origem: string
+          semana_fim: string
+          semana_inicio: string
+          tipo: string
+        }
+        Insert: {
+          ano: number
+          atualizado_em?: string
+          cod_empresa?: number | null
+          cod_referencia: number
+          dias_uteis?: number
+          id?: string
+          mes: number
+          meta_valor?: number
+          nome_referencia?: string | null
+          origem?: string
+          semana_fim: string
+          semana_inicio: string
+          tipo: string
+        }
+        Update: {
+          ano?: number
+          atualizado_em?: string
+          cod_empresa?: number | null
+          cod_referencia?: number
+          dias_uteis?: number
+          id?: string
+          mes?: number
+          meta_valor?: number
+          nome_referencia?: string | null
+          origem?: string
+          semana_fim?: string
+          semana_inicio?: string
+          tipo?: string
         }
         Relationships: []
       }
@@ -2280,6 +2417,36 @@ export type Database = {
         }
         Relationships: []
       }
+      premios_config: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          id: string
+          percentual_meta_min: number | null
+          percentual_premio: number
+          semanas_consecutivas: number | null
+          tipo: string
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          id?: string
+          percentual_meta_min?: number | null
+          percentual_premio?: number
+          semanas_consecutivas?: number | null
+          tipo: string
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          id?: string
+          percentual_meta_min?: number | null
+          percentual_premio?: number
+          semanas_consecutivas?: number | null
+          tipo?: string
+        }
+        Relationships: []
+      }
       produto: {
         Row: {
           ativo: boolean | null
@@ -2364,6 +2531,45 @@ export type Database = {
           function_name?: string
           id?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      recebimentos_agregado_diario: {
+        Row: {
+          atualizado_em: string
+          cod_empresa: number
+          cod_vendedor: number
+          data_pagamento: string
+          forma_categoria: string
+          id: string
+          origem: string
+          qtd_parcelas: number
+          valor_recebido: number
+          vendedor_nome: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          cod_empresa: number
+          cod_vendedor: number
+          data_pagamento: string
+          forma_categoria: string
+          id?: string
+          origem: string
+          qtd_parcelas?: number
+          valor_recebido?: number
+          vendedor_nome?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          cod_empresa?: number
+          cod_vendedor?: number
+          data_pagamento?: string
+          forma_categoria?: string
+          id?: string
+          origem?: string
+          qtd_parcelas?: number
+          valor_recebido?: number
+          vendedor_nome?: string | null
         }
         Relationships: []
       }
@@ -2560,6 +2766,42 @@ export type Database = {
           expires_at?: string | null
           id?: string
           lock_key?: string
+        }
+        Relationships: []
+      }
+      sync_log: {
+        Row: {
+          detalhe: Json | null
+          empresas: string | null
+          executado_em: string
+          id: string
+          linhas: number
+          periodo_fim: string | null
+          periodo_inicio: string | null
+          status: string
+          sync_tipo: string
+        }
+        Insert: {
+          detalhe?: Json | null
+          empresas?: string | null
+          executado_em?: string
+          id?: string
+          linhas?: number
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          status: string
+          sync_tipo: string
+        }
+        Update: {
+          detalhe?: Json | null
+          empresas?: string | null
+          executado_em?: string
+          id?: string
+          linhas?: number
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          status?: string
+          sync_tipo?: string
         }
         Relationships: []
       }
