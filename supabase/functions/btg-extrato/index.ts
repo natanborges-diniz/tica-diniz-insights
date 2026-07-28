@@ -474,7 +474,16 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   }
 
   const importados = inserted?.length ?? 0;
-  return json({ success: true, importados, duplicados: rows.length - importados });
+
+  // Aplica regras aprendidas de classificações anteriores nos pendentes.
+  let auto_classificados = 0;
+  try {
+    auto_classificados = await aplicarRegrasEmPendentes(db, cod_empresa);
+  } catch (e) {
+    console.warn("[btg-extrato] aplicarRegrasEmPendentes falhou:", (e as Error)?.message);
+  }
+
+  return json({ success: true, importados, duplicados: rows.length - importados, auto_classificados });
 }
 
 // ─── ACTION: listar ──────────────────────────────────────────
