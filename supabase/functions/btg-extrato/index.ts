@@ -567,7 +567,7 @@ async function handleClassificar(body: Record<string, unknown>, userId: string) 
   const regra_salva = await salvarRegraClassificacao(db, alvo, nat, userId);
 
 
-  return json({ success: true, replicadas, empresas });
+  return json({ success: true, replicadas, empresas, regra_salva });
 }
 
 // ─── ACTION: conciliar ──────────────────────────────────────
