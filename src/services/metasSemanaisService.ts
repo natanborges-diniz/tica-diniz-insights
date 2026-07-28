@@ -16,11 +16,15 @@
 import { supabase } from '@/integrations/supabase/client';
 import {
   gerarSemanasDoPeriodo,
+  gerarSemanasDeCortes,
+  validarCortes,
   calcularMetaSemanalLoja,
   derivarMetaVendedor,
   sugerirMetaMensal,
   type MetaSemanalCalculada,
+  type CorteSemana,
 } from '@/lib/metas/metasSemanais';
+export type { CorteSemana };
 import { getDatasDoPeriodo } from '@/lib/metas/calendario';
 import {
   getMetaPeriodo,
@@ -82,6 +86,95 @@ export interface GerarSemanasResult {
   avisos: string[];
 }
 
+// ==================== CORTES SEMANAIS (globais por ano/mês) ====================
+
+/** Cortes manuais do mês comercial; [] = usar sugestão automática (seg→dom). */
+export async function getSemanaCortes(ano: number, mes: number): Promise<CorteSemana[]> {
+  const { data, error } = await (supabase as any)
+    .from('metas_semana_cortes')
+    .select('semana_inicio, semana_fim')
+    .eq('ano', ano)
+    .eq('mes', mes)
+    .order('semana_inicio');
+  if (error) throw new Error(`Erro ao ler cortes: ${error.message}`);
+  return ((data || []) as any[]).map((r) => ({
+    semanaInicio: r.semana_inicio,
+    semanaFim: r.semana_fim,
+  }));
+}
+
+/**
+ * Salva os cortes finalizados pelo gestor (valida contiguidade/cobertura do
+ * período 21→20). Remove metas semanais LOJA do mês cujo semana_inicio não
+ * exista mais nos novos cortes (inclusive AJUSTADAS — avisadas no retorno).
+ */
+export async function salvarSemanaCortes(
+  ano: number,
+  mes: number,
+  cortes: CorteSemana[]
+): Promise<{ avisos: string[] }> {
+  const periodoCfg = await getMetaPeriodo(ano, mes);
+  const { dataInicio, dataFim } = getDatasDoPeriodo(ano, mes, periodoCfg);
+  const ini = dataInicio.toISOString().split('T')[0];
+  const fim = dataFim.toISOString().split('T')[0];
+  const erros = validarCortes(cortes, ini, fim);
+  if (erros.length) throw new Error(erros.join(' · '));
+
+  const avisos: string[] = [];
+  const iniciosNovos = new Set(cortes.map((c) => c.semanaInicio));
+
+  // metas existentes fora dos novos cortes (qualquer tipo) → remover
+  const { data: orfas } = await (supabase as any)
+    .from('metas_semanais')
+    .select('id, tipo, cod_referencia, semana_inicio, origem')
+    .eq('ano', ano)
+    .eq('mes', mes);
+  const remover = ((orfas || []) as any[]).filter((m) => !iniciosNovos.has(m.semana_inicio));
+  if (remover.length) {
+    const ajustadas = remover.filter((m) => m.origem === 'AJUSTADA').length;
+    if (ajustadas) {
+      avisos.push(
+        `${ajustadas} meta(s) AJUSTADA(s) removida(s) — os cortes mudaram; ajuste novamente se necessário`
+      );
+    }
+    const { error: errDel } = await (supabase as any)
+      .from('metas_semanais')
+      .delete()
+      .in('id', remover.map((m) => m.id));
+    if (errDel) throw new Error(`Erro ao limpar metas antigas: ${errDel.message}`);
+  }
+
+  // substituir cortes do mês
+  const { error: errDelCortes } = await (supabase as any)
+    .from('metas_semana_cortes')
+    .delete()
+    .eq('ano', ano)
+    .eq('mes', mes);
+  if (errDelCortes) throw new Error(`Erro ao limpar cortes: ${errDelCortes.message}`);
+  const ordenados = cortes.slice().sort((a, b) => a.semanaInicio.localeCompare(b.semanaInicio));
+  const { error: errIns } = await (supabase as any).from('metas_semana_cortes').insert(
+    ordenados.map((c, i) => ({
+      ano,
+      mes,
+      ordem: i + 1,
+      semana_inicio: c.semanaInicio,
+      semana_fim: c.semanaFim,
+    }))
+  );
+  if (errIns) throw new Error(`Erro ao salvar cortes: ${errIns.message}`);
+  return { avisos };
+}
+
+/** Volta o mês para a sugestão automática (remove cortes manuais). */
+export async function removerSemanaCortes(ano: number, mes: number): Promise<void> {
+  const { error } = await (supabase as any)
+    .from('metas_semana_cortes')
+    .delete()
+    .eq('ano', ano)
+    .eq('mes', mes);
+  if (error) throw new Error(`Erro ao remover cortes: ${error.message}`);
+}
+
 // ==================== GERAÇÃO (LOJA) ====================
 
 /**
@@ -127,8 +220,11 @@ export async function gerarSemanasLoja(
   ]);
   if (!config) avisos.push(`Loja ${codEmpresa} sem lojas_configuracao — usando padrão (fecha domingo/feriado)`);
 
-  // 3) cálculo puro
-  const semanas = gerarSemanasDoPeriodo(dataInicio, dataFim, config, feriados, excecoes);
+  // 3) cálculo puro — cortes MANUAIS têm precedência sobre a sugestão seg→dom
+  const cortes = await getSemanaCortes(ano, mes);
+  const semanas = cortes.length
+    ? gerarSemanasDeCortes(cortes, config, feriados, excecoes)
+    : gerarSemanasDoPeriodo(dataInicio, dataFim, config, feriados, excecoes);
   const metas = calcularMetaSemanalLoja(metaMensal, semanas);
 
   // 4) preservar AJUSTADAS existentes

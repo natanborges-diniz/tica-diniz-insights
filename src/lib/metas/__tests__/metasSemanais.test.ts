@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
   gerarSemanasDoPeriodo,
+  gerarSemanasDeCortes,
+  validarCortes,
   calcularMetaSemanalLoja,
   derivarMetaVendedor,
   sugerirMetaMensal,
   calcularRitmo,
 } from '../metasSemanais';
+import { getDatasDoPeriodo } from '@/lib/metas/calendario';
 import type { LojaConfiguracao, Feriado, LojaExcecao } from '@/lib/metas/calendario';
 
 const configRua: LojaConfiguracao = {
@@ -119,6 +122,55 @@ describe('sugerirMetaMensal', () => {
   it('ano anterior + 10%', () => {
     expect(sugerirMetaMensal(100000)).toBe(110000);
     expect(sugerirMetaMensal(87654.32)).toBe(96419.75);
+  });
+});
+
+describe('getDatasDoPeriodo — padrão da casa 21→20', () => {
+  it('sem config: julho = 21/06 a 20/07', () => {
+    const { dataInicio, dataFim } = getDatasDoPeriodo(2026, 7, null);
+    expect(dataInicio.getDate()).toBe(21);
+    expect(dataInicio.getMonth()).toBe(5); // junho
+    expect(dataFim.getDate()).toBe(20);
+    expect(dataFim.getMonth()).toBe(6); // julho
+  });
+  it('janeiro = 21/12 do ano anterior a 20/01', () => {
+    const { dataInicio, dataFim } = getDatasDoPeriodo(2027, 1, null);
+    expect(dataInicio.getFullYear()).toBe(2026);
+    expect(dataInicio.getMonth()).toBe(11); // dezembro
+    expect(dataInicio.getDate()).toBe(21);
+    expect(dataFim.getFullYear()).toBe(2027);
+    expect(dataFim.getMonth()).toBe(0);
+    expect(dataFim.getDate()).toBe(20);
+  });
+});
+
+describe('cortes manuais', () => {
+  const cortes = [
+    { semanaInicio: '2026-06-21', semanaFim: '2026-06-28' },
+    { semanaInicio: '2026-06-29', semanaFim: '2026-07-05' },
+    { semanaInicio: '2026-07-06', semanaFim: '2026-07-12' },
+    { semanaInicio: '2026-07-13', semanaFim: '2026-07-20' },
+  ];
+
+  it('validarCortes aceita cortes contíguos cobrindo o período', () => {
+    expect(validarCortes(cortes, '2026-06-21', '2026-07-20')).toEqual([]);
+  });
+
+  it('validarCortes acusa buraco/borda errada', () => {
+    expect(
+      validarCortes(cortes.slice(1), '2026-06-21', '2026-07-20').length
+    ).toBeGreaterThan(0);
+    const comBuraco = [cortes[0], { semanaInicio: '2026-07-01', semanaFim: '2026-07-20' }];
+    expect(validarCortes(comBuraco, '2026-06-21', '2026-07-20').length).toBeGreaterThan(0);
+  });
+
+  it('gerarSemanasDeCortes calcula dias úteis por corte (fecha domingo)', () => {
+    const semanas = gerarSemanasDeCortes(cortes, configRua, semFeriados, semExcecoes);
+    expect(semanas).toHaveLength(4);
+    // 1º corte 21/06(dom) a 28/06(dom): 8 dias corridos, 2 domingos fechados = 6 úteis
+    expect(semanas[0].diasUteis).toBe(6);
+    expect(semanas[0].semanaInicio).toBe('2026-06-21');
+    expect(semanas[0].semanaFim).toBe('2026-06-28');
   });
 });
 

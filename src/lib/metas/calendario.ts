@@ -100,8 +100,12 @@ export function calcularDiasUteis(
 }
 
 /**
- * Retorna as datas do período da meta (considerando config de período
- * comercial customizado, ex. 21→20).
+ * Retorna as datas do período da meta.
+ *
+ * PADRÃO DA CASA (Natan, 2026-07-28): o mês comercial M vai SEMPRE do dia 21
+ * do mês anterior ao dia 20 do mês M (ex.: julho = 21/06 → 20/07; janeiro =
+ * 21/12 do ano anterior → 20/01). Esse é o DEFAULT mesmo sem registro em
+ * metas_periodos — um registro lá só serve para EXCEÇÕES pontuais.
  */
 export function getDatasDoPeriodo(
   ano: number,
@@ -121,8 +125,9 @@ export function getDatasDoPeriodo(
     };
   }
 
+  // default 21 → 20 (mes-1 dia 21 até mes dia 20); Date lida com mes 0 = dez/ano-1
   return {
-    dataInicio: new Date(ano, mes - 1, 1),
-    dataFim: new Date(ano, mes, 0),
+    dataInicio: new Date(ano, mes - 2, 21),
+    dataFim: new Date(ano, mes - 1, 20),
   };
 }

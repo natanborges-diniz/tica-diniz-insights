@@ -62,7 +62,8 @@ export async function getAcompanhamentoSemanal(
   ).filter((m) => !codEmpresas?.length || codEmpresas.includes(m.codReferencia));
   if (!metasLoja.length) return [];
 
-  const semanaFim = addDaysISO(semanaInicio, 6);
+  // cortes manuais podem ter semanas ≠ 7 dias — usar o fim gravado na meta
+  const semanaFim = metasLoja[0].semanaFim || addDaysISO(semanaInicio, 6);
   const hoje = new Date().toISOString().split('T')[0];
 
   const recebimentos = await getRecebimentosAgregado({

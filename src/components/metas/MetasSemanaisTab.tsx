@@ -46,16 +46,18 @@ import {
   type Feriado,
   type LojaConfiguracao,
 } from "@/lib/metas/calendario";
-import { gerarSemanasDoPeriodo } from "@/lib/metas/metasSemanais";
+import { gerarSemanasDoPeriodo, gerarSemanasDeCortes } from "@/lib/metas/metasSemanais";
 import {
   gerarSemanasLoja,
   getMetasSemanais,
   getDivisaoSemanal,
+  getSemanaCortes,
   sugerirMetaMensalLoja,
   upsertDivisaoEmMassa,
 } from "@/services/metasSemanaisService";
 import { GradeSemanasLoja, type LinhaGradeSemana } from "./GradeSemanasLoja";
 import { CalendarioLojaDialog } from "./CalendarioLojaDialog";
+import { CortesSemanaDialog } from "./CortesSemanaDialog";
 
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -113,6 +115,10 @@ export function MetasSemanaisTab({ empresas, ano }: MetasSemanaisTabProps) {
   // calendário
   const [calendarioLoja, setCalendarioLoja] = useState<LinhaLoja | null>(null);
 
+  // cortes semanais manuais
+  const [cortesOpen, setCortesOpen] = useState(false);
+  const [cortesManuais, setCortesManuais] = useState(false);
+
   const nomeLoja = useCallback(
     (cod: number) => empresas.find((e) => e.codEmpresa === cod)?.nome ?? `Loja ${cod}`,
     [empresas]
@@ -140,13 +146,15 @@ export function MetasSemanaisTab({ empresas, ano }: MetasSemanaisTabProps) {
       const fim = toISO(dataFim);
       setPeriodo({ ini, fim });
 
-      const [fer, cfgs, metasMensais, metasSemanaisTodas] = await Promise.all([
+      const [fer, cfgs, metasMensais, metasSemanaisTodas, cortes] = await Promise.all([
         getFeriados(ano),
         getLojasConfiguracao(),
         getMetasPorPeriodo("LOJA", ano, mes),
         getMetasSemanais({ tipo: "LOJA", ano, mes }),
+        getSemanaCortes(ano, mes),
       ]);
       setFeriados(fer);
+      setCortesManuais(cortes.length > 0);
       const cfgMap = new Map(cfgs.map((c) => [c.codEmpresa, c]));
       setConfigs(cfgMap);
 
@@ -157,7 +165,9 @@ export function MetasSemanaisTab({ empresas, ano }: MetasSemanaisTabProps) {
         lojas.map(async (cod) => {
           const excecoes = await getLojasExcecoes(cod, ini, fim);
           const cfg = cfgMap.get(cod) ?? null;
-          const semanas = gerarSemanasDoPeriodo(dataInicio, dataFim, cfg, fer, excecoes);
+          const semanas = cortes.length
+            ? gerarSemanasDeCortes(cortes, cfg, fer, excecoes)
+            : gerarSemanasDoPeriodo(dataInicio, dataFim, cfg, fer, excecoes);
           const diasUteis = semanas.reduce((s, w) => s + w.diasUteis, 0);
           const metaSalva =
             metasMensais.find((m) => m.codReferencia === cod)?.metaFaturamento ?? null;
@@ -351,9 +361,16 @@ export function MetasSemanaisTab({ empresas, ano }: MetasSemanaisTabProps) {
               </div>
             </div>
             {periodo && (
-              <Badge variant="outline" className="mb-1">
-                Período comercial: {fmtData(periodo.ini)} a {fmtData(periodo.fim)}
-              </Badge>
+              <div className="flex items-center gap-2 mb-1">
+                <Badge variant="outline">
+                  Período comercial: {fmtData(periodo.ini)} a {fmtData(periodo.fim)}
+                </Badge>
+                <Button variant="outline" size="sm" onClick={() => setCortesOpen(true)}>
+                  <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
+                  Cortes das semanas
+                  {cortesManuais && <Badge className="ml-2" variant="secondary">manual</Badge>}
+                </Button>
+              </div>
             )}
           </div>
 
@@ -600,6 +617,20 @@ export function MetasSemanaisTab({ empresas, ano }: MetasSemanaisTabProps) {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* cortes das semanas (globais do mês) */}
+      {periodo && (
+        <CortesSemanaDialog
+          open={cortesOpen}
+          onOpenChange={setCortesOpen}
+          ano={ano}
+          mes={mes}
+          mesLabel={MESES[mes - 1]}
+          periodoIni={periodo.ini}
+          periodoFim={periodo.fim}
+          onChanged={carregar}
+        />
       )}
 
       {/* calendário da loja */}

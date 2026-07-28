@@ -83,6 +83,76 @@ export function gerarSemanasDoPeriodo(
   return semanas;
 }
 
+export interface CorteSemana {
+  /** YYYY-MM-DD */
+  semanaInicio: string;
+  /** YYYY-MM-DD */
+  semanaFim: string;
+}
+
+/**
+ * Gera as semanas a partir de CORTES MANUAIS (metas_semana_cortes) — o gestor
+ * finaliza o corte sugerido. Dias úteis calculados por loja em cada corte.
+ */
+export function gerarSemanasDeCortes(
+  cortes: CorteSemana[],
+  config: LojaConfiguracao | null,
+  feriados: Feriado[],
+  excecoes: LojaExcecao[]
+): SemanaDoPeriodo[] {
+  return cortes
+    .slice()
+    .sort((a, b) => a.semanaInicio.localeCompare(b.semanaInicio))
+    .map((c) => ({
+      semanaInicio: c.semanaInicio,
+      semanaFim: c.semanaFim,
+      inicioNoPeriodo: c.semanaInicio,
+      fimNoPeriodo: c.semanaFim,
+      diasUteis: calcularDiasUteis(
+        new Date(c.semanaInicio + 'T12:00:00Z'),
+        new Date(c.semanaFim + 'T12:00:00Z'),
+        config,
+        feriados,
+        excecoes
+      ),
+    }));
+}
+
+/**
+ * Valida um conjunto de cortes contra o período: contíguos (fim+1 = próximo
+ * início), sem sobreposição, cobrindo do início ao fim do período.
+ * Retorna lista de erros (vazia = ok).
+ */
+export function validarCortes(
+  cortes: CorteSemana[],
+  periodoInicio: string,
+  periodoFim: string
+): string[] {
+  const erros: string[] = [];
+  if (!cortes.length) return ['Nenhum corte informado'];
+  const ordenados = cortes.slice().sort((a, b) => a.semanaInicio.localeCompare(b.semanaInicio));
+  if (ordenados[0].semanaInicio !== periodoInicio) {
+    erros.push(`O primeiro corte deve começar em ${periodoInicio}`);
+  }
+  if (ordenados[ordenados.length - 1].semanaFim !== periodoFim) {
+    erros.push(`O último corte deve terminar em ${periodoFim}`);
+  }
+  for (const c of ordenados) {
+    if (c.semanaFim < c.semanaInicio) {
+      erros.push(`Corte ${c.semanaInicio}: fim antes do início`);
+    }
+  }
+  for (let i = 1; i < ordenados.length; i++) {
+    const esperado = addDaysISO(ordenados[i - 1].semanaFim, 1);
+    if (ordenados[i].semanaInicio !== esperado) {
+      erros.push(
+        `Cortes não contíguos: após ${ordenados[i - 1].semanaFim} o próximo deve iniciar em ${esperado}`
+      );
+    }
+  }
+  return erros;
+}
+
 /**
  * Distribui a meta mensal entre as semanas proporcionalmente aos dias úteis.
  * Garante que a SOMA das semanas == meta mensal (ajuste de arredondamento na
