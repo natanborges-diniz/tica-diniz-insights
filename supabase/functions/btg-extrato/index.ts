@@ -563,6 +563,10 @@ async function handleClassificar(body: Record<string, unknown>, userId: string) 
 
   const { replicadas, empresas } = await replicarNaturezaParaIguais(db, alvo, nat, userId, nowIso);
 
+  // Memoriza a classificação como regra permanente (aplicada em novos extratos e outras lojas).
+  const regra_salva = await salvarRegraClassificacao(db, alvo, nat, userId);
+
+
   return json({ success: true, replicadas, empresas });
 }
 
