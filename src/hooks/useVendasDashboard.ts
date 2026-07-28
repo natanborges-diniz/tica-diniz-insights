@@ -8,11 +8,10 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
-  getResumoFormasPagamento,
   ResumoFormaPagamento,
   ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
-import { EmpresaParam, aplicarFiltroEmpresaSupabase, empresaFilterList } from "@/services/firebirdBridge";
+import { EmpresaParam, aplicarFiltroEmpresaSupabase } from "@/services/firebirdBridge";
 import { isCredito, isDevolucao, calcularTicketMedio } from "@/lib/vendas/formaPagamento";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,8 +29,6 @@ export type ViewMode = "loja" | "vendedor";
 
 // CONFIGURAÇÕES
 const CONFIG = {
-  /** Timeout para Firebird em background */
-  TIMEOUT_FIREBIRD_BG: 60000, // 60s
   /** Limite máximo de dias para alertar o usuário */
   LIMITE_DIAS_ALERTA: 45,
   /** Limite máximo de dias permitido */
@@ -378,60 +375,92 @@ function agregarDados(dados: ResumoFormaPagamento[]): ResumoFormaPagamento[] {
 }
 
 // ========================================
-// GRAVAR RESULTADO FIREBIRD NO CACHE SUPABASE
+// LER CACHE DIÁRIO (Supabase)
 // ========================================
-async function salvarNoCache(
-  dados: ResumoFormaPagamento[],
+async function lerCacheAgregado(
+  empresa: EmpresaParam,
   dataInicio: string,
   dataFim: string
-): Promise<void> {
-  try {
-    // Agrupar por data (o cache é diário, mas os dados do Firebird são agregados)
-    // Como não temos data individual, salvamos como o período inteiro
-    // Usar dataInicio como data representativa para o cache
-    const agora = new Date().toISOString();
-    
-    // Coletar cod_empresas presentes nos dados
-    const empresasPresentes = [...new Set(dados.map(d => d.codEmpresa))];
-    
-    if (empresasPresentes.length === 0) return;
-    
-    // Deletar registros existentes do período para as empresas retornadas
-    await supabase
-      .from('vendas_agregado_diario')
-      .delete()
-      .in('cod_empresa', empresasPresentes)
-      .gte('data', dataInicio)
-      .lte('data', dataFim);
-    
-    // Inserir novos registros (usar dataInicio como data representativa)
-    const registros = dados.map(d => ({
-      data: dataInicio,
-      cod_empresa: d.codEmpresa,
-      vendedor: d.vendedor || 'DESCONHECIDO',
-      forma_pagamento: d.formaPagamento || 'OUTROS',
-      total_vendido: d.totalGeral,
-      total_bruto: d.totalBruto,
-      total_desconto: d.totalDesconto,
-      qtd_vendas: d.qtdVendas,
-      atualizado_em: agora,
-    }));
-    
-    // Inserir em batches de 500
-    for (let i = 0; i < registros.length; i += 500) {
-      const batch = registros.slice(i, i + 500);
-      const { error } = await supabase
-        .from('vendas_agregado_diario')
-        .insert(batch);
+): Promise<ResumoFormaPagamento[]> {
+  let queryCache = supabase
+    .from('vendas_agregado_diario')
+    .select('*')
+    .gte('data', dataInicio)
+    .lte('data', dataFim);
+
+  queryCache = aplicarFiltroEmpresaSupabase(queryCache, empresa);
+
+  const { data: cacheData, error: cacheError } = await queryCache;
+  if (cacheError || !cacheData || cacheData.length === 0) {
+    if (cacheError) console.warn('[useVendasDashboard] Erro ao ler cache:', cacheError.message);
+    return [];
+  }
+
+  const empresasMap = await getEmpresasMap();
+  return cacheToFormasPagamento(cacheData, empresasMap);
+}
+
+// ========================================
+// SINCRONIZAR PERÍODO VIA EDGE FUNCTION (F5)
+// ========================================
+// O botão "Atualizar" NÃO grava mais o cache client-side. A gravação antiga
+// (salvarNoCache) apagava o período inteiro e regravava o agregado do Firebird
+// com uma ÚNICA data (dataInicio), destruindo a granularidade diária usada
+// pela aba "Por Dia", pelo ComparativoPanel e pela Inteligência de Vendas.
+// Agora o sync é feito pela edge function `sync-agregados-diarios`, que
+// reagrega dia a dia direto do Firebird e regrava o cache no servidor.
+// Obs.: a edge function exige usuário admin (ou service_role); usuários sem
+// permissão recebem erro e o dashboard continua exibindo o cache existente.
+
+interface ResultadoSyncEdge {
+  /** true quando o sync roda em background no servidor (modo 'ALL'/histórico) */
+  background: boolean;
+  registros: number;
+  erros: string[];
+}
+
+async function sincronizarPeriodoViaEdge(
+  empresa: EmpresaParam,
+  dataInicio: string,
+  dataFim: string
+): Promise<ResultadoSyncEdge> {
+  const empresas: number[] | null = Array.isArray(empresa)
+    ? empresa
+    : (empresa === 'ALL' || empresa === null || empresa === '')
+      ? null
+      : [Number(empresa)].filter((n) => !Number.isNaN(n));
+
+  if (empresas && empresas.length > 0) {
+    // Modo normal da edge function: síncrono, mas aceita UMA empresa por
+    // chamada — por isso o loop sequencial para seleção multi-loja.
+    const erros: string[] = [];
+    let registros = 0;
+    for (const cod of empresas) {
+      const { data, error } = await supabase.functions.invoke('sync-agregados-diarios', {
+        body: { empresa: cod, dataInicio, dataFim },
+      });
       if (error) {
-        console.warn('[Cache] Erro ao salvar batch:', error.message);
+        erros.push(`Loja ${cod}: ${error.message || String(error)}`);
+      } else if (data?.erro) {
+        erros.push(`Loja ${cod}: ${data.erro}`);
+      } else {
+        registros += Number(data?.registros) || 0;
       }
     }
-    
-    console.log(`[Cache] ✓ ${registros.length} registros salvos no cache Supabase`);
-  } catch (err) {
-    console.warn('[Cache] Erro ao salvar no cache:', err);
+    return { background: false, registros, erros };
   }
+
+  // 'ALL': modo histórico — a edge function processa todas as empresas em
+  // background (EdgeRuntime.waitUntil) e o cache vai sendo atualizado aos
+  // poucos. Limitação conhecida: não há como aguardar a conclusão aqui; a
+  // leitura logo abaixo pode ainda refletir dados antigos.
+  const { data, error } = await supabase.functions.invoke('sync-agregados-diarios', {
+    body: { historico: true, dataInicio, dataFim },
+  });
+  if (error) {
+    return { background: true, registros: 0, erros: [error.message || String(error)] };
+  }
+  return { background: true, registros: Number(data?.registros) || 0, erros: [] };
 }
 
 // ========================================
@@ -527,18 +556,17 @@ export function useVendasDashboard() {
   // Progresso da paginação
   const [progressoPaginacao, setProgressoPaginacao] = useState<ProgressoPaginacao | null>(null);
 
-  // Ref para controlar requisições em andamento
-  const abortControllerRef = useRef<AbortController | null>(null);
-  
   // Ref para debounce
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
-  // Ref para Firebird background (para cancelar se mudar filtro)
-  const firebirdBgRef = useRef<{ cancelled: boolean }>({ cancelled: false });
 
+  // ========================================
+  // fetchData ("Atualizar"): dispara o sync via edge function e relê o cache.
+  // F5: não há mais gravação de cache client-side — o servidor reagrega dia a
+  // dia, preservando a granularidade diária do vendas_agregado_diario.
+  // ========================================
   const fetchData = useCallback(async (
-    empresa: EmpresaParam, 
-    dataInicio: string, 
+    empresa: EmpresaParam,
+    dataInicio: string,
     dataFim: string
   ) => {
     // ========================================
@@ -548,26 +576,15 @@ export function useVendasDashboard() {
       console.log('[useVendasDashboard] ⏳ Aguardando empresa ser definida...');
       return;
     }
-    
+
     if (!isDateRangeValid(dataInicio, dataFim)) {
       console.log('[useVendasDashboard] ⏳ Datas inválidas, ignorando fetch:', { dataInicio, dataFim });
       return;
     }
-    
-    // Cancelar requisição anterior
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
-    
-    // Cancelar Firebird background anterior
-    firebirdBgRef.current.cancelled = true;
-    const bgToken = { cancelled: false };
-    firebirdBgRef.current = bgToken;
-    
+
     // Verificar limite de dias
     const diasNoPeriodo = diffInDays(dataInicio, dataFim) + 1;
-    
+
     if (diasNoPeriodo > CONFIG.LIMITE_DIAS_MAXIMO) {
       setAlertaPeriodo(`Período muito longo (${diasNoPeriodo} dias). O máximo recomendado é ${CONFIG.LIMITE_DIAS_MAXIMO} dias.`);
       setError(`Reduza o período para no máximo ${CONFIG.LIMITE_DIAS_MAXIMO} dias para melhor performance.`);
@@ -578,7 +595,7 @@ export function useVendasDashboard() {
     } else {
       setAlertaPeriodo(null);
     }
-    
+
     // Loading
     setLoading(true);
     setError(null);
@@ -586,176 +603,73 @@ export function useVendasDashboard() {
     setProgressoPaginacao(null);
     setErroDesconto(null);
     setFontesDados({ supabase: false, firebird: false });
-    
-    const startTime = performance.now();
-    
-    try {
-      // ========================================
-      // PASSO 1: CACHE-FIRST — Buscar Supabase (instantâneo)
-      // ========================================
-      console.log('[useVendasDashboard] 📦 Buscando cache Supabase...');
-      
-      let dadosCache: ResumoFormaPagamento[] = [];
-      
-      try {
-        let queryCache = supabase
-          .from('vendas_agregado_diario')
-          .select('*')
-          .gte('data', dataInicio)
-          .lte('data', dataFim);
-        
-        queryCache = aplicarFiltroEmpresaSupabase(queryCache, empresa);
-        
-        const { data: cacheData, error: cacheError } = await queryCache;
-        
-        if (!cacheError && cacheData && cacheData.length > 0) {
-          const empresasMap = await getEmpresasMap();
-          dadosCache = cacheToFormasPagamento(cacheData, empresasMap);
-          console.log(`[useVendasDashboard] ✓ Cache: ${dadosCache.length} registros`);
-        } else {
-          console.log('[useVendasDashboard] ⚠ Cache vazio para o período');
-        }
-      } catch (cacheErr) {
-        console.warn('[useVendasDashboard] Erro ao ler cache:', cacheErr);
-      }
-      
-      // Se temos dados no cache, mostrar imediatamente
-      if (dadosCache.length > 0) {
-        const dadosAgregados = agregarDados(dadosCache);
-        const tempoMs = Math.round(performance.now() - startTime);
-        
-        setDadosFormasPagamento(dadosAgregados);
-        setFontesDados({ 
-          supabase: true, 
-          firebird: false,
-          mensagem: `Cache (${tempoMs}ms) — atualizando em background...`,
-        });
-        setDataLoaded(true);
-        setLoading(false);
-        setLoadingDesconto(false);
-        
-        console.log(`[useVendasDashboard] ✓ UI atualizada com cache em ${tempoMs}ms`);
-      }
-      
-      // ========================================
-      // PASSO 2: FIREBIRD EM BACKGROUND — atualizar dados
-      // Se cache estava vazio, este é o carregamento principal
-      // Se cache tinha dados, é atualização silenciosa
-      // ========================================
-      const cacheEstavaCheio = dadosCache.length > 0;
-      
-      console.log(`[useVendasDashboard] 🔥 Firebird em background (cache ${cacheEstavaCheio ? 'disponível' : 'vazio'})...`);
-      
-      try {
-        const dadosFirebirdRaw = await Promise.race([
-          getResumoFormasPagamento({
-            empresa,
-            dataInicio,
-            dataFim,
-            bypassCache: true,
-            incluirDevolucoes: true,
-            timeoutMs: CONFIG.TIMEOUT_FIREBIRD_BG,
-          }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout Firebird background')), CONFIG.TIMEOUT_FIREBIRD_BG)
-          ),
-        ]);
-        
-        // Verificar se não foi cancelado (filtro mudou)
-        if (bgToken.cancelled) {
-          console.log('[useVendasDashboard] Firebird retornou mas filtro já mudou, descartando');
-          return;
-        }
 
-        // Multi-empresa: bridge devolve todas as empresas, filtramos client-side
-        const filterList = empresaFilterList(empresa);
-        const dadosFirebird = filterList
-          ? dadosFirebirdRaw.filter((d) => filterList.includes(d.codEmpresa))
-          : dadosFirebirdRaw;
-        
-        if (dadosFirebird.length > 0) {
-          const dadosAgregados = agregarDados(dadosFirebird);
-          const tempoMs = Math.round(performance.now() - startTime);
-          
-          setDadosFormasPagamento(dadosAgregados);
-          setFontesDados({ 
-            supabase: false, 
-            firebird: true,
-            mensagem: `Dados ao vivo (${tempoMs}ms)`,
-          });
-          setDataLoaded(true);
-          
-          console.log(`[useVendasDashboard] ✓ Firebird: ${dadosAgregados.length} registros em ${tempoMs}ms`);
-          
-          // Salvar no cache Supabase para próxima vez (fire-and-forget)
-          // Salva sempre os dados brutos (não-filtrados) — o cache é global por empresa
-          salvarNoCache(dadosFirebirdRaw, dataInicio, dataFim).catch(() => {});
-        } else if (!cacheEstavaCheio) {
-          // Firebird retornou vazio E cache estava vazio
-          setDadosFormasPagamento([]);
-          setFontesDados({
-            supabase: false,
-            firebird: true,
-            mensagem: 'Nenhuma venda no período',
-          });
-          setDataLoaded(true);
-        } else {
-          // Firebird retornou vazio mas cache tinha dados — manter cache
-          const tempoMs = Math.round(performance.now() - startTime);
-          setFontesDados({
-            supabase: true,
-            firebird: false,
-            mensagem: `Cache (${tempoMs}ms)`,
-          });
-        }
-      } catch (firebirdErr) {
-        const msg = firebirdErr instanceof Error ? firebirdErr.message : String(firebirdErr);
-        
-        // Se foi cancelado (filtro mudou), ignorar silenciosamente
-        if (bgToken.cancelled || msg.includes('aborted') || msg.includes('abort')) {
-          return;
-        }
-        
-        if (cacheEstavaCheio) {
-          // Cache disponível — falha do Firebird é transparente
-          const tempoMs = Math.round(performance.now() - startTime);
-          console.warn(`[useVendasDashboard] ⚠ Firebird falhou em background, mantendo cache: ${msg}`);
-          setFontesDados({
-            supabase: true,
-            firebird: false,
-            mensagem: `Cache (${tempoMs}ms) — atualização ao vivo indisponível`,
-          });
-        } else {
-          // Sem cache, sem Firebird — erro real
-          console.error(`[useVendasDashboard] ❌ Sem cache e Firebird falhou: ${msg}`);
+    const startTime = performance.now();
+    let infoSync = '';
+    let syncFalhou = false;
+
+    // ========================================
+    // PASSO 1: SINCRONIZAR o período via edge function (servidor grava o cache)
+    // ========================================
+    try {
+      console.log('[useVendasDashboard] 🔄 Sincronizando via edge function...', { empresa, dataInicio, dataFim });
+      const resultado = await sincronizarPeriodoViaEdge(empresa, dataInicio, dataFim);
+
+      if (resultado.erros.length > 0) {
+        console.warn('[useVendasDashboard] ⚠ Sync com erros:', resultado.erros);
+        syncFalhou = resultado.registros === 0;
+        infoSync = ` — sync com erro: ${resultado.erros[0]}`;
+      } else if (resultado.background) {
+        infoSync = ' — sync de todas as lojas continua em background';
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[useVendasDashboard] ⚠ Falha ao sincronizar via edge function:', msg);
+      infoSync = ` — atualização indisponível (${msg})`;
+      syncFalhou = true;
+    }
+
+    // ========================================
+    // PASSO 2: RELER o cache diário (fonte única dos dashboards)
+    // ========================================
+    try {
+      const dadosCache = await lerCacheAgregado(empresa, dataInicio, dataFim);
+      const tempoMs = Math.round(performance.now() - startTime);
+
+      if (dadosCache.length > 0) {
+        setDadosFormasPagamento(agregarDados(dadosCache));
+        setFontesDados({
+          supabase: true,
+          firebird: !syncFalhou,
+          parcial: infoSync !== '' || undefined,
+          mensagem: syncFalhou
+            ? `Cache (${tempoMs}ms)${infoSync}`
+            : `Atualizado (${tempoMs}ms)${infoSync}`,
+        });
+        console.log(`[useVendasDashboard] ✓ Atualização concluída em ${tempoMs}ms (${dadosCache.length} registros)`);
+      } else {
+        setDadosFormasPagamento([]);
+        setFontesDados({
+          supabase: false,
+          firebird: false,
+          parcial: syncFalhou || undefined,
+          mensagem: syncFalhou
+            ? `Sem dados em cache${infoSync}`
+            : `Nenhuma venda no período${infoSync}`,
+        });
+        if (syncFalhou) {
           setError('Dados indisponíveis no momento. Clique em Atualizar para tentar novamente.');
-          setDadosFormasPagamento([]);
-          setFontesDados({
-            supabase: false,
-            firebird: false,
-            parcial: true,
-            mensagem: `Erro: ${msg}`,
-          });
-          setDataLoaded(true);
         }
       }
-      
+      setDataLoaded(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      
-      // Ignorar erros de abort
-      if (message.includes('aborted') || message.includes('abort')) {
-        console.log('[useVendasDashboard] Requisição cancelada (debounce/navegação)');
-        return;
-      }
-      
-      console.error('[useVendasDashboard] ❌ Erro geral:', message);
-      
+      console.error('[useVendasDashboard] ❌ Erro ao reler cache:', message);
       setError(`Erro ao carregar dados: ${message}`);
       setDadosFormasPagamento([]);
-      setFontesDados({ 
-        supabase: false, 
-        firebird: false, 
+      setFontesDados({
+        supabase: false,
+        firebird: false,
         parcial: true,
         mensagem: `Erro: ${message}`,
       });
@@ -797,19 +711,9 @@ export function useVendasDashboard() {
     try {
       console.log('[useVendasDashboard] 📦 Buscando apenas cache Supabase...');
 
-      let queryCache = supabase
-        .from('vendas_agregado_diario')
-        .select('*')
-        .gte('data', dataInicio)
-        .lte('data', dataFim);
+      const dadosCache = await lerCacheAgregado(empresa, dataInicio, dataFim);
 
-      queryCache = aplicarFiltroEmpresaSupabase(queryCache, empresa);
-
-      const { data: cacheData, error: cacheError } = await queryCache;
-
-      if (!cacheError && cacheData && cacheData.length > 0) {
-        const empresasMap = await getEmpresasMap();
-        const dadosCache = cacheToFormasPagamento(cacheData, empresasMap);
+      if (dadosCache.length > 0) {
         const dadosAgregados = agregarDados(dadosCache);
         const tempoMs = Math.round(performance.now() - startTime);
 
@@ -861,9 +765,6 @@ export function useVendasDashboard() {
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
       }
     };
   }, [filters.empresa, filters.dataInicio, filters.dataFim, fetchCacheOnly]);
