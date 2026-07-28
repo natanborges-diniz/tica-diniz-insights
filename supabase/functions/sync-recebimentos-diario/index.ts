@@ -26,8 +26,11 @@
 //        à própria semana, inclusive em backfill de várias semanas.
 //   Default (sem parâmetros): [segunda-feira da semana corrente .. hoje] em BRT.
 //
-// JWT obrigatório: service_role (cron) ou admin — mesmo padrão de
-// sync-agregados-diarios.
+// JWT obrigatório: anon/service_role (cron interno — mesmo padrão do
+// conciliar-extrato, que é invocada por pg_cron com o anon key) ou usuário
+// admin (disparo manual pelo frontend). Obs.: o padrão do sync-agregados-diarios
+// (só service_role/admin) rejeitaria o anon key que as migrations de cron
+// embutem no header — por isso seguimos o padrão do conciliar-extrato.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authGuard, corsHeaders } from '../_shared/authGuard.ts';
@@ -172,26 +175,27 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Auth: service_role (cron) ou admin — mesmo padrão de sync-agregados-diarios
+    // Auth: anon/service_role = chamada interna (pg_cron usa o anon key nas
+    // migrations — mesmo padrão do conciliar-extrato); senão exige admin.
     let userId = 'cron';
     const authHeader = req.headers.get('Authorization') || '';
     const token = authHeader.replace('Bearer ', '');
 
-    let isServiceRole = false;
+    let isInterno = false;
     if (token) {
       try {
         const parts = token.split('.');
         if (parts.length === 3) {
           const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-          if (payload.role === 'service_role') {
-            isServiceRole = true;
-            userId = 'cron-service-role';
+          if (payload.role === 'service_role' || payload.role === 'anon') {
+            isInterno = true;
+            userId = `cron-${payload.role}`;
           }
         }
       } catch { /* segue para authGuard */ }
     }
 
-    if (!isServiceRole) {
+    if (!isInterno) {
       const result = await authGuard(req, { requiredRole: 'admin' });
       userId = result.userId;
     }
