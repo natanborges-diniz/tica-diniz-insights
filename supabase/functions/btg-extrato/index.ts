@@ -437,7 +437,7 @@ async function handleClassificar(body: Record<string, unknown>, userId: string) 
 
   const { error: errUpd } = await db
     .from("btg_extrato")
-    .update({ natureza: nat, updated_at: nowIso })
+    .update({ natureza: nat, status_conciliacao: "CLASSIFICADO", updated_at: nowIso })
     .eq("id", String(id));
   if (errUpd) return json({ error: "Erro ao classificar", details: errUpd.message }, 500);
 
