@@ -2367,6 +2367,45 @@ export type Database = {
         }
         Relationships: []
       }
+      recebimentos_agregado_diario: {
+        Row: {
+          atualizado_em: string
+          cod_empresa: number
+          cod_vendedor: number
+          data_pagamento: string
+          forma_categoria: string
+          id: string
+          origem: string
+          qtd_parcelas: number
+          valor_recebido: number
+          vendedor_nome: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          cod_empresa: number
+          cod_vendedor: number
+          data_pagamento: string
+          forma_categoria: string
+          id?: string
+          origem: string
+          qtd_parcelas?: number
+          valor_recebido?: number
+          vendedor_nome?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          cod_empresa?: number
+          cod_vendedor?: number
+          data_pagamento?: string
+          forma_categoria?: string
+          id?: string
+          origem?: string
+          qtd_parcelas?: number
+          valor_recebido?: number
+          vendedor_nome?: string | null
+        }
+        Relationships: []
+      }
       recebiveis_cartao: {
         Row: {
           adquirente: string | null
@@ -2538,6 +2577,42 @@ export type Database = {
             referencedColumns: ["run_id"]
           },
         ]
+      }
+      sync_log: {
+        Row: {
+          detalhe: Json | null
+          empresas: string | null
+          executado_em: string
+          id: string
+          linhas: number
+          periodo_fim: string | null
+          periodo_inicio: string | null
+          status: string
+          sync_tipo: string
+        }
+        Insert: {
+          detalhe?: Json | null
+          empresas?: string | null
+          executado_em?: string
+          id?: string
+          linhas?: number
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          status: string
+          sync_tipo: string
+        }
+        Update: {
+          detalhe?: Json | null
+          empresas?: string | null
+          executado_em?: string
+          id?: string
+          linhas?: number
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          status?: string
+          sync_tipo?: string
+        }
+        Relationships: []
       }
       sync_locks: {
         Row: {
