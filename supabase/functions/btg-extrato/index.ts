@@ -124,6 +124,38 @@ function normalizarDescricaoExtrato(descricao: unknown): string {
     .toUpperCase();
 }
 
+async function salvarRegraClassificacao(
+  db: ReturnType<typeof getServiceClient>,
+  alvo: { descricao: string | null; tipo: string | null },
+  natureza: string,
+  userId: string,
+) {
+  const descNorm = normalizarDescricaoExtrato(alvo.descricao);
+  if (!descNorm || !alvo.tipo) return false;
+
+  // Regra global (cod_empresa = NULL) → aplica em qualquer loja.
+  // Índice único parcial garante idempotência via upsert.
+  const { error } = await db
+    .from("extrato_regras_classificacao")
+    .upsert(
+      {
+        cod_empresa: null,
+        padrao_descricao: descNorm,
+        tipo: alvo.tipo,
+        natureza,
+        auto_conciliar: true,
+        ativo: true,
+        criado_por: userId,
+      },
+      { onConflict: "padrao_descricao,tipo", ignoreDuplicates: false },
+    );
+  if (error) {
+    console.warn("[btg-extrato] Falha ao salvar regra de classificação:", error.message);
+    return false;
+  }
+  return true;
+}
+
 async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient>, alvo: { id: string; descricao: string | null; tipo: string | null }, natureza: string, userId: string, nowIso: string) {
   const descNorm = normalizarDescricaoExtrato(alvo.descricao);
   if (!descNorm || !alvo.tipo) return { replicadas: 0, empresas: 0 };
@@ -173,6 +205,66 @@ async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient
   }
 
   return { replicadas: ids.length, empresas: empresas.size };
+}
+
+// Aplica regras salvas em `extrato_regras_classificacao` a lançamentos PENDENTES
+// (usado logo após um importar do BTG). Retorna quantas linhas foram classificadas.
+async function aplicarRegrasEmPendentes(
+  db: ReturnType<typeof getServiceClient>,
+  codEmpresa: number,
+): Promise<number> {
+  const { data: regras, error: errRegras } = await db
+    .from("extrato_regras_classificacao")
+    .select("padrao_descricao, tipo, natureza, auto_conciliar")
+    .eq("ativo", true);
+  if (errRegras || !regras || regras.length === 0) return 0;
+
+  const mapa = new Map<string, { natureza: string; auto: boolean }>();
+  for (const r of regras) {
+    mapa.set(`${r.tipo}|${r.padrao_descricao}`, {
+      natureza: r.natureza,
+      auto: r.auto_conciliar !== false,
+    });
+  }
+
+  const { data: pendentes, error: errPend } = await db
+    .from("btg_extrato")
+    .select("id, descricao, tipo")
+    .eq("cod_empresa", codEmpresa)
+    .eq("status_conciliacao", "PENDENTE");
+  if (errPend || !pendentes) return 0;
+
+  const nowIso = new Date().toISOString();
+  const grupos = new Map<string, string[]>(); // chave "natureza|auto" → ids
+  for (const row of pendentes as Array<{ id: string; descricao: string | null; tipo: string | null }>) {
+    if (!row.tipo) continue;
+    const chave = `${row.tipo}|${normalizarDescricaoExtrato(row.descricao)}`;
+    const regra = mapa.get(chave);
+    if (!regra) continue;
+    const grupoKey = `${regra.natureza}|${regra.auto ? "1" : "0"}`;
+    const arr = grupos.get(grupoKey) ?? [];
+    arr.push(row.id);
+    grupos.set(grupoKey, arr);
+  }
+
+  let total = 0;
+  for (const [grupoKey, ids] of grupos) {
+    const [natureza, autoFlag] = grupoKey.split("|");
+    const auto = autoFlag === "1";
+    for (let i = 0; i < ids.length; i += 500) {
+      const lote = ids.slice(i, i + 500);
+      const patch: Record<string, unknown> = { natureza, updated_at: nowIso };
+      if (auto) {
+        patch.status_conciliacao = "CONCILIADO_MANUAL";
+        patch.metodo_conciliacao = "REGRA_AUTO";
+        patch.conciliado = true;
+        patch.conciliado_em = nowIso;
+      }
+      const { error } = await db.from("btg_extrato").update(patch).in("id", lote);
+      if (!error) total += lote.length;
+    }
+  }
+  return total;
 }
 
 // ─── ACTION: contas (construir e salvar account_id) ─────────
@@ -382,7 +474,16 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
   }
 
   const importados = inserted?.length ?? 0;
-  return json({ success: true, importados, duplicados: rows.length - importados });
+
+  // Aplica regras aprendidas de classificações anteriores nos pendentes.
+  let auto_classificados = 0;
+  try {
+    auto_classificados = await aplicarRegrasEmPendentes(db, cod_empresa);
+  } catch (e) {
+    console.warn("[btg-extrato] aplicarRegrasEmPendentes falhou:", (e as Error)?.message);
+  }
+
+  return json({ success: true, importados, duplicados: rows.length - importados, auto_classificados });
 }
 
 // ─── ACTION: listar ──────────────────────────────────────────
@@ -462,7 +563,11 @@ async function handleClassificar(body: Record<string, unknown>, userId: string) 
 
   const { replicadas, empresas } = await replicarNaturezaParaIguais(db, alvo, nat, userId, nowIso);
 
-  return json({ success: true, replicadas, empresas });
+  // Memoriza a classificação como regra permanente (aplicada em novos extratos e outras lojas).
+  const regra_salva = await salvarRegraClassificacao(db, alvo, nat, userId);
+
+
+  return json({ success: true, replicadas, empresas, regra_salva });
 }
 
 // ─── ACTION: conciliar ──────────────────────────────────────

@@ -354,14 +354,15 @@ export default function BankingExtratoDashboard() {
         body: { action: "classificar", id, natureza },
       });
       if (error) throw new Error(await getFunctionErrorMessage(error));
-      return data as { replicadas?: number; empresas?: number } | null;
+      return data as { replicadas?: number; empresas?: number; regra_salva?: boolean } | null;
     },
     onSuccess: (data) => {
       const replicadas = data?.replicadas ?? 0;
+      const sufixoRegra = data?.regra_salva ? " (regra memorizada para próximos extratos)" : "";
       if (replicadas > 0) {
-        toast.success(`Classificação aplicada e replicada em ${replicadas} linha${replicadas === 1 ? "" : "s"} igual${replicadas === 1 ? "" : "is"}`);
+        toast.success(`Classificação aplicada e replicada em ${replicadas} linha${replicadas === 1 ? "" : "s"} igual${replicadas === 1 ? "" : "is"}${sufixoRegra}`);
       } else {
-        toast.success("Classificação aplicada");
+        toast.success(`Classificação aplicada${sufixoRegra}`);
       }
       invalidate();
     },
