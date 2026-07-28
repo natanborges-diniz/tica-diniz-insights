@@ -401,13 +401,6 @@ export default function BankingExtratoDashboard() {
         </Badge>
       );
     }
-    if (s === "CLASSIFICADO") {
-      return (
-        <Badge variant="outline" className="border-warning text-warning">
-          Classificado
-        </Badge>
-      );
-    }
     if (s === "IGNORADO") return <Badge variant="secondary">Ignorado</Badge>;
     return (
       <Badge variant="secondary" className="bg-success/10 text-success border-success/30">
