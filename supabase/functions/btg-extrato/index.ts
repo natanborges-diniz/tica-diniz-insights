@@ -128,8 +128,10 @@ async function handleContas(body: Record<string, unknown> | null, url: URL, user
   const accountId = `${cnpj}-208-${agencia}-${conta}`;
 
   const db = getServiceClient();
+  // company_id = identificador da empresa usado no path das rotas Banking do BTG
+  // (`${apiBase}/${company_id}/banking/...`), que é o CNPJ sem pontuação.
   const { error } = await db.from("btg_contas_bancarias")
-    .update({ account_id: accountId, agencia, conta })
+    .update({ account_id: accountId, agencia, conta, cnpj, company_id: cnpj })
     .eq("cod_empresa", codEmpresa);
 
   if (error) {

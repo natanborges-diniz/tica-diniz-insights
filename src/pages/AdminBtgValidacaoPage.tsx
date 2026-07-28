@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import {
   Shield, CheckCircle2, XCircle, RefreshCw, ExternalLink,
   Landmark, AlertTriangle, Settings2, KeyRound,
-  Eye, EyeOff, Save, Loader2, Globe, ChevronDown, ChevronUp, Copy,
+  Eye, EyeOff, Save, Loader2, Globe, ChevronDown, ChevronUp, Copy, Plus,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
 // ─── Types ───────────────────────────────────────────────────
@@ -99,12 +100,21 @@ export default function AdminBtgValidacaoPage() {
   const queryClient = useQueryClient();
   const [manualAuthorizeUrl, setManualAuthorizeUrl] = useState<Record<number, string>>({});
   const [contaInputs, setContaInputs] = useState<Record<number, { agencia: string; conta: string }>>({});
+  const [showNovaConta, setShowNovaConta] = useState(false);
+  const [novaContaEmpresa, setNovaContaEmpresa] = useState<string>("");
+  const [novaContaCnpj, setNovaContaCnpj] = useState("");
 
   // Handle callback redirect from BTG OAuth
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("btg_callback") === "success") {
       const codEmpresa = params.get("cod_empresa");
+      if (params.get("verificacao") === "inconclusive") {
+        toast.warning(
+          "Identidade da empresa nao verificada. Confirme se o login BTG usado pertence ao CNPJ desta loja.",
+          { duration: 10000 }
+        );
+      }
       toast.success(`Autorização BTG concluída para empresa ${codEmpresa}!`);
       window.history.replaceState({}, "", window.location.pathname);
       setTimeout(() => queryClient.invalidateQueries({ queryKey: ["btg-status"] }), 1000);
@@ -117,11 +127,11 @@ export default function AdminBtgValidacaoPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("empresa")
-        .select("cod_empresa, nome_fantasia")
+        .select("cod_empresa, nome_fantasia, cnpj")
         .eq("ativa", true)
         .order("cod_empresa");
       if (error) throw error;
-      return data as { cod_empresa: number; nome_fantasia: string | null }[];
+      return data as { cod_empresa: number; nome_fantasia: string | null; cnpj: string | null }[];
     },
     enabled: isAdmin,
   });
@@ -221,6 +231,46 @@ export default function AdminBtgValidacaoPage() {
     onError: (err: Error) => toast.error(`Erro ao configurar conta: ${err.message}`),
   });
 
+  // Cadastro de nova conta BTG (substitui o INSERT manual no banco)
+  const novaContaMutation = useMutation({
+    mutationFn: async ({ codEmpresa, cnpj }: { codEmpresa: number; cnpj: string }) => {
+      const cnpjLimpo = cnpj.replace(/\D/g, "");
+      if (cnpjLimpo.length !== 14) {
+        throw new Error("CNPJ deve conter 14 dígitos.");
+      }
+      if (contas.some((c) => c.cod_empresa === codEmpresa)) {
+        throw new Error("Esta empresa já possui uma conta BTG cadastrada.");
+      }
+      const { error } = await supabase.from("btg_contas_bancarias").insert({
+        cod_empresa: codEmpresa,
+        cnpj: cnpjLimpo,
+        company_id: cnpjLimpo,
+        ativa: true,
+      });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success("Conta cadastrada. Informe agência e conta e depois autorize no BTG.");
+      setShowNovaConta(false);
+      setNovaContaEmpresa("");
+      setNovaContaCnpj("");
+      queryClient.invalidateQueries({ queryKey: ["btg-contas"] });
+      queryClient.invalidateQueries({ queryKey: ["btg-status"] });
+    },
+    onError: (err: Error) => toast.error(`Erro ao cadastrar conta: ${err.message}`),
+  });
+
+  // Empresas ainda sem conta BTG vinculada
+  const empresasDisponiveis = empresas.filter(
+    (e) => !contas.some((c) => c.cod_empresa === e.cod_empresa)
+  );
+
+  const handleSelecionarEmpresaNova = (value: string) => {
+    setNovaContaEmpresa(value);
+    const emp = empresas.find((e) => e.cod_empresa === Number(value));
+    setNovaContaCnpj(emp?.cnpj ? emp.cnpj.replace(/\D/g, "") : "");
+  };
+
 
   const getStatusForEmpresa = (codEmpresa: number) =>
     tokenStatus?.find((t) => t.cod_empresa === codEmpresa);
@@ -298,27 +348,105 @@ export default function AdminBtgValidacaoPage() {
               Gerencie as contas BTG vinculadas e o status de autorização OAuth de cada empresa.
             </CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              refetchStatus();
-              queryClient.invalidateQueries({ queryKey: ["btg-contas"] });
-            }}
-          >
-            <RefreshCw className="h-3 w-3 mr-1" />
-            Atualizar
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setShowNovaConta((v) => !v)}
+              disabled={empresasDisponiveis.length === 0}
+              title={
+                empresasDisponiveis.length === 0
+                  ? "Todas as empresas ativas já possuem conta BTG cadastrada"
+                  : undefined
+              }
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Adicionar conta
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                refetchStatus();
+                queryClient.invalidateQueries({ queryKey: ["btg-contas"] });
+              }}
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Atualizar
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
+          {/* ── Formulário de nova conta ──────────────────── */}
+          {showNovaConta && (
+            <div className="mb-4 rounded-lg border bg-muted/40 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Landmark className="h-4 w-4" />
+                Vincular nova loja ao BTG
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Empresa</Label>
+                  <Select value={novaContaEmpresa} onValueChange={handleSelecionarEmpresaNova}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a loja" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {empresasDisponiveis.map((e) => (
+                        <SelectItem key={e.cod_empresa} value={String(e.cod_empresa)}>
+                          {e.nome_fantasia || `Loja ${e.cod_empresa}`} ({e.cod_empresa})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">CNPJ (somente números)</Label>
+                  <Input
+                    value={novaContaCnpj}
+                    onChange={(e) => setNovaContaCnpj(e.target.value.replace(/\D/g, "").slice(0, 14))}
+                    placeholder="00000000000000"
+                    className="font-mono"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={!novaContaEmpresa || novaContaMutation.isPending}
+                    onClick={() =>
+                      novaContaMutation.mutate({
+                        codEmpresa: Number(novaContaEmpresa),
+                        cnpj: novaContaCnpj,
+                      })
+                    }
+                  >
+                    {novaContaMutation.isPending ? (
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    ) : (
+                      <Save className="h-3 w-3 mr-1" />
+                    )}
+                    Salvar
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setShowNovaConta(false)}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                O CNPJ é preenchido a partir do cadastro da empresa e identifica a loja nas
+                chamadas ao BTG. Após salvar, informe agência e conta e clique em Autorizar.
+              </p>
+            </div>
+          )}
+
           {loadingContas || loadingStatus ? (
             <div className="text-center py-8 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
               Carregando...
             </div>
           ) : contas.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Nenhuma conta cadastrada. Adicione contas na tabela <code className="text-xs bg-muted px-1 py-0.5 rounded">btg_contas_bancarias</code>.
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              Nenhuma conta cadastrada. Use <strong>Adicionar conta</strong> para vincular a primeira loja.
             </div>
           ) : (
             <Table>

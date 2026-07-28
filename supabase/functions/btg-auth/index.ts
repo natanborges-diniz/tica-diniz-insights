@@ -89,6 +89,244 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
+// ─── Identidade da empresa (anti-cross-authorization) ────────
+// Garante que o CNPJ que fez login no BTG é o mesmo da empresa
+// carregada no `state`. Sem isso, autorizar a loja errada grava
+// token cruzado silenciosamente.
+
+function onlyDigits(value: unknown): string {
+  return typeof value === "string" || typeof value === "number"
+    ? String(value).replace(/\D/g, "")
+    : "";
+}
+
+/** Validação dos dígitos verificadores do CNPJ (mod 11). */
+function isValidCnpj(digits: string): boolean {
+  if (digits.length !== 14 || /^(\d)\1{13}$/.test(digits)) return false;
+  const calc = (len: number) => {
+    let soma = 0;
+    let peso = len - 7;
+    for (let i = 0; i < len; i++) {
+      soma += Number(digits[i]) * peso;
+      peso = peso - 1 < 2 ? 9 : peso - 1;
+    }
+    const resto = soma % 11;
+    return resto < 2 ? 0 : 11 - resto;
+  };
+  return calc(12) === Number(digits[12]) && calc(13) === Number(digits[13]);
+}
+
+/** Chaves cujo valor plausivelmente carrega o documento da empresa. */
+const CNPJ_KEY_PATTERN = /cnpj|document|taxid|tax_id|federal|registration|identifier/i;
+
+/**
+ * Coleta candidatos a CNPJ. Um valor de 14 dígitos só entra se:
+ *  - a chave sugere documento (ex.: `cnpj`, `documentNumber`, `taxId`), ou
+ *  - os dígitos verificadores são válidos.
+ * Isso evita que IDs numéricos aleatórios de 14 dígitos gerem falso mismatch.
+ */
+function collectCnpjCandidates(
+  node: unknown,
+  acc = new Set<string>(),
+  depth = 0,
+  key = "",
+): Set<string> {
+  if (depth > 6 || node == null) return acc;
+  if (typeof node === "string" || typeof node === "number") {
+    const digits = onlyDigits(node);
+    if (digits.length === 14 && (CNPJ_KEY_PATTERN.test(key) || isValidCnpj(digits))) {
+      acc.add(digits);
+    }
+    return acc;
+  }
+  if (Array.isArray(node)) {
+    for (const item of node) collectCnpjCandidates(item, acc, depth + 1, key);
+    return acc;
+  }
+  if (typeof node === "object") {
+    for (const [childKey, value] of Object.entries(node as Record<string, unknown>)) {
+      collectCnpjCandidates(value, acc, depth + 1, childKey);
+    }
+  }
+  return acc;
+}
+
+const COMPANY_ID_KEYS = [
+  "companyId", "company_id", "companyID",
+  "tenantId", "tenant_id",
+  "organizationId", "organization_id",
+];
+
+/** Procura recursivamente uma chave de company_id conhecida. */
+function findCompanyId(node: unknown, depth = 0): string | null {
+  if (depth > 6 || node == null || typeof node !== "object") return null;
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const found = findCompanyId(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  const obj = node as Record<string, unknown>;
+  for (const key of COMPANY_ID_KEYS) {
+    const value = obj[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number") return String(value);
+  }
+  for (const value of Object.values(obj)) {
+    const found = findCompanyId(value, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+type VerificationStatus = "match" | "mismatch" | "inconclusive";
+
+interface VerificationResult {
+  status: VerificationStatus;
+  companyId: string | null;
+  motivo: string;
+  cnpjEncontrados: string[];
+}
+
+/** CNPJ da empresa: btg_contas_bancarias tem precedência, empresa é fallback. */
+async function getCnpjEsperado(codEmpresa: number): Promise<string | null> {
+  const db = getServiceClient();
+  const { data: conta } = await db
+    .from("btg_contas_bancarias")
+    .select("cnpj")
+    .eq("cod_empresa", codEmpresa)
+    .maybeSingle();
+  if (conta?.cnpj) return onlyDigits(conta.cnpj);
+
+  const { data: emp } = await db
+    .from("empresa")
+    .select("cnpj")
+    .eq("cod_empresa", codEmpresa)
+    .maybeSingle();
+  return emp?.cnpj ? onlyDigits(emp.cnpj) : null;
+}
+
+/**
+ * Verifica se o token recém-emitido pertence de fato ao CNPJ esperado.
+ *
+ * Estratégia em camadas:
+ *  1. Decodifica access_token / id_token e procura o CNPJ nas claims.
+ *  2. Se as claims não forem conclusivas, chama /accounts do BTG usando o
+ *     CNPJ esperado no path — 401/403 significa que o login não tem acesso.
+ *
+ * Fail-closed em divergência explícita; fail-open (com aviso) quando
+ * nenhuma das camadas consegue decidir.
+ */
+async function verificarIdentidadeEmpresa(
+  tokenData: Record<string, unknown>,
+  cnpjEsperado: string | null,
+  creds: BtgCredentials,
+): Promise<VerificationResult> {
+  if (!cnpjEsperado) {
+    return {
+      status: "inconclusive",
+      companyId: null,
+      motivo: "Empresa sem CNPJ cadastrado — impossível validar identidade.",
+      cnpjEncontrados: [],
+    };
+  }
+
+  // ── Camada 1: claims do JWT ────────────────────────────────
+  const claimSources = [tokenData.access_token, tokenData.id_token]
+    .filter((t): t is string => typeof t === "string")
+    .map((t) => decodeJwtPayload(t))
+    .filter((p): p is Record<string, unknown> => !!p);
+
+  const candidatos = new Set<string>();
+  let companyId: string | null = null;
+
+  for (const payload of claimSources) {
+    collectCnpjCandidates(payload, candidatos);
+    companyId = companyId || findCompanyId(payload);
+    console.log("[btg-auth][verify] claims disponíveis:", Object.keys(payload).join(", "));
+  }
+
+  if (candidatos.size > 0) {
+    if (candidatos.has(cnpjEsperado)) {
+      return {
+        status: "match",
+        companyId,
+        motivo: "CNPJ confirmado nas claims do token BTG.",
+        cnpjEncontrados: [...candidatos],
+      };
+    }
+    return {
+      status: "mismatch",
+      companyId,
+      motivo: `O login BTG pertence ao CNPJ ${[...candidatos].join(", ")}, mas a empresa selecionada é ${cnpjEsperado}.`,
+      cnpjEncontrados: [...candidatos],
+    };
+  }
+
+  // ── Camada 2: chamada real à API por CNPJ ──────────────────
+  if (creds.isSandbox) {
+    return {
+      status: "inconclusive",
+      companyId,
+      motivo: "Ambiente sandbox — validação por API ignorada.",
+      cnpjEncontrados: [],
+    };
+  }
+
+  const accessToken = tokenData.access_token;
+  if (typeof accessToken !== "string") {
+    return {
+      status: "inconclusive",
+      companyId,
+      motivo: "Resposta do BTG sem access_token utilizável para validação.",
+      cnpjEncontrados: [],
+    };
+  }
+
+  try {
+    const res = await fetch(`${creds.apiBase}/${cnpjEsperado}/banking/accounts`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      return {
+        status: "mismatch",
+        companyId,
+        motivo: `O BTG retornou ${res.status} ao acessar as contas do CNPJ ${cnpjEsperado} — o login autorizado não tem acesso a esta empresa.`,
+        cnpjEncontrados: [],
+      };
+    }
+
+    if (!res.ok) {
+      return {
+        status: "inconclusive",
+        companyId,
+        motivo: `Consulta de contas retornou HTTP ${res.status} — validação não conclusiva.`,
+        cnpjEncontrados: [],
+      };
+    }
+
+    const accounts = await res.json();
+    console.log("[btg-auth][verify] /accounts keys:", JSON.stringify(Object.keys(accounts || {})));
+    companyId = companyId || findCompanyId(accounts);
+
+    return {
+      status: "match",
+      companyId,
+      motivo: "Acesso às contas do CNPJ confirmado via API do BTG.",
+      cnpjEncontrados: [cnpjEsperado],
+    };
+  } catch (e) {
+    return {
+      status: "inconclusive",
+      companyId,
+      motivo: `Falha de rede ao validar identidade: ${String(e)}`,
+      cnpjEncontrados: [],
+    };
+  }
+}
+
 function requireAdmin(req: Request): string {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -124,6 +362,22 @@ async function handleAuthorize(req: Request) {
 
   const { cod_empresa } = await req.json();
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
+
+  // Sem linha em btg_contas_bancarias o token ficaria órfão (a tela de status
+  // lista a partir dessa tabela) e não haveria CNPJ para validar a identidade.
+  const dbCheck = getServiceClient();
+  const { data: contaExistente } = await dbCheck
+    .from("btg_contas_bancarias")
+    .select("cod_empresa")
+    .eq("cod_empresa", cod_empresa)
+    .maybeSingle();
+
+  if (!contaExistente) {
+    return json(
+      { error: `Empresa ${cod_empresa} não possui conta BTG cadastrada. Use "Adicionar conta" antes de autorizar.` },
+      400
+    );
+  }
 
   const creds = await getBtgCredentials();
 
@@ -236,6 +490,23 @@ async function handleCallback(req: Request) {
     Date.now() + (tokenData.expires_in || 86400) * 1000
   ).toISOString();
 
+  // ── Validação de identidade antes de persistir o token ─────
+  const cnpjEsperado = await getCnpjEsperado(stateData.cod_empresa);
+  const verificacao = await verificarIdentidadeEmpresa(tokenData, cnpjEsperado, creds);
+
+  console.log(
+    `[btg-auth][callback] empresa=${stateData.cod_empresa} cnpj=${cnpjEsperado} ` +
+    `verificacao=${verificacao.status} motivo="${verificacao.motivo}" company_id=${verificacao.companyId}`
+  );
+
+  if (verificacao.status === "mismatch") {
+    console.error("[btg-auth][callback] Autorização rejeitada:", verificacao.motivo);
+    return new Response(
+      `<html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#fef2f2"><div style="text-align:center;max-width:560px"><h2 style="color:#dc2626">❌ Autorização rejeitada</h2><p>O login BTG utilizado não corresponde à empresa selecionada. <strong>Nenhum token foi salvo.</strong></p><p style="color:#7f1d1d;font-size:14px">${verificacao.motivo}</p><p style="color:#64748b;font-size:13px">Volte ao sistema, confirme a empresa e refaça a autorização com as credenciais do CNPJ correto.</p></div></body></html>`,
+      { status: 403, headers: { "Content-Type": "text/html; charset=utf-8" } }
+    );
+  }
+
   const db = getServiceClient();
   const { error: dbError } = await db.from("btg_tokens").upsert(
     {
@@ -257,10 +528,34 @@ async function handleCallback(req: Request) {
     );
   }
 
-  const redirectTarget = `${req.headers.get("origin") || "https://lens-data-vision.lovable.app"}/admin/btg-validacao?btg_callback=success&cod_empresa=${stateData.cod_empresa}`;
+  // ── Persistir company_id descoberto (usado nas chamadas multi-empresa) ──
+  // Nas rotas Banking do BTG o identificador da empresa no path é o CNPJ sem
+  // pontuação (ver btg-extrato: `${apiBase}/${cnpj}/banking/...`). Usamos um
+  // companyId explícito quando o token/API expõe um; senão, o CNPJ.
+  const companyIdFinal = verificacao.companyId || cnpjEsperado;
+
+  const contaUpdate: Record<string, unknown> = {};
+  if (companyIdFinal) contaUpdate.company_id = companyIdFinal;
+  if (cnpjEsperado) contaUpdate.cnpj = cnpjEsperado;
+
+  if (Object.keys(contaUpdate).length > 0) {
+    const { error: contaError } = await db
+      .from("btg_contas_bancarias")
+      .update(contaUpdate)
+      .eq("cod_empresa", stateData.cod_empresa);
+    if (contaError) {
+      console.error("[btg-auth][callback] Falha ao gravar company_id:", contaError.message);
+    }
+  }
+
+  const avisoVerificacao = verificacao.status === "inconclusive"
+    ? `<p style="color:#b45309;font-size:13px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 12px">⚠️ Identidade não verificada: ${verificacao.motivo}</p>`
+    : "";
+
+  const redirectTarget = `${req.headers.get("origin") || "https://lens-data-vision.lovable.app"}/admin/btg-validacao?btg_callback=success&cod_empresa=${stateData.cod_empresa}&verificacao=${verificacao.status}`;
 
   return new Response(
-    `<html><head><meta charset="utf-8"><meta http-equiv="refresh" content="2;url=${redirectTarget}"></head><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc"><div style="text-align:center"><h2 style="color:#16a34a">✅ Autorização BTG concluída!</h2><p>Empresa ${stateData.cod_empresa} conectada com sucesso.</p><p style="color:#64748b;font-size:14px">Redirecionando de volta ao sistema...</p><a href="${redirectTarget}" style="color:#2563eb">Clique aqui se não for redirecionado</a></div></body></html>`,
+    `<html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3;url=${redirectTarget}"></head><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc"><div style="text-align:center;max-width:560px"><h2 style="color:#16a34a">✅ Autorização BTG concluída!</h2><p>Empresa ${stateData.cod_empresa} conectada com sucesso.</p>${avisoVerificacao}<p style="color:#64748b;font-size:14px">Redirecionando de volta ao sistema...</p><a href="${redirectTarget}" style="color:#2563eb">Clique aqui se não for redirecionado</a></div></body></html>`,
     { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
   );
 }
