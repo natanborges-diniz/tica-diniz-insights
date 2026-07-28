@@ -182,11 +182,56 @@ function findCompanyId(node: unknown, depth = 0): string | null {
 
 type VerificationStatus = "match" | "mismatch" | "inconclusive";
 
+interface AccountDetails {
+  accountId: string | null;
+  agencia: string | null;
+  conta: string | null;
+}
+
 interface VerificationResult {
   status: VerificationStatus;
   companyId: string | null;
   motivo: string;
   cnpjEncontrados: string[];
+  accountDetails?: AccountDetails;
+}
+
+const ACCOUNT_ID_KEYS = ["accountId", "account_id", "accountID", "id"];
+const AGENCY_KEYS = ["agency", "agencia", "agencyNumber", "branch", "branchNumber", "agenciaNumero"];
+const ACCOUNT_KEYS = ["account", "conta", "accountNumber", "contaNumero", "number"];
+
+function pickString(obj: Record<string, unknown>, keys: string[]): string | null {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v === "number") return String(v);
+  }
+  return null;
+}
+
+/** Extrai o primeiro registro de conta bancária da resposta /accounts do BTG. */
+function extractAccountDetails(node: unknown, depth = 0): AccountDetails | null {
+  if (depth > 6 || node == null) return null;
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const found = extractAccountDetails(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof node !== "object") return null;
+  const obj = node as Record<string, unknown>;
+  const agencia = pickString(obj, AGENCY_KEYS);
+  const conta = pickString(obj, ACCOUNT_KEYS);
+  const accountId = pickString(obj, ACCOUNT_ID_KEYS);
+  if (agencia && conta) {
+    return { accountId, agencia, conta };
+  }
+  for (const value of Object.values(obj)) {
+    const found = extractAccountDetails(value, depth + 1);
+    if (found) return found;
+  }
+  return null;
 }
 
 /** CNPJ da empresa: btg_contas_bancarias tem precedência, empresa é fallback. */
