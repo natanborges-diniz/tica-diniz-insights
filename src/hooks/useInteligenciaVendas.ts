@@ -18,6 +18,7 @@ import {
   LojaExcecao,
 } from "@/services/calendarioService";
 import { formatLocalDate, getPeriodoComercial } from "@/utils/dateValidation";
+import { isCredito, isDevolucao, calcularTicketMedio } from "@/lib/vendas/formaPagamento";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
 import { getVendasAgregado, AgregadoFormaPagamento } from "@/services/agregadosService";
@@ -93,6 +94,8 @@ interface DadoProcessado {
   totalDesconto: number;
   totalBruto: number;
   qtdTransacao: number;
+  /** Transações sem devolução e sem créditos — base do ticket médio (F4) */
+  qtdTransacaoSemCreditos: number;
   percentualDesconto: number;
 }
 
@@ -213,32 +216,35 @@ export function useInteligenciaVendas() {
     agregados.forEach(a => {
       const key = `${a.codEmpresa}|${a.vendedor}`;
       const nomeEmpresa = empresasMap.get(a.codEmpresa) || String(a.codEmpresa);
-      
-      // Ignorar devoluções no total
-      const isDevolucao = a.formaPagamento === 'DEVOLUCAO';
-      const isCredito = a.formaPagamento === 'CREDITO';
-      
+
+      // Regra única de venda válida (F3): helper compartilhado cobre
+      // 'CREDITO'/'CREDITOS' com upper+trim — mesma regra do dashboard.
+      const devolucao = isDevolucao(a.formaPagamento);
+      const credito = isCredito(a.formaPagamento);
+
       const existing = mapaVendedor.get(key);
       if (existing) {
-        if (!isDevolucao) {
+        if (!devolucao) {
           existing.totalVendido += a.totalGeral;
           existing.totalBruto += a.totalBruto;
           existing.totalDesconto += a.totalDesconto;
           existing.qtdTransacao += a.qtdVendas;
         }
-        if (!isDevolucao && !isCredito) {
+        if (!devolucao && !credito) {
           existing.totalVendidoSemCreditos += a.totalGeral;
+          existing.qtdTransacaoSemCreditos += a.qtdVendas;
         }
       } else {
         mapaVendedor.set(key, {
           codEmpresa: a.codEmpresa,
           empresa: nomeEmpresa,
           vendedor: a.vendedor,
-          totalVendido: isDevolucao ? 0 : a.totalGeral,
-          totalVendidoSemCreditos: (isDevolucao || isCredito) ? 0 : a.totalGeral,
-          totalDesconto: isDevolucao ? 0 : a.totalDesconto,
-          totalBruto: isDevolucao ? 0 : a.totalBruto,
-          qtdTransacao: isDevolucao ? 0 : a.qtdVendas,
+          totalVendido: devolucao ? 0 : a.totalGeral,
+          totalVendidoSemCreditos: (devolucao || credito) ? 0 : a.totalGeral,
+          totalDesconto: devolucao ? 0 : a.totalDesconto,
+          totalBruto: devolucao ? 0 : a.totalBruto,
+          qtdTransacao: devolucao ? 0 : a.qtdVendas,
+          qtdTransacaoSemCreditos: (devolucao || credito) ? 0 : a.qtdVendas,
           percentualDesconto: 0,
         });
       }
@@ -349,6 +355,7 @@ export function useInteligenciaVendas() {
       totalDesconto: number;
       totalBruto: number;
       qtdTransacoes: number;
+      qtdTransacoesSemCreditos: number;
     }>();
 
     dados.forEach(d => {
@@ -360,6 +367,7 @@ export function useInteligenciaVendas() {
         existing.totalDesconto += d.totalDesconto || 0;
         existing.totalBruto += d.totalBruto || 0;
         existing.qtdTransacoes += d.qtdTransacao || 0;
+        existing.qtdTransacoesSemCreditos += d.qtdTransacaoSemCreditos || 0;
       } else {
         porLoja.set(key, {
           codEmpresa: d.codEmpresa,
@@ -369,6 +377,7 @@ export function useInteligenciaVendas() {
           totalDesconto: d.totalDesconto || 0,
           totalBruto: d.totalBruto || 0,
           qtdTransacoes: d.qtdTransacao || 0,
+          qtdTransacoesSemCreditos: d.qtdTransacaoSemCreditos || 0,
         });
       }
     });
@@ -381,8 +390,9 @@ export function useInteligenciaVendas() {
     const dataAtual = hoje < dataInicio ? dataInicio : (hoje > dataFim ? dataFim : hoje);
 
     const lista = Array.from(porLoja.values())
-      .map(loja => {
-        const ticketMedio = loja.qtdTransacoes > 0 ? loja.totalVendidoSemCreditos / loja.qtdTransacoes : 0;
+      .map(({ qtdTransacoesSemCreditos, ...loja }) => {
+        // Fórmula única do ticket médio (F4): sem créditos / transações sem créditos
+        const ticketMedio = calcularTicketMedio(loja.totalVendidoSemCreditos, qtdTransacoesSemCreditos);
         const percentualDesconto = loja.totalBruto > 0 ? (loja.totalDesconto / loja.totalBruto) * 100 : 0;
         
         const meta = metasLojas.find(m => m.codReferencia === loja.codEmpresa);
@@ -463,7 +473,8 @@ export function useInteligenciaVendas() {
     const lista = dados
       .filter(d => d.vendedor && d.vendedor.trim() !== '')
       .map(d => {
-        const ticketMedio = d.qtdTransacao > 0 ? d.totalVendidoSemCreditos / d.qtdTransacao : 0;
+        // Fórmula única do ticket médio (F4)
+        const ticketMedio = calcularTicketMedio(d.totalVendidoSemCreditos, d.qtdTransacaoSemCreditos);
         const empresaKey = d.empresa;
         const mediaLoja = mediasPorLoja.get(empresaKey);
         const mediaVendedorLoja = mediaLoja?.mediaVendedor || 0;
@@ -495,13 +506,15 @@ export function useInteligenciaVendas() {
     const totalVendido = rankingLojas.reduce((acc, r) => acc + r.totalVendido, 0);
     const totalVendidoSemCreditos = rankingLojas.reduce((acc, r) => acc + r.totalVendidoSemCreditos, 0);
     const totalTransacoes = rankingLojas.reduce((acc, r) => acc + r.qtdTransacoes, 0);
+    // Fórmula única do ticket médio (F4): base sem créditos/devoluções
+    const totalTransacoesSemCreditos = dados.reduce((acc, d) => acc + (d.qtdTransacaoSemCreditos || 0), 0);
     const metaTotal = metasLojas.reduce((acc, m) => acc + (m.metaFaturamento || 0), 0);
-    
+
     return {
       totalVendido,
       totalVendidoSemCreditos,
       totalTransacoes,
-      ticketMedioGeral: totalTransacoes > 0 ? totalVendidoSemCreditos / totalTransacoes : 0,
+      ticketMedioGeral: calcularTicketMedio(totalVendidoSemCreditos, totalTransacoesSemCreditos),
       metaTotal,
       percentualMetaGeral: metaTotal > 0 ? (totalVendidoSemCreditos / metaTotal) * 100 : 0,
       qtdLojas: rankingLojas.length,
@@ -509,7 +522,7 @@ export function useInteligenciaVendas() {
       lojasAcimaMedia: rankingLojas.filter(l => l.status === 'ACIMA_MEDIA' || l.status === 'NO_RITMO').length,
       lojasEmRisco: rankingLojas.filter(l => l.status === 'EM_RISCO' || l.status === 'CRITICO').length,
     };
-  }, [rankingLojas, rankingVendedores, metasLojas]);
+  }, [rankingLojas, rankingVendedores, metasLojas, dados]);
 
   // Gerar análise IA
   const gerarAnaliseIA = useCallback(async () => {

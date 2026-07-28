@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { EmpresaParam, formatEmpresaParam } from "./firebirdBridge";
 import { getResumoFormasPagamento, getAnaliseSku } from "./vendasService";
 import { getVendasAgregado } from "./agregadosService";
+import { isVendaValida } from "@/lib/vendas/formaPagamento";
 import { getAnaliseFamiliaVendedor } from "./vendasService";
 
 // ============================================
@@ -146,8 +147,8 @@ async function coletarDadosVendas(
     let qtdVendas = 0;
 
     agregados.forEach(a => {
-      // Ignorar devoluções e créditos para cálculos de faturamento
-      if (a.formaPagamento === 'DEVOLUCAO' || a.formaPagamento === 'CREDITO') {
+      // Ignorar devoluções e créditos para cálculos de faturamento (regra única F3)
+      if (!isVendaValida(a.formaPagamento)) {
         return;
       }
 

@@ -6,6 +6,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { EmpresaParam, aplicarFiltroEmpresaSupabase } from '@/services/firebirdBridge';
+import { isVendaValida, calcularTicketMedio } from '@/lib/vendas/formaPagamento';
 
 // ============================================
 // TIPOS
@@ -106,10 +107,8 @@ export async function buscarAgregadosPeriodo(
   let qtdVendas = 0;
 
   (data || []).forEach((d) => {
-    const fp = (d.forma_pagamento || '').toUpperCase().trim();
-    const isDevolucao = fp === 'DEVOLUCAO';
-    const isCredito = fp === 'CREDITOS' || fp === 'CREDITO';
-    if (!isDevolucao && !isCredito) {
+    // Regra única de venda válida (F3): exclui devoluções e créditos
+    if (isVendaValida(d.forma_pagamento)) {
       totalVendido += Number(d.total_vendido) || 0;
       totalBruto += Number(d.total_bruto) || 0;
       totalDesconto += Number(d.total_desconto) || 0;
@@ -167,7 +166,8 @@ export function useComparativoAnual(): ComparativoResult {
           tasks.push(
             buscarAgregadosPeriodo(periodo.inicio, periodo.fim, empParaFetch).then((r) => {
               const percentualDesconto = r.totalBruto > 0 ? (r.totalDesconto / r.totalBruto) * 100 : 0;
-              const ticketMedio = r.qtdVendas > 0 ? r.totalVendido / r.qtdVendas : 0;
+              // totalVendido/qtdVendas aqui já são "sem créditos" (só vendas válidas) — F4
+              const ticketMedio = calcularTicketMedio(r.totalVendido, r.qtdVendas);
               return {
                 key: `${ano}-${emp ?? 'all'}`,
                 label,

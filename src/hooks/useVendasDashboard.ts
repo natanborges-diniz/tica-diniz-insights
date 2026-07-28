@@ -13,6 +13,7 @@ import {
   ResumoEmpresaVendedor as ResumoEmpresaVendedorAPI,
 } from "@/services/vendasService";
 import { EmpresaParam, aplicarFiltroEmpresaSupabase, empresaFilterList } from "@/services/firebirdBridge";
+import { isCredito, isDevolucao, calcularTicketMedio } from "@/lib/vendas/formaPagamento";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
@@ -131,20 +132,22 @@ function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
   let totalCreditos = 0;
   let totalDevolucoes = 0;
   let qtdTransacoes = 0;
+  let qtdTransacoesSemCreditos = 0;
   let totalBruto = 0;
   let totalDesconto = 0;
 
   dados.forEach((d) => {
-    const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
-    const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
-    const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
-    
-    if (isDevolucao) {
+    const devolucao = isDevolucao(d.formaPagamento);
+    const credito = isCredito(d.formaPagamento);
+
+    if (devolucao) {
       totalDevolucoes += Math.abs(d.totalGeral);
     } else {
       totalVendido += d.totalGeral;
-      if (isCredito) {
+      if (credito) {
         totalCreditos += d.totalGeral;
+      } else {
+        qtdTransacoesSemCreditos += d.qtdVendas;
       }
       qtdTransacoes += d.qtdVendas;
       totalBruto += d.totalBruto || 0;
@@ -153,7 +156,7 @@ function calcularMetricasFormasPagamento(dados: ResumoFormaPagamento[]) {
   });
 
   const totalVendidoSemCreditos = totalVendido - totalCreditos;
-  const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
+  const ticketMedio = calcularTicketMedio(totalVendidoSemCreditos, qtdTransacoesSemCreditos);
   const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
 
   return {
@@ -177,29 +180,31 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
     totalCreditos: number;
     totalDevolucoes: number;
     qtdTransacao: number;
+    qtdTransacaoSemCreditos: number;
     totalBruto: number;
     totalDesconto: number;
   }>();
 
   dados.forEach((d) => {
     const existing = mapaFormas.get(d.codEmpresa);
-    
-    const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
-    const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
-    const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
-    
-    const valorVenda = isDevolucao ? 0 : d.totalGeral;
-    const valorCredito = isCredito ? d.totalGeral : 0;
-    const valorDevolucao = isDevolucao ? Math.abs(d.totalGeral) : 0;
-    const qtdVendas = isDevolucao ? 0 : d.qtdVendas;
-    const valorBruto = isDevolucao ? 0 : (d.totalBruto ?? 0);
-    const valorDesconto = isDevolucao ? 0 : (d.totalDesconto ?? 0);
-    
+
+    const devolucao = isDevolucao(d.formaPagamento);
+    const credito = isCredito(d.formaPagamento);
+
+    const valorVenda = devolucao ? 0 : d.totalGeral;
+    const valorCredito = credito ? d.totalGeral : 0;
+    const valorDevolucao = devolucao ? Math.abs(d.totalGeral) : 0;
+    const qtdVendas = devolucao ? 0 : d.qtdVendas;
+    const qtdVendasSemCreditos = (devolucao || credito) ? 0 : d.qtdVendas;
+    const valorBruto = devolucao ? 0 : (d.totalBruto ?? 0);
+    const valorDesconto = devolucao ? 0 : (d.totalDesconto ?? 0);
+
     if (existing) {
       existing.totalVendido += valorVenda;
       existing.totalCreditos += valorCredito;
       existing.totalDevolucoes += valorDevolucao;
       existing.qtdTransacao += qtdVendas;
+      existing.qtdTransacaoSemCreditos += qtdVendasSemCreditos;
       existing.totalBruto += valorBruto;
       existing.totalDesconto += valorDesconto;
     } else {
@@ -210,6 +215,7 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
         totalCreditos: valorCredito,
         totalDevolucoes: valorDevolucao,
         qtdTransacao: qtdVendas,
+        qtdTransacaoSemCreditos: qtdVendasSemCreditos,
         totalBruto: valorBruto,
         totalDesconto: valorDesconto,
       });
@@ -218,7 +224,7 @@ function agruparPorLoja(dados: ResumoFormaPagamento[]): ResumoLoja[] {
 
   return Array.from(mapaFormas.values()).map((item) => {
     const totalVendidoSemCreditos = item.totalVendido - item.totalCreditos;
-    const ticketMedio = item.qtdTransacao > 0 ? totalVendidoSemCreditos / item.qtdTransacao : 0;
+    const ticketMedio = calcularTicketMedio(totalVendidoSemCreditos, item.qtdTransacaoSemCreditos);
     const percentualDesconto = item.totalBruto > 0 ? (item.totalDesconto / item.totalBruto) * 100 : 0;
     
     return {
@@ -246,6 +252,7 @@ function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedo
     totalCreditos: number;
     totalDevolucoes: number;
     qtdTransacao: number;
+    qtdTransacaoSemCreditos: number;
     totalBruto: number;
     totalDesconto: number;
   }>();
@@ -253,23 +260,24 @@ function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedo
   dados.forEach((d) => {
     const vendedorKey = `${d.vendedor || 'SEM VENDEDOR'}|${d.codEmpresa}`;
     const existing = mapaVendedores.get(vendedorKey);
-    
-    const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
-    const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
-    const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
-    
-    const valorVenda = isDevolucao ? 0 : d.totalGeral;
-    const valorCredito = isCredito ? d.totalGeral : 0;
-    const valorDevolucao = isDevolucao ? Math.abs(d.totalGeral) : 0;
-    const qtdVendas = isDevolucao ? 0 : d.qtdVendas;
-    const valorBruto = isDevolucao ? 0 : (d.totalBruto ?? 0);
-    const valorDesconto = isDevolucao ? 0 : (d.totalDesconto ?? 0);
-    
+
+    const devolucao = isDevolucao(d.formaPagamento);
+    const credito = isCredito(d.formaPagamento);
+
+    const valorVenda = devolucao ? 0 : d.totalGeral;
+    const valorCredito = credito ? d.totalGeral : 0;
+    const valorDevolucao = devolucao ? Math.abs(d.totalGeral) : 0;
+    const qtdVendas = devolucao ? 0 : d.qtdVendas;
+    const qtdVendasSemCreditos = (devolucao || credito) ? 0 : d.qtdVendas;
+    const valorBruto = devolucao ? 0 : (d.totalBruto ?? 0);
+    const valorDesconto = devolucao ? 0 : (d.totalDesconto ?? 0);
+
     if (existing) {
       existing.totalVendido += valorVenda;
       existing.totalCreditos += valorCredito;
       existing.totalDevolucoes += valorDevolucao;
       existing.qtdTransacao += qtdVendas;
+      existing.qtdTransacaoSemCreditos += qtdVendasSemCreditos;
       existing.totalBruto += valorBruto;
       existing.totalDesconto += valorDesconto;
     } else {
@@ -281,6 +289,7 @@ function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedo
         totalCreditos: valorCredito,
         totalDevolucoes: valorDevolucao,
         qtdTransacao: qtdVendas,
+        qtdTransacaoSemCreditos: qtdVendasSemCreditos,
         totalBruto: valorBruto,
         totalDesconto: valorDesconto,
       });
@@ -289,7 +298,7 @@ function agruparPorVendedor(dados: ResumoFormaPagamento[]): ResumoEmpresaVendedo
 
   return Array.from(mapaVendedores.values()).map((item) => {
     const totalVendidoSemCreditos = item.totalVendido - item.totalCreditos;
-    const ticketMedio = item.qtdTransacao > 0 ? totalVendidoSemCreditos / item.qtdTransacao : 0;
+    const ticketMedio = calcularTicketMedio(totalVendidoSemCreditos, item.qtdTransacaoSemCreditos);
     const percentualDesconto = item.totalBruto > 0 ? (item.totalDesconto / item.totalBruto) * 100 : 0;
     
     return {

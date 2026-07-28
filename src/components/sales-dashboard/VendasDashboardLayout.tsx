@@ -15,6 +15,7 @@ import { VendasFiltersState, ViewMode, ResumoLoja, VendasMetrics, ProjecaoFecham
 import { UseVendasDiariasResult } from "@/hooks/useVendasDiarias";
 import { ResumoEmpresaVendedor, ResumoFormaPagamento } from "@/services/vendasService";
 import { useChartFilter } from "@/hooks/useChartFilter";
+import { isCredito, isDevolucao, calcularTicketMedio } from "@/lib/vendas/formaPagamento";
 import { ActiveFilterBadges } from "@/components/ui/active-filter-badges";
 import { SalesFilters } from "./SalesFilters";
 import { SalesKPICards } from "./SalesKPICards";
@@ -290,20 +291,24 @@ export function VendasDashboardLayout({
     let totalBruto = 0;
     let totalDesconto = 0;
 
+    let qtdTransacoesSemCreditos = 0;
+
     filteredDadosFormasPagamento.forEach((d) => {
-      const formaPagamentoUpper = (d.formaPagamento || '').toUpperCase().trim();
-      const isDevolucao = formaPagamentoUpper === 'DEVOLUCAO';
-      const isCredito = formaPagamentoUpper === 'CREDITOS' || formaPagamentoUpper === 'CREDITO';
-      
-      if (isDevolucao) {
+      // Regra única de venda válida (F3): helper compartilhado
+      const devolucao = isDevolucao(d.formaPagamento);
+      const credito = isCredito(d.formaPagamento);
+
+      if (devolucao) {
         totalDevolucoes += Math.abs(d.totalGeral);
       } else {
         totalVendido += d.totalGeral;
-        if (isCredito) {
+        if (credito) {
           totalCreditos += d.totalGeral;
+        } else {
+          qtdTransacoesSemCreditos += d.qtdVendas;
         }
         qtdTransacoes += d.qtdVendas;
-        
+
         // Somar diretamente - backend já distribui proporcionalmente por forma de pagamento
         totalBruto += d.totalBruto || 0;
         totalDesconto += d.totalDesconto || 0;
@@ -311,7 +316,7 @@ export function VendasDashboardLayout({
     });
 
     const totalVendidoSemCreditos = totalVendido - totalCreditos;
-    const ticketMedio = qtdTransacoes > 0 ? totalVendidoSemCreditos / qtdTransacoes : 0;
+    const ticketMedio = calcularTicketMedio(totalVendidoSemCreditos, qtdTransacoesSemCreditos);
     
     const percentualDesconto = totalBruto > 0 ? (totalDesconto / totalBruto) * 100 : 0;
     const descontoDisponivel = totalBruto > 0;
