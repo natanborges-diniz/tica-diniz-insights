@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { TopNavigation } from "./TopNavigation";
 import { AppSidebar } from "./AppSidebar";
+import { DbFreshnessBanner } from "./DbFreshnessBanner";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 export type ModuleKey = "vendas" | "compras" | "estoque" | "monitor" | "financeiro" | "ia" | "config" | "comunicacao";
@@ -34,6 +35,7 @@ export function AppLayout() {
               <div className="md:hidden mb-4">
                 <SidebarTrigger />
               </div>
+              <DbFreshnessBanner />
               <Outlet />
             </div>
           </main>
