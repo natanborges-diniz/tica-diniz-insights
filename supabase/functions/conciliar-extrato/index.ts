@@ -44,6 +44,60 @@ function getServiceClient() {
   );
 }
 
+function normalizarDescricaoExtrato(descricao: unknown): string {
+  return String(descricao ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+// deno-lint-ignore no-explicit-any
+async function replicarNaturezaParaIguais(db: any, alvo: { id: string; descricao: string | null; tipo: string | null }, natureza: string, nowIso: string) {
+  const descNorm = normalizarDescricaoExtrato(alvo.descricao);
+  if (!descNorm || !alvo.tipo) return { replicadas: 0, empresas: 0 };
+
+  const ids: string[] = [];
+  const empresas = new Set<number>();
+  const pageSize = 1000;
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await db
+      .from("btg_extrato")
+      .select("id, cod_empresa, descricao, natureza, tipo")
+      .eq("status_conciliacao", "PENDENTE")
+      .eq("tipo", alvo.tipo)
+      .range(offset, offset + pageSize - 1);
+
+    if (error) throw new Error(error.message);
+
+    const rows = (data || []) as Array<{ id: string; cod_empresa: number; descricao: string | null; natureza: string | null; tipo: string | null }>;
+    for (const row of rows) {
+      if (row.id === alvo.id) continue;
+      if (row.natureza && row.natureza.trim() !== "") continue;
+      if (normalizarDescricaoExtrato(row.descricao) !== descNorm) continue;
+      ids.push(row.id);
+      empresas.add(row.cod_empresa);
+    }
+
+    if (rows.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  for (let i = 0; i < ids.length; i += 500) {
+    const lote = ids.slice(i, i + 500);
+    const { error } = await db
+      .from("btg_extrato")
+      .update({ natureza, updated_at: nowIso })
+      .in("id", lote);
+    if (error) throw new Error(error.message);
+  }
+
+  return { replicadas: ids.length, empresas: empresas.size };
+}
+
 // ─── Auth ────────────────────────────────────────────────────
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -373,7 +427,7 @@ async function handleCriarLancamento(db: any, body: Record<string, unknown>, use
   const natureza = body.natureza ? String(body.natureza) : null;
   if (!extratoId || !natureza) return json({ error: "extrato_id e natureza são obrigatórios" }, 400);
 
-  const { data: entry } = await db.from("btg_extrato").select("valor, descricao").eq("id", extratoId).single();
+  const { data: entry } = await db.from("btg_extrato").select("id, valor, descricao, tipo").eq("id", extratoId).single();
   if (!entry) return json({ error: "Linha do extrato não encontrada" }, 404);
 
   const { data, error } = await db.rpc("fn_conciliar_extrato", {
@@ -393,7 +447,9 @@ async function handleCriarLancamento(db: any, body: Record<string, unknown>, use
     p_user: userId,
   });
   if (error) return json({ error: error.message }, 400);
-  return json({ success: true, ...data });
+
+  const { replicadas, empresas } = await replicarNaturezaParaIguais(db, entry, natureza, new Date().toISOString());
+  return json({ success: true, ...data, replicadas, empresas });
 }
 
 // ─── ACTION: desfazer ────────────────────────────────────────
