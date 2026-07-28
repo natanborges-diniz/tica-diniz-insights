@@ -362,51 +362,54 @@ async function handleListar(body: Record<string, unknown> | null, url: URL, user
 }
 
 // ─── ACTION: classificar ────────────────────────────────────
-// Além de classificar a linha, aplica a mesma natureza a todas as demais linhas
-// PENDENTES da mesma empresa com a mesma descrição (case/space-insensitive).
-// Envie `aplicar_similares: false` para desligar esse comportamento.
+// Aplica a natureza na linha alvo e replica em todas as PENDENTE da mesma empresa
+// com descrição idêntica (trim + case-insensitive) que ainda não tenham natureza.
 async function handleClassificar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
   const { id, natureza } = body;
-  const aplicarSimilares = body.aplicar_similares !== false;
   if (!id || !natureza) return json({ error: "id e natureza obrigatórios" }, 400);
 
   const db = getServiceClient();
+  const nat = String(natureza);
+  const nowIso = new Date().toISOString();
 
-  const { data: base, error: eBase } = await db
+  const { data: alvo, error: errAlvo } = await db
     .from("btg_extrato")
-    .select("id, cod_empresa, descricao, tipo, status_conciliacao")
+    .select("id, cod_empresa, descricao")
     .eq("id", String(id))
     .single();
-  if (eBase || !base) return json({ error: "Linha não encontrada", details: eBase?.message }, 404);
+  if (errAlvo || !alvo) {
+    return json({ error: "Lançamento não encontrado", details: errAlvo?.message }, 404);
+  }
 
-  const nowIso = new Date().toISOString();
-  const { error: eUpd } = await db
+  const { error: errUpd } = await db
     .from("btg_extrato")
-    .update({ natureza: String(natureza), updated_at: nowIso })
-    .eq("id", base.id);
-  if (eUpd) return json({ error: "Erro ao classificar", details: eUpd.message }, 500);
+    .update({ natureza: nat, updated_at: nowIso })
+    .eq("id", String(id));
+  if (errUpd) return json({ error: "Erro ao classificar", details: errUpd.message }, 500);
 
   let replicadas = 0;
-  if (aplicarSimilares && base.descricao) {
-    const alvo = base.descricao.trim();
-    const { data: irmas, error: eList } = await db
+  const descNorm = String(alvo.descricao || "").trim();
+  if (descNorm.length > 0) {
+    const { data: irmas, error: errSel } = await db
       .from("btg_extrato")
-      .select("id, descricao")
-      .eq("cod_empresa", base.cod_empresa)
-      .eq("tipo", base.tipo)
+      .select("id, descricao, natureza")
+      .eq("cod_empresa", alvo.cod_empresa)
       .eq("status_conciliacao", "PENDENTE")
-      .neq("id", base.id);
-    if (!eList && irmas) {
-      const ids = irmas
-        .filter((r: { descricao: string | null }) => (r.descricao ?? "").trim().toLowerCase() === alvo.toLowerCase())
-        .map((r: { id: string }) => r.id);
-      if (ids.length > 0) {
-        const { error: eBatch } = await db
+      .neq("id", String(id));
+    if (!errSel && irmas) {
+      const alvos = (irmas as Array<{ id: string; descricao: string | null; natureza: string | null }>)
+        .filter((r) =>
+          String(r.descricao || "").trim().toLowerCase() === descNorm.toLowerCase() &&
+          (!r.natureza || r.natureza.trim() === "")
+        )
+        .map((r) => r.id);
+      if (alvos.length > 0) {
+        const { error: errBatch } = await db
           .from("btg_extrato")
-          .update({ natureza: String(natureza), updated_at: nowIso })
-          .in("id", ids);
-        if (!eBatch) replicadas = ids.length;
+          .update({ natureza: nat, updated_at: nowIso })
+          .in("id", alvos);
+        if (!errBatch) replicadas = alvos.length;
       }
     }
   }

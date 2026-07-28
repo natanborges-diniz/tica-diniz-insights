@@ -875,12 +875,8 @@ export default function MetasConfigDashboard() {
         onSave={handleActionBarSave}
         onCancel={handleActionBarCancel}
       >
-        {tabAtiva === "metas-lojas" && (
-          <span>{lojasSelecionadas.length} loja(s) × {mesesMeta.length} mês(es)</span>
-        )}
-        {tabAtiva === "metas-vendedores" && (
-          <span>{vendedoresSelecionados.length} vendedor(es) × {mesesMeta.length} mês(es)</span>
-        )}
+        {null}
+
       </ActionBar>
     </div>
   );
