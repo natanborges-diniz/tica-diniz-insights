@@ -74,7 +74,7 @@ export async function getRecebimentosAgregado(
   let from = 0;
 
   for (;;) {
-    let query = supabase
+    let query: any = (supabase as any)
       .from('recebimentos_agregado_diario')
       .select('cod_empresa, cod_vendedor, vendedor_nome, data_pagamento, forma_categoria, origem, valor_recebido, qtd_parcelas')
       .gte('data_pagamento', params.dataInicio)
