@@ -407,7 +407,11 @@ async function handleListar(body: Record<string, unknown> | null, url: URL, user
   if (conciliado !== null && conciliado !== undefined && conciliado !== "") {
     query = query.eq("conciliado", conciliado === "true");
   }
-  if (statusConciliacao) query = query.eq("status_conciliacao", statusConciliacao);
+  if (statusConciliacao) {
+    const parts = String(statusConciliacao).split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 1) query = query.in("status_conciliacao", parts);
+    else if (parts.length === 1) query = query.eq("status_conciliacao", parts[0]);
+  }
 
   const { data, error } = await query;
   if (error) return json({ error: "Erro ao listar extrato", details: error.message }, 500);
