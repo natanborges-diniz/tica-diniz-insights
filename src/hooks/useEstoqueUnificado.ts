@@ -732,7 +732,7 @@ export function useEstoqueUnificado() {
       pctSolarDefault: capacidadeEmpresa.percentual_solar,
       minimoLoja: capacidadeEmpresa.mix_minimo,
     });
-  }, [itensFiltrados, capacidadeEmpresa, marcaConfigMap, marcaConfigFlagsByName]);
+  }, [itensFiltrados, capacidadeEmpresa, marcaConfigMap]);
 
   // ============================================
   // RESUMO POR MARCA — com blocos acionáveis (Fase 2)
