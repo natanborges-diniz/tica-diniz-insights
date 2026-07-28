@@ -323,8 +323,13 @@ export default function BankingExtratoDashboard() {
         categoria: conta.categoria,
         descricao: descricao || `${conta.conta_numero} ${conta.conta_descricao} — ${item.descricao ?? ""}`.trim(),
       }),
-    onSuccess: () => {
-      toast.success("Lançamento criado e linha conciliada");
+    onSuccess: (data) => {
+      const replicadas = data?.replicadas ?? 0;
+      toast.success(
+        replicadas > 0
+          ? `Lançamento criado, linha conciliada e classificação replicada em ${replicadas} linha${replicadas === 1 ? "" : "s"} igual${replicadas === 1 ? "" : "is"}`
+          : "Lançamento criado e linha conciliada"
+      );
       setCriarFor(null);
       setCriarConta(null);
       setCriarDescricao("");
