@@ -91,6 +91,7 @@ const isBtgAuthMissing = (message: string) =>
 
 const STATUS_LABEL: Record<string, string> = {
   PENDENTE: "Pendente",
+  CLASSIFICADO: "Classificado",
   CONCILIADO_AUTO: "Auto",
   CONCILIADO_MANUAL: "Manual",
   IGNORADO: "Ignorado",
