@@ -91,6 +91,7 @@ const isBtgAuthMissing = (message: string) =>
 
 const STATUS_LABEL: Record<string, string> = {
   PENDENTE: "Pendente",
+  CLASSIFICADO: "Classificado",
   CONCILIADO_AUTO: "Auto",
   CONCILIADO_MANUAL: "Manual",
   IGNORADO: "Ignorado",
@@ -172,7 +173,8 @@ export default function BankingExtratoDashboard() {
       const params: Record<string, unknown> = {
         action: "listar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim,
       };
-      if (filtroStatus !== "todos") params.status_conciliacao = filtroStatus;
+      if (filtroStatus === "PENDENTE") params.status_conciliacao = "PENDENTE,CLASSIFICADO";
+      else if (filtroStatus !== "todos") params.status_conciliacao = filtroStatus;
       const { data, error } = await supabase.functions.invoke("btg-extrato", { body: params });
       if (error) {
         const message = await getFunctionErrorMessage(error);
@@ -400,6 +402,13 @@ export default function BankingExtratoDashboard() {
         </Badge>
       );
     }
+    if (s === "CLASSIFICADO") {
+      return (
+        <Badge variant="outline" className="border-warning text-warning">
+          Classificado
+        </Badge>
+      );
+    }
     if (s === "IGNORADO") return <Badge variant="secondary">Ignorado</Badge>;
     return (
       <Badge variant="secondary" className="bg-success/10 text-success border-success/30">
@@ -456,7 +465,8 @@ export default function BankingExtratoDashboard() {
           <Select value={filtroStatus} onValueChange={setFiltroStatus}>
             <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="PENDENTE">Pendentes</SelectItem>
+              <SelectItem value="PENDENTE">A conciliar</SelectItem>
+              <SelectItem value="CLASSIFICADO">Classificadas</SelectItem>
               <SelectItem value="CONCILIADO_AUTO">Conciliadas (auto)</SelectItem>
               <SelectItem value="CONCILIADO_MANUAL">Conciliadas (manual)</SelectItem>
               <SelectItem value="IGNORADO">Ignoradas</SelectItem>
@@ -610,7 +620,8 @@ export default function BankingExtratoDashboard() {
                   </TableRow>
                 ) : (
                   lancamentos.map((item) => {
-                    const pendente = (item.status_conciliacao || "PENDENTE") === "PENDENTE";
+                    const statusAtual = item.status_conciliacao || "PENDENTE";
+                    const pendente = statusAtual === "PENDENTE" || statusAtual === "CLASSIFICADO";
                     const sug = topSugestao(item);
                     return (
                       <TableRow key={item.id}>
@@ -690,7 +701,7 @@ export default function BankingExtratoDashboard() {
                                 </>
                               )}
                             </div>
-                          ) : item.status_conciliacao !== "PENDENTE" && isAdmin ? (
+                          ) : statusAtual !== "PENDENTE" && statusAtual !== "CLASSIFICADO" && isAdmin ? (
                             <Button
                               variant="ghost"
                               size="sm"

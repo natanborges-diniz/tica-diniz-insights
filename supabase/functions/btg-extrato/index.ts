@@ -136,8 +136,8 @@ async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient
   while (true) {
     const { data, error } = await db
       .from("btg_extrato")
-      .select("id, cod_empresa, descricao, natureza, tipo")
-      .eq("status_conciliacao", "PENDENTE")
+      .select("id, cod_empresa, descricao, natureza, tipo, status_conciliacao")
+      .in("status_conciliacao", ["PENDENTE", "CLASSIFICADO"])
       .eq("tipo", alvo.tipo)
       .range(offset, offset + pageSize - 1);
 
@@ -160,7 +160,7 @@ async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient
     const lote = ids.slice(i, i + 500);
     const { error } = await db
       .from("btg_extrato")
-      .update({ natureza, updated_at: nowIso })
+      .update({ natureza, status_conciliacao: "CLASSIFICADO", updated_at: nowIso })
       .in("id", lote);
     if (error) throw new Error(error.message);
   }
@@ -407,7 +407,11 @@ async function handleListar(body: Record<string, unknown> | null, url: URL, user
   if (conciliado !== null && conciliado !== undefined && conciliado !== "") {
     query = query.eq("conciliado", conciliado === "true");
   }
-  if (statusConciliacao) query = query.eq("status_conciliacao", statusConciliacao);
+  if (statusConciliacao) {
+    const parts = String(statusConciliacao).split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts.length > 1) query = query.in("status_conciliacao", parts);
+    else if (parts.length === 1) query = query.eq("status_conciliacao", parts[0]);
+  }
 
   const { data, error } = await query;
   if (error) return json({ error: "Erro ao listar extrato", details: error.message }, 500);
@@ -437,7 +441,7 @@ async function handleClassificar(body: Record<string, unknown>, userId: string) 
 
   const { error: errUpd } = await db
     .from("btg_extrato")
-    .update({ natureza: nat, updated_at: nowIso })
+    .update({ natureza: nat, status_conciliacao: "CLASSIFICADO", updated_at: nowIso })
     .eq("id", String(id));
   if (errUpd) return json({ error: "Erro ao classificar", details: errUpd.message }, 500);
 
