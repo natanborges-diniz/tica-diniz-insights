@@ -350,11 +350,16 @@ async function verificarIdentidadeEmpresa(
 
     const accounts = await res.json();
     console.log("[btg-auth][verify] /accounts keys:", JSON.stringify(Object.keys(accounts || {})));
+    // Dump primeiro item pra diagnosticar chaves reais
+    try {
+      const firstItem = Array.isArray(accounts?.data) ? accounts.data[0]
+        : Array.isArray(accounts) ? accounts[0]
+        : accounts?.data ?? accounts;
+      console.log("[btg-auth][verify] /accounts sample:", JSON.stringify(firstItem).slice(0, 800));
+    } catch (_) { /* ignore */ }
     companyId = companyId || findCompanyId(accounts);
     const accountDetails = extractAccountDetails(accounts) || undefined;
-    if (accountDetails) {
-      console.log("[btg-auth][verify] conta extraída:", JSON.stringify(accountDetails));
-    }
+    console.log("[btg-auth][verify] conta extraída:", JSON.stringify(accountDetails ?? null));
 
     return {
       status: "match",
