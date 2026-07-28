@@ -613,7 +613,7 @@ export default function BankingExtratoDashboard() {
                 ) : (
                   lancamentos.map((item) => {
                     const statusAtual = item.status_conciliacao || "PENDENTE";
-                    const pendente = statusAtual === "PENDENTE" || statusAtual === "CLASSIFICADO";
+                    const pendente = statusAtual === "PENDENTE";
                     const sug = topSugestao(item);
                     return (
                       <TableRow key={item.id}>
