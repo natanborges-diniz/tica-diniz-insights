@@ -115,6 +115,60 @@ function getParam(body: Record<string, unknown> | null, url: URL, key: string): 
   return url.searchParams.get(key);
 }
 
+function normalizarDescricaoExtrato(descricao: unknown): string {
+  return String(descricao ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+// deno-lint-ignore no-explicit-any
+async function replicarNaturezaParaIguais(db: any, alvo: { id: string; descricao: string | null; tipo: string | null }, natureza: string, nowIso: string) {
+  const descNorm = normalizarDescricaoExtrato(alvo.descricao);
+  if (!descNorm || !alvo.tipo) return { replicadas: 0, empresas: 0 };
+
+  const ids: string[] = [];
+  const empresas = new Set<number>();
+  const pageSize = 1000;
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await db
+      .from("btg_extrato")
+      .select("id, cod_empresa, descricao, natureza, tipo")
+      .eq("status_conciliacao", "PENDENTE")
+      .eq("tipo", alvo.tipo)
+      .range(offset, offset + pageSize - 1);
+
+    if (error) throw new Error(error.message);
+
+    const rows = (data || []) as Array<{ id: string; cod_empresa: number; descricao: string | null; natureza: string | null; tipo: string | null }>;
+    for (const row of rows) {
+      if (row.id === alvo.id) continue;
+      if (row.natureza && row.natureza.trim() !== "") continue;
+      if (normalizarDescricaoExtrato(row.descricao) !== descNorm) continue;
+      ids.push(row.id);
+      empresas.add(row.cod_empresa);
+    }
+
+    if (rows.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  for (let i = 0; i < ids.length; i += 500) {
+    const lote = ids.slice(i, i + 500);
+    const { error } = await db
+      .from("btg_extrato")
+      .update({ natureza, updated_at: nowIso })
+      .in("id", lote);
+    if (error) throw new Error(error.message);
+  }
+
+  return { replicadas: ids.length, empresas: empresas.size };
+}
+
 // ─── ACTION: contas (construir e salvar account_id) ─────────
 async function handleContas(body: Record<string, unknown> | null, url: URL, userId: string) {
   await requireAdminRole(userId);
@@ -362,8 +416,8 @@ async function handleListar(body: Record<string, unknown> | null, url: URL, user
 }
 
 // ─── ACTION: classificar ────────────────────────────────────
-// Aplica a natureza na linha alvo e replica em todas as PENDENTE da mesma empresa
-// com descrição idêntica (trim + case-insensitive) que ainda não tenham natureza.
+// Aplica a natureza na linha alvo e replica em todas as PENDENTE equivalentes
+// (mesma descrição normalizada + mesmo tipo) que ainda não tenham natureza.
 async function handleClassificar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
   const { id, natureza } = body;
@@ -375,7 +429,7 @@ async function handleClassificar(body: Record<string, unknown>, userId: string) 
 
   const { data: alvo, error: errAlvo } = await db
     .from("btg_extrato")
-    .select("id, cod_empresa, descricao")
+    .select("id, cod_empresa, descricao, tipo")
     .eq("id", String(id))
     .single();
   if (errAlvo || !alvo) {
@@ -388,33 +442,9 @@ async function handleClassificar(body: Record<string, unknown>, userId: string) 
     .eq("id", String(id));
   if (errUpd) return json({ error: "Erro ao classificar", details: errUpd.message }, 500);
 
-  let replicadas = 0;
-  const descNorm = String(alvo.descricao || "").trim();
-  if (descNorm.length > 0) {
-    const { data: irmas, error: errSel } = await db
-      .from("btg_extrato")
-      .select("id, descricao, natureza")
-      .eq("cod_empresa", alvo.cod_empresa)
-      .eq("status_conciliacao", "PENDENTE")
-      .neq("id", String(id));
-    if (!errSel && irmas) {
-      const alvos = (irmas as Array<{ id: string; descricao: string | null; natureza: string | null }>)
-        .filter((r) =>
-          String(r.descricao || "").trim().toLowerCase() === descNorm.toLowerCase() &&
-          (!r.natureza || r.natureza.trim() === "")
-        )
-        .map((r) => r.id);
-      if (alvos.length > 0) {
-        const { error: errBatch } = await db
-          .from("btg_extrato")
-          .update({ natureza: nat, updated_at: nowIso })
-          .in("id", alvos);
-        if (!errBatch) replicadas = alvos.length;
-      }
-    }
-  }
+  const { replicadas, empresas } = await replicarNaturezaParaIguais(db, alvo, nat, nowIso);
 
-  return json({ success: true, replicadas });
+  return json({ success: true, replicadas, empresas });
 }
 
 // ─── ACTION: conciliar ──────────────────────────────────────
