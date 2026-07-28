@@ -136,8 +136,8 @@ async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient
   while (true) {
     const { data, error } = await db
       .from("btg_extrato")
-      .select("id, cod_empresa, descricao, natureza, tipo")
-      .eq("status_conciliacao", "PENDENTE")
+      .select("id, cod_empresa, descricao, natureza, tipo, status_conciliacao")
+      .in("status_conciliacao", ["PENDENTE", "CLASSIFICADO"])
       .eq("tipo", alvo.tipo)
       .range(offset, offset + pageSize - 1);
 
@@ -160,7 +160,7 @@ async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient
     const lote = ids.slice(i, i + 500);
     const { error } = await db
       .from("btg_extrato")
-      .update({ natureza, updated_at: nowIso })
+      .update({ natureza, status_conciliacao: "CLASSIFICADO", updated_at: nowIso })
       .in("id", lote);
     if (error) throw new Error(error.message);
   }
