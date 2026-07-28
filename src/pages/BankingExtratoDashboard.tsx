@@ -1,9 +1,13 @@
+// E4 — Fila de exceções da conciliação 3 vias (SPEC_P1_CONCILIACAO_3VIAS.md §6)
+// Filtro padrão: PENDENTE. Sugestões do motor com confirmação de 1 clique.
+// O checkbox manual de conciliado foi removido — toda conciliação passa pelo
+// motor (conciliar-extrato) ou pelas ações desta fila.
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, subDays } from "date-fns";
+import { format, subDays, differenceInCalendarDays } from "date-fns";
 import {
   ArrowDownCircle, ArrowUpCircle, Download, Landmark, TrendingUp, TrendingDown,
-  BarChart3, PieChart, CheckCircle2, XCircle,
+  PieChart, CheckCircle2, Sparkles, Search, EyeOff, FilePlus2, Undo2, Clock, Settings2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -11,12 +15,23 @@ import { useDefaultEmpresa } from "@/hooks/useDefaultEmpresa";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { BaseDialog } from "@/components/system/BaseDialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { ExtratoRegrasDialog } from "@/components/banking/ExtratoRegrasDialog";
 
 // ─── Types ───────────────────────────────────────────────────
+interface Sugestao {
+  alvo_tipo: string;
+  alvo_id: string;
+  score: number;
+  motivo: string;
+}
+
 interface ExtratoItem {
   id: string;
   cod_empresa: number;
@@ -26,6 +41,9 @@ interface ExtratoItem {
   tipo: string;
   natureza: string | null;
   conciliado: boolean;
+  status_conciliacao: string;
+  metodo_conciliacao: string | null;
+  dados_extras: { sugestoes?: Sugestao[]; ignorar_observacao?: string | null } | null;
   saldo_apos: number | null;
   created_at: string;
 }
@@ -36,9 +54,11 @@ interface ResumoExtrato {
   total_debito: number;
   saldo_periodo: number;
   total_conciliado: number;
-  total_nao_conciliado: number;
   percentual_conciliado: number;
   por_natureza: Record<string, { count: number; total: number }>;
+  por_metodo: Record<string, number>;
+  total_pendente: number;
+  pendentes_antigos: number;
 }
 
 interface SaldoResponse {
@@ -47,47 +67,105 @@ interface SaldoResponse {
   sandbox?: boolean;
 }
 
-const NATUREZAS = [
+const STATUS_LABEL: Record<string, string> = {
+  PENDENTE: "Pendente",
+  CONCILIADO_AUTO: "Auto",
+  CONCILIADO_MANUAL: "Manual",
+  IGNORADO: "Ignorado",
+};
+
+const METODO_LABEL: Record<string, string> = {
+  EXATO: "Auto (exato)",
+  TOLERANCIA: "Auto (tolerância)",
+  AGRUPADO: "Auto (agrupado)",
+  REGRA: "Regra de tarifa",
+  MANUAL: "Manual",
+  IGNORADO: "Ignorado",
+};
+
+const ALVO_LABEL: Record<string, string> = {
+  LANCAMENTO: "Lançamento",
+  PAGAMENTO_BTG: "Pagamento BTG",
+  COBRANCA_BTG: "Boleto",
+  RECEBIVEL_CARTAO: "Recebível cartão",
+  TARIFA: "Tarifa",
+};
+
+const NATUREZAS_LANCAMENTO = [
+  "DESPESAS_FINANCEIRAS", "DESPESAS_OPERACIONAIS", "IMPOSTOS",
+  "RECEITAS_OPERACIONAIS", "OUTRAS_RECEITAS", "OUTRAS_DESPESAS",
+];
+
+const NATUREZAS_CLASSIFICACAO = [
   "Vendas", "Fornecedores", "Salários", "Impostos",
   "Aluguel", "Energia/Água", "Telecom", "Financeiro", "Outros",
 ];
 
 export default function BankingExtratoDashboard() {
   const { empresas } = useEmpresas();
-  const { codEmpresa: codEmpresaDefault } = useDefaultEmpresa();
+  const { codEmpresa: codEmpresaDefault, isAdmin } = useDefaultEmpresa();
   const queryClient = useQueryClient();
 
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
   const [dataInicio, setDataInicio] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
   const [dataFim, setDataFim] = useState(format(new Date(), "yyyy-MM-dd"));
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
-  const [filtroConciliado, setFiltroConciliado] = useState<string>("todos");
+  const [filtroStatus, setFiltroStatus] = useState<string>("PENDENTE");
 
   const [autoImported, setAutoImported] = useState(false);
   useEffect(() => setAutoImported(false), [codEmpresa]);
 
+  // Dialogs
+  const [candidatosFor, setCandidatosFor] = useState<ExtratoItem | null>(null);
+  const [candidatosLive, setCandidatosLive] = useState<Sugestao[] | null>(null);
+  const [ignorarFor, setIgnorarFor] = useState<ExtratoItem | null>(null);
+  const [ignorarObs, setIgnorarObs] = useState("");
+  const [criarFor, setCriarFor] = useState<ExtratoItem | null>(null);
+  const [criarNatureza, setCriarNatureza] = useState("DESPESAS_FINANCEIRAS");
+  const [criarCategoria, setCriarCategoria] = useState("");
+  const [criarDescricao, setCriarDescricao] = useState("");
+  const [regrasOpen, setRegrasOpen] = useState(false);
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["btg-extrato"] });
+    queryClient.invalidateQueries({ queryKey: ["btg-extrato-resumo"] });
+  };
+
+  // conciliar-extrato exige o JWT do usuário nas ações mutadoras
+  const invokeConciliar = async (action: string, extra: Record<string, unknown> = {}) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error("Sessão expirada — faça login novamente");
+    const { data, error } = await supabase.functions.invoke("conciliar-extrato", {
+      body: { action, ...extra },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(String(data.error));
+    return data;
+  };
+
   // ─── Queries ─────────────────────────────────────────────
   const { data: lancamentos = [], isLoading } = useQuery<ExtratoItem[]>({
-    queryKey: ["btg-extrato", codEmpresa, dataInicio, dataFim, filtroTipo, filtroConciliado],
+    queryKey: ["btg-extrato", codEmpresa, dataInicio, dataFim, filtroTipo, filtroStatus],
     queryFn: async () => {
-      // 1. Try local DB first
-      const { data, error } = await supabase.functions.invoke("btg-extrato", {
-        body: { action: "listar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
-      });
+      const params: Record<string, unknown> = {
+        action: "listar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim,
+      };
+      if (filtroStatus !== "todos") params.status_conciliacao = filtroStatus;
+      const { data, error } = await supabase.functions.invoke("btg-extrato", { body: params });
       if (error) throw error;
-      let items = Array.isArray(data) ? data : [];
+      let items: ExtratoItem[] = Array.isArray(data) ? data : [];
 
-      // 2. If empty, try auto-import
-      if (items.length === 0 && !autoImported) {
+      // Auto-import na primeira visita sem dados (persiste e relê — nada de linha "live")
+      if (items.length === 0 && !autoImported && filtroStatus === "PENDENTE") {
         setAutoImported(true);
         try {
           const { data: importResult } = await supabase.functions.invoke("btg-extrato", {
             body: { action: "importar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
           });
           if (importResult?.importados > 0) {
-            const { data: refetched } = await supabase.functions.invoke("btg-extrato", {
-              body: { action: "listar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
-            });
+            const { data: refetched } = await supabase.functions.invoke("btg-extrato", { body: params });
             items = Array.isArray(refetched) ? refetched : [];
             toast.success(`${importResult.importados} lançamentos importados do BTG`);
           }
@@ -96,38 +174,7 @@ export default function BankingExtratoDashboard() {
         }
       }
 
-      // 3. Fallback: live query from BTG API
-      if (items.length === 0) {
-        try {
-          const { data: directData } = await supabase.functions.invoke("btg-extrato", {
-            body: { action: "extrato", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
-          });
-          const directItems = directData?.lancamentos;
-          if (Array.isArray(directItems) && directItems.length > 0) {
-            items = directItems.map((l: Record<string, unknown>, idx: number) => {
-              const rawType = String(l.type || l.tipo || "");
-              const isCredit = rawType.toLowerCase() === "credit" || rawType.toUpperCase().includes("CRED");
-              return {
-                id: `live-${idx}`,
-                cod_empresa: codEmpresa,
-                data_lancamento: String(l._dayDate || l.dateHour || l.date || l.bookingDate || "").substring(0, 10),
-                descricao: String(l.description || l.remittanceInformation || ""),
-                valor: Math.abs(Number(l.amount || l.transactionAmount || 0)),
-                tipo: isCredit ? "CREDITO" : "DEBITO",
-                natureza: null,
-                conciliado: false,
-                saldo_apos: l.balance_after ? Number(l.balance_after) : null,
-                created_at: new Date().toISOString(),
-              };
-            });
-          }
-        } catch (e) {
-          console.warn("Direct extrato query failed:", e);
-        }
-      }
-
-      if (filtroTipo !== "todos") items = items.filter((i: ExtratoItem) => i.tipo === filtroTipo);
-      if (filtroConciliado !== "todos") items = items.filter((i: ExtratoItem) => String(i.conciliado) === filtroConciliado);
+      if (filtroTipo !== "todos") items = items.filter((i) => i.tipo === filtroTipo);
       return items;
     },
   });
@@ -164,11 +211,85 @@ export default function BankingExtratoDashboard() {
       return data;
     },
     onSuccess: (data) => {
-      toast.success(`${data.importados} lançamentos importados`);
-      queryClient.invalidateQueries({ queryKey: ["btg-extrato"] });
-      queryClient.invalidateQueries({ queryKey: ["btg-extrato-resumo"] });
+      toast.success(`${data.importados} importados, ${data.duplicados ?? 0} duplicados ignorados`);
+      invalidate();
     },
     onError: () => toast.error("Erro ao importar extrato"),
+  });
+
+  const executarMotorMutation = useMutation({
+    mutationFn: () => invokeConciliar("executar", { cod_empresa: codEmpresa }),
+    onSuccess: (data) => {
+      toast.success(`Motor: ${data.conciliados} conciliadas, ${data.com_sugestao} com sugestão, ${data.sem_match} sem match`);
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(`Erro ao executar motor: ${e.message}`),
+  });
+
+  const confirmarMutation = useMutation({
+    mutationFn: async ({ item, sugestao }: { item: ExtratoItem; sugestao: Sugestao }) => {
+      if (sugestao.alvo_tipo === "TARIFA") {
+        // alvo_id é a regra — busca natureza/categoria e cria o lançamento de tarifa
+        const { data: regra, error } = await supabase
+          .from("extrato_regras_classificacao")
+          .select("natureza, categoria")
+          .eq("id", sugestao.alvo_id)
+          .single();
+        if (error || !regra) throw new Error("Regra de tarifa não encontrada");
+        return invokeConciliar("criar_lancamento", {
+          extrato_id: item.id,
+          natureza: regra.natureza,
+          categoria: regra.categoria ?? undefined,
+          descricao: item.descricao,
+        });
+      }
+      return invokeConciliar("confirmar", {
+        extrato_id: item.id,
+        alocacoes: [{ alvo_tipo: sugestao.alvo_tipo, alvo_id: sugestao.alvo_id, valor_alocado: item.valor }],
+      });
+    },
+    onSuccess: () => {
+      toast.success("Linha conciliada");
+      setCandidatosFor(null);
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(`Erro ao conciliar: ${e.message}`),
+  });
+
+  const ignorarMutation = useMutation({
+    mutationFn: ({ item, observacao }: { item: ExtratoItem; observacao: string }) =>
+      invokeConciliar("ignorar", { extrato_id: item.id, observacao: observacao || undefined }),
+    onSuccess: () => {
+      toast.success("Linha ignorada");
+      setIgnorarFor(null);
+      setIgnorarObs("");
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(`Erro ao ignorar: ${e.message}`),
+  });
+
+  const criarLancamentoMutation = useMutation({
+    mutationFn: ({ item, natureza, categoria, descricao }: { item: ExtratoItem; natureza: string; categoria?: string; descricao?: string }) =>
+      invokeConciliar("criar_lancamento", {
+        extrato_id: item.id, natureza, categoria: categoria || undefined, descricao: descricao || undefined,
+      }),
+    onSuccess: () => {
+      toast.success("Lançamento criado e linha conciliada");
+      setCriarFor(null);
+      setCriarCategoria("");
+      setCriarDescricao("");
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(`Erro ao criar lançamento: ${e.message}`),
+  });
+
+  const desfazerMutation = useMutation({
+    mutationFn: (item: ExtratoItem) => invokeConciliar("desfazer", { extrato_id: item.id }),
+    onSuccess: () => {
+      toast.success("Conciliação desfeita — linha voltou a PENDENTE");
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(`Erro ao desfazer: ${e.message}`),
   });
 
   const classificarMutation = useMutation({
@@ -178,41 +299,61 @@ export default function BankingExtratoDashboard() {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["btg-extrato"] });
-      queryClient.invalidateQueries({ queryKey: ["btg-extrato-resumo"] });
-    },
+    onSuccess: invalidate,
   });
 
-  const conciliarMutation = useMutation({
-    mutationFn: async ({ id, conciliado }: { id: string; conciliado: boolean }) => {
-      const { error } = await supabase.functions.invoke("btg-extrato", {
-        body: { action: "conciliar", id, conciliado },
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Conciliação atualizada");
-      queryClient.invalidateQueries({ queryKey: ["btg-extrato"] });
-      queryClient.invalidateQueries({ queryKey: ["btg-extrato-resumo"] });
-    },
-  });
+  const abrirCandidatos = async (item: ExtratoItem) => {
+    setCandidatosFor(item);
+    setCandidatosLive(null);
+    try {
+      const data = await invokeConciliar("sugestoes", { extrato_id: item.id });
+      setCandidatosLive(data?.resultado?.sugestoes ?? []);
+    } catch {
+      // fallback: sugestões persistidas pelo motor
+      setCandidatosLive(item.dados_extras?.sugestoes ?? []);
+    }
+  };
 
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
+  const idadeDias = (item: ExtratoItem) =>
+    differenceInCalendarDays(new Date(), new Date(item.data_lancamento + "T12:00:00"));
+
+  const topSugestao = (item: ExtratoItem): Sugestao | null =>
+    item.dados_extras?.sugestoes?.length ? item.dados_extras.sugestoes[0] : null;
+
   const saldoDisponivel = saldo?.available?.amount;
-  const saldoBloqueado = saldo?.blocked?.amount;
+
+  const statusBadge = (item: ExtratoItem) => {
+    const s = item.status_conciliacao || "PENDENTE";
+    if (s === "PENDENTE") {
+      const antiga = idadeDias(item) > 7;
+      return (
+        <Badge variant="outline" className={antiga ? "border-danger text-danger" : ""}>
+          {antiga && <Clock className="h-3 w-3 mr-1" />}
+          Pendente{antiga ? ` há ${idadeDias(item)}d` : ""}
+        </Badge>
+      );
+    }
+    if (s === "IGNORADO") return <Badge variant="secondary">Ignorado</Badge>;
+    return (
+      <Badge variant="secondary" className="bg-success/10 text-success border-success/30">
+        <CheckCircle2 className="h-3 w-3 mr-1" />
+        {METODO_LABEL[item.metodo_conciliacao ?? "MANUAL"] ?? STATUS_LABEL[s]}
+      </Badge>
+    );
+  };
 
   return (
     <div className="space-y-6">
       <ModuleHeader
-        title="Extrato Bancário"
-        subtitle="Consulta de saldo, extrato, classificação por natureza e batimento de caixa"
+        title="Conciliação Bancária"
+        subtitle="Fila de exceções do extrato BTG — todo lançamento do extrato explicado por um registro do sistema"
         icon={<Landmark className="h-5 w-5" />}
       />
 
-      {/* ── Filters ─────────────────────────────────────────── */}
+      {/* ── Filters + actions ───────────────────────────────── */}
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Empresa</label>
@@ -238,7 +379,7 @@ export default function BankingExtratoDashboard() {
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Tipo</label>
           <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-            <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos</SelectItem>
               <SelectItem value="CREDITO">Crédito</SelectItem>
@@ -247,25 +388,34 @@ export default function BankingExtratoDashboard() {
           </Select>
         </div>
         <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Conciliado</label>
-          <Select value={filtroConciliado} onValueChange={setFiltroConciliado}>
-            <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+          <label className="text-xs text-muted-foreground">Status</label>
+          <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+            <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
-              <SelectItem value="true">Sim</SelectItem>
-              <SelectItem value="false">Não</SelectItem>
+              <SelectItem value="PENDENTE">Pendentes</SelectItem>
+              <SelectItem value="CONCILIADO_AUTO">Conciliadas (auto)</SelectItem>
+              <SelectItem value="CONCILIADO_MANUAL">Conciliadas (manual)</SelectItem>
+              <SelectItem value="IGNORADO">Ignoradas</SelectItem>
+              <SelectItem value="todos">Todas</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => importarMutation.mutate()}
-          disabled={importarMutation.isPending}
-        >
+        <Button variant="outline" size="sm" onClick={() => importarMutation.mutate()} disabled={importarMutation.isPending}>
           <Download className="h-4 w-4 mr-1" />
           Importar BTG
         </Button>
+        {isAdmin && (
+          <>
+            <Button size="sm" onClick={() => executarMotorMutation.mutate()} disabled={executarMotorMutation.isPending}>
+              <Sparkles className="h-4 w-4 mr-1" />
+              {executarMotorMutation.isPending ? "Conciliando..." : "Rodar motor"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setRegrasOpen(true)}>
+              <Settings2 className="h-4 w-4 mr-1" />
+              Regras de tarifas
+            </Button>
+          </>
+        )}
       </div>
 
       {/* ── KPI Cards ───────────────────────────────────────── */}
@@ -280,53 +430,45 @@ export default function BankingExtratoDashboard() {
             <p className="text-2xl font-bold">
               {saldoDisponivel != null ? fmtCurrency(saldoDisponivel) : "—"}
             </p>
-            {saldoBloqueado != null && saldoBloqueado > 0 && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Bloqueado: {fmtCurrency(saldoBloqueado)}
+            {saldo?.sandbox && <p className="text-xs text-muted-foreground mt-1 italic">Sandbox</p>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-success" /> Créditos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-success">{resumo ? fmtCurrency(resumo.total_credito) : "—"}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-danger" /> Débitos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-danger">{resumo ? fmtCurrency(resumo.total_debito) : "—"}</p>
+          </CardContent>
+        </Card>
+
+        <Card className={resumo && resumo.pendentes_antigos > 0 ? "border-danger/40" : ""}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Clock className="h-4 w-4" /> Pendentes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{resumo ? resumo.total_pendente : "—"}</p>
+            {resumo && resumo.pendentes_antigos > 0 && (
+              <p className="text-xs text-danger mt-1 font-medium">
+                {resumo.pendentes_antigos} com mais de 7 dias
               </p>
             )}
-            {saldo?.sandbox && (
-              <p className="text-xs text-muted-foreground mt-1 italic">Sandbox</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-success" /> Total Créditos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-success">
-              {resumo ? fmtCurrency(resumo.total_credito) : "—"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-destructive" /> Total Débitos
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-destructive">
-              {resumo ? fmtCurrency(resumo.total_debito) : "—"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" /> Saldo Período
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className={`text-2xl font-bold ${(resumo?.saldo_periodo ?? 0) >= 0 ? "text-success" : "text-destructive"}`}>
-              {resumo ? fmtCurrency(resumo.saldo_periodo) : "—"}
-            </p>
           </CardContent>
         </Card>
 
@@ -337,99 +479,164 @@ export default function BankingExtratoDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">
-              {resumo ? `${resumo.percentual_conciliado}%` : "—"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {resumo ? `${resumo.total_conciliado}/${resumo.total_lancamentos}` : ""}
-            </p>
+            <p className="text-2xl font-bold">{resumo ? `${resumo.percentual_conciliado}%` : "—"}</p>
+            {resumo && Object.keys(resumo.por_metodo ?? {}).length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {Object.entries(resumo.por_metodo).map(([metodo, count]) => (
+                  <p key={metodo} className="text-xs text-muted-foreground">
+                    {METODO_LABEL[metodo] ?? metodo}: {count}
+                  </p>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* ── Extrato Table ───────────────────────────────────── */}
+      {/* ── Fila ────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Lançamentos do Extrato</CardTitle>
+          <CardTitle className="text-base">
+            {filtroStatus === "PENDENTE" ? "Fila de exceções" : "Lançamentos do extrato"}
+            {filtroStatus === "PENDENTE" && lancamentos.length > 0 && (
+              <Badge variant="secondary" className="ml-2">{lancamentos.length}</Badge>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[100px]">Data</TableHead>
+                  <TableHead className="w-[90px]">Data</TableHead>
                   <TableHead>Descrição</TableHead>
-                  <TableHead className="w-[100px] text-right">Valor</TableHead>
-                  <TableHead className="w-[100px] text-right">Saldo</TableHead>
-                  <TableHead className="w-[150px]">Natureza</TableHead>
-                  <TableHead className="w-[100px] text-center">Conciliado</TableHead>
+                  <TableHead className="w-[110px] text-right">Valor</TableHead>
+                  <TableHead className="w-[130px]">Natureza</TableHead>
+                  <TableHead className="w-[130px]">Status</TableHead>
+                  <TableHead>Sugestão do motor</TableHead>
+                  <TableHead className="w-[280px] text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                       Carregando...
                     </TableCell>
                   </TableRow>
                 ) : lancamentos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Nenhum lançamento encontrado. Importe o extrato do BTG.
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      {filtroStatus === "PENDENTE"
+                        ? "Nenhuma pendência — extrato 100% explicado. 🎉"
+                        : "Nenhum lançamento encontrado."}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  lancamentos.map((item) => (
-                    <TableRow key={item.id} className={item.conciliado ? "opacity-60" : ""}>
-                      <TableCell className="text-sm">
-                        {format(new Date(item.data_lancamento + "T12:00:00"), "dd/MM/yy")}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        <div className="flex items-center gap-2">
-                          {item.tipo === "CREDITO" ? (
-                            <ArrowDownCircle className="h-4 w-4 text-success shrink-0" />
-                          ) : (
-                            <ArrowUpCircle className="h-4 w-4 text-destructive shrink-0" />
-                          )}
-                          {item.descricao}
-                        </div>
-                      </TableCell>
-                      <TableCell className={`text-sm text-right font-medium ${item.tipo === "CREDITO" ? "text-success" : "text-destructive"}`}>
-                        {item.tipo === "DEBITO" ? "-" : "+"}{fmtCurrency(item.valor)}
-                      </TableCell>
-                      <TableCell className="text-sm text-right">
-                        {item.saldo_apos != null ? fmtCurrency(item.saldo_apos) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          value={item.natureza || ""}
-                          onValueChange={(v) => classificarMutation.mutate({ id: item.id, natureza: v })}
-                        >
-                          <SelectTrigger className="h-7 text-xs w-[130px]">
-                            <SelectValue placeholder="Classificar" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {NATUREZAS.map((n) => (
-                              <SelectItem key={n} value={n}>{n}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => conciliarMutation.mutate({ id: item.id, conciliado: !item.conciliado })}
-                        >
-                          {item.conciliado ? (
-                            <CheckCircle2 className="h-4 w-4 text-success" />
-                          ) : (
-                            <XCircle className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  lancamentos.map((item) => {
+                    const pendente = (item.status_conciliacao || "PENDENTE") === "PENDENTE";
+                    const sug = topSugestao(item);
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell className="text-sm">
+                          {format(new Date(item.data_lancamento + "T12:00:00"), "dd/MM/yy")}
+                        </TableCell>
+                        <TableCell className="text-sm max-w-[280px]">
+                          <div className="flex items-center gap-2">
+                            {item.tipo === "CREDITO" ? (
+                              <ArrowDownCircle className="h-4 w-4 text-success shrink-0" />
+                            ) : (
+                              <ArrowUpCircle className="h-4 w-4 text-danger shrink-0" />
+                            )}
+                            <span className="truncate">{item.descricao}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className={`text-sm text-right font-medium ${item.tipo === "CREDITO" ? "text-success" : "text-danger"}`}>
+                          {item.tipo === "DEBITO" ? "-" : "+"}{fmtCurrency(item.valor)}
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={item.natureza || ""}
+                            onValueChange={(v) => classificarMutation.mutate({ id: item.id, natureza: v })}
+                          >
+                            <SelectTrigger className="h-7 text-xs w-[120px]">
+                              <SelectValue placeholder="Classificar" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {NATUREZAS_CLASSIFICACAO.map((n) => (
+                                <SelectItem key={n} value={n}>{n}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>{statusBadge(item)}</TableCell>
+                        <TableCell className="text-xs">
+                          {pendente && sug ? (
+                            <div className="flex items-center gap-1.5">
+                              <Badge variant="outline" className="shrink-0">
+                                {ALVO_LABEL[sug.alvo_tipo] ?? sug.alvo_tipo} · {sug.score}
+                              </Badge>
+                              <span className="text-muted-foreground truncate max-w-[220px]">{sug.motivo}</span>
+                            </div>
+                          ) : pendente ? (
+                            <span className="text-muted-foreground">Sem candidato</span>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {pendente ? (
+                            <div className="flex items-center justify-end gap-1">
+                              {sug && isAdmin && (
+                                <Button
+                                  size="sm"
+                                  className="h-7"
+                                  onClick={() => confirmarMutation.mutate({ item, sugestao: sug })}
+                                  disabled={confirmarMutation.isPending}
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                                  Confirmar
+                                </Button>
+                              )}
+                              <Button variant="outline" size="sm" className="h-7" onClick={() => abrirCandidatos(item)}>
+                                <Search className="h-3.5 w-3.5 mr-1" />
+                                Candidatos
+                              </Button>
+                              {isAdmin && (
+                                <>
+                                  <Button variant="ghost" size="sm" className="h-7" title="Ignorar (ex.: transferência interna)" onClick={() => setIgnorarFor(item)}>
+                                    <EyeOff className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7"
+                                    title="Criar lançamento a partir do extrato"
+                                    onClick={() => {
+                                      setCriarFor(item);
+                                      setCriarDescricao(item.descricao || "");
+                                    }}
+                                  >
+                                    <FilePlus2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          ) : item.status_conciliacao !== "PENDENTE" && isAdmin ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7"
+                              title="Desfazer conciliação"
+                              onClick={() => desfazerMutation.mutate(item)}
+                              disabled={desfazerMutation.isPending}
+                            >
+                              <Undo2 className="h-3.5 w-3.5 mr-1" />
+                              Desfazer
+                            </Button>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -437,7 +644,7 @@ export default function BankingExtratoDashboard() {
         </CardContent>
       </Card>
 
-      {/* ── Breakdown by Natureza ───────────────────────────── */}
+      {/* ── Breakdown por Natureza ──────────────────────────── */}
       {resumo?.por_natureza && Object.keys(resumo.por_natureza).length > 0 && (
         <Card>
           <CardHeader>
@@ -448,7 +655,7 @@ export default function BankingExtratoDashboard() {
               {Object.entries(resumo.por_natureza).map(([nat, info]) => (
                 <div key={nat} className="p-3 rounded-lg border bg-muted/30">
                   <p className="text-xs font-medium text-muted-foreground">{nat}</p>
-                  <p className={`text-lg font-bold ${info.total >= 0 ? "text-success" : "text-destructive"}`}>
+                  <p className={`text-lg font-bold ${info.total >= 0 ? "text-success" : "text-danger"}`}>
                     {fmtCurrency(Math.abs(info.total))}
                   </p>
                   <p className="text-xs text-muted-foreground">{info.count} lançamentos</p>
@@ -458,6 +665,131 @@ export default function BankingExtratoDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* ── Dialog: candidatos ──────────────────────────────── */}
+      <BaseDialog
+        open={!!candidatosFor}
+        onOpenChange={(o) => !o && setCandidatosFor(null)}
+        title="Candidatos de conciliação"
+        size="sm"
+        description={
+          candidatosFor
+            ? `${format(new Date(candidatosFor.data_lancamento + "T12:00:00"), "dd/MM/yyyy")} · ${candidatosFor.tipo === "DEBITO" ? "-" : "+"}${fmtCurrency(candidatosFor.valor)} · ${candidatosFor.descricao}`
+            : undefined
+        }
+      >
+        {candidatosLive === null ? (
+          <p className="text-sm text-muted-foreground py-4">Recalculando candidatos...</p>
+        ) : candidatosLive.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">
+            Nenhum candidato encontrado. Use "Criar lançamento" ou "Ignorar".
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {candidatosLive.map((s, i) => (
+              <div key={`${s.alvo_id}-${i}`} className="flex items-center justify-between gap-2 p-2 rounded-lg border">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">
+                    {ALVO_LABEL[s.alvo_tipo] ?? s.alvo_tipo}
+                    <Badge variant="outline" className="ml-2">score {s.score}</Badge>
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">{s.motivo}</p>
+                </div>
+                {isAdmin && candidatosFor && (
+                  <Button
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => confirmarMutation.mutate({ item: candidatosFor, sugestao: s })}
+                    disabled={confirmarMutation.isPending}
+                  >
+                    Confirmar
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </BaseDialog>
+
+      {/* ── Dialog: ignorar ─────────────────────────────────── */}
+      <BaseDialog
+        open={!!ignorarFor}
+        onOpenChange={(o) => !o && setIgnorarFor(null)}
+        title="Ignorar linha do extrato"
+        size="sm"
+        description="Use para movimentos que não devem ser explicados pelo ledger (ex.: transferência entre contas próprias)."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIgnorarFor(null)}>Cancelar</Button>
+            <Button
+              onClick={() => ignorarFor && ignorarMutation.mutate({ item: ignorarFor, observacao: ignorarObs })}
+              disabled={ignorarMutation.isPending}
+            >
+              Ignorar linha
+            </Button>
+          </>
+        }
+      >
+        <Textarea
+          placeholder="Observação (opcional)"
+          value={ignorarObs}
+          onChange={(e) => setIgnorarObs(e.target.value)}
+        />
+      </BaseDialog>
+
+      {/* ── Dialog: criar lançamento ────────────────────────── */}
+      <BaseDialog
+        open={!!criarFor}
+        onOpenChange={(o) => !o && setCriarFor(null)}
+        title="Criar lançamento a partir do extrato"
+        size="sm"
+        description={
+          criarFor
+            ? `Lançamento BAIXADO com data e valor reais da linha: ${criarFor.tipo === "DEBITO" ? "-" : "+"}${fmtCurrency(criarFor.valor)} em ${format(new Date(criarFor.data_lancamento + "T12:00:00"), "dd/MM/yyyy")}.`
+            : undefined
+        }
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setCriarFor(null)}>Cancelar</Button>
+            <Button
+              onClick={() =>
+                criarFor &&
+                criarLancamentoMutation.mutate({
+                  item: criarFor, natureza: criarNatureza, categoria: criarCategoria, descricao: criarDescricao,
+                })
+              }
+              disabled={criarLancamentoMutation.isPending}
+            >
+              Criar e conciliar
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Natureza</label>
+            <Select value={criarNatureza} onValueChange={setCriarNatureza}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {NATUREZAS_LANCAMENTO.map((n) => (
+                  <SelectItem key={n} value={n}>{n.replace(/_/g, " ")}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Categoria (opcional)</label>
+            <Input value={criarCategoria} onChange={(e) => setCriarCategoria(e.target.value)} placeholder="ex.: TARIFA_BANCARIA" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Descrição</label>
+            <Input value={criarDescricao} onChange={(e) => setCriarDescricao(e.target.value)} />
+          </div>
+        </div>
+      </BaseDialog>
+
+      {/* ── Dialog: regras de tarifas ───────────────────────── */}
+      <ExtratoRegrasDialog open={regrasOpen} onOpenChange={setRegrasOpen} codEmpresa={codEmpresa} />
     </div>
   );
 }

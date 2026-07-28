@@ -50,6 +50,22 @@ export default function FinanceiroOverviewPage() {
     refetchInterval: 60000,
   });
 
+  // E4 — fila de exceções da conciliação bancária (SPEC_P1 §6)
+  const { data: extratoPendentes = 0 } = useQuery<number>({
+    queryKey: ["extrato-pendentes", codEmpresa],
+    queryFn: async () => {
+      let query = supabase
+        .from("btg_extrato")
+        .select("id", { count: "exact", head: true })
+        .eq("status_conciliacao", "PENDENTE");
+      if (codEmpresa) query = query.eq("cod_empresa", codEmpresa);
+      const { count, error } = await query;
+      if (error) return 0;
+      return count ?? 0;
+    },
+    refetchInterval: 60000,
+  });
+
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
@@ -163,6 +179,17 @@ export default function FinanceiroOverviewPage() {
               <div>
                 <p className="text-sm font-medium">{resumo.recebiveisPendentes} recebível(is)</p>
                 <p className="text-xs text-muted-foreground">Pendentes conciliação</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        {extratoPendentes > 0 && (
+          <Card className="border-warning/30 bg-warning/5 cursor-pointer hover:bg-warning/10 transition-colors" onClick={() => navigate("/financeiro/banking/extrato")}>
+            <CardContent className="flex items-center gap-3 p-4">
+              <Landmark className="h-5 w-5 text-warning shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-warning">Extrato pendente de conciliação ({extratoPendentes})</p>
+                <p className="text-xs text-muted-foreground">Fila de exceções bancária</p>
               </div>
             </CardContent>
           </Card>
