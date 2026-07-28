@@ -125,7 +125,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
         { title: "Pagamentos", url: "/financeiro/banking/pagamentos", icon: CreditCard },
         { title: "Cobranças / Boletos", url: "/financeiro/banking/cobrancas", icon: Receipt },
         { title: "Conciliação DDA", url: "/financeiro/banking/dda", icon: FileSearch },
-        { title: "Extrato e Batimento", url: "/financeiro/banking/extrato", icon: Landmark },
+        { title: "Conciliação Bancária", url: "/financeiro/banking/extrato", icon: Landmark },
       ],
     },
   ],

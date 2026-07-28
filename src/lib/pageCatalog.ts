@@ -41,7 +41,7 @@ export const PAGE_CATALOG: PageEntry[] = [
   { key: "financeiro.banking-pagamentos", module: "financeiro", title: "Banking · Pagamentos", path: "/financeiro/banking/pagamentos" },
   { key: "financeiro.banking-cobrancas", module: "financeiro", title: "Banking · Cobranças", path: "/financeiro/banking/cobrancas" },
   { key: "financeiro.banking-dda", module: "financeiro", title: "Banking · DDA", path: "/financeiro/banking/dda" },
-  { key: "financeiro.banking-extrato", module: "financeiro", title: "Banking · Extrato", path: "/financeiro/banking/extrato" },
+  { key: "financeiro.banking-extrato", module: "financeiro", title: "Banking · Conciliação Bancária", path: "/financeiro/banking/extrato" },
   // IA
   { key: "ia.central", module: "ia", title: "Central de IA", path: "/ia" },
   // Config
