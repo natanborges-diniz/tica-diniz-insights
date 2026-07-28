@@ -344,12 +344,21 @@ export default function BankingExtratoDashboard() {
 
   const classificarMutation = useMutation({
     mutationFn: async ({ id, natureza }: { id: string; natureza: string }) => {
-      const { error } = await supabase.functions.invoke("btg-extrato", {
+      const { data, error } = await supabase.functions.invoke("btg-extrato", {
         body: { action: "classificar", id, natureza },
       });
       if (error) throw new Error(await getFunctionErrorMessage(error));
+      return data as { replicadas?: number; empresas?: number } | null;
     },
-    onSuccess: invalidate,
+    onSuccess: (data) => {
+      const replicadas = data?.replicadas ?? 0;
+      if (replicadas > 0) {
+        toast.success(`Classificação aplicada e replicada em ${replicadas} linha${replicadas === 1 ? "" : "s"} igual${replicadas === 1 ? "" : "is"}`);
+      } else {
+        toast.success("Classificação aplicada");
+      }
+      invalidate();
+    },
   });
 
   const abrirCandidatos = async (item: ExtratoItem) => {
