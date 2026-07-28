@@ -701,7 +701,7 @@ export default function BankingExtratoDashboard() {
                                 </>
                               )}
                             </div>
-                          ) : item.status_conciliacao !== "PENDENTE" && isAdmin ? (
+                          ) : statusAtual !== "PENDENTE" && statusAtual !== "CLASSIFICADO" && isAdmin ? (
                             <Button
                               variant="ghost"
                               size="sm"
