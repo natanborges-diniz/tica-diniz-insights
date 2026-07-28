@@ -15,6 +15,23 @@ export interface MetaVenda {
   percentualAceitavel: number;
 }
 
+function mapMetaRow(m: any): MetaVenda {
+  return {
+    id: m.id,
+    tipo: m.tipo,
+    codReferencia: m.cod_referencia,
+    nomeReferencia: m.nome_referencia,
+    ano: m.ano,
+    mes: m.mes,
+    metaFaturamento: Number(m.meta_faturamento) || 0,
+    metaTicketMedio: Number(m.meta_ticket_medio) || 0,
+    metaDescontoMax: Number(m.meta_desconto_max) || 0,
+    metaQtdVendas: m.meta_qtd_vendas || 0,
+    numVendedores: m.num_vendedores || 1,
+    percentualAceitavel: Number(m.percentual_aceitavel) || 100,
+  };
+}
+
 export async function getMetasPorPeriodo(
   tipo: 'LOJA' | 'VENDEDOR',
   ano: number,
@@ -32,20 +49,30 @@ export async function getMetasPorPeriodo(
     return [];
   }
 
-  return (data || []).map((m: any) => ({
-    id: m.id,
-    tipo: m.tipo,
-    codReferencia: m.cod_referencia,
-    nomeReferencia: m.nome_referencia,
-    ano: m.ano,
-    mes: m.mes,
-    metaFaturamento: Number(m.meta_faturamento) || 0,
-    metaTicketMedio: Number(m.meta_ticket_medio) || 0,
-    metaDescontoMax: Number(m.meta_desconto_max) || 0,
-    metaQtdVendas: m.meta_qtd_vendas || 0,
-    numVendedores: m.num_vendedores || 1,
-    percentualAceitavel: Number(m.percentual_aceitavel) || 100,
-  }));
+  return (data || []).map(mapMetaRow);
+}
+
+/**
+ * F8: busca o ano INTEIRO de um tipo em 1 query (sem filtro de mês).
+ * Substitui o padrão antigo de 12 queries (uma por mês) na tela de metas.
+ */
+export async function getMetasPorAno(
+  tipo: 'LOJA' | 'VENDEDOR',
+  ano: number
+): Promise<MetaVenda[]> {
+  const { data, error } = await supabase
+    .from('metas_vendas')
+    .select('*')
+    .eq('tipo', tipo)
+    .eq('ano', ano)
+    .order('mes', { ascending: true });
+
+  if (error) {
+    console.error('Erro ao buscar metas do ano:', error);
+    return [];
+  }
+
+  return (data || []).map(mapMetaRow);
 }
 
 export async function upsertMeta(meta: Omit<MetaVenda, 'id'>): Promise<boolean> {

@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
-import { 
-  getMetasPorPeriodo, 
-  upsertMeta, 
+import {
+  getMetasPorAno,
+  upsertMeta,
   deleteMeta,
-  MetaVenda 
+  MetaVenda
 } from "@/services/metasService";
 import { getEmpresas, Empresa } from "@/services/empresaService";
 import { getResumoEmpresaVendedor, ResumoEmpresaVendedor } from "@/services/vendasService";
@@ -62,8 +62,10 @@ export function useMetasVendas() {
     try {
       const dataFim = new Date();
       const dataIni = new Date();
-      dataIni.setMonth(dataIni.getMonth() - 3); // Últimos 3 meses para pegar vendedores ativos
-      
+      // F8: 1 mês é suficiente para popular o dropdown de vendedores ativos
+      // (antes eram 3 meses de TODAS as lojas só para montar a lista).
+      dataIni.setMonth(dataIni.getMonth() - 1);
+
       const result = await getResumoEmpresaVendedor({
         empresa: empresa === 'ALL' ? 'ALL' : String(empresa),
         dataInicio: dataIni.toISOString().split('T')[0],
@@ -108,28 +110,17 @@ export function useMetasVendas() {
     setLoading(true);
     setError(null);
     try {
-      // Buscar todos os meses do ano para ter dados completos
-      const promisesLoja: Promise<MetaVenda[]>[] = [];
-      const promisesVendedor: Promise<MetaVenda[]>[] = [];
-      
-      for (let mes = 1; mes <= 12; mes++) {
-        if (filters.tipo === 'TODOS' || filters.tipo === 'LOJA') {
-          promisesLoja.push(getMetasPorPeriodo('LOJA', filters.ano, mes));
-        }
-        if (filters.tipo === 'TODOS' || filters.tipo === 'VENDEDOR') {
-          promisesVendedor.push(getMetasPorPeriodo('VENDEDOR', filters.ano, mes));
-        }
-      }
-
-      const [metasLojaResults, metasVendedorResults] = await Promise.all([
-        Promise.all(promisesLoja),
-        Promise.all(promisesVendedor),
+      // F8: 1 query por tipo com o ano inteiro (antes: 12 meses × 2 tipos = 24 queries)
+      const [metasLoja, metasVendedor] = await Promise.all([
+        (filters.tipo === 'TODOS' || filters.tipo === 'LOJA')
+          ? getMetasPorAno('LOJA', filters.ano)
+          : Promise.resolve<MetaVenda[]>([]),
+        (filters.tipo === 'TODOS' || filters.tipo === 'VENDEDOR')
+          ? getMetasPorAno('VENDEDOR', filters.ano)
+          : Promise.resolve<MetaVenda[]>([]),
       ]);
 
-      let resultado: MetaVenda[] = [
-        ...metasLojaResults.flat(),
-        ...metasVendedorResults.flat(),
-      ];
+      let resultado: MetaVenda[] = [...metasLoja, ...metasVendedor];
 
       // Filtrar por empresa se necessário
       if (filters.empresa !== 'ALL' && filters.tipo !== 'LOJA') {

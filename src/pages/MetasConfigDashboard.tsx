@@ -75,7 +75,15 @@ export default function MetasConfigDashboard() {
     fetchMetas,
     fetchVendedores,
     excluirMeta,
+    setFilters: setMetasFilters,
   } = useMetasVendas();
+
+  // F6: manter o filtro de ano do useMetasVendas sincronizado com o seletor
+  // do header (useCalendarioConfig). Antes o header salvava num ano e o
+  // fetchMetas filtrava noutro (filters.ano nunca era atualizado).
+  useEffect(() => {
+    setMetasFilters(prev => (prev.ano === ano ? prev : { ...prev, ano }));
+  }, [ano, setMetasFilters]);
 
   // Estado global da aba
   const [tabAtiva, setTabAtiva] = useState("metas-lojas");
