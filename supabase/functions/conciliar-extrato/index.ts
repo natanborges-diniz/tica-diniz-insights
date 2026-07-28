@@ -53,7 +53,7 @@ function normalizarDescricaoExtrato(descricao: unknown): string {
     .toUpperCase();
 }
 
-async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient>, alvo: { id: string; descricao: string | null; tipo: string | null }, natureza: string, nowIso: string) {
+async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient>, alvo: { id: string; descricao: string | null; tipo: string | null }, natureza: string, userId: string | null, nowIso: string) {
   const descNorm = normalizarDescricaoExtrato(alvo.descricao);
   if (!descNorm || !alvo.tipo) return { replicadas: 0, empresas: 0 };
 
@@ -75,7 +75,6 @@ async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient
     const rows = (data || []) as Array<{ id: string; cod_empresa: number; descricao: string | null; natureza: string | null; tipo: string | null }>;
     for (const row of rows) {
       if (row.id === alvo.id) continue;
-      if (row.natureza && row.natureza.trim() !== "") continue;
       if (normalizarDescricaoExtrato(row.descricao) !== descNorm) continue;
       ids.push(row.id);
       empresas.add(row.cod_empresa);
@@ -89,7 +88,15 @@ async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient
     const lote = ids.slice(i, i + 500);
     const { error } = await db
       .from("btg_extrato")
-      .update({ natureza, updated_at: nowIso })
+      .update({
+        natureza,
+        status_conciliacao: "CONCILIADO_MANUAL",
+        metodo_conciliacao: "MANUAL",
+        conciliado: true,
+        conciliado_por: userId,
+        conciliado_em: nowIso,
+        updated_at: nowIso,
+      })
       .in("id", lote);
     if (error) throw new Error(error.message);
   }
@@ -441,7 +448,7 @@ async function handleCriarLancamento(db: ReturnType<typeof getServiceClient>, bo
   });
   if (error) return json({ error: error.message }, 400);
 
-  const { replicadas, empresas } = await replicarNaturezaParaIguais(db, entry, natureza, new Date().toISOString());
+  const { replicadas, empresas } = await replicarNaturezaParaIguais(db, entry, natureza, userId, new Date().toISOString());
   return json({ success: true, ...data, replicadas, empresas });
 }
 

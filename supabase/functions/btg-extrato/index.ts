@@ -124,7 +124,7 @@ function normalizarDescricaoExtrato(descricao: unknown): string {
     .toUpperCase();
 }
 
-async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient>, alvo: { id: string; descricao: string | null; tipo: string | null }, natureza: string, nowIso: string) {
+async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient>, alvo: { id: string; descricao: string | null; tipo: string | null }, natureza: string, userId: string, nowIso: string) {
   const descNorm = normalizarDescricaoExtrato(alvo.descricao);
   if (!descNorm || !alvo.tipo) return { replicadas: 0, empresas: 0 };
 
@@ -137,7 +137,7 @@ async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient
     const { data, error } = await db
       .from("btg_extrato")
       .select("id, cod_empresa, descricao, natureza, tipo, status_conciliacao")
-      .in("status_conciliacao", ["PENDENTE", "CLASSIFICADO"])
+      .eq("status_conciliacao", "PENDENTE")
       .eq("tipo", alvo.tipo)
       .range(offset, offset + pageSize - 1);
 
@@ -146,7 +146,6 @@ async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient
     const rows = (data || []) as Array<{ id: string; cod_empresa: number; descricao: string | null; natureza: string | null; tipo: string | null }>;
     for (const row of rows) {
       if (row.id === alvo.id) continue;
-      if (row.natureza && row.natureza.trim() !== "") continue;
       if (normalizarDescricaoExtrato(row.descricao) !== descNorm) continue;
       ids.push(row.id);
       empresas.add(row.cod_empresa);
@@ -160,7 +159,15 @@ async function replicarNaturezaParaIguais(db: ReturnType<typeof getServiceClient
     const lote = ids.slice(i, i + 500);
     const { error } = await db
       .from("btg_extrato")
-      .update({ natureza, status_conciliacao: "CLASSIFICADO", updated_at: nowIso })
+      .update({
+        natureza,
+        status_conciliacao: "CONCILIADO_MANUAL",
+        metodo_conciliacao: "MANUAL",
+        conciliado: true,
+        conciliado_por: userId,
+        conciliado_em: nowIso,
+        updated_at: nowIso,
+      })
       .in("id", lote);
     if (error) throw new Error(error.message);
   }
@@ -441,11 +448,19 @@ async function handleClassificar(body: Record<string, unknown>, userId: string) 
 
   const { error: errUpd } = await db
     .from("btg_extrato")
-    .update({ natureza: nat, status_conciliacao: "CLASSIFICADO", updated_at: nowIso })
+    .update({
+      natureza: nat,
+      status_conciliacao: "CONCILIADO_MANUAL",
+      metodo_conciliacao: "MANUAL",
+      conciliado: true,
+      conciliado_por: userId,
+      conciliado_em: nowIso,
+      updated_at: nowIso,
+    })
     .eq("id", String(id));
   if (errUpd) return json({ error: "Erro ao classificar", details: errUpd.message }, 500);
 
-  const { replicadas, empresas } = await replicarNaturezaParaIguais(db, alvo, nat, nowIso);
+  const { replicadas, empresas } = await replicarNaturezaParaIguais(db, alvo, nat, userId, nowIso);
 
   return json({ success: true, replicadas, empresas });
 }
