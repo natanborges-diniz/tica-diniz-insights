@@ -12,10 +12,14 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  ArrowLeft, Calendar, Store, Settings, Plus, Trash2, Save, 
-  Building2, CalendarDays, AlertCircle, Target, Users, Copy
+import {
+  ArrowLeft, Calendar, Store, Settings, Plus, Trash2, Save,
+  Building2, CalendarDays, AlertCircle, Target, Users, Copy,
+  CalendarRange, BadgePercent
 } from "lucide-react";
+import { SemanasTab } from "@/components/metas/SemanasTab";
+import { GruposTab } from "@/components/metas/GruposTab";
+import { ComissoesPremiosTab } from "@/components/metas/ComissoesPremiosTab";
 import { useCalendarioConfig } from "@/hooks/useCalendarioConfig";
 import { useMetasVendas, VendedorOption } from "@/hooks/useMetasVendas";
 import {
@@ -540,7 +544,11 @@ export default function MetasConfigDashboard() {
           <Skeleton className="h-96" />
         ) : (
           <Tabs value={tabAtiva} onValueChange={handleTabChange} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-6 h-auto">
+            <TabsList className="grid w-full grid-cols-4 lg:grid-cols-9 h-auto">
+              <TabsTrigger value="semanas" className="flex flex-col gap-1 py-2">
+                <CalendarRange className="h-4 w-4" />
+                <span className="text-xs">Semanas</span>
+              </TabsTrigger>
               <TabsTrigger value="metas-lojas" className="flex flex-col gap-1 py-2">
                 <Target className="h-4 w-4" />
                 <span className="text-xs">Metas Lojas</span>
@@ -565,7 +573,30 @@ export default function MetasConfigDashboard() {
                 <AlertCircle className="h-4 w-4" />
                 <span className="text-xs">Exceções</span>
               </TabsTrigger>
+              <TabsTrigger value="grupos" className="flex flex-col gap-1 py-2">
+                <Building2 className="h-4 w-4" />
+                <span className="text-xs">Grupos</span>
+              </TabsTrigger>
+              <TabsTrigger value="comissoes" className="flex flex-col gap-1 py-2">
+                <BadgePercent className="h-4 w-4" />
+                <span className="text-xs">Comissões & Prêmios</span>
+              </TabsTrigger>
             </TabsList>
+
+            {/* ========== METAS SEMANAIS (Fase 2) ========== */}
+            <TabsContent value="semanas">
+              <SemanasTab empresas={empresas} ano={ano} />
+            </TabsContent>
+
+            {/* ========== GRUPOS DE LOJAS (supervisores) ========== */}
+            <TabsContent value="grupos">
+              <GruposTab empresas={empresas} />
+            </TabsContent>
+
+            {/* ========== COMISSÕES & PRÊMIOS (master) ========== */}
+            <TabsContent value="comissoes">
+              <ComissoesPremiosTab />
+            </TabsContent>
 
             {/* ========== METAS DE LOJAS EM LOTE ========== */}
             <TabsContent value="metas-lojas">
