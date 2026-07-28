@@ -28,6 +28,12 @@ function mapRecord(r: Rec, loadedAt: string) {
     conta_numero: ((r.contacla_numero as string) ?? "").trim() || null,
     conta_descricao: ((r.contacla_descricao as string) ?? "").trim() || null,
     forma_pagamento_tipo: ((r.formapagto_tipo_nome as string) ?? "").trim() || null,
+    // P2/E1 — chave dura do ERP (SPEC_P2_LEDGER_UNICO.md §3.1)
+    cod_lancamento: r.cod_lancamento != null ? Number(r.cod_lancamento) : null,
+    parcela_id: r.parcela_id != null ? Number(r.parcela_id) : null,
+    cod_pessoa: r.pessoa_cod_pessoa != null ? Number(r.pessoa_cod_pessoa) : null,
+    valor_original: r.parcela_valor_original ?? null,
+    data_recebimento: r.parcela_data_recebimento ?? null,
     cache_loaded_at: loadedAt,
   };
 }
@@ -128,11 +134,16 @@ Deno.serve(async (req) => {
     const loadedAt = new Date().toISOString();
     const combined = [...recsVenc, ...recsEmis].map((r) => mapRecord(r, loadedAt));
 
-    // Dedupe em memória pela chave única (cod_empresa, tipo_lancamento, documento, data_vencimento, valor)
+    // P2/E1 — identidade agora é a chave dura (cod_empresa, parcela_id).
+    // Registros sem parcela_id (bridge desatualizada) são descartados com log —
+    // melhor faltar até o deploy da bridge do que duplicar.
+    const semChave = combined.filter((r) => r.parcela_id == null).length;
+    if (semChave > 0) console.warn(`[sync-parcelas] ${semChave} registros sem parcela_id descartados (bridge desatualizada?)`);
+
     const dedup = new Map<string, ReturnType<typeof mapRecord>>();
     for (const r of combined) {
-      const k = `${r.cod_empresa}|${r.tipo_lancamento}|${r.documento}|${r.data_vencimento}|${r.valor}`;
-      dedup.set(k, r);
+      if (r.parcela_id == null) continue;
+      dedup.set(`${r.cod_empresa}|${r.parcela_id}`, r);
     }
     const records = Array.from(dedup.values());
     console.log(`[sync-parcelas] After dedupe: ${records.length}`);
@@ -145,12 +156,14 @@ Deno.serve(async (req) => {
 
     const batchSize = 200;
     let totalUpserted = 0;
+    let upsertFailures = 0;
     for (let i = 0; i < records.length; i += batchSize) {
       const batch = records.slice(i, i + batchSize);
       const { error } = await supabase
         .from("parcelas_cache")
-        .upsert(batch, { onConflict: "cod_empresa,tipo_lancamento,documento,data_vencimento,valor" });
+        .upsert(batch, { onConflict: "cod_empresa,parcela_id" });
       if (error) {
+        upsertFailures++;
         console.error(`[sync-parcelas] Upsert error batch ${i}:`, error.message);
       } else {
         totalUpserted += batch.length;
@@ -159,10 +172,30 @@ Deno.serve(async (req) => {
 
     console.log(`[sync-parcelas] Upserted ${totalUpserted} parcelas`);
 
+    // P2/E1 — no backfill, remove as linhas legadas sem chave dura das empresas
+    // sincronizadas (evita dupla contagem no Dashboard de Parcelas). Só quando o
+    // run foi limpo — se algum batch falhou, preserva o legado.
+    let legadoRemovido = 0;
+    if (mode === "backfill" && upsertFailures === 0 && totalUpserted > 0) {
+      const empresasNum = empresasParam.map((e) => Number(e)).filter((n) => !Number.isNaN(n));
+      const { count, error: delErr } = await supabase
+        .from("parcelas_cache")
+        .delete({ count: "exact" })
+        .is("parcela_id", null)
+        .in("cod_empresa", empresasNum);
+      if (delErr) console.error("[sync-parcelas] Erro ao limpar legado:", delErr.message);
+      else {
+        legadoRemovido = count ?? 0;
+        console.log(`[sync-parcelas] Legado sem parcela_id removido: ${legadoRemovido}`);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,
         synced: totalUpserted,
+        sem_chave_descartados: semChave,
+        legado_removido: legadoRemovido,
         mode,
         empresas: empresasParam,
         windows: { vencimento: { ini: vencIni, fim: vencFim }, emissao: { ini: emissaoIni, fim: emissaoFim } },
