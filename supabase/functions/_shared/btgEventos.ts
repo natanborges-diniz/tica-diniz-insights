@@ -5,6 +5,8 @@
 // linha correspondente do extrato chegar, ela casa por referência forte com o
 // pagamento já PAGO — os três lados fecham.
 
+declare const Deno: { env: { get(key: string): string | undefined } };
+
 // ─── Vocabulário de status BTG (tolerante — pendência #1 da spec §9) ──
 const FAILED_WORDS = ["REJECTED", "REFUSED", "FAILED", "CANCELLED", "CANCELED", "ERROR", "RETURNED"];
 const PAID_WORDS = ["PAID", "COMPLETED", "EXECUTED", "SETTLED", "PROCESSED", "LIQUIDATED", "DONE"];

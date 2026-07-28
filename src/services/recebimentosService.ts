@@ -74,7 +74,7 @@ export async function getRecebimentosAgregado(
   let from = 0;
 
   for (;;) {
-    let query = supabase
+    let query: any = (supabase as any)
       .from('recebimentos_agregado_diario')
       .select('cod_empresa, cod_vendedor, vendedor_nome, data_pagamento, forma_categoria, origem, valor_recebido, qtd_parcelas')
       .gte('data_pagamento', params.dataInicio)
@@ -176,7 +176,7 @@ export interface UltimoSyncRecebimentos {
  * no frontend — plano §4).
  */
 export async function getUltimoSyncRecebimentos(): Promise<UltimoSyncRecebimentos | null> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('sync_log')
     .select('executado_em, status, periodo_inicio, periodo_fim, linhas')
     .eq('sync_tipo', 'recebimentos_diario')

@@ -705,7 +705,7 @@ export function useEstoqueUnificado() {
   const mixIdealV2 = useMemo((): MixMarcaV2[] => {
     if (!capacidadeEmpresa || capacidadeEmpresa.capacidade_total <= 0) return [];
     const configsV2 = new Map<string, MarcaConfigV2>();
-    marcaConfigFlagsByName.forEach((_flags, nome) => {
+    marcaConfigMap.forEach((_cfg, nome) => {
       const cfg = marcaConfigMap.get(nome.trim().toUpperCase());
       if (!cfg) return;
       configsV2.set(nome, {
@@ -732,7 +732,7 @@ export function useEstoqueUnificado() {
       pctSolarDefault: capacidadeEmpresa.percentual_solar,
       minimoLoja: capacidadeEmpresa.mix_minimo,
     });
-  }, [itensFiltrados, capacidadeEmpresa, marcaConfigMap, marcaConfigFlagsByName]);
+  }, [itensFiltrados, capacidadeEmpresa, marcaConfigMap]);
 
   // ============================================
   // RESUMO POR MARCA — com blocos acionáveis (Fase 2)
