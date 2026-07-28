@@ -693,7 +693,7 @@ export default function BankingExtratoDashboard() {
                                 </>
                               )}
                             </div>
-                          ) : statusAtual !== "PENDENTE" && statusAtual !== "CLASSIFICADO" && isAdmin ? (
+                          ) : statusAtual !== "PENDENTE" && isAdmin ? (
                             <Button
                               variant="ghost"
                               size="sm"
