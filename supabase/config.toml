@@ -108,3 +108,6 @@ verify_jwt = false
 
 [functions.btg-webhook]
 verify_jwt = false
+
+[functions.sync-ledger]
+verify_jwt = false
