@@ -1003,6 +1003,7 @@ export type Database = {
       }
       extrato_regras_classificacao: {
         Row: {
+          acao: string
           ativo: boolean
           auto_conciliar: boolean
           categoria: string | null
@@ -1016,6 +1017,7 @@ export type Database = {
           valor_max: number | null
         }
         Insert: {
+          acao?: string
           ativo?: boolean
           auto_conciliar?: boolean
           categoria?: string | null
@@ -1029,6 +1031,7 @@ export type Database = {
           valor_max?: number | null
         }
         Update: {
+          acao?: string
           ativo?: boolean
           auto_conciliar?: boolean
           categoria?: string | null
@@ -1630,6 +1633,36 @@ export type Database = {
           mes_fim?: number | null
           mes_inicio?: number | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      metas_semana_cortes: {
+        Row: {
+          ano: number
+          atualizado_em: string
+          id: string
+          mes: number
+          ordem: number
+          semana_fim: string
+          semana_inicio: string
+        }
+        Insert: {
+          ano: number
+          atualizado_em?: string
+          id?: string
+          mes: number
+          ordem: number
+          semana_fim: string
+          semana_inicio: string
+        }
+        Update: {
+          ano?: number
+          atualizado_em?: string
+          id?: string
+          mes?: number
+          ordem?: number
+          semana_fim?: string
+          semana_inicio?: string
         }
         Relationships: []
       }
