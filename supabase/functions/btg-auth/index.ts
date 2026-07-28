@@ -247,22 +247,18 @@ async function verificarIdentidadeEmpresa(
     console.log("[btg-auth][verify] claims disponíveis:", Object.keys(payload).join(", "));
   }
 
-  if (candidatos.size > 0) {
-    if (candidatos.has(cnpjEsperado)) {
-      return {
-        status: "match",
-        companyId,
-        motivo: "CNPJ confirmado nas claims do token BTG.",
-        cnpjEncontrados: [...candidatos],
-      };
-    }
+  if (candidatos.size > 0 && candidatos.has(cnpjEsperado)) {
     return {
-      status: "mismatch",
+      status: "match",
       companyId,
-      motivo: `O login BTG pertence ao CNPJ ${[...candidatos].join(", ")}, mas a empresa selecionada é ${cnpjEsperado}.`,
+      motivo: "CNPJ confirmado nas claims do token BTG.",
       cnpjEncontrados: [...candidatos],
     };
   }
+  // Se o token traz CNPJ diferente (ou nenhum), ainda pode ser um usuário
+  // multi-empresa. Não rejeita aqui — segue para a camada 2 (chamada real
+  // à API), que é a autoridade final: se o login BTG tem acesso ao CNPJ
+  // esperado, aprova.
 
   // ── Camada 2: chamada real à API por CNPJ ──────────────────
   if (creds.isSandbox) {
