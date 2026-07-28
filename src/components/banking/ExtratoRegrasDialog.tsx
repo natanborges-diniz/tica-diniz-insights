@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { BaseDialog } from "@/components/system/BaseDialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { PlanoContaSelect, type PlanoConta } from "@/components/banking/PlanoContaSelect";
 
 interface Regra {
   id: string;
@@ -38,8 +39,7 @@ export function ExtratoRegrasDialog({ open, onOpenChange, codEmpresa }: Props) {
 
   const [novoPadrao, setNovoPadrao] = useState("");
   const [novoTipo, setNovoTipo] = useState("DEBITO");
-  const [novaNatureza, setNovaNatureza] = useState("DESPESAS_FINANCEIRAS");
-  const [novaCategoria, setNovaCategoria] = useState("TARIFA_BANCARIA");
+  const [novaConta, setNovaConta] = useState<PlanoConta | null>(null);
   const [novoValorMax, setNovoValorMax] = useState("500");
   const [novoGlobal, setNovoGlobal] = useState(false);
 
@@ -63,17 +63,19 @@ export function ExtratoRegrasDialog({ open, onOpenChange, codEmpresa }: Props) {
   const criarMutation = useMutation({
     mutationFn: async () => {
       if (!novoPadrao.trim()) throw new Error("Padrão (regex) é obrigatório");
+      if (!novaConta) throw new Error("Selecione a conta do plano");
       try {
         new RegExp(novoPadrao); // valida a regex antes de salvar
       } catch {
         throw new Error("Regex inválida");
       }
+      // Padrão do DRE: natureza = grupo_dre, categoria = categoria do plano
       const { error } = await supabase.from("extrato_regras_classificacao").insert({
         cod_empresa: novoGlobal ? null : codEmpresa,
         padrao_descricao: novoPadrao.trim(),
         tipo: novoTipo,
-        natureza: novaNatureza.trim(),
-        categoria: novaCategoria.trim() || null,
+        natureza: novaConta.grupo_dre,
+        categoria: novaConta.categoria,
         auto_conciliar: true,
         valor_max: novoValorMax ? Number(novoValorMax) : null,
         ativo: true,
@@ -137,12 +139,13 @@ export function ExtratoRegrasDialog({ open, onOpenChange, codEmpresa }: Props) {
             </Select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Natureza</label>
-            <Input value={novaNatureza} onChange={(e) => setNovaNatureza(e.target.value)} className="w-[190px]" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Categoria</label>
-            <Input value={novaCategoria} onChange={(e) => setNovaCategoria(e.target.value)} className="w-[150px]" />
+            <label className="text-xs text-muted-foreground">Conta do plano (grupo DRE)</label>
+            <PlanoContaSelect
+              className="w-[240px]"
+              value={novaConta?.conta_numero ?? null}
+              onChange={setNovaConta}
+              grupos={novoTipo === "CREDITO" ? ["RECEITA_BRUTA", "OUTRAS_RECEITAS"] : undefined}
+            />
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Valor máx. (R$)</label>

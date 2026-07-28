@@ -25,6 +25,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { ExtratoRegrasDialog } from "@/components/banking/ExtratoRegrasDialog";
+import { PlanoContaSelect, usePlanoContas, type PlanoConta } from "@/components/banking/PlanoContaSelect";
 
 // ─── Types ───────────────────────────────────────────────────
 interface Sugestao {
@@ -112,15 +113,9 @@ const ALVO_LABEL: Record<string, string> = {
   TARIFA: "Tarifa",
 };
 
-const NATUREZAS_LANCAMENTO = [
-  "DESPESAS_FINANCEIRAS", "DESPESAS_OPERACIONAIS", "IMPOSTOS",
-  "RECEITAS_OPERACIONAIS", "OUTRAS_RECEITAS", "OUTRAS_DESPESAS",
-];
-
-const NATUREZAS_CLASSIFICACAO = [
-  "Vendas", "Fornecedores", "Salários", "Impostos",
-  "Aluguel", "Energia/Água", "Telecom", "Financeiro", "Outros",
-];
+// Grupos DRE compatíveis com cada lado do extrato (padrão do plano de contas)
+const GRUPOS_DEBITO = ["DEDUCOES", "CUSTO_MERCADORIA", "DESPESAS_OPERACIONAIS", "OUTRAS_DESPESAS", "INVESTIMENTOS"];
+const GRUPOS_CREDITO = ["RECEITA_BRUTA", "OUTRAS_RECEITAS"];
 
 export default function BankingExtratoDashboard() {
   const { empresas } = useEmpresas();
@@ -146,9 +141,9 @@ export default function BankingExtratoDashboard() {
   const [ignorarFor, setIgnorarFor] = useState<ExtratoItem | null>(null);
   const [ignorarObs, setIgnorarObs] = useState("");
   const [criarFor, setCriarFor] = useState<ExtratoItem | null>(null);
-  const [criarNatureza, setCriarNatureza] = useState("DESPESAS_FINANCEIRAS");
-  const [criarCategoria, setCriarCategoria] = useState("");
+  const [criarConta, setCriarConta] = useState<PlanoConta | null>(null);
   const [criarDescricao, setCriarDescricao] = useState("");
+  const { data: planoContas = [] } = usePlanoContas();
   const [regrasOpen, setRegrasOpen] = useState(false);
 
   const invalidate = () => {
@@ -320,14 +315,18 @@ export default function BankingExtratoDashboard() {
   });
 
   const criarLancamentoMutation = useMutation({
-    mutationFn: ({ item, natureza, categoria, descricao }: { item: ExtratoItem; natureza: string; categoria?: string; descricao?: string }) =>
+    mutationFn: ({ item, conta, descricao }: { item: ExtratoItem; conta: PlanoConta; descricao?: string }) =>
+      // Padrão do DRE: natureza = grupo_dre, categoria = categoria do plano de contas
       invokeConciliar("criar_lancamento", {
-        extrato_id: item.id, natureza, categoria: categoria || undefined, descricao: descricao || undefined,
+        extrato_id: item.id,
+        natureza: conta.grupo_dre,
+        categoria: conta.categoria,
+        descricao: descricao || `${conta.conta_numero} ${conta.conta_descricao} — ${item.descricao ?? ""}`.trim(),
       }),
     onSuccess: () => {
       toast.success("Lançamento criado e linha conciliada");
       setCriarFor(null);
-      setCriarCategoria("");
+      setCriarConta(null);
       setCriarDescricao("");
       invalidate();
     },
@@ -618,19 +617,13 @@ export default function BankingExtratoDashboard() {
                           {item.tipo === "DEBITO" ? "-" : "+"}{fmtCurrency(item.valor)}
                         </TableCell>
                         <TableCell>
-                          <Select
-                            value={item.natureza || ""}
-                            onValueChange={(v) => classificarMutation.mutate({ id: item.id, natureza: v })}
-                          >
-                            <SelectTrigger className="h-7 text-xs w-[120px]">
-                              <SelectValue placeholder="Classificar" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {NATUREZAS_CLASSIFICACAO.map((n) => (
-                                <SelectItem key={n} value={n}>{n}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <PlanoContaSelect
+                            className="h-7 text-xs w-[150px]"
+                            placeholder={item.natureza || "Classificar"}
+                            value={planoContas.find((c) => c.conta_descricao === item.natureza)?.conta_numero ?? null}
+                            grupos={item.tipo === "DEBITO" ? GRUPOS_DEBITO : GRUPOS_CREDITO}
+                            onChange={(conta) => classificarMutation.mutate({ id: item.id, natureza: conta.conta_descricao })}
+                          />
                         </TableCell>
                         <TableCell>{statusBadge(item)}</TableCell>
                         <TableCell className="text-xs">
@@ -816,12 +809,10 @@ export default function BankingExtratoDashboard() {
             <Button variant="outline" onClick={() => setCriarFor(null)}>Cancelar</Button>
             <Button
               onClick={() =>
-                criarFor &&
-                criarLancamentoMutation.mutate({
-                  item: criarFor, natureza: criarNatureza, categoria: criarCategoria, descricao: criarDescricao,
-                })
+                criarFor && criarConta &&
+                criarLancamentoMutation.mutate({ item: criarFor, conta: criarConta, descricao: criarDescricao })
               }
-              disabled={criarLancamentoMutation.isPending}
+              disabled={criarLancamentoMutation.isPending || !criarConta}
             >
               Criar e conciliar
             </Button>
@@ -830,19 +821,17 @@ export default function BankingExtratoDashboard() {
       >
         <div className="space-y-3">
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Natureza</label>
-            <Select value={criarNatureza} onValueChange={setCriarNatureza}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {NATUREZAS_LANCAMENTO.map((n) => (
-                  <SelectItem key={n} value={n}>{n.replace(/_/g, " ")}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Categoria (opcional)</label>
-            <Input value={criarCategoria} onChange={(e) => setCriarCategoria(e.target.value)} placeholder="ex.: TARIFA_BANCARIA" />
+            <label className="text-xs text-muted-foreground">Conta do plano (define o grupo DRE)</label>
+            <PlanoContaSelect
+              value={criarConta?.conta_numero ?? null}
+              onChange={setCriarConta}
+              grupos={criarFor?.tipo === "CREDITO" ? GRUPOS_CREDITO : GRUPOS_DEBITO}
+            />
+            {criarConta && (
+              <p className="text-xs text-muted-foreground">
+                Vai para o DRE como <strong>{criarConta.grupo_dre.replace(/_/g, " ")}</strong> · {criarConta.categoria.replace(/_/g, " ")}
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Descrição</label>
