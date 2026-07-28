@@ -212,7 +212,7 @@ export default function BankingExtratoDashboard() {
     },
   });
 
-  const { data: resumo } = useQuery<ResumoExtrato>({
+  const { data: resumo } = useQuery<ResumoExtrato | null>({
     queryKey: ["btg-extrato-resumo", codEmpresa, dataInicio, dataFim],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
@@ -469,6 +469,16 @@ export default function BankingExtratoDashboard() {
         )}
       </div>
 
+      {btgAccessIssue && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>BTG não conectado para esta empresa</AlertTitle>
+          <AlertDescription>
+            {btgAccessIssue} Conecte a empresa no BTG em Configurações → Validação BTG e tente novamente.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* ── KPI Cards ───────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
@@ -578,7 +588,9 @@ export default function BankingExtratoDashboard() {
                 ) : lancamentos.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      {filtroStatus === "PENDENTE"
+                      {btgAccessIssue
+                        ? "Empresa sem autenticação BTG — conecte antes de importar o extrato."
+                        : filtroStatus === "PENDENTE"
                         ? "Nenhuma pendência — extrato 100% explicado. 🎉"
                         : "Nenhum lançamento encontrado."}
                     </TableCell>
