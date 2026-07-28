@@ -259,6 +259,7 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
       categoria: (r.categoria as string) ?? null,
       auto_conciliar: Boolean(r.auto_conciliar),
       valor_max: r.valor_max != null ? Number(r.valor_max) : null,
+      acao: (r.acao as "TARIFA" | "CLASSIFICAR") ?? "TARIFA",
     }))
     .sort((a: { cod_empresa: number | null }, b: { cod_empresa: number | null }) =>
       (a.cod_empresa == null ? 1 : 0) - (b.cod_empresa == null ? 1 : 0)
@@ -313,7 +314,23 @@ async function handleExecutar(db: ReturnType<typeof getServiceClient>, body: Rec
         const pool = e.tipo === "DEBITO" ? pools.debito : pools.credito;
         const result = matchEntry(e, pool, usados);
 
-        if (result.status === "MATCH" && result.alocacoes) {
+        if (result.status === "MATCH" && result.classificacao) {
+          // Regra permanente de classificação: concilia sem criar lançamento
+          // (mesmo efeito do fluxo manual de classificar, só que automático)
+          const { error } = await db.from("btg_extrato").update({
+            natureza: result.classificacao.natureza,
+            status_conciliacao: "CONCILIADO_AUTO",
+            metodo_conciliacao: "REGRA",
+            conciliado: true,
+            conciliado_em: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq("id", e.id);
+          if (error) {
+            resultado.erros.push(`extrato ${e.id}: ${error.message}`);
+            continue;
+          }
+          resultado.conciliados++;
+        } else if (result.status === "MATCH" && result.alocacoes) {
           const { error } = await db.rpc("fn_conciliar_extrato", {
             p_extrato_id: e.id,
             p_alocacoes: result.alocacoes,

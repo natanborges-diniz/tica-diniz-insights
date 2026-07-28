@@ -146,6 +146,9 @@ async function salvarRegraClassificacao(
         auto_conciliar: true,
         ativo: true,
         criado_por: userId,
+        // Regra permanente de classificação: o motor só classifica/concilia —
+        // NUNCA cria lançamento (isso é exclusivo das regras acao='TARIFA').
+        acao: "CLASSIFICAR",
       },
       { onConflict: "padrao_descricao,tipo", ignoreDuplicates: false },
     );

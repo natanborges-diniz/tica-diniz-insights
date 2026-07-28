@@ -50,6 +50,31 @@ export interface RegraClassificacao {
   categoria: string | null;
   auto_conciliar: boolean;
   valor_max: number | null;
+  /** TARIFA: cria lançamento (dialog de regras). CLASSIFICAR: só classifica e
+   *  concilia a linha (regra permanente criada pelo fluxo de classificação). */
+  acao?: "TARIFA" | "CLASSIFICAR";
+}
+
+// Mesma normalização usada ao salvar regras permanentes (btg-extrato/conciliar-extrato)
+export function normalizarDescricao(descricao: unknown): string {
+  return String(descricao ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+export function regraCasa(regra: RegraClassificacao, descricao: string): boolean {
+  if ((regra.acao ?? "TARIFA") === "CLASSIFICAR") {
+    // Regra permanente guarda a descrição normalizada literal — igualdade, não regex
+    return normalizarDescricao(descricao) === regra.padrao_descricao;
+  }
+  try {
+    return new RegExp(regra.padrao_descricao, "i").test(descricao);
+  } catch {
+    return false; // regex inválida cadastrada — ignora a regra
+  }
 }
 
 export interface Pools {
@@ -81,6 +106,8 @@ export interface MatchResult {
   metodo?: "EXATO" | "TOLERANCIA" | "AGRUPADO" | "REGRA";
   score?: number;
   alocacoes?: Alocacao[];
+  /** Presente quando a regra é de classificação pura: concilia sem criar lançamento */
+  classificacao?: { natureza: string; regra_id: string };
   sugestoes: Sugestao[];
 }
 
@@ -267,20 +294,25 @@ export function matchEntry(entry: ExtratoEntry, pools: Pools, usados: Set<string
     });
   }
 
-  // ── F4: regras de classificação (tarifas) ──
+  // ── F4: regras — tarifas (criam lançamento) e classificação permanente (só classificam) ──
   const descricao = entry.descricao ?? "";
   for (const regra of pools.regras) {
     if (regra.tipo !== entry.tipo) continue;
     if (regra.valor_max != null && entry.valor > regra.valor_max) continue;
-    let re: RegExp;
-    try {
-      re = new RegExp(regra.padrao_descricao, "i");
-    } catch {
-      continue; // regex inválida cadastrada — ignora a regra
-    }
-    if (!re.test(descricao)) continue;
+    if (!regraCasa(regra, descricao)) continue;
 
     if (regra.auto_conciliar) {
+      if ((regra.acao ?? "TARIFA") === "CLASSIFICAR") {
+        // Regra permanente do fluxo de classificação: NÃO cria lançamento —
+        // a linha é classificada e conciliada direto (executar aplica).
+        return {
+          status: "MATCH",
+          metodo: "REGRA",
+          score: 95,
+          classificacao: { natureza: regra.natureza, regra_id: regra.id },
+          sugestoes: [],
+        };
+      }
       return {
         status: "MATCH",
         metodo: "REGRA",

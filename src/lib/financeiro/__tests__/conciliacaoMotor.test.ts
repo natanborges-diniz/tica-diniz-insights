@@ -239,6 +239,74 @@ describe('F4 — regras de classificação', () => {
   });
 });
 
+describe('F4 — regras permanentes de classificação (acao CLASSIFICAR)', () => {
+  const regraClassificar = {
+    id: 'regra-perm-1',
+    cod_empresa: null,
+    // Salva normalizada: sem acento, maiúscula, espaços colapsados
+    padrao_descricao: 'PIX ENVIADO FORNECEDOR OTICA LTDA',
+    tipo: 'DEBITO' as const,
+    natureza: 'FORNECEDORES ARMACOES',
+    categoria: null,
+    auto_conciliar: true,
+    valor_max: null,
+    acao: 'CLASSIFICAR' as const,
+  };
+
+  it('casa por igualdade normalizada (acentos/espaços) e classifica sem criar lançamento', () => {
+    const r = matchEntry(
+      entryBase({ descricao: '  Pix   enviado FORNECEDOR ótica ltda ' }),
+      poolsVazios({ regras: [regraClassificar] }),
+      new Set()
+    );
+    expect(r.status).toBe('MATCH');
+    expect(r.metodo).toBe('REGRA');
+    expect(r.alocacoes).toBeUndefined();
+    expect(r.classificacao).toMatchObject({ natureza: 'FORNECEDORES ARMACOES', regra_id: 'regra-perm-1' });
+  });
+
+  it('descrição parecida mas não idêntica → não casa (igualdade, não substring)', () => {
+    const r = matchEntry(
+      entryBase({ descricao: 'PIX ENVIADO FORNECEDOR OTICA LTDA FILIAL 2' }),
+      poolsVazios({ regras: [regraClassificar] }),
+      new Set()
+    );
+    expect(r.status).toBe('NENHUM');
+  });
+
+  it('padrão com caracteres especiais de regex não quebra o match literal', () => {
+    const regra = { ...regraClassificar, padrao_descricao: 'PAGTO (PARC. 1/3) C+A' };
+    const r = matchEntry(
+      entryBase({ descricao: 'pagto (parc. 1/3) c+a' }),
+      poolsVazios({ regras: [regra] }),
+      new Set()
+    );
+    expect(r.status).toBe('MATCH');
+    expect(r.classificacao?.natureza).toBe('FORNECEDORES ARMACOES');
+  });
+
+  it('regra CLASSIFICAR não vira lançamento nem com valor alto (sem teto)', () => {
+    const r = matchEntry(
+      entryBase({ valor: 25000, descricao: 'PIX ENVIADO FORNECEDOR OTICA LTDA' }),
+      poolsVazios({ regras: [regraClassificar] }),
+      new Set()
+    );
+    expect(r.status).toBe('MATCH');
+    expect(r.alocacoes).toBeUndefined();
+  });
+
+  it('regra sem acao definida continua se comportando como TARIFA (regex)', () => {
+    const regraLegada = { ...regraClassificar, acao: undefined, padrao_descricao: 'FORNECEDOR' };
+    const r = matchEntry(
+      entryBase({ valor: 100, descricao: 'PIX FORNECEDOR XYZ' }),
+      poolsVazios({ regras: [regraLegada] }),
+      new Set()
+    );
+    expect(r.status).toBe('MATCH');
+    expect(r.alocacoes?.[0].alvo_tipo).toBe('TARIFA');
+  });
+});
+
 describe('prioridade do waterfall', () => {
   it('F1 vence F3 quando ambos casariam', () => {
     const r = matchEntry(entryBase(), poolsVazios({
