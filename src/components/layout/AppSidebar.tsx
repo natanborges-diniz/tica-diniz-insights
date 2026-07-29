@@ -4,7 +4,9 @@ import {
   Package, ClipboardList, FileText, ArrowLeftRight,
   Target, Users, Brain, RefreshCw, Activity, Truck, FlaskConical,
   Landmark, CreditCard, Receipt, FileSearch, Shield, Link2, Settings2,
-  ShoppingCart
+  ShoppingCart,
+  ShieldCheck,
+  BookmarkCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
@@ -107,6 +109,8 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       label: "Hub Financeiro",
       items: [
         { title: "Contas a Pagar", url: "/financeiro/hub", icon: Landmark },
+        { title: "Mesa de Aprovação", url: "/financeiro/mesa", icon: ShieldCheck },
+        { title: "Rubricas", url: "/financeiro/rubricas", icon: BookmarkCheck },
         { title: "Conciliação Cartões", url: "/financeiro/cartoes", icon: CreditCard },
         { title: "Carteira Recebíveis", url: "/financeiro/recebiveis", icon: Wallet },
         { title: "Links de Pagamento", url: "/financeiro/links-pagamento", icon: Link2 },
@@ -124,7 +128,8 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
     {
       label: "Banking BTG",
       items: [
-        { title: "Pagamentos", url: "/financeiro/banking/pagamentos", icon: CreditCard },
+        // "Pagamentos" (avulsos) saiu do menu — governança: pagar é via borderô;
+        // a rota segue viva só como execução de exceções aprovadas na Mesa.
         { title: "Cobranças / Boletos", url: "/financeiro/banking/cobrancas", icon: Receipt },
         { title: "Conciliação DDA", url: "/financeiro/banking/dda", icon: FileSearch },
         { title: "Conciliação Bancária", url: "/financeiro/banking/extrato", icon: Landmark },

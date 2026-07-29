@@ -36,6 +36,9 @@ Deno.serve(async (req) => {
       case "cancelar":
         return await cancelar(body);
       case "importar_erp":
+        // Aposentada junto com importar_erp_auto (P2) — ERP entra só pelo sync-ledger
+        return json({ error: "Ação aposentada pelo P2 — o ERP entra automaticamente via sync-ledger." }, 410);
+      case "importar_erp_legado_desativado":
         return await importarErp(body, auth.userId);
       case "importar_erp_auto":
         // P2 — aposentada: usava chave frouxa ERP-{emp}-{documento} (colidia em
@@ -66,6 +69,10 @@ Deno.serve(async (req) => {
         return await adicionarAoBordero(body);
       case "remover_do_bordero":
         return await removerDoBordero(body);
+      case "mesa_aprovacao":
+        return await mesaAprovacao(body);
+      case "aprovar_excecao":
+        return await aprovarExcecao(body, auth.userId);
       case "aprovar_bordero":
         return await aprovarBordero(body, auth.userId);
       case "enviar_bordero_btg":
@@ -1300,4 +1307,103 @@ async function resumoFinanceiro(body: Record<string, unknown>) {
     recebiveisPendentes,
     totalTaxasCartao,
   });
+}
+
+// ═══════════════════════════════════════════════════════════
+// G3 — MESA DE APROVAÇÃO (SPEC_P2_5 §4/§5)
+// ═══════════════════════════════════════════════════════════
+
+// Lançamentos PAGAR do pipeline com selo de lastro computado no servidor
+// (mesma regra pura _shared/governanca.ts usada nas travas do borderô).
+async function mesaAprovacao(body: Record<string, unknown>) {
+  const codEmpresa = body.cod_empresa ? Number(body.cod_empresa) : null;
+
+  let query = supabase
+    .from("lancamentos_financeiros")
+    .select("id, cod_empresa, tipo, descricao, pessoa_nome, pessoa_documento, valor, data_vencimento, status, natureza, categoria, lastro, erp_parcela_id, nf_entrada_id, rubrica_id, btg_dda_id, justificativa, bordero_id, criado_por, forma_pagamento")
+    .eq("tipo", "PAGAR")
+    .in("status", ["PREVISTO", "CLASSIFICADO", "BORDERO"])
+    .order("data_vencimento", { ascending: true })
+    .limit(500);
+  if (codEmpresa) query = query.eq("cod_empresa", codEmpresa);
+  const { data: lancs, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const rubricaIds = [...new Set((lancs || []).map((l) => l.rubrica_id).filter(Boolean))] as string[];
+  const rubricasMap = new Map<string, Record<string, unknown>>();
+  if (rubricaIds.length > 0) {
+    const { data: rubs } = await supabase.from("rubricas_autorizadas").select("*").in("id", rubricaIds);
+    for (const r of (rubs || [])) rubricasMap.set(String(r.id), r);
+  }
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const avaliados = (lancs || []).map((l) => {
+    const rubrica = l.rubrica_id ? (rubricasMap.get(String(l.rubrica_id)) as never) ?? null : null;
+    const av = avaliarLancamento(l as never, rubrica, hoje);
+    const rub = l.rubrica_id ? rubricasMap.get(String(l.rubrica_id)) : null;
+    return {
+      ...l,
+      selo: av.selo,
+      selo_motivo: av.motivo,
+      desvio_pct: av.desvioPct ?? null,
+      pode_bordero: av.podeBordero,
+      rubrica_descricao: rub ? String(rub.descricao) : null,
+    };
+  });
+
+  // Borderôs em montagem/aprovados com composição de selos
+  let bq = supabase
+    .from("borderos")
+    .select("id, cod_empresa, descricao, status, qtd_lancamentos, total_valor, criado_por, created_at")
+    .in("status", ["MONTAGEM", "APROVADO"])
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (codEmpresa) bq = bq.eq("cod_empresa", codEmpresa);
+  const { data: borderos } = await bq;
+
+  const borderosResumo = (borderos || []).map((b) => {
+    const doBordero = avaliados.filter((l) => l.bordero_id === b.id);
+    const porSelo: Record<string, number> = {};
+    for (const l of doBordero) porSelo[l.selo] = (porSelo[l.selo] || 0) + 1;
+    return { ...b, selos: porSelo };
+  });
+
+  const porSelo: Record<string, number> = {};
+  for (const l of avaliados) porSelo[l.selo] = (porSelo[l.selo] || 0) + 1;
+
+  return json({ lancamentos: avaliados, borderos: borderosResumo, resumo_selos: porSelo });
+}
+
+// Exceção emergencial: aprovação individual do master, fora do borderô.
+// Após aprovada, a execução é o pagamento avulso BTG (único uso remanescente).
+async function aprovarExcecao(body: Record<string, unknown>, userId: string) {
+  const { id } = body;
+  if (!id) throw new Error("id obrigatório");
+  await requireMaster(userId);
+
+  const { data: lanc } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id, status, lastro, justificativa, criado_por, dados_extras")
+    .eq("id", String(id))
+    .single();
+  if (!lanc) throw new Error("Lançamento não encontrado");
+  if (lanc.lastro !== "EXCECAO") throw new Error("Só exceções emergenciais passam por este caminho");
+  if (!validarJustificativa(lanc.justificativa)) throw new Error("Exceção sem justificativa válida");
+  if (!["PREVISTO", "CLASSIFICADO"].includes(lanc.status)) throw new Error(`Status ${lanc.status} não permite aprovação de exceção`);
+
+  const distinto = criadorAprovadorDistintos(lanc.criado_por, userId);
+  if (!distinto.ok) throw new Error(distinto.motivo!);
+
+  const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
+  const { error } = await supabase
+    .from("lancamentos_financeiros")
+    .update({
+      status: "AUTORIZADO",
+      autorizado_por: userId,
+      autorizado_em: new Date().toISOString(),
+      dados_extras: { ...dados, excecao_aprovada_por: userId, excecao_aprovada_em: new Date().toISOString() },
+    })
+    .eq("id", String(id));
+  if (error) throw new Error(error.message);
+  return json({ ok: true, status: "AUTORIZADO" });
 }

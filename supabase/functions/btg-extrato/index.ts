@@ -694,6 +694,12 @@ Deno.serve(async (req) => {
       case "classificar":
         return await handleClassificar(body || {}, userId);
       case "conciliar":
+        // Aposentada pelo P1 — o checkbox manual saiu; conciliação passa pelo
+        // motor (conciliar-extrato) ou pelas ações da fila (confirmar/ignorar/
+        // criar_lancamento/classificar). handleConciliar mantido apenas como
+        // referência histórica.
+        return json({ error: "Ação aposentada pelo P1 — use a fila de Conciliação Bancária (motor conciliar-extrato)." }, 410);
+      case "conciliar_legado_desativado":
         return await handleConciliar(body || {}, userId);
       case "resumo":
         return await handleResumo(body, url);
