@@ -2105,55 +2105,70 @@ export type Database = {
         Row: {
           cache_loaded_at: string
           cod_empresa: number
+          cod_lancamento: number | null
+          cod_pessoa: number | null
           conta_descricao: string | null
           conta_numero: string | null
           data_emissao: string | null
           data_pagamento: string | null
+          data_recebimento: string | null
           data_vencimento: string | null
           documento: string | null
           empresa_nome: string | null
           forma_pagamento_tipo: string | null
           id: string
+          parcela_id: number | null
           pessoa_nome: string | null
           situacao: string
           tipo_lancamento: string
           valor: number
+          valor_original: number | null
           valor_pago: number | null
         }
         Insert: {
           cache_loaded_at?: string
           cod_empresa: number
+          cod_lancamento?: number | null
+          cod_pessoa?: number | null
           conta_descricao?: string | null
           conta_numero?: string | null
           data_emissao?: string | null
           data_pagamento?: string | null
+          data_recebimento?: string | null
           data_vencimento?: string | null
           documento?: string | null
           empresa_nome?: string | null
           forma_pagamento_tipo?: string | null
           id?: string
+          parcela_id?: number | null
           pessoa_nome?: string | null
           situacao?: string
           tipo_lancamento?: string
           valor?: number
+          valor_original?: number | null
           valor_pago?: number | null
         }
         Update: {
           cache_loaded_at?: string
           cod_empresa?: number
+          cod_lancamento?: number | null
+          cod_pessoa?: number | null
           conta_descricao?: string | null
           conta_numero?: string | null
           data_emissao?: string | null
           data_pagamento?: string | null
+          data_recebimento?: string | null
           data_vencimento?: string | null
           documento?: string | null
           empresa_nome?: string | null
           forma_pagamento_tipo?: string | null
           id?: string
+          parcela_id?: number | null
           pessoa_nome?: string | null
           situacao?: string
           tipo_lancamento?: string
           valor?: number
+          valor_original?: number | null
           valor_pago?: number | null
         }
         Relationships: []
