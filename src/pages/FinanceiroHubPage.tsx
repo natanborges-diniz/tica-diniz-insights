@@ -425,7 +425,7 @@ export default function FinanceiroHubPage() {
             { number: 2, title: "Validar", description: "Confirme e classifique a conta DRE", status: stepStatus(2), count: naoClassificados },
             { number: 3, title: "Preparar Pgto", description: "PIX, boleto ou TED", status: stepStatus(3), count: classificadosSemPgto },
             { number: 4, title: "Montar Borderô", description: "Agrupe em lote para aprovação", status: stepStatus(4), count: countComPagamento + countBorderoMontagem },
-            { number: 5, title: "Aprovar e Enviar", description: "Admin transmite ao BTG", status: stepStatus(5), count: countBorderoAprovado },
+            { number: 5, title: "Aprovar e Enviar", description: "Master aprova na Mesa e transmite ao BTG", status: stepStatus(5), count: countBorderoAprovado },
             { number: 6, title: "Aguardar Banco", description: "Baixa confirmada pelo retorno", status: stepStatus(6), count: countBorderoEnviado },
           ]}
           onStepClick={handleStepClick}

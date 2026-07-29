@@ -1,5 +1,8 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Banknote, CreditCard, ShieldCheck } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,13 +50,35 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
   const [formaPgto, setFormaPgto] = useState("");
   const [pixKey, setPixKey] = useState("");
   const [barcode, setBarcode] = useState("");
+  // G2/G3 — lastro obrigatório para PAGAR manual: rubrica ou exceção com justificativa
+  const [lastroTipo, setLastroTipo] = useState<"RUBRICA" | "EXCECAO">("RUBRICA");
+  const [rubricaId, setRubricaId] = useState("");
+  const [justificativa, setJustificativa] = useState("");
+
+  const { data: rubricasAtivas = [] } = useQuery({
+    queryKey: ["rubricas-ativas"],
+    enabled: open,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("rubricas_autorizadas")
+        .select("id, descricao, favorecido_nome, valor_esperado, valor_teto, cod_empresa")
+        .eq("status", "ATIVA")
+        .order("descricao");
+      return data ?? [];
+    },
+  });
 
   const reset = () => {
     setDescricao(""); setValor(""); setVencimento("");
     setPessoa(""); setDocumento(""); setContaSelecionada("");
     setNatureza(""); setCategoria(""); setFormaPgto("");
     setPixKey(""); setBarcode("");
+    setLastroTipo("RUBRICA"); setRubricaId(""); setJustificativa("");
   };
+
+  const lastroInvalido =
+    tipo === "PAGAR" &&
+    (lastroTipo === "RUBRICA" ? !rubricaId : justificativa.trim().length < 20);
 
   const handleCriar = () => {
     const dadosExtras: Record<string, unknown> = {};
@@ -73,11 +98,17 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
       subcategoria: contaSelecionada || undefined,
       forma_pagamento: formaPgto || undefined,
       dados_extras: Object.keys(dadosExtras).length > 0 ? dadosExtras : undefined,
+      // G2 — lastro: sem ele, o lançamento PAGAR não entra em borderô
+      ...(tipo === "PAGAR"
+        ? lastroTipo === "RUBRICA"
+          ? { rubrica_id: rubricaId }
+          : { lastro: "EXCECAO", justificativa: justificativa.trim() }
+        : {}),
     });
     reset();
   };
 
-  const canSubmit = descricao && valor && vencimento && contaSelecionada;
+  const canSubmit = descricao && valor && vencimento && contaSelecionada && !lastroInvalido;
 
   return (
     <BaseDialog
@@ -94,6 +125,56 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
       }
     >
       <div className="space-y-4 py-2">
+        {/* G2 — lastro do pagamento manual (governança: nada sem lastro) */}
+        {tipo === "PAGAR" && (
+          <div className="rounded-lg border p-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Lastro do pagamento</span>
+            </div>
+            <Select value={lastroTipo} onValueChange={(v) => setLastroTipo(v as "RUBRICA" | "EXCECAO")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="RUBRICA">Rubrica autorizada (recorrente pré-aprovado)</SelectItem>
+                <SelectItem value="EXCECAO">Exceção emergencial (master aprova individualmente)</SelectItem>
+              </SelectContent>
+            </Select>
+            {lastroTipo === "RUBRICA" ? (
+              <div className="space-y-1">
+                <Select value={rubricaId} onValueChange={setRubricaId}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar rubrica ativa" /></SelectTrigger>
+                  <SelectContent>
+                    {rubricasAtivas.length === 0 && (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">
+                        Nenhuma rubrica ativa — cadastre e aprove em Financeiro → Rubricas
+                      </div>
+                    )}
+                    {rubricasAtivas.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.descricao}{r.cod_empresa != null ? ` (emp. ${r.cod_empresa})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Títulos de fornecedor não se criam aqui — entram sozinhos pelo ERP (e pela NF, em breve).
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <Textarea
+                  value={justificativa}
+                  onChange={(e) => setJustificativa(e.target.value)}
+                  placeholder="Justificativa obrigatória (mínimo 20 caracteres) — ex.: conserto emergencial do ar-condicionado da loja Centro"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Exceção não entra em borderô: o master aprova individualmente na Mesa de Aprovação.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex items-start gap-2">
           <ShieldCheck className="h-4 w-4 text-primary mt-0.5 shrink-0" />
           <div>
