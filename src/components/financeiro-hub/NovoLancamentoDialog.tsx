@@ -136,7 +136,7 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="RUBRICA">Rubrica autorizada (recorrente pré-aprovado)</SelectItem>
-                <SelectItem value="EXCECAO">Exceção emergencial (master aprova individualmente)</SelectItem>
+                <SelectItem value="EXCECAO">Exceção emergencial (admin aprova individualmente)</SelectItem>
               </SelectContent>
             </Select>
             {lastroTipo === "RUBRICA" ? (
@@ -168,7 +168,7 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
                   placeholder="Justificativa obrigatória (mínimo 20 caracteres) — ex.: conserto emergencial do ar-condicionado da loja Centro"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Exceção não entra em borderô: o master aprova individualmente na Mesa de Aprovação.
+                  Exceção não entra em borderô: o admin aprova individualmente na Mesa de Aprovação.
                 </p>
               </div>
             )}

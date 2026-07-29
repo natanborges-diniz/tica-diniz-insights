@@ -96,7 +96,7 @@ export default function RubricasPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Rubrica criada em rascunho — outro usuário master precisa aprová-la");
+      toast.success("Rubrica criada em rascunho — outro admin precisa aprová-la");
       setDialogOpen(false);
       setFDescricao(""); setFFavorecido(""); setFDocumento(""); setFChave(""); setFConta(null);
       setFEsperado(""); setFTeto("");
@@ -114,7 +114,7 @@ export default function RubricasPage() {
         .eq("id", r.id);
       if (error) {
         if (error.message.includes("chk_rubrica_criador_aprovador")) {
-          throw new Error("Quem criou a rubrica não pode aprová-la — peça a outro master");
+          throw new Error("Quem criou a rubrica não pode aprová-la — peça a outro admin");
         }
         throw error;
       }
@@ -280,7 +280,7 @@ export default function RubricasPage() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         title="Nova rubrica autorizada"
-        description="Nasce em rascunho; outro usuário master aprova. Pagamentos com esta rubrica só passam se o favorecido bater exatamente e o valor respeitar faixa e teto."
+        description="Nasce em rascunho; outro admin aprova. Pagamentos com esta rubrica só passam se o favorecido bater exatamente e o valor respeitar faixa e teto."
         footer={
           <>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>

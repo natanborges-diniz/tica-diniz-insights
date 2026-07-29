@@ -112,18 +112,6 @@ async function requireAdmin(userId: string) {
   }
 }
 
-// G2 — aprovação de pagamento exige master (admin aceito na transição, até os
-// papéis serem atribuídos; apertar depois — SPEC_P2_5 §2)
-async function requireMaster(userId: string) {
-  const { data: roles } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .in("role", ["master", "admin"]);
-  if (!roles || roles.length === 0) {
-    throw new Error("Apenas o master pode aprovar pagamentos");
-  }
-}
 
 // ═══════════════════════════════════════════════════════════
 // LANÇAMENTOS
@@ -475,7 +463,7 @@ async function removerDoBordero(body: Record<string, unknown>) {
 async function aprovarBordero(body: Record<string, unknown>, userId: string) {
   const { bordero_id } = body;
   if (!bordero_id) throw new Error("bordero_id obrigatório");
-  await requireMaster(userId); // G2 — aprovação é do master
+  await requireAdmin(userId); // Decisão 30/07: operador cria, ADMIN aprova (sem papel master)
 
   const { data: bordero } = await supabase.from("borderos").select("*").eq("id", bordero_id).single();
   if (!bordero) throw new Error("Borderô não encontrado");
@@ -1381,7 +1369,7 @@ async function mesaAprovacao(body: Record<string, unknown>) {
 async function aprovarExcecao(body: Record<string, unknown>, userId: string) {
   const { id } = body;
   if (!id) throw new Error("id obrigatório");
-  await requireMaster(userId);
+  await requireAdmin(userId);
 
   const { data: lanc } = await supabase
     .from("lancamentos_financeiros")
@@ -1417,7 +1405,7 @@ async function aprovarExcecao(body: Record<string, unknown>, userId: string) {
 // contábil do ERP — pré-requisito da substituição automática de provisões.
 // ═══════════════════════════════════════════════════════════
 async function sugerirRubricas(body: Record<string, unknown>, userId: string) {
-  await requireMaster(userId);
+  await requireAdmin(userId);
   const codEmpresa = body.cod_empresa ? Number(body.cod_empresa) : null;
   const mesesMin = 4; // recorrente = apareceu em >= 4 meses distintos no último ano
 

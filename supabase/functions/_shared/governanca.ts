@@ -46,7 +46,7 @@ const soDigitos = (s: unknown) => String(s ?? "").replace(/\D/g, "");
 
 export function avaliarRubrica(l: LancParaAvaliar, r: RubricaAvaliavel, hoje: string): Avaliacao {
   if (r.status !== "ATIVA") {
-    return { selo: "SEM_LASTRO", podeBordero: false, motivo: `Rubrica ${r.status === "RASCUNHO" ? "aguardando aprovação do master" : "suspensa"}` };
+    return { selo: "SEM_LASTRO", podeBordero: false, motivo: `Rubrica ${r.status === "RASCUNHO" ? "aguardando aprovação do admin" : "suspensa"}` };
   }
   const d = hoje.slice(0, 10);
   if (d < r.vigencia_inicio || (r.vigencia_fim && d > r.vigencia_fim)) {
@@ -64,7 +64,7 @@ export function avaliarRubrica(l: LancParaAvaliar, r: RubricaAvaliavel, hoje: st
     if (Math.abs(desvioPct) > Number(r.tolerancia_pct)) {
       return {
         selo: "AMARELO",
-        podeBordero: true, // entra, mas sinalizado — o master decide na aprovação
+        podeBordero: true, // entra, mas sinalizado — o admin decide na aprovação
         motivo: `Fora da faixa: ${desvioPct > 0 ? "+" : ""}${desvioPct}% vs esperado (tolerância ±${r.tolerancia_pct}%)`,
         desvioPct,
       };
@@ -95,7 +95,7 @@ export function avaliarLancamento(l: LancParaAvaliar, rubrica: RubricaAvaliavel 
       selo: ok ? "VERMELHO" : "SEM_LASTRO",
       podeBordero: false,
       motivo: ok
-        ? "Exceção emergencial — aprovação individual do master, fora do borderô"
+        ? "Exceção emergencial — aprovação individual do admin, fora do borderô"
         : "Exceção sem justificativa válida (mínimo 20 caracteres)",
     };
   }
@@ -112,7 +112,7 @@ export function validarJustificativa(j: unknown): boolean {
   return typeof j === "string" && j.trim().length >= 20;
 }
 
-// Separação de funções — vale para master também
+// Separação de funções — vale para admin também
 export function criadorAprovadorDistintos(criadoPor: string | null | undefined, aprovador: string): { ok: boolean; motivo?: string } {
   if (criadoPor && criadoPor === aprovador) {
     return { ok: false, motivo: "Quem criou não pode aprovar (separação de funções)" };

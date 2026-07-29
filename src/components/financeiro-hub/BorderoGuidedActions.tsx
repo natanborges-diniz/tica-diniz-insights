@@ -54,8 +54,9 @@ export function BorderoGuidedActions({
       )}
 
       {status === "MONTAGEM" && isAdmin && (
-        <Button size="sm" variant="outline" onClick={onAprovar} disabled={isPendingAprovar}>
-          <FileCheck className="h-3.5 w-3.5 mr-1" /> Aprovar
+        <Button size="sm" variant="outline" onClick={onAprovar} disabled={isPendingAprovar}
+          title="A aprovação acontece na Mesa, com os selos de lastro à vista">
+          <FileCheck className="h-3.5 w-3.5 mr-1" /> Aprovar na Mesa
         </Button>
       )}
       {status === "APROVADO" && isAdmin && (

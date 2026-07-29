@@ -29,14 +29,18 @@ Não configurar auto-execução de API na conta.
 
 ## 2. Papéis e separação de funções
 
+> **Decisão do stakeholder (30/07, revisada):** modelo simplificado em DOIS papéis —
+> **operador cria, admin aprova**. Sem papel "master" (o valor de enum existe no
+> banco mas não é usado). Toda aprovação acontece na Mesa de Aprovação (única
+> superfície; o Hub apenas encaminha para lá).
+
 | Papel | Pode | Não pode |
 |---|---|---|
-| **analista** (novo em `app_role`) | criar/classificar lançamentos, montar borderô, cadastrar rubrica (rascunho), lançar exceção C com justificativa | aprovar qualquer coisa |
-| **master** (novo; hoje = admin) | tudo do analista + aprovar borderôs, rubricas e exceções; gerir regras | aprovar item **criado por si** (trava criador≠aprovador vale para todos) |
-| **admin** | administração técnica | aprovar pagamentos (a menos que também seja master) |
+| **operador** (qualquer usuário autorizado no módulo) | criar/classificar lançamentos, montar borderô, cadastrar rubrica (rascunho), lançar exceção C com justificativa | aprovar qualquer coisa |
+| **admin** | tudo do operador + aprovar borderôs, rubricas e exceções na Mesa; gerir regras | aprovar item **criado por si** (trava criador≠aprovador vale para todos) |
 
 Trava de sistema: `aprovado_por <> criado_por` em borderô, rubrica e exceção.
-Alçada opcional por valor (v2): acima de R$ X, exigir segundo master.
+Alçada opcional por valor (v2): acima de R$ X, exigir segundo admin.
 
 ## 3. Modelo de dados (1 migration)
 

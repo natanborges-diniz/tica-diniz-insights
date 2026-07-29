@@ -194,7 +194,7 @@ export default function MesaAprovacaoPage() {
         </div>
       )}
 
-      {/* Exceções aguardando o master */}
+      {/* Exceções aguardando o admin */}
       {excecoesPendentes.length > 0 && (
         <Card className="border-danger/40">
           <CardHeader className="pb-2">

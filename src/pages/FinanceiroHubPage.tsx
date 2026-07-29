@@ -215,17 +215,12 @@ export default function FinanceiroHubPage() {
       lancamento_ids: Array.from(selectedIds),
     }),
     onSuccess: () => {
-      toast.success("Borderô criado — vá à aba Borderôs para aprovar e enviar");
+      toast.success("Borderô criado — aprovação é na Mesa de Aprovação");
       invalidateAll(); setBorderoDialogOpen(false); setSelectedIds(new Set()); setFormBorderoDesc(""); setActiveTab("borderos");
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao criar borderô"),
   });
 
-  const aprovarBorderoMutation = useMutation({
-    mutationFn: (id: string) => invokeAction("aprovar_bordero", { bordero_id: id }),
-    onSuccess: () => { toast.success("Borderô aprovado"); invalidateAll(); },
-    onError: (e: Error) => toast.error(e.message || "Erro ao aprovar"),
-  });
 
   const enviarBorderoMutation = useMutation({
     mutationFn: (id: string) => invokeAction("enviar_bordero_btg", { bordero_id: id }),
@@ -425,7 +420,7 @@ export default function FinanceiroHubPage() {
             { number: 2, title: "Validar", description: "Confirme e classifique a conta DRE", status: stepStatus(2), count: naoClassificados },
             { number: 3, title: "Preparar Pgto", description: "PIX, boleto ou TED", status: stepStatus(3), count: classificadosSemPgto },
             { number: 4, title: "Montar Borderô", description: "Agrupe em lote para aprovação", status: stepStatus(4), count: countComPagamento + countBorderoMontagem },
-            { number: 5, title: "Aprovar e Enviar", description: "Master aprova na Mesa e transmite ao BTG", status: stepStatus(5), count: countBorderoAprovado },
+            { number: 5, title: "Aprovar e Enviar", description: "Admin aprova na Mesa e transmite ao BTG", status: stepStatus(5), count: countBorderoAprovado },
             { number: 6, title: "Aguardar Banco", description: "Baixa confirmada pelo retorno", status: stepStatus(6), count: countBorderoEnviado },
           ]}
           onStepClick={handleStepClick}
@@ -885,11 +880,11 @@ export default function FinanceiroHubPage() {
                               <BorderoGuidedActions
                                 status={b.status}
                                 isAdmin={!!authIsAdmin}
-                                onAprovar={() => aprovarBorderoMutation.mutate(b.id)}
+                                onAprovar={() => { window.location.href = "/financeiro/mesa"; }}
                                 onEnviar={() => enviarBorderoMutation.mutate(b.id)}
                                 onConfirmar={() => confirmarProcessamentoMutation.mutate(b.id)}
                                 onCancelar={() => cancelarBorderoMutation.mutate(b.id)}
-                                isPendingAprovar={aprovarBorderoMutation.isPending}
+                                isPendingAprovar={false}
                                 isPendingEnviar={enviarBorderoMutation.isPending}
                                 isPendingConfirmar={confirmarProcessamentoMutation.isPending}
                                 isPendingCancelar={cancelarBorderoMutation.isPending}
