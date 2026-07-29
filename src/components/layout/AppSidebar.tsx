@@ -55,6 +55,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
       items: [
         { title: "Inteligência de Vendas", url: "/vendas/inteligencia", icon: TrendingUp },
         { title: "Acompanhamento Semanal", url: "/vendas/acompanhamento", icon: Target },
+        { title: "Fechamento RH", url: "/rh/fechamento-semanal", icon: Users },
       ],
     },
   ],

@@ -4,6 +4,12 @@
 -- congelados aqui (mudanças futuras de configuração não alteram fechamentos).
 -- Reabertura só admin, com log (reaberto_por/reaberto_em + status REABERTO).
 
+-- categoria especial p/ modo EMITIDO (comissão sobre o emitido em OS, sem
+-- forma de pagamento) — taxa definida pelo master; 0 até ser configurada
+INSERT INTO public.comissao_taxas (forma_categoria, percentual)
+VALUES ('EMITIDO', 0)
+ON CONFLICT (forma_categoria) DO NOTHING;
+
 CREATE TABLE public.fechamentos_comissao (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   cod_empresa INTEGER NOT NULL,
