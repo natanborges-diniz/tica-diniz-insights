@@ -1512,6 +1512,8 @@ export type Database = {
           erp_parcela_id: number | null
           forma_pagamento: string | null
           id: string
+          justificativa: string | null
+          lastro: string | null
           natureza: string | null
           numero_parcela: number | null
           observacao: string | null
@@ -1523,6 +1525,7 @@ export type Database = {
           recorrencia_tipo: string | null
           recorrente: boolean | null
           requer_validacao: boolean | null
+          rubrica_id: string | null
           status: string
           subcategoria: string | null
           tipo: string
@@ -1557,6 +1560,8 @@ export type Database = {
           erp_parcela_id?: number | null
           forma_pagamento?: string | null
           id?: string
+          justificativa?: string | null
+          lastro?: string | null
           natureza?: string | null
           numero_parcela?: number | null
           observacao?: string | null
@@ -1568,6 +1573,7 @@ export type Database = {
           recorrencia_tipo?: string | null
           recorrente?: boolean | null
           requer_validacao?: boolean | null
+          rubrica_id?: string | null
           status?: string
           subcategoria?: string | null
           tipo: string
@@ -1602,6 +1608,8 @@ export type Database = {
           erp_parcela_id?: number | null
           forma_pagamento?: string | null
           id?: string
+          justificativa?: string | null
+          lastro?: string | null
           natureza?: string | null
           numero_parcela?: number | null
           observacao?: string | null
@@ -1613,6 +1621,7 @@ export type Database = {
           recorrencia_tipo?: string | null
           recorrente?: boolean | null
           requer_validacao?: boolean | null
+          rubrica_id?: string | null
           status?: string
           subcategoria?: string | null
           tipo?: string
@@ -1634,6 +1643,13 @@ export type Database = {
             columns: ["recebivel_cartao_id"]
             isOneToOne: false
             referencedRelation: "recebiveis_cartao"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lancamentos_financeiros_rubrica_id_fkey"
+            columns: ["rubrica_id"]
+            isOneToOne: false
+            referencedRelation: "rubricas_autorizadas"
             referencedColumns: ["id"]
           },
         ]
@@ -3009,6 +3025,72 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rubricas_autorizadas: {
+        Row: {
+          aprovado_em: string | null
+          aprovado_por: string | null
+          cod_empresa: number | null
+          conta_numero: string
+          created_at: string
+          criado_por: string
+          descricao: string
+          favorecido_chave: string | null
+          favorecido_documento: string | null
+          favorecido_nome: string
+          id: string
+          periodicidade: string
+          status: string
+          tolerancia_pct: number
+          updated_at: string
+          valor_esperado: number | null
+          valor_teto: number
+          vigencia_fim: string | null
+          vigencia_inicio: string
+        }
+        Insert: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          cod_empresa?: number | null
+          conta_numero: string
+          created_at?: string
+          criado_por: string
+          descricao: string
+          favorecido_chave?: string | null
+          favorecido_documento?: string | null
+          favorecido_nome: string
+          id?: string
+          periodicidade?: string
+          status?: string
+          tolerancia_pct?: number
+          updated_at?: string
+          valor_esperado?: number | null
+          valor_teto: number
+          vigencia_fim?: string | null
+          vigencia_inicio?: string
+        }
+        Update: {
+          aprovado_em?: string | null
+          aprovado_por?: string | null
+          cod_empresa?: number | null
+          conta_numero?: string
+          created_at?: string
+          criado_por?: string
+          descricao?: string
+          favorecido_chave?: string | null
+          favorecido_documento?: string | null
+          favorecido_nome?: string
+          id?: string
+          periodicidade?: string
+          status?: string
+          tolerancia_pct?: number
+          updated_at?: string
+          valor_esperado?: number | null
+          valor_teto?: number
+          vigencia_fim?: string | null
+          vigencia_inicio?: string
+        }
+        Relationships: []
       }
       sync_jobs: {
         Row: {
