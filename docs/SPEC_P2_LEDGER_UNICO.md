@@ -137,10 +137,13 @@ tela) — `importar_erp_auto` é aposentado após o backfill.
 
 ## 5. Telas (depois do sync no ar)
 
-- **Dashboard de Parcelas** (`/financeiro/parcelas`): passa a ler do ledger
-  (`financeiro-lancamentos.listar`) com os mesmos filtros; `parcelas_cache` vira
-  detalhe de implementação do sync. Alternativa mais agressiva (absorver no Hub) fica
-  para o P5 — aqui só trocamos a fonte.
+- **Dashboard de Parcelas** (`/financeiro/parcelas`): **decisão revisada em 29/07
+  (pós E1-E3)** — permanece lendo `parcelas_cache`. Com o cache agora confiável
+  (sync horário, chave dura, dedup), ele é o espelho fiel do ERP com campos
+  nativos (documento, conta contábil) que o ledger só carrega em `dados_extras`;
+  trocar a fonte degradaria a tela sem ganho. A unificação que importava já
+  aconteceu: DRE/Fluxo/Overview/Hub leem o ledger, e cache↔ledger são espelhos
+  1:1 por chave dura (defasagem máx. 30 min). Absorção no Hub segue para o P5.
 - **Hub**: aba RECEBER habilitada em leitura (títulos RECEBER agora existem no ledger);
   gestão ativa de recebimento continua P4.
 - **Overview/DRE/Fluxo**: já leem do ledger — nenhuma mudança além de conferir
@@ -171,7 +174,7 @@ tela) — `importar_erp_auto` é aposentado após o backfill.
 | **E1** | Migration (§3) + `sync-parcelas` gravando chave dura + backfill do cache | — |
 | **E2** | `sync-ledger` (função + cron + precedência §2) + `autoClassify` em `_shared/` + testes | E1 |
 | **E3** | Backfill do ledger + migração origem_id legado (§6) + aposentar `importar_erp_auto` | E2 |
-| **E4** | Dashboard de Parcelas lendo do ledger + aba RECEBER (leitura) no Hub | E3 |
+| **E4** | ~~Dashboard de Parcelas lendo do ledger~~ (revisado: cache mantido, ver §5) + aba RECEBER (leitura) no Hub — absorvida pelo redesenho da mesa de aprovação (SPEC_P2_5_GOVERNANCA) | E3 |
 
 ### Critérios de aceite
 

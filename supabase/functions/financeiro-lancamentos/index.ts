@@ -37,7 +37,12 @@ Deno.serve(async (req) => {
       case "importar_erp":
         return await importarErp(body, auth.userId);
       case "importar_erp_auto":
-        return await importarErpAuto(body, auth.userId);
+        // P2 — aposentada: usava chave frouxa ERP-{emp}-{documento} (colidia em
+        // documentos multi-parcela e criou os "lançamentos sombra" limpos em 29/07).
+        // O caminho único agora é a function sync-ledger (chave dura por parcela).
+        return json({
+          error: "Ação aposentada pelo P2 — use a function sync-ledger (o Hub e o cron de 30min já usam).",
+        }, 410);
       case "classificar":
         return await classificar(body, auth.userId);
       case "classificar_lote":

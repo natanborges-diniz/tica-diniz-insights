@@ -183,14 +183,23 @@ export default function FinanceiroHubPage() {
     onError: () => toast.error("Erro ao criar lançamento"),
   });
 
+  // P2 — o import legado (importar_erp_auto, chave frouxa por documento) foi
+  // aposentado; o botão agora dispara o sync-ledger (chave dura por parcela),
+  // o mesmo que roda sozinho a cada 30 min.
   const importErpMutation = useMutation({
-    mutationFn: () => invokeAction("importar_erp_auto", { cod_empresa: codEmpresa }),
-    onSuccess: (data: { inserted?: number; skipped?: number; dda_vinculados?: number; dda_orfaos?: number; message?: string }) => {
-      if (data?.message) { toast.info(data.message); }
-      else { toast.success(`Importação: ${data?.inserted || 0} novos, ${data?.skipped || 0} existentes, ${data?.dda_vinculados || 0} DDA vinculados`); }
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("sync-ledger", {
+        body: { mode: "full", codEmpresa: String(codEmpresa) },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(String(data.error));
+      return data as { inseridos?: number; baixados_erp?: number; atualizados?: number; dda_vinculados?: number };
+    },
+    onSuccess: (data) => {
+      toast.success(`Sync ERP: ${data?.inseridos || 0} novos, ${data?.baixados_erp || 0} baixados pelo ERP, ${data?.atualizados || 0} atualizados, ${data?.dda_vinculados || 0} DDA vinculados`);
       invalidateAll();
     },
-    onError: (e: Error) => toast.error(e.message || "Erro ao importar do ERP"),
+    onError: (e: Error) => toast.error(e.message || "Erro ao sincronizar com o ERP"),
   });
 
   const cancelarMutation = useMutation({
