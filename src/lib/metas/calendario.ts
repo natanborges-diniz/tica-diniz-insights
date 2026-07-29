@@ -40,6 +40,51 @@ export interface LojaConfiguracao {
 }
 
 /**
+ * Valida a CONTINUIDADE de um período customizado com os meses vizinhos:
+ * o início do mês M deve ser exatamente o dia seguinte ao fim de M-1, e o fim
+ * de M deve ser o dia anterior ao início de M+1. Sobreposição = dias contados
+ * em dois meses; buraco = dias fora de qualquer mês. Retorna avisos (vazio =
+ * contíguo). `buscarConfig` devolve o período cadastrado do vizinho (ou null
+ * para usar o padrão 21→20).
+ */
+export function validarVizinhancaPeriodo(
+  ano: number,
+  mes: number,
+  periodoNovo: Omit<MetaPeriodo, 'id' | 'descricao'>,
+  buscarConfig: (ano: number, mes: number) => MetaPeriodo | null
+): string[] {
+  const avisos: string[] = [];
+  const fmt = (d: Date) => d.toLocaleDateString('pt-BR');
+  const umDia = 86400000;
+
+  const novo = getDatasDoPeriodo(ano, mes, { ...periodoNovo, id: '', descricao: null });
+
+  // vizinho anterior
+  const [anoAnt, mesAnt] = mes === 1 ? [ano - 1, 12] : [ano, mes - 1];
+  const anterior = getDatasDoPeriodo(anoAnt, mesAnt, buscarConfig(anoAnt, mesAnt));
+  const esperadoInicio = new Date(anterior.dataFim.getTime() + umDia);
+  if (novo.dataInicio.getTime() !== esperadoInicio.getTime()) {
+    const tipo = novo.dataInicio.getTime() < esperadoInicio.getTime() ? 'SOBREPOSIÇÃO' : 'BURACO';
+    avisos.push(
+      `${tipo} com ${String(mesAnt).padStart(2, '0')}/${anoAnt}: o mês anterior termina em ${fmt(anterior.dataFim)}, então este deveria começar em ${fmt(esperadoInicio)} (informado: ${fmt(novo.dataInicio)})`
+    );
+  }
+
+  // vizinho seguinte
+  const [anoSeg, mesSeg] = mes === 12 ? [ano + 1, 1] : [ano, mes + 1];
+  const seguinte = getDatasDoPeriodo(anoSeg, mesSeg, buscarConfig(anoSeg, mesSeg));
+  const esperadoFim = new Date(seguinte.dataInicio.getTime() - umDia);
+  if (novo.dataFim.getTime() !== esperadoFim.getTime()) {
+    const tipo = novo.dataFim.getTime() > esperadoFim.getTime() ? 'SOBREPOSIÇÃO' : 'BURACO';
+    avisos.push(
+      `${tipo} com ${String(mesSeg).padStart(2, '0')}/${anoSeg}: o mês seguinte começa em ${fmt(seguinte.dataInicio)}, então este deveria terminar em ${fmt(esperadoFim)} (informado: ${fmt(novo.dataFim)})`
+    );
+  }
+
+  return avisos;
+}
+
+/**
  * Feriado se aplica à loja? NACIONAL sempre; ESTADUAL se a UF bater (feriado
  * sem UF vale para todos); MUNICIPAL só com cidade igual — loja sem cidade
  * configurada NÃO fecha por feriado municipal (evita fechar a cidade errada).

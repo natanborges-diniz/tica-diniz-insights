@@ -21,6 +21,7 @@ import { MetasSemanaisTab } from "@/components/metas/MetasSemanaisTab";
 import { GruposTab } from "@/components/metas/GruposTab";
 import { ComissoesPremiosTab } from "@/components/metas/ComissoesPremiosTab";
 import { useCalendarioConfig } from "@/hooks/useCalendarioConfig";
+import { validarVizinhancaPeriodo } from "@/lib/metas/calendario";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -123,6 +124,29 @@ export default function MetasConfigDashboard() {
 
   // ========== HANDLERS: PERÍODOS ==========
   const handleSalvarPeriodo = async () => {
+    // valida continuidade com os meses vizinhos (sobreposição = dupla contagem
+    // no consolidado mensal; buraco = dias fora de qualquer mês)
+    const avisos = validarVizinhancaPeriodo(
+      ano,
+      novoPeriodo.mes,
+      {
+        ano,
+        mes: novoPeriodo.mes,
+        diaInicio: novoPeriodo.diaInicio,
+        diaFim: novoPeriodo.diaFim,
+        mesInicio: novoPeriodo.mesInicio,
+        mesFim: novoPeriodo.mesFim,
+      },
+      (a, m) => periodos.find((p) => p.ano === a && p.mes === m) ?? null
+    );
+    if (avisos.length) {
+      const ok = window.confirm(
+        `Atenção — o período informado não é contíguo aos meses vizinhos:\n\n` +
+          avisos.map((a) => `• ${a}`).join('\n') +
+          `\n\nSalvar mesmo assim? (Lembre-se de ajustar o mês vizinho para fechar a conta.)`
+      );
+      if (!ok) return;
+    }
     await salvarPeriodo({
       ano,
       mes: novoPeriodo.mes,
@@ -132,6 +156,9 @@ export default function MetasConfigDashboard() {
       mesFim: novoPeriodo.mesFim,
       descricao: novoPeriodo.descricao || null,
     });
+    if (avisos.length) {
+      toast.warning('Período salvo com pendência de continuidade — ajuste o mês vizinho');
+    }
   };
 
   // ========== ACTIONBAR HANDLERS ==========

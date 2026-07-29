@@ -8,7 +8,7 @@ import {
   sugerirMetaMensal,
   calcularRitmo,
 } from '../metasSemanais';
-import { getDatasDoPeriodo } from '@/lib/metas/calendario';
+import { getDatasDoPeriodo, validarVizinhancaPeriodo } from '@/lib/metas/calendario';
 import type { LojaConfiguracao, Feriado, LojaExcecao } from '@/lib/metas/calendario';
 
 const configRua: LojaConfiguracao = {
@@ -162,6 +162,54 @@ describe('getDatasDoPeriodo — padrão da casa 21→20', () => {
     expect(dataFim.getFullYear()).toBe(2027);
     expect(dataFim.getMonth()).toBe(0);
     expect(dataFim.getDate()).toBe(20);
+  });
+});
+
+describe('validarVizinhancaPeriodo — continuidade entre meses', () => {
+  const semConfig = () => null;
+  const base = { ano: 2026, mesInicio: null as number | null, mesFim: null as number | null };
+
+  it('período igual ao padrão 21→20 é contíguo (sem avisos)', () => {
+    // dezembro/2026 padrão: 21/11 → 20/12
+    const avisos = validarVizinhancaPeriodo(
+      2026, 12,
+      { ...base, mes: 12, diaInicio: 21, diaFim: 20, mesInicio: 11, mesFim: 12 },
+      semConfig
+    );
+    expect(avisos).toEqual([]);
+  });
+
+  it('esticar dezembro até 23/12 gera SOBREPOSIÇÃO com janeiro', () => {
+    const avisos = validarVizinhancaPeriodo(
+      2026, 12,
+      { ...base, mes: 12, diaInicio: 21, diaFim: 23, mesInicio: 11, mesFim: 12 },
+      semConfig
+    );
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]).toContain('SOBREPOSIÇÃO');
+    expect(avisos[0]).toContain('01/2027');
+  });
+
+  it('encurtar dezembro deixa BURACO com janeiro', () => {
+    const avisos = validarVizinhancaPeriodo(
+      2026, 12,
+      { ...base, mes: 12, diaInicio: 21, diaFim: 15, mesInicio: 11, mesFim: 12 },
+      semConfig
+    );
+    expect(avisos.some((a) => a.includes('BURACO'))).toBe(true);
+  });
+
+  it('vizinho customizado é considerado no lugar do padrão', () => {
+    // janeiro/2027 customizado começando em 24/12 → dezembro até 23/12 fecha certinho
+    const avisos = validarVizinhancaPeriodo(
+      2026, 12,
+      { ...base, mes: 12, diaInicio: 21, diaFim: 23, mesInicio: 11, mesFim: 12 },
+      (a, m) =>
+        a === 2027 && m === 1
+          ? { id: 'x', ano: 2027, mes: 1, diaInicio: 24, diaFim: 20, mesInicio: 12, mesFim: 1, descricao: null }
+          : null
+    );
+    expect(avisos).toEqual([]);
   });
 });
 
