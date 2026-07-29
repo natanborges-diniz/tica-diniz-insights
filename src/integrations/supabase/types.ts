@@ -1780,34 +1780,40 @@ export type Database = {
         Row: {
           abre_domingo: boolean | null
           abre_feriado: boolean | null
+          cidade: string | null
           cod_empresa: number
           created_at: string
           id: string
           num_vendedores: number | null
           percentual_aceitavel: number | null
           tipo_loja: string
+          uf: string
           updated_at: string
         }
         Insert: {
           abre_domingo?: boolean | null
           abre_feriado?: boolean | null
+          cidade?: string | null
           cod_empresa: number
           created_at?: string
           id?: string
           num_vendedores?: number | null
           percentual_aceitavel?: number | null
           tipo_loja?: string
+          uf?: string
           updated_at?: string
         }
         Update: {
           abre_domingo?: boolean | null
           abre_feriado?: boolean | null
+          cidade?: string | null
           cod_empresa?: number
           created_at?: string
           id?: string
           num_vendedores?: number | null
           percentual_aceitavel?: number | null
           tipo_loja?: string
+          uf?: string
           updated_at?: string
         }
         Relationships: []
