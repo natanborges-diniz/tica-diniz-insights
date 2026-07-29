@@ -28,11 +28,27 @@ import { ExtratoRegrasDialog } from "@/components/banking/ExtratoRegrasDialog";
 import { PlanoContaSelect, usePlanoContas, type PlanoConta } from "@/components/banking/PlanoContaSelect";
 
 // ─── Types ───────────────────────────────────────────────────
+interface SugestaoDetalhe {
+  titulo?: string | null;
+  descricao?: string | null;
+  valor?: number | null;
+  valor_bruto?: number | null;
+  data_vencimento?: string | null;
+  data_pagamento?: string | null;
+  natureza?: string | null;
+  subcategoria?: string | null;
+  status?: string | null;
+  origem?: string | null;
+  forma_pagamento?: string | null;
+}
+
 interface Sugestao {
   alvo_tipo: string;
   alvo_id: string;
   score: number;
   motivo: string;
+  /** Preenchido pela action `sugestoes` (dados reais do alvo) */
+  detalhe?: SugestaoDetalhe | null;
 }
 
 interface ExtratoItem {
@@ -760,27 +776,51 @@ export default function BankingExtratoDashboard() {
           </p>
         ) : (
           <div className="space-y-2">
-            {candidatosLive.map((s, i) => (
-              <div key={`${s.alvo_id}-${i}`} className="flex items-center justify-between gap-2 p-2 rounded-lg border">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">
-                    {ALVO_LABEL[s.alvo_tipo] ?? s.alvo_tipo}
-                    <Badge variant="outline" className="ml-2">score {s.score}</Badge>
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">{s.motivo}</p>
+            {candidatosLive.map((s, i) => {
+              const d = s.detalhe;
+              const diferenca = d?.valor != null && candidatosFor
+                ? Math.round((candidatosFor.valor - d.valor) * 100) / 100
+                : null;
+              return (
+                <div key={`${s.alvo_id}-${i}`} className="flex items-center justify-between gap-2 p-2.5 rounded-lg border">
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="text-sm font-medium truncate">
+                      {d?.titulo || (ALVO_LABEL[s.alvo_tipo] ?? s.alvo_tipo)}
+                      <Badge variant="outline" className="ml-2">{ALVO_LABEL[s.alvo_tipo] ?? s.alvo_tipo} · {s.score}</Badge>
+                    </p>
+                    {d ? (
+                      <>
+                        <p className="text-xs">
+                          {d.valor != null && <span className="font-medium">{fmtCurrency(d.valor)}</span>}
+                          {diferenca != null && diferenca !== 0 && (
+                            <span className="text-warning"> (dif. {diferenca > 0 ? "+" : ""}{fmtCurrency(diferenca)})</span>
+                          )}
+                          {d.data_pagamento && <span className="text-muted-foreground"> · pago {format(new Date(d.data_pagamento + "T12:00:00"), "dd/MM/yy")}</span>}
+                          {!d.data_pagamento && d.data_vencimento && <span className="text-muted-foreground"> · venc. {format(new Date(d.data_vencimento + "T12:00:00"), "dd/MM/yy")}</span>}
+                          {d.status && <span className="text-muted-foreground"> · {d.status}</span>}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {[d.descricao !== d.titulo ? d.descricao : null, d.subcategoria ?? d.natureza, d.forma_pagamento]
+                            .filter(Boolean).join(" · ") || s.motivo}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground truncate">{s.motivo}</p>
+                    )}
+                  </div>
+                  {isAdmin && candidatosFor && (
+                    <Button
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => confirmarMutation.mutate({ item: candidatosFor, sugestao: s })}
+                      disabled={confirmarMutation.isPending}
+                    >
+                      Confirmar
+                    </Button>
+                  )}
                 </div>
-                {isAdmin && candidatosFor && (
-                  <Button
-                    size="sm"
-                    className="shrink-0"
-                    onClick={() => confirmarMutation.mutate({ item: candidatosFor, sugestao: s })}
-                    disabled={confirmarMutation.isPending}
-                  >
-                    Confirmar
-                  </Button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </BaseDialog>

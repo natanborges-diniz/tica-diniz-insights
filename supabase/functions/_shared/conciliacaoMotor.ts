@@ -204,7 +204,12 @@ export function matchEntry(entry: ExtratoEntry, pools: Pools, usados: Set<string
     };
   }
   for (const c of fortes) {
-    sugestoes.push({ alvo_tipo: c.alvo_tipo, alvo_id: c.id, score: 85, motivo: `Referência forte ambígua: ${c.label}` });
+    sugestoes.push({
+      alvo_tipo: c.alvo_tipo,
+      alvo_id: c.id,
+      score: 85,
+      motivo: `${c.label || "Referência forte"} — R$ ${c.valor.toFixed(2)}${c.data ? ` · ${c.data.slice(0, 10)}` : ""} (ambíguo)`,
+    });
   }
 
   // ── F2: recebíveis de cartão (apenas créditos) ──
@@ -228,7 +233,7 @@ export function matchEntry(entry: ExtratoEntry, pools: Pools, usados: Set<string
     }
     if (individuais.length > 1) {
       for (const r of individuais.slice(0, 3)) {
-        sugestoes.push({ alvo_tipo: "RECEBIVEL_CARTAO", alvo_id: r.id, score: 80, motivo: `Recebível ${r.adquirente ?? ""} ${r.data_vencimento} (ambíguo)` });
+        sugestoes.push({ alvo_tipo: "RECEBIVEL_CARTAO", alvo_id: r.id, score: 80, motivo: `Recebível ${r.adquirente ?? ""} R$ ${r.valor_liquido.toFixed(2)} · venc. ${r.data_vencimento} (ambíguo)` });
       }
     } else {
       // combinação: o banco pode ter agregado bandeiras num crédito só
@@ -290,7 +295,7 @@ export function matchEntry(entry: ExtratoEntry, pools: Pools, usados: Set<string
       alvo_tipo: "LANCAMENTO",
       alvo_id: l.id,
       score: melhores.length === 1 ? scoreLanc : scoreLanc - 10,
-      motivo: melhores.length === 1 ? `Vencimento ${l.data_vencimento} (janela 7d)` : `Candidato ambíguo — venc. ${l.data_vencimento}`,
+      motivo: `${l.label || "Lançamento"} — R$ ${l.valor.toFixed(2)} · venc. ${l.data_vencimento}${melhores.length === 1 ? "" : " (ambíguo)"}`,
     });
   }
 

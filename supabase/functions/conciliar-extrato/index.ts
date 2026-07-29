@@ -393,6 +393,112 @@ async function handleExecutar(db: ReturnType<typeof getServiceClient>, body: Rec
   return json({ success: true, ...resultado });
 }
 
+// Detalhes reais do alvo de cada sugestão — a descrição do ERP é genérica
+// demais para o humano confirmar só com score (feedback de produção 29/07).
+// deno-lint-ignore no-explicit-any
+async function enriquecerSugestoes(db: ReturnType<typeof getServiceClient>, sugestoes: Array<Record<string, any>>) {
+  const porTipo = new Map<string, string[]>();
+  for (const s of sugestoes) {
+    if (!s.alvo_id) continue;
+    const ids = porTipo.get(s.alvo_tipo) ?? [];
+    ids.push(s.alvo_id);
+    porTipo.set(s.alvo_tipo, ids);
+  }
+
+  // deno-lint-ignore no-explicit-any
+  const detalhes = new Map<string, Record<string, any>>();
+
+  const lancIds = porTipo.get("LANCAMENTO");
+  if (lancIds?.length) {
+    const { data } = await db
+      .from("lancamentos_financeiros")
+      .select("id, descricao, pessoa_nome, valor, valor_pago, data_vencimento, data_pagamento, natureza, subcategoria, status, origem, forma_pagamento, dados_extras")
+      .in("id", lancIds);
+    for (const l of (data || [])) {
+      const extras = (l.dados_extras || {}) as Record<string, unknown>;
+      detalhes.set(`LANCAMENTO|${l.id}`, {
+        titulo: l.pessoa_nome || l.descricao,
+        descricao: l.descricao,
+        valor: Number(l.valor_pago ?? l.valor),
+        data_vencimento: l.data_vencimento,
+        data_pagamento: l.data_pagamento,
+        natureza: l.natureza,
+        subcategoria: l.subcategoria ?? (extras.conta_descricao as string ?? null),
+        status: l.status,
+        origem: l.origem,
+        forma_pagamento: l.forma_pagamento,
+      });
+    }
+  }
+
+  const recIds = porTipo.get("RECEBIVEL_CARTAO");
+  if (recIds?.length) {
+    const { data } = await db
+      .from("recebiveis_cartao")
+      .select("id, adquirente, bandeira, valor_liquido, valor_bruto, data_vencimento, status")
+      .in("id", recIds);
+    for (const r of (data || [])) {
+      detalhes.set(`RECEBIVEL_CARTAO|${r.id}`, {
+        titulo: `${r.adquirente ?? "Adquirente"}${r.bandeira ? ` · ${r.bandeira}` : ""}`,
+        valor: Number(r.valor_liquido),
+        valor_bruto: r.valor_bruto != null ? Number(r.valor_bruto) : null,
+        data_vencimento: r.data_vencimento,
+        status: r.status,
+      });
+    }
+  }
+
+  const pagIds = porTipo.get("PAGAMENTO_BTG");
+  if (pagIds?.length) {
+    const { data } = await db
+      .from("btg_pagamentos")
+      .select("id, beneficiario, valor, tipo, status")
+      .in("id", pagIds);
+    for (const p of (data || [])) {
+      detalhes.set(`PAGAMENTO_BTG|${p.id}`, {
+        titulo: p.beneficiario ?? "Pagamento BTG",
+        valor: Number(p.valor),
+        forma_pagamento: p.tipo,
+        status: p.status,
+      });
+    }
+  }
+
+  const cobIds = porTipo.get("COBRANCA_BTG");
+  if (cobIds?.length) {
+    const { data } = await db
+      .from("btg_cobrancas")
+      .select("id, sacado_nome, valor, valor_pago, data_pagamento, data_vencimento, status")
+      .in("id", cobIds);
+    for (const c of (data || [])) {
+      detalhes.set(`COBRANCA_BTG|${c.id}`, {
+        titulo: c.sacado_nome ?? "Boleto",
+        valor: Number(c.valor_pago ?? c.valor),
+        data_vencimento: c.data_vencimento,
+        data_pagamento: c.data_pagamento,
+        status: c.status,
+      });
+    }
+  }
+
+  const regraIds = porTipo.get("TARIFA");
+  if (regraIds?.length) {
+    const { data } = await db
+      .from("extrato_regras_classificacao")
+      .select("id, padrao_descricao, natureza, categoria")
+      .in("id", regraIds);
+    for (const r of (data || [])) {
+      detalhes.set(`TARIFA|${r.id}`, {
+        titulo: `Regra: ${r.padrao_descricao}`,
+        natureza: r.natureza,
+        subcategoria: r.categoria,
+      });
+    }
+  }
+
+  return sugestoes.map((s) => ({ ...s, detalhe: detalhes.get(`${s.alvo_tipo}|${s.alvo_id}`) ?? null }));
+}
+
 // ─── ACTION: sugestoes ───────────────────────────────────────
 async function handleSugestoes(db: ReturnType<typeof getServiceClient>, body: Record<string, unknown>) {
   const extratoId = String(body.extrato_id ?? "");
@@ -418,7 +524,8 @@ async function handleSugestoes(db: ReturnType<typeof getServiceClient>, body: Re
     updated_at: new Date().toISOString(),
   }).eq("id", extratoId);
 
-  return json({ extrato_id: extratoId, resultado: result });
+  const sugestoesDetalhadas = await enriquecerSugestoes(db, result.sugestoes as Array<Record<string, unknown>>);
+  return json({ extrato_id: extratoId, resultado: { ...result, sugestoes: sugestoesDetalhadas } });
 }
 
 // ─── ACTION: confirmar ───────────────────────────────────────
