@@ -28,6 +28,7 @@ import {
   getComissaoTaxas,
   getPremiosConfig,
   getSemanaCortes,
+  getGruposLojas,
 } from './metasSemanaisService';
 import { derivarMetaVendedor } from '@/lib/metas/metasSemanais';
 import { getRecebimentosAgregado } from './recebimentosService';
@@ -303,6 +304,50 @@ export async function gerarPrevia(
     }
   }
 
+  // 6) comissões de GESTÃO: gerente = % sobre a base recebida da loja;
+  // supervisor = % sobre a base da loja (somando as lojas do grupo no mês, o
+  // resultado equivale ao % sobre o grupo). Linhas com código sentinela
+  // negativo (-<loja>1 gerente, -<loja>2 supervisor) para não colidir com
+  // vendedores e não se fundirem entre lojas na visão por vendedor.
+  const baseLoja = round2(vendedores.reduce((s, v) => s + v.baseTotal, 0));
+  const linhaGestao = (
+    codigo: number,
+    nome: string,
+    taxa: number
+  ): ResultadoVendedor => ({
+    codVendedor: codigo,
+    vendedorNome: nome,
+    metaSemana: metas.metaLoja,
+    percentualMeta: metas.metaLoja > 0 ? round2((baseLoja / metas.metaLoja) * 100) : 0,
+    basePorCategoria: {},
+    basePorOrigem: { vendaPeriodo: 0, saldoAnterior: 0 },
+    baseTotal: baseLoja,
+    restituicoes: 0,
+    comissao: round2((baseLoja * taxa) / 100),
+    premioFaixa: null,
+    premioSequencia: null,
+    premioValor: 0,
+    totalPagar: round2((baseLoja * taxa) / 100),
+    detalhe: [],
+  });
+  const taxaGerente = taxas['GERENTE'] ?? 0;
+  if (taxaGerente > 0 && baseLoja > 0) {
+    vendedores.push(linhaGestao(-(codEmpresa * 10 + 1), `GERENTE — ${nomeEmpresa ?? `Loja ${codEmpresa}`}`, taxaGerente));
+  }
+  const taxaSupervisor = taxas['SUPERVISOR'] ?? 0;
+  if (taxaSupervisor > 0 && baseLoja > 0) {
+    try {
+      const grupos = await getGruposLojas();
+      const grupo = grupos.find((g) => g.membros.includes(codEmpresa));
+      if (grupo) {
+        vendedores.push(
+          linhaGestao(-(codEmpresa * 10 + 2), `SUPERVISOR — ${grupo.nome} (parcela ${nomeEmpresa ?? codEmpresa})`, taxaSupervisor)
+        );
+      }
+    } catch {
+      avisos.push('Não foi possível verificar grupos de lojas para a comissão de supervisor.');
+    }
+  }
   const totais = vendedores.reduce(
     (acc, v) => ({
       base: round2(acc.base + v.baseTotal),

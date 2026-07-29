@@ -46,6 +46,9 @@ const CATEGORIA_LABEL: Record<string, string> = {
   CONVENIO: "Convênio",
   CREDITOS: "Créditos (tipo 6)",
   OUTROS: "Outros",
+  EMITIDO: "Modo Emitido em OS (taxa única)",
+  GERENTE: "Gerente — % sobre a base da loja",
+  SUPERVISOR: "Supervisor — % sobre a base do grupo",
 };
 
 export function ComissoesPremiosTab() {

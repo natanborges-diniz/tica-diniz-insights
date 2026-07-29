@@ -262,6 +262,7 @@ export default function RhFechamentoSemanalPage() {
 
   const [visao, setVisao] = useState<LojaView[]>([]);
   const [vendedorSel, setVendedorSel] = useState<string>("ALL");
+  const [agrupamento, setAgrupamento] = useState<"LOJA" | "VENDEDOR">("LOJA");
   const [gerando, setGerando] = useState(false);
   const [fechando, setFechando] = useState(false);
 
@@ -440,6 +441,16 @@ export default function RhFechamentoSemanalPage() {
             {visao.length > 0 && (
               <>
                 <div className="space-y-2">
+                  <Label>Agrupar por</Label>
+                  <Select value={agrupamento} onValueChange={(v) => setAgrupamento(v as "LOJA" | "VENDEDOR")}>
+                    <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="LOJA">Loja</SelectItem>
+                      <SelectItem value="VENDEDOR">Vendedor</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
                   <Label>Vendedor</Label>
                   <Select value={vendedorSel} onValueChange={setVendedorSel}>
                     <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
@@ -488,7 +499,87 @@ export default function RhFechamentoSemanalPage() {
 
       {gerando && <Skeleton className="h-64" />}
 
-      {visao.map((loja) => {
+      {/* ---------- VISÃO POR VENDEDOR (consolidada nas lojas selecionadas) ---------- */}
+      {!gerando && agrupamento === "VENDEDOR" && visao.length > 0 && (() => {
+        const todos = filtraVendedor(consolidarVendedores(visao.map((l) => l.consolidado)));
+        const totalGeral = todos.reduce((t, v) => t + v.totalPagar, 0);
+        const temParcial = visao.some((l) => l.temParcial);
+        return (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  Por Vendedor — {MESES[mes - 1]} {ano}
+                  <Badge variant="outline">{modo}</Badge>
+                  {temParcial && <Badge variant="secondary">inclui parciais</Badge>}
+                </CardTitle>
+                <CardDescription>
+                  {visao.length} loja(s) selecionada(s) · cada linha traz as fontes do valor
+                  (recebido no ato, de períodos anteriores, emitido e a receber) — expanda para o
+                  detalhe por OS/venda · <strong>total a pagar R$ {fmtBRL(totalGeral)}</strong>
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(
+                    wb,
+                    XLSX.utils.json_to_sheet(
+                      todos.map((v) => ({
+                        "Cód. Vendedor": v.codVendedor,
+                        Vendedor: v.vendedorNome ?? "",
+                        "Meta do Mês": v.metaSemana,
+                        "% Meta": v.percentualMeta,
+                        "Recebido no Ato (Vendas do Período)": v.basePorOrigem.vendaPeriodo,
+                        "Recebido de Períodos Anteriores": v.basePorOrigem.saldoAnterior,
+                        "Emitido em OS no Período": v.basePorOrigem.vendasEmitidas ?? "",
+                        "Ficou a Receber (Período)": v.basePorOrigem.saldoAReceber ?? "",
+                        "Base Total (Recebido)": v.baseTotal,
+                        Restituições: v.restituicoes,
+                        Comissão: v.comissao,
+                        Prêmios: v.premioValor,
+                        "Total a Pagar": v.totalPagar,
+                      }))
+                    ),
+                    "Por Vendedor"
+                  );
+                  XLSX.utils.book_append_sheet(
+                    wb,
+                    XLSX.utils.json_to_sheet(
+                      todos.flatMap((v) =>
+                        v.detalhe.map((d) => ({
+                          "Cód. Vendedor": v.codVendedor,
+                          Vendedor: v.vendedorNome ?? "",
+                          "OS/Venda": d.codTransacao,
+                          Emissão: d.dataEmissao,
+                          Pagamento: d.dataPagamento,
+                          Forma: d.formaCategoria,
+                          Origem: d.origem,
+                          Valor: d.valor,
+                          "Taxa %": d.taxa,
+                          Comissão: d.comissao,
+                        }))
+                      )
+                    ),
+                    "Detalhe por OS"
+                  );
+                  const sufixo = vendedorSel === "ALL" ? "" : `_vend${vendedorSel}`;
+                  XLSX.writeFile(wb, `fechamento_por_vendedor_${ano}-${String(mes).padStart(2, "0")}${sufixo}.xlsx`);
+                }}
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                XLSX por Vendedor
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <TabelaFechamento vendedores={todos} metaLabel="Meta do mês" />
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {agrupamento === "LOJA" && visao.map((loja) => {
         const totalMes = loja.consolidado.reduce((s, v) => s + v.totalPagar, 0);
         return (
           <Card key={loja.codEmpresa}>
