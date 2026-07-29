@@ -10,6 +10,9 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getVendedoresConhecidos } from "@/services/recebimentosService";
+import { getGruposLojas } from "@/services/metasSemanaisService";
 import { Loader2, Shield, Users, Eye, Store, Info, Plus, Lock, Undo2, Check, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Navigate } from "react-router-dom";
@@ -35,6 +38,10 @@ interface ProfileRow {
   email: string | null;
   nome: string | null;
   cod_empresa: number;
+  /** Fase 3: vínculo usuário → vendedor (vê só a própria posição) */
+  cod_vendedor?: number | null;
+  /** Fase 3: vínculo usuário → grupo de lojas (supervisor) */
+  cod_grupo_supervisor?: number | null;
 }
 
 interface RoleRow {
@@ -322,7 +329,11 @@ function UserEditSheet({
   serverEmpresaPerms: EmpresaPermRow[];
   serverPagePerms: PagePermRow[];
   empresas: { codEmpresa: number; nome: string }[];
-  onSave: (data: { nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[]; pageKeys: string[] }) => Promise<void>;
+  grupos: { codGrupo: number; nome: string }[];
+  onSave: (data: {
+    nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[]; pageKeys: string[];
+    codVendedor: number | null; codGrupoSupervisor: number | null;
+  }) => Promise<void>;
   onResetPassword: () => void;
 }) {
   const { isDirty, setDirty, setClean, guardClose } = useDirtyGuard();
@@ -334,6 +345,9 @@ function UserEditSheet({
   const [draftModules, setDraftModules] = useState<Record<string, string>>({});
   const [draftEmpresas, setDraftEmpresas] = useState<number[]>([]);
   const [draftPages, setDraftPages] = useState<Set<string>>(new Set());
+  const [draftCodVendedor, setDraftCodVendedor] = useState<number | null>(null);
+  const [draftGrupoSupervisor, setDraftGrupoSupervisor] = useState<number | null>(null);
+  const [vendedoresLoja, setVendedoresLoja] = useState<{ codVendedor: number; nome: string | null }[]>([]);
 
   // Reset draft when profile/server data changes
   useEffect(() => {
@@ -346,9 +360,19 @@ function UserEditSheet({
     setDraftModules(map);
     setDraftEmpresas(serverEmpresaPerms.map(p => p.cod_empresa));
     setDraftPages(new Set(serverPagePerms.map(p => p.page_key)));
+    setDraftCodVendedor(profile.cod_vendedor ?? null);
+    setDraftGrupoSupervisor(profile.cod_grupo_supervisor ?? null);
     setClean();
     setSaveStatus("idle");
   }, [profile, serverRoles, serverModulePerms, serverEmpresaPerms, serverPagePerms, setClean]);
+
+  // vendedores conhecidos da loja do usuário (p/ vínculo)
+  useEffect(() => {
+    if (!open || !profile?.cod_empresa) return;
+    getVendedoresConhecidos(profile.cod_empresa)
+      .then(setVendedoresLoja)
+      .catch(() => setVendedoresLoja([]));
+  }, [open, profile?.cod_empresa]);
 
   const isAdminUser = draftIsAdmin;
 
@@ -367,8 +391,10 @@ function UserEditSheet({
     const serverPageKeys = serverPagePerms.map(p => p.page_key).sort();
     const draftPageKeys = [...draftPages].sort();
     if (JSON.stringify(serverPageKeys) !== JSON.stringify(draftPageKeys)) return true;
+    if (draftCodVendedor !== (profile.cod_vendedor ?? null)) return true;
+    if (draftGrupoSupervisor !== (profile.cod_grupo_supervisor ?? null)) return true;
     return false;
-  }, [draftName, draftIsAdmin, draftModules, draftEmpresas, draftPages, profile, serverRoles, serverModulePerms, serverEmpresaPerms, serverPagePerms]);
+  }, [draftName, draftIsAdmin, draftModules, draftEmpresas, draftPages, draftCodVendedor, draftGrupoSupervisor, profile, serverRoles, serverModulePerms, serverEmpresaPerms, serverPagePerms]);
 
   // Sync dirty state
   useEffect(() => {
@@ -386,6 +412,8 @@ function UserEditSheet({
     setDraftModules(map);
     setDraftEmpresas(serverEmpresaPerms.map(p => p.cod_empresa));
     setDraftPages(new Set(serverPagePerms.map(p => p.page_key)));
+    setDraftCodVendedor(profile.cod_vendedor ?? null);
+    setDraftGrupoSupervisor(profile.cod_grupo_supervisor ?? null);
   };
 
   const handleSave = async () => {
@@ -397,6 +425,8 @@ function UserEditSheet({
         modules: draftModules,
         empresaCods: draftEmpresas,
         pageKeys: [...draftPages],
+        codVendedor: draftCodVendedor,
+        codGrupoSupervisor: draftGrupoSupervisor,
       });
       setSaveStatus("success");
       toast({ title: "Permissões salvas com sucesso!" });
@@ -522,6 +552,75 @@ function UserEditSheet({
               <Info className="h-3 w-3" /> Admin tem acesso total automático a todos os módulos e lojas
             </p>
           )}
+        </div>
+
+        <Separator />
+
+        {/* Vínculos de metas (Fase 3): decide o ESCOPO do Acompanhamento Semanal */}
+        <div>
+          <SectionHeader
+            icon={Shield}
+            title="Vínculos de metas"
+            description="Escopo do Acompanhamento Semanal: vendedor vê só a própria posição; supervisor vê o grupo; sem vínculo = gerente (vê a própria loja)"
+          />
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Vendedor (código do ERP)</Label>
+              <Select
+                value={draftCodVendedor != null ? String(draftCodVendedor) : "none"}
+                onValueChange={(v) => {
+                  setDraftCodVendedor(v === "none" ? null : Number(v));
+                  if (v !== "none") setDraftGrupoSupervisor(null);
+                }}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— sem vínculo —</SelectItem>
+                  {draftCodVendedor != null &&
+                    !vendedoresLoja.some((v) => v.codVendedor === draftCodVendedor) && (
+                      <SelectItem value={String(draftCodVendedor)}>
+                        Vendedor {draftCodVendedor} (atual)
+                      </SelectItem>
+                    )}
+                  {vendedoresLoja.map((v) => (
+                    <SelectItem key={v.codVendedor} value={String(v.codVendedor)}>
+                      {v.nome ?? `Vendedor ${v.codVendedor}`} ({v.codVendedor})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Lista = vendedores com recebimentos nos últimos 120 dias na loja do usuário
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Supervisor do grupo</Label>
+              <Select
+                value={draftGrupoSupervisor != null ? String(draftGrupoSupervisor) : "none"}
+                onValueChange={(v) => {
+                  setDraftGrupoSupervisor(v === "none" ? null : Number(v));
+                  if (v !== "none") setDraftCodVendedor(null);
+                }}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— não é supervisor —</SelectItem>
+                  {grupos.map((g) => (
+                    <SelectItem key={g.codGrupo} value={String(g.codGrupo)}>
+                      {g.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Grupos são criados em Configurações de Metas → Grupos
+              </p>
+            </div>
+          </div>
         </div>
 
         <Separator />
@@ -661,6 +760,12 @@ function UserEditSheet({
 export default function AdminUsuariosPage() {
   const { isAdmin, isLoading: authLoading } = useAuth();
   const { empresas } = useEmpresas();
+  const [grupos, setGrupos] = useState<{ codGrupo: number; nome: string }[]>([]);
+  useEffect(() => {
+    getGruposLojas()
+      .then((gs) => setGrupos(gs.map((g) => ({ codGrupo: g.codGrupo, nome: g.nome }))))
+      .catch(() => setGrupos([]));
+  }, []);
   const insightsData = useModuleInsights({ module: "admin", enabled: isAdmin });
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [userRoles, setUserRoles] = useState<RoleRow[]>([]);
@@ -675,7 +780,8 @@ export default function AdminUsuariosPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [profilesRes, rolesRes, permsRes, empresaPermsRes, pagePermsRes] = await Promise.all([
-      supabase.from("profiles").select("id, email, nome, cod_empresa"),
+      // select * tolera a ordem de deploy das colunas de vínculo (Fase 3)
+      supabase.from("profiles").select("*"),
       supabase.from("user_roles").select("user_id, role"),
       supabase.from("user_module_permissions").select("user_id, module, access_level"),
       supabase.from("user_empresa_permissions").select("user_id, cod_empresa"),
@@ -705,7 +811,10 @@ export default function AdminUsuariosPage() {
 
   const handleSaveUser = async (
     userId: string,
-    data: { nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[]; pageKeys: string[] }
+    data: {
+      nome: string; isAdmin: boolean; modules: Record<string, string>; empresaCods: number[]; pageKeys: string[];
+      codVendedor: number | null; codGrupoSupervisor: number | null;
+    }
   ) => {
     const currentProfile = profiles.find(p => p.id === userId);
     const currentIsAdmin = userRoles.some(r => r.user_id === userId && r.role === "admin");
@@ -723,6 +832,26 @@ export default function AdminUsuariosPage() {
           });
           if (error) throw error;
           if (d?.error) throw new Error(d.error);
+        })()
+      );
+    }
+
+    // 1b. Vínculos de metas (Fase 3) — update direto no profiles (RLS admin;
+    // trigger protect_vinculos_metas garante que só admin altera)
+    if (
+      data.codVendedor !== (currentProfile?.cod_vendedor ?? null) ||
+      data.codGrupoSupervisor !== (currentProfile?.cod_grupo_supervisor ?? null)
+    ) {
+      promises.push(
+        (async () => {
+          const { error } = await supabase
+            .from("profiles")
+            .update({
+              cod_vendedor: data.codVendedor,
+              cod_grupo_supervisor: data.codGrupoSupervisor,
+            } as any)
+            .eq("id", userId);
+          if (error) throw error;
         })()
       );
     }
@@ -924,6 +1053,7 @@ export default function AdminUsuariosPage() {
         serverEmpresaPerms={editEmpPerms}
         serverPagePerms={editPagePerms}
         empresas={empresas}
+        grupos={grupos}
         onSave={(data) => handleSaveUser(editUserId!, data)}
         onResetPassword={() => {
           const p = profiles.find(pr => pr.id === editUserId);

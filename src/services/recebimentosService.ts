@@ -116,6 +116,32 @@ export async function getRecebimentosPorSemana(
   return agruparRecebimentosPorSemana(recebimentos);
 }
 
+/**
+ * Vendedores conhecidos de uma loja (distinct do agregado dos últimos ~120
+ * dias) — usado no admin para vincular usuário → vendedor (Fase 3).
+ */
+export async function getVendedoresConhecidos(
+  codEmpresa: number
+): Promise<{ codVendedor: number; nome: string | null }[]> {
+  const desde = new Date();
+  desde.setDate(desde.getDate() - 120);
+  const { data, error } = await (supabase as any)
+    .from('recebimentos_agregado_diario')
+    .select('cod_vendedor, vendedor_nome')
+    .eq('cod_empresa', codEmpresa)
+    .gte('data_pagamento', desde.toISOString().split('T')[0]);
+  if (error) throw new Error(`Erro ao listar vendedores: ${error.message}`);
+  const vistos = new Map<number, string | null>();
+  ((data || []) as any[]).forEach((r) => {
+    if (r.cod_vendedor > 0 && !vistos.has(r.cod_vendedor)) {
+      vistos.set(r.cod_vendedor, r.vendedor_nome);
+    }
+  });
+  return Array.from(vistos.entries())
+    .map(([codVendedor, nome]) => ({ codVendedor, nome }))
+    .sort((a, b) => (a.nome ?? '').localeCompare(b.nome ?? ''));
+}
+
 // ============================================
 // SYNC — disparo manual da edge function
 // ============================================
