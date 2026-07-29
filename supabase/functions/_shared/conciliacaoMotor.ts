@@ -16,6 +16,41 @@ export interface ExtratoEntry {
   descricao: string | null;
   valor: number;
   tipo: "CREDITO" | "DEBITO";
+  /** Extraídos do payload BTG (dados_extras) quando disponíveis — desempate */
+  bandeira?: string | null;
+  cnpj_contraparte?: string | null;
+}
+
+// Extrai bandeira e CNPJ do payload bruto do BTG. Formato observado em produção
+// (créditos de cartão): category.name = CARD_RECEIVABLES e
+// descriptionDetails = "REDECARD - <Bandeira><Crédito|Débito> | CNPJ: <cnpj>"
+export function extrairPistasPayload(dadosExtras: Record<string, unknown> | null | undefined): {
+  bandeira: string | null;
+  cnpj_contraparte: string | null;
+} {
+  if (!dadosExtras) return { bandeira: null, cnpj_contraparte: null };
+  const texto = JSON.stringify(dadosExtras);
+
+  const cnpjMatch = texto.match(/CNPJ[:\s"]*([\d][\d./-]{12,17}[\d])/i);
+  const cnpj = cnpjMatch ? cnpjMatch[1].replace(/\D/g, "") : null;
+
+  let bandeira: string | null = null;
+  const bandMatch = texto.match(/(?:REDECARD|CIELO|GETNET|STONE)\s*-\s*([A-Za-zÀ-ú ]+?)\s*(?:Cr[ée]dito|D[ée]bito)/i);
+  if (bandMatch) bandeira = bandMatch[1].trim().toUpperCase();
+  else {
+    const nomeBand = texto.match(/\b(VISA|MASTERCARD|MASTER|ELO|AMEX|HIPERCARD)\b/i);
+    if (nomeBand) bandeira = nomeBand[1].toUpperCase();
+  }
+  if (bandeira === "MASTER") bandeira = "MASTERCARD";
+
+  return { bandeira, cnpj_contraparte: cnpj };
+}
+
+function bandeiraIgual(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  const na = a.toUpperCase().replace("MASTER CARD", "MASTERCARD");
+  const nb = b.toUpperCase().replace("MASTER CARD", "MASTERCARD");
+  return na.includes(nb) || nb.includes(na);
 }
 
 export interface CandidatoForte {
@@ -31,6 +66,7 @@ export interface CandidatoRecebivel {
   valor_liquido: number;
   data_vencimento: string;
   adquirente?: string | null;
+  bandeira?: string | null;
 }
 
 export interface CandidatoLancamento {
@@ -219,7 +255,13 @@ export function matchEntry(entry: ExtratoEntry, pools: Pools, usados: Set<string
       (r) => !usados.has(chave("RECEBIVEL_CARTAO", r.id)) && janelaRecebivel(entry.data_lancamento, r.data_vencimento)
     );
 
-    const individuais = cands.filter((r) => Math.abs(r.valor_liquido - entry.valor) <= tol);
+    let individuais = cands.filter((r) => Math.abs(r.valor_liquido - entry.valor) <= tol);
+    // Desempate por bandeira (payload BTG traz "REDECARD - <Bandeira>..."):
+    // se vários candidatos têm o mesmo valor, mas só um bate a bandeira, ele vence.
+    if (individuais.length > 1 && entry.bandeira) {
+      const daBandeira = individuais.filter((r) => bandeiraIgual(entry.bandeira, r.bandeira));
+      if (daBandeira.length === 1) individuais = daBandeira;
+    }
     if (individuais.length === 1) {
       const r = individuais[0];
       const exato = Math.abs(r.valor_liquido - entry.valor) <= CENTAVO;
@@ -233,7 +275,7 @@ export function matchEntry(entry: ExtratoEntry, pools: Pools, usados: Set<string
     }
     if (individuais.length > 1) {
       for (const r of individuais.slice(0, 3)) {
-        sugestoes.push({ alvo_tipo: "RECEBIVEL_CARTAO", alvo_id: r.id, score: 80, motivo: `Recebível ${r.adquirente ?? ""} R$ ${r.valor_liquido.toFixed(2)} · venc. ${r.data_vencimento} (ambíguo)` });
+        sugestoes.push({ alvo_tipo: "RECEBIVEL_CARTAO", alvo_id: r.id, score: 80, motivo: `Recebível ${r.adquirente ?? ""}${r.bandeira ? ` ${r.bandeira}` : ""} R$ ${r.valor_liquido.toFixed(2)} · venc. ${r.data_vencimento} (ambíguo)` });
       }
     } else {
       // combinação: o banco pode ter agregado bandeiras num crédito só

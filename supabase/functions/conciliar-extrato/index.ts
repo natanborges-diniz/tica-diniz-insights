@@ -18,6 +18,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   matchEntry,
+  extrairPistasPayload,
   type ExtratoEntry,
   type Pools,
   type CandidatoForte,
@@ -240,17 +241,18 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
   // Crédito ← recebíveis de cartão
   const { data: recebiveis } = await db
     .from("recebiveis_cartao")
-    .select("id, valor_liquido, data_vencimento, adquirente, status")
+    .select("id, valor_liquido, data_vencimento, adquirente, bandeira, status")
     .eq("cod_empresa", codEmpresa)
     .in("status", ["PREVISTO", "CONCILIADO"])
     .is("btg_extrato_id", null);
   const poolRecebiveis = (recebiveis || [])
     .filter((r: { id: string }) => !usados.has(`RECEBIVEL_CARTAO|${r.id}`))
-    .map((r: { id: string; valor_liquido: number; data_vencimento: string; adquirente: string | null }) => ({
+    .map((r: { id: string; valor_liquido: number; data_vencimento: string; adquirente: string | null; bandeira: string | null }) => ({
       id: r.id,
       valor_liquido: Number(r.valor_liquido),
       data_vencimento: r.data_vencimento,
       adquirente: r.adquirente,
+      bandeira: r.bandeira,
     }));
 
   // Ambos ← lançamentos em aberto
@@ -330,6 +332,7 @@ async function handleExecutar(db: ReturnType<typeof getServiceClient>, body: Rec
         .limit(300);
 
       for (const entry of (entries || [])) {
+        const pistas = extrairPistasPayload(entry.dados_extras as Record<string, unknown> | null);
         const e: ExtratoEntry = {
           id: entry.id,
           cod_empresa: entry.cod_empresa,
@@ -337,6 +340,8 @@ async function handleExecutar(db: ReturnType<typeof getServiceClient>, body: Rec
           descricao: entry.descricao,
           valor: Number(entry.valor),
           tipo: entry.tipo,
+          bandeira: pistas.bandeira,
+          cnpj_contraparte: pistas.cnpj_contraparte,
         };
         const pool = e.tipo === "DEBITO" ? pools.debito : pools.credito;
         const result = matchEntry(e, pool, usados);
@@ -508,6 +513,7 @@ async function handleSugestoes(db: ReturnType<typeof getServiceClient>, body: Re
   if (!entry) return json({ error: "Linha do extrato não encontrada" }, 404);
 
   const pools = await carregarPools(db, entry.cod_empresa);
+  const pistas = extrairPistasPayload(entry.dados_extras as Record<string, unknown> | null);
   const e: ExtratoEntry = {
     id: entry.id,
     cod_empresa: entry.cod_empresa,
@@ -515,6 +521,8 @@ async function handleSugestoes(db: ReturnType<typeof getServiceClient>, body: Re
     descricao: entry.descricao,
     valor: Number(entry.valor),
     tipo: entry.tipo,
+    bandeira: pistas.bandeira,
+    cnpj_contraparte: pistas.cnpj_contraparte,
   };
   const result = matchEntry(e, e.tipo === "DEBITO" ? pools.debito : pools.credito, new Set());
 

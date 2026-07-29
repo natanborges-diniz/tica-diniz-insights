@@ -7,6 +7,7 @@ import {
   janelaRecebivel,
   diffDias,
   tolReceb,
+  extrairPistasPayload,
   type ExtratoEntry,
   type Pools,
 } from '../../../../supabase/functions/_shared/conciliacaoMotor';
@@ -236,6 +237,57 @@ describe('F4 — regras de classificação', () => {
       new Set()
     );
     expect(r.status).toBe('NENHUM');
+  });
+});
+
+describe('F2 — desempate por bandeira (payload BTG)', () => {
+  const receb = (id: string, bandeira: string | null) => ({
+    id, valor_liquido: 1000, data_vencimento: '2026-07-01', adquirente: 'REDE', bandeira,
+  });
+
+  it('dois recebíveis de mesmo valor/data → bandeira do payload decide', () => {
+    const r = matchEntry(
+      entryBase({ tipo: 'CREDITO', valor: 1000, bandeira: 'MASTERCARD' }),
+      poolsVazios({ recebiveis: [receb('r-visa', 'VISA'), receb('r-master', 'MASTERCARD')] }),
+      new Set()
+    );
+    expect(r.status).toBe('MATCH');
+    expect(r.alocacoes![0].alvo_id).toBe('r-master');
+  });
+
+  it('sem bandeira no payload → continua ambíguo (não chuta)', () => {
+    const r = matchEntry(
+      entryBase({ tipo: 'CREDITO', valor: 1000 }),
+      poolsVazios({ recebiveis: [receb('r-visa', 'VISA'), receb('r-master', 'MASTERCARD')] }),
+      new Set()
+    );
+    expect(r.status).toBe('SUGESTAO');
+  });
+
+  it('duas da mesma bandeira → segue ambíguo', () => {
+    const r = matchEntry(
+      entryBase({ tipo: 'CREDITO', valor: 1000, bandeira: 'VISA' }),
+      poolsVazios({ recebiveis: [receb('r-v1', 'VISA'), receb('r-v2', 'VISA')] }),
+      new Set()
+    );
+    expect(r.status).toBe('SUGESTAO');
+  });
+});
+
+describe('extrairPistasPayload (formato real BTG)', () => {
+  it('extrai bandeira e CNPJ do descriptionDetails de CARD_RECEIVABLES', () => {
+    const p = extrairPistasPayload({
+      category: { name: 'CARD_RECEIVABLES' },
+      descriptionDetails: 'REDECARD - MastercardCrédito | CNPJ: 12.345.678/0001-90',
+    });
+    expect(p.bandeira).toBe('MASTERCARD');
+    expect(p.cnpj_contraparte).toBe('12345678000190');
+  });
+
+  it('payload vazio → sem pistas', () => {
+    const p = extrairPistasPayload({});
+    expect(p.bandeira).toBeNull();
+    expect(p.cnpj_contraparte).toBeNull();
   });
 });
 
