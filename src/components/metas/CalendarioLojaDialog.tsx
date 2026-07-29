@@ -133,15 +133,17 @@ export function CalendarioLojaDialog({
   const handleClickDia = async (d: DiaInfo) => {
     try {
       if (d.excecao) {
-        await deleteLojaExcecao(d.excecao.id);
+        const ok = await deleteLojaExcecao(d.excecao.id);
+        if (!ok) throw new Error("Não foi possível remover a exceção (verifique permissão/migrations)");
         toast.success(`Exceção de ${d.dia} removida — volta à regra padrão`);
       } else {
-        await upsertLojaExcecao({
+        const ok = await upsertLojaExcecao({
           codEmpresa,
           data: d.data,
           aberto: !d.aberto,
           motivo: d.aberto ? "Fechado (ajuste manual)" : "Aberto (ajuste manual)",
         });
+        if (!ok) throw new Error("Não foi possível salvar a exceção (verifique permissão/migrations)");
         toast.success(`Dia ${d.dia}: ${d.aberto ? "fechado" : "aberto"} por exceção`);
       }
       setMudou(true);
@@ -151,7 +153,9 @@ export function CalendarioLojaDialog({
     }
   };
 
-  const handleToggleConfig = async (campo: "abreDomingo" | "abreFeriado", valor: boolean) => {
+  const handleConfigChange = async (
+    patch: Partial<Omit<LojaConfiguracao, "id" | "codEmpresa">>
+  ) => {
     const base: Omit<LojaConfiguracao, "id"> = {
       codEmpresa,
       tipoLoja: config?.tipoLoja ?? "RUA",
@@ -159,11 +163,13 @@ export function CalendarioLojaDialog({
       abreFeriado: config?.abreFeriado ?? false,
       numVendedores: config?.numVendedores ?? 1,
       percentualAceitavel: config?.percentualAceitavel ?? 100,
-      [campo]: valor,
+      cidade: config?.cidade ?? null,
+      uf: config?.uf ?? "SP",
+      ...patch,
     };
     const ok = await upsertLojaConfiguracao(base);
     if (!ok) {
-      toast.error("Erro ao salvar configuração da loja");
+      toast.error("Erro ao salvar configuração da loja (verifique permissão/migrations)");
       return;
     }
     setMudou(true);
@@ -195,20 +201,44 @@ export function CalendarioLojaDialog({
           <p className="text-muted-foreground text-center py-8">Carregando...</p>
         ) : (
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-6">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
               <label className="flex items-center gap-2 text-sm">
                 <Switch
                   checked={config?.abreDomingo ?? false}
-                  onCheckedChange={(v) => handleToggleConfig("abreDomingo", v)}
+                  onCheckedChange={(v) => handleConfigChange({ abreDomingo: v })}
                 />
                 Abre aos domingos
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <Switch
                   checked={config?.abreFeriado ?? false}
-                  onCheckedChange={(v) => handleToggleConfig("abreFeriado", v)}
+                  onCheckedChange={(v) => handleConfigChange({ abreFeriado: v })}
                 />
                 Abre em feriados
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                Tipo:
+                <select
+                  className="border rounded-md px-2 py-1 text-sm bg-background"
+                  value={config?.tipoLoja ?? "RUA"}
+                  onChange={(e) => handleConfigChange({ tipoLoja: e.target.value as "RUA" | "SHOPPING" })}
+                >
+                  <option value="RUA">Rua</option>
+                  <option value="SHOPPING">Shopping</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                Cidade:
+                <input
+                  className="border rounded-md px-2 py-1 text-sm bg-background w-36"
+                  defaultValue={config?.cidade ?? ""}
+                  placeholder="Ex.: Osasco"
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v !== (config?.cidade ?? "")) handleConfigChange({ cidade: v || null });
+                  }}
+                  title="Feriado municipal só fecha lojas da própria cidade"
+                />
               </label>
             </div>
 

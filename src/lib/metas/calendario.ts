@@ -33,6 +33,27 @@ export interface LojaConfiguracao {
   abreFeriado: boolean;
   numVendedores: number;
   percentualAceitavel: number;
+  /** feriado MUNICIPAL só se aplica se a cidade da loja bater com a do feriado */
+  cidade?: string | null;
+  /** feriado ESTADUAL só se aplica se a UF bater (default SP) */
+  uf?: string | null;
+}
+
+/**
+ * Feriado se aplica à loja? NACIONAL sempre; ESTADUAL se a UF bater (feriado
+ * sem UF vale para todos); MUNICIPAL só com cidade igual — loja sem cidade
+ * configurada NÃO fecha por feriado municipal (evita fechar a cidade errada).
+ */
+export function feriadoAplicaALoja(f: Feriado, config: LojaConfiguracao | null): boolean {
+  if (f.tipo === 'NACIONAL') return true;
+  if (f.tipo === 'ESTADUAL') {
+    if (!f.uf) return true;
+    return (config?.uf ?? 'SP').toUpperCase() === f.uf.toUpperCase();
+  }
+  // MUNICIPAL
+  const cidadeLoja = (config?.cidade ?? '').trim().toLowerCase();
+  const cidadeFeriado = (f.cidade ?? '').trim().toLowerCase();
+  return !!cidadeLoja && !!cidadeFeriado && cidadeLoja === cidadeFeriado;
 }
 
 export interface LojaExcecao {
@@ -66,15 +87,17 @@ export function calcularDiasUteis(
   });
 
   const feriadosSet = new Set<string>();
-  feriados.forEach((f) => {
-    if (f.recorrente) {
-      const [, mes, dia] = f.data.split('-');
-      const anoAtual = current.getFullYear();
-      feriadosSet.add(`${anoAtual}-${mes}-${dia}`);
-    } else {
-      feriadosSet.add(f.data);
-    }
-  });
+  feriados
+    .filter((f) => feriadoAplicaALoja(f, config))
+    .forEach((f) => {
+      if (f.recorrente) {
+        const [, mes, dia] = f.data.split('-');
+        const anoAtual = current.getFullYear();
+        feriadosSet.add(`${anoAtual}-${mes}-${dia}`);
+      } else {
+        feriadosSet.add(f.data);
+      }
+    });
 
   while (current <= dataFim) {
     const dataStr = current.toISOString().split('T')[0];

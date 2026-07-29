@@ -49,13 +49,13 @@ describe('gerarSemanasDoPeriodo', () => {
     expect(ultima.diasUteis).toBe(2);
   });
 
-  it('feriado no meio do período reduz os dias úteis da semana (loja fechada)', () => {
+  it('feriado nacional no meio do período reduz os dias úteis (loja fechada)', () => {
     const feriados: Feriado[] = [
       {
         id: 'f1',
         data: '2027-06-24',
         descricao: 'São João',
-        tipo: 'MUNICIPAL',
+        tipo: 'NACIONAL',
         uf: null,
         cidade: null,
         recorrente: false,
@@ -64,6 +64,27 @@ describe('gerarSemanasDoPeriodo', () => {
     const sem = gerarSemanasDoPeriodo(ini, fim, configRua, semFeriados, semExcecoes);
     const com = gerarSemanasDoPeriodo(ini, fim, configRua, feriados, semExcecoes);
     expect(com[0].diasUteis).toBe(sem[0].diasUteis - 1);
+  });
+
+  it('feriado MUNICIPAL só fecha lojas da própria cidade', () => {
+    const feriadoOsasco: Feriado[] = [
+      {
+        id: 'f2',
+        data: '2027-06-24',
+        descricao: 'Feriado de Osasco',
+        tipo: 'MUNICIPAL',
+        uf: 'SP',
+        cidade: 'Osasco',
+        recorrente: false,
+      },
+    ];
+    const lojaOsasco = { ...configRua, cidade: 'Osasco' };
+    const lojaItapevi = { ...configRua, cidade: 'Itapevi' };
+    const lojaSemCidade = configRua; // sem cidade → municipal não aplica
+    const base = gerarSemanasDoPeriodo(ini, fim, lojaOsasco, semFeriados, semExcecoes)[0].diasUteis;
+    expect(gerarSemanasDoPeriodo(ini, fim, lojaOsasco, feriadoOsasco, semExcecoes)[0].diasUteis).toBe(base - 1);
+    expect(gerarSemanasDoPeriodo(ini, fim, lojaItapevi, feriadoOsasco, semExcecoes)[0].diasUteis).toBe(base);
+    expect(gerarSemanasDoPeriodo(ini, fim, lojaSemCidade, feriadoOsasco, semExcecoes)[0].diasUteis).toBe(base);
   });
 
   it('período que cruza a virada do mês/ano funciona', () => {

@@ -15,6 +15,7 @@ import {
   type DivisaoSemanal,
 } from './metasSemanaisService';
 import { getRecebimentosAgregado } from './recebimentosService';
+import { lojasEquivalentes } from '@/lib/metas/lojas';
 
 export type StatusRitmo = 'ATINGIDA' | 'NO_RITMO' | 'ATENCAO' | 'CRITICO';
 
@@ -165,7 +166,8 @@ export async function getAcompanhamentoSemanal(
   const resultado: AcompanhamentoLoja[] = [];
   for (const metaLoja of metasLoja) {
     const codEmpresa = metaLoja.codReferencia;
-    const daLoja = recebimentos.filter((r) => r.codEmpresa === codEmpresa);
+    const equivalentes = lojasEquivalentes(codEmpresa);
+    const daLoja = recebimentos.filter((r) => equivalentes.includes(r.codEmpresa));
     const realizado = round2(
       daLoja
         .filter((r) => r.formaCategoria !== 'CREDITOS')

@@ -31,6 +31,7 @@ import {
 } from './metasSemanaisService';
 import { derivarMetaVendedor } from '@/lib/metas/metasSemanais';
 import { getRecebimentosAgregado } from './recebimentosService';
+import { lojasEquivalentesParam } from '@/lib/metas/lojas';
 
 export type ModoFechamento = 'RECEBIDO' | 'EMITIDO';
 
@@ -101,7 +102,7 @@ async function semanasAtingidasAntes(
   for (const corte of cortes) {
     const { padrao, ajustadas } = await metasVendedoresDaSemana(codEmpresa, corte.semanaInicio);
     const recebimentos = await getRecebimentosAgregado({
-      empresa: codEmpresa,
+      empresa: lojasEquivalentesParam(codEmpresa),
       dataInicio: corte.semanaInicio,
       dataFim: corte.semanaFim,
     });

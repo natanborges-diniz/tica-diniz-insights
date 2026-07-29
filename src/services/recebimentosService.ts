@@ -128,7 +128,7 @@ export async function getVendedoresConhecidos(
   const { data, error } = await (supabase as any)
     .from('recebimentos_agregado_diario')
     .select('cod_vendedor, vendedor_nome')
-    .eq('cod_empresa', codEmpresa)
+    .in('cod_empresa', (await import('@/lib/metas/lojas')).lojasEquivalentes(codEmpresa))
     .gte('data_pagamento', desde.toISOString().split('T')[0]);
   if (error) throw new Error(`Erro ao listar vendedores: ${error.message}`);
   const vistos = new Map<number, string | null>();

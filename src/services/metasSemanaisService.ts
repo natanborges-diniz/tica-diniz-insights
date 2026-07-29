@@ -33,6 +33,7 @@ import {
   getLojasExcecoes,
 } from './calendarioService';
 import { getRecebimentosAgregado } from './recebimentosService';
+import { lojasEquivalentes, lojasEquivalentesParam } from '@/lib/metas/lojas';
 import { isCredito, isDevolucao } from '@/lib/vendas/formaPagamento';
 
 // ==================== TIPOS ====================
@@ -470,8 +471,9 @@ export async function sugerirMetaMensalLoja(
   const fim = dataFim.toISOString().split('T')[0];
 
   // 1) recebimentos
+  // regra 13/18: DINIZ SUPER soma as duas empresas equivalentes
   const recebimentos = await getRecebimentosAgregado({
-    empresa: codEmpresa,
+    empresa: lojasEquivalentesParam(codEmpresa),
     dataInicio: ini,
     dataFim: fim,
   });
@@ -490,7 +492,7 @@ export async function sugerirMetaMensalLoja(
   const { data, error } = await (supabase as any)
     .from('vendas_agregado_diario')
     .select('forma_pagamento, total_vendido')
-    .eq('cod_empresa', codEmpresa)
+    .in('cod_empresa', lojasEquivalentes(codEmpresa))
     .gte('data', ini)
     .lte('data', fim);
   if (error) throw new Error(`Erro no fallback de vendas: ${error.message}`);

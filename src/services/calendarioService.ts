@@ -169,6 +169,8 @@ export async function getLojasConfiguracao(): Promise<LojaConfiguracao[]> {
     abreFeriado: l.abre_feriado,
     numVendedores: l.num_vendedores ?? 1,
     percentualAceitavel: l.percentual_aceitavel ?? 100,
+    cidade: l.cidade ?? null,
+    uf: l.uf ?? 'SP',
   }));
 }
 
@@ -191,6 +193,8 @@ export async function getLojaConfiguracao(codEmpresa: number): Promise<LojaConfi
     abreFeriado: data.abre_feriado,
     numVendedores: data.num_vendedores ?? 1,
     percentualAceitavel: data.percentual_aceitavel ?? 100,
+    cidade: data.cidade ?? null,
+    uf: data.uf ?? 'SP',
   };
 }
 
@@ -204,6 +208,8 @@ export async function upsertLojaConfiguracao(config: Omit<LojaConfiguracao, 'id'
       abre_feriado: config.abreFeriado,
       num_vendedores: config.numVendedores,
       percentual_aceitavel: config.percentualAceitavel,
+      cidade: config.cidade ?? null,
+      uf: config.uf ?? 'SP',
     }, {
       onConflict: 'cod_empresa'
     });
