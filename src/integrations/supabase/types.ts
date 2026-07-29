@@ -1046,6 +1046,140 @@ export type Database = {
         }
         Relationships: []
       }
+      fechamentos_comissao: {
+        Row: {
+          ano: number
+          cod_empresa: number
+          criado_em: string
+          criado_por: string | null
+          id: string
+          mes: number
+          modo: string
+          nome_empresa: string | null
+          premios_aplicados: Json
+          reaberto_em: string | null
+          reaberto_por: string | null
+          semana_fim: string
+          semana_inicio: string
+          status: string
+          taxas_aplicadas: Json
+          total_base: number
+          total_comissao: number
+          total_pagar: number
+          total_premio: number
+          total_restituicoes: number
+        }
+        Insert: {
+          ano: number
+          cod_empresa: number
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          mes: number
+          modo: string
+          nome_empresa?: string | null
+          premios_aplicados?: Json
+          reaberto_em?: string | null
+          reaberto_por?: string | null
+          semana_fim: string
+          semana_inicio: string
+          status?: string
+          taxas_aplicadas?: Json
+          total_base?: number
+          total_comissao?: number
+          total_pagar?: number
+          total_premio?: number
+          total_restituicoes?: number
+        }
+        Update: {
+          ano?: number
+          cod_empresa?: number
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          mes?: number
+          modo?: string
+          nome_empresa?: string | null
+          premios_aplicados?: Json
+          reaberto_em?: string | null
+          reaberto_por?: string | null
+          semana_fim?: string
+          semana_inicio?: string
+          status?: string
+          taxas_aplicadas?: Json
+          total_base?: number
+          total_comissao?: number
+          total_pagar?: number
+          total_premio?: number
+          total_restituicoes?: number
+        }
+        Relationships: []
+      }
+      fechamentos_comissao_itens: {
+        Row: {
+          base_por_categoria: Json
+          base_por_origem: Json
+          base_total: number
+          cod_vendedor: number
+          comissao: number
+          detalhe: Json
+          fechamento_id: string
+          id: string
+          meta_semana: number
+          percentual_meta: number
+          premio_faixa: Json | null
+          premio_sequencia: Json | null
+          premio_valor: number
+          restituicoes: number
+          total_pagar: number
+          vendedor_nome: string | null
+        }
+        Insert: {
+          base_por_categoria?: Json
+          base_por_origem?: Json
+          base_total?: number
+          cod_vendedor: number
+          comissao?: number
+          detalhe?: Json
+          fechamento_id: string
+          id?: string
+          meta_semana?: number
+          percentual_meta?: number
+          premio_faixa?: Json | null
+          premio_sequencia?: Json | null
+          premio_valor?: number
+          restituicoes?: number
+          total_pagar?: number
+          vendedor_nome?: string | null
+        }
+        Update: {
+          base_por_categoria?: Json
+          base_por_origem?: Json
+          base_total?: number
+          cod_vendedor?: number
+          comissao?: number
+          detalhe?: Json
+          fechamento_id?: string
+          id?: string
+          meta_semana?: number
+          percentual_meta?: number
+          premio_faixa?: Json | null
+          premio_sequencia?: Json | null
+          premio_valor?: number
+          restituicoes?: number
+          total_pagar?: number
+          vendedor_nome?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fechamentos_comissao_itens_fechamento_id_fkey"
+            columns: ["fechamento_id"]
+            isOneToOne: false
+            referencedRelation: "fechamentos_comissao"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fornecedor_configuracao: {
         Row: {
           ambiente: string
@@ -2618,6 +2752,8 @@ export type Database = {
           percentual_premio: number
           semanas_consecutivas: number | null
           tipo: string
+          tipo_valor: string
+          valor_fixo: number
         }
         Insert: {
           ativo?: boolean
@@ -2627,6 +2763,8 @@ export type Database = {
           percentual_premio?: number
           semanas_consecutivas?: number | null
           tipo: string
+          tipo_valor?: string
+          valor_fixo?: number
         }
         Update: {
           ativo?: boolean
@@ -2636,6 +2774,8 @@ export type Database = {
           percentual_premio?: number
           semanas_consecutivas?: number | null
           tipo?: string
+          tipo_valor?: string
+          valor_fixo?: number
         }
         Relationships: []
       }
