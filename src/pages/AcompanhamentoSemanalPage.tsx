@@ -39,6 +39,7 @@ import {
 } from "@/services/acompanhamentoSemanalService";
 import { getGruposLojas } from "@/services/metasSemanaisService";
 import { getUltimoSyncRecebimentos } from "@/services/recebimentosService";
+import { supabase } from "@/integrations/supabase/client";
 
 function fmtBRL(n: number): string {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -151,9 +152,19 @@ export default function AcompanhamentoSemanalPage() {
           const grupos = await getGruposLojas();
           const grupo = grupos.find((g) => g.codGrupo === codGrupoSupervisor);
           setLojasEscopo(grupo?.membros ?? []);
-        } else {
-          // GERENTE e VENDEDOR: a própria loja
+        } else if (perfil === "VENDEDOR") {
+          // VENDEDOR: a própria loja (a RLS já restringe às linhas dele)
           setLojasEscopo(profile?.cod_empresa ? [profile.cod_empresa] : []);
+        } else {
+          // GERENTE: loja principal + lojas extras (user_empresa_permissions)
+          const lojas = new Set<number>();
+          if (profile?.cod_empresa) lojas.add(profile.cod_empresa);
+          const { data } = await supabase
+            .from("user_empresa_permissions")
+            .select("cod_empresa")
+            .eq("user_id", profile?.id ?? "");
+          (data ?? []).forEach((r: { cod_empresa: number }) => lojas.add(r.cod_empresa));
+          setLojasEscopo([...lojas]);
         }
       } finally {
         setEscopoResolvido(true);
