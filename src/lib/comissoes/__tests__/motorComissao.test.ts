@@ -135,6 +135,34 @@ describe('calcularFechamento — prêmios', () => {
     expect(naoPaga[0].premioValor).toBe(0);
   });
 
+  it('faixa com VALOR FIXO paga o valor em R$, não %', () => {
+    const r = calcularFechamento({
+      linhas: [linha({ valor: 12000 })],
+      taxas: TAXAS,
+      metasPorVendedor: new Map([[1, 10000]]), // 120%
+      restituicoes: [],
+      sequenciaAtiva: null,
+      semanasAtingidasAntes: new Map(),
+      faixasAtivas: [
+        { percentualMetaMin: 100, percentualPremio: 0, valorFixo: 250, tipoValor: 'FIXO' },
+      ],
+    });
+    expect(r[0].premioValor).toBe(250);
+  });
+
+  it('sequência com VALOR FIXO paga o valor em R$', () => {
+    const r = calcularFechamento({
+      linhas: [linha({ valor: 10000 })],
+      taxas: TAXAS,
+      metasPorVendedor: new Map([[1, 10000]]),
+      restituicoes: [],
+      faixasAtivas: [],
+      sequenciaAtiva: { semanasConsecutivas: 2, percentualPremio: 0, valorFixo: 500, tipoValor: 'FIXO' },
+      semanasAtingidasAntes: new Map([[1, 1]]),
+    });
+    expect(r[0].premioValor).toBe(500);
+  });
+
   it('sem meta atingida não há prêmio de sequência', () => {
     const r = calcularFechamento({
       linhas: [linha({ valor: 5000 })],

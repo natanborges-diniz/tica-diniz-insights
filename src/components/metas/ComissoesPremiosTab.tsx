@@ -67,6 +67,8 @@ export function ComissoesPremiosTab() {
   const [premioPercentual, setPremioPercentual] = useState("");
   const [premioSemanas, setPremioSemanas] = useState("");
   const [premioAtivo, setPremioAtivo] = useState(false);
+  const [premioTipoValor, setPremioTipoValor] = useState<"PERCENTUAL" | "FIXO">("PERCENTUAL");
+  const [premioValorFixo, setPremioValorFixo] = useState("");
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -110,13 +112,20 @@ export function ComissoesPremiosTab() {
     setPremioPercentual(p ? String(p.percentualPremio) : "");
     setPremioSemanas(p?.semanasConsecutivas != null ? String(p.semanasConsecutivas) : "");
     setPremioAtivo(p?.ativo ?? false);
+    setPremioTipoValor(p?.tipoValor ?? "PERCENTUAL");
+    setPremioValorFixo(p?.valorFixo ? String(p.valorFixo) : "");
     setDialogPremio(true);
   };
 
   const handleSalvarPremio = async () => {
     const pct = Number(premioPercentual);
-    if (Number.isNaN(pct) || pct <= 0) {
+    const fixo = Number(premioValorFixo);
+    if (premioTipoValor === "PERCENTUAL" && (Number.isNaN(pct) || pct <= 0)) {
       toast.error("Informe o % de prêmio");
+      return;
+    }
+    if (premioTipoValor === "FIXO" && (Number.isNaN(fixo) || fixo <= 0)) {
+      toast.error("Informe o valor fixo do prêmio (R$)");
       return;
     }
     if (premioTipo === "FAIXA" && (premioMetaMin === "" || Number(premioMetaMin) <= 0)) {
@@ -132,9 +141,11 @@ export function ComissoesPremiosTab() {
         id: premioEdit?.id,
         tipo: premioTipo,
         percentualMetaMin: premioTipo === "FAIXA" ? Number(premioMetaMin) : null,
-        percentualPremio: pct,
+        percentualPremio: premioTipoValor === "PERCENTUAL" ? pct : 0,
         semanasConsecutivas: premioTipo === "SEQUENCIA" ? Number(premioSemanas) : null,
         ativo: premioAtivo,
+        tipoValor: premioTipoValor,
+        valorFixo: premioTipoValor === "FIXO" ? fixo : 0,
       });
       toast.success(premioEdit ? "Prêmio atualizado" : "Prêmio criado");
       setDialogPremio(false);
@@ -316,7 +327,11 @@ export function ComissoesPremiosTab() {
                         ? `Atingiu ≥ ${p.percentualMetaMin}% da meta semanal`
                         : `${p.semanasConsecutivas} semanas consecutivas atingidas no mês`}
                     </TableCell>
-                    <TableCell className="text-right font-medium">+{p.percentualPremio}%</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {p.tipoValor === "FIXO"
+                        ? `R$ ${p.valorFixo.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                        : `+${p.percentualPremio}%`}
+                    </TableCell>
                     <TableCell className="text-center">
                       <Switch
                         checked={p.ativo}
@@ -386,16 +401,45 @@ export function ComissoesPremiosTab() {
               </div>
             )}
             <div className="space-y-2">
-              <Label>% de prêmio</Label>
-              <Input
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={premioPercentual}
-                onChange={(e) => setPremioPercentual(e.target.value)}
-                placeholder="Ex.: 0,5"
-              />
+              <Label>Forma do prêmio</Label>
+              <Select
+                value={premioTipoValor}
+                onValueChange={(v) => setPremioTipoValor(v as "PERCENTUAL" | "FIXO")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PERCENTUAL">% sobre a base da semana</SelectItem>
+                  <SelectItem value="FIXO">Valor fixo (R$)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            {premioTipoValor === "PERCENTUAL" ? (
+              <div className="space-y-2">
+                <Label>% de prêmio</Label>
+                <Input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={premioPercentual}
+                  onChange={(e) => setPremioPercentual(e.target.value)}
+                  placeholder="Ex.: 0,5"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Valor fixo do prêmio (R$)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  value={premioValorFixo}
+                  onChange={(e) => setPremioValorFixo(e.target.value)}
+                  placeholder="Ex.: 250,00"
+                />
+              </div>
+            )}
             <label className="flex items-center gap-2">
               <Switch checked={premioAtivo} onCheckedChange={setPremioAtivo} />
               <span className="text-sm">Ativo</span>

@@ -215,10 +215,20 @@ export async function gerarPrevia(
   }
   const faixas: FaixaPremio[] = premios
     .filter((p) => p.ativo && p.tipo === 'FAIXA' && p.percentualMetaMin != null)
-    .map((p) => ({ percentualMetaMin: p.percentualMetaMin!, percentualPremio: p.percentualPremio }));
+    .map((p) => ({
+      percentualMetaMin: p.percentualMetaMin!,
+      percentualPremio: p.percentualPremio,
+      tipoValor: p.tipoValor,
+      valorFixo: p.valorFixo,
+    }));
   const seqCfg = premios.find((p) => p.ativo && p.tipo === 'SEQUENCIA' && p.semanasConsecutivas);
   const sequencia: SequenciaPremio | null = seqCfg
-    ? { semanasConsecutivas: seqCfg.semanasConsecutivas!, percentualPremio: seqCfg.percentualPremio }
+    ? {
+        semanasConsecutivas: seqCfg.semanasConsecutivas!,
+        percentualPremio: seqCfg.percentualPremio,
+        tipoValor: seqCfg.tipoValor,
+        valorFixo: seqCfg.valorFixo,
+      }
     : null;
 
   // metas por vendedor presentes nas linhas

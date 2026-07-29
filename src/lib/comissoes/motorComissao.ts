@@ -29,14 +29,31 @@ export interface Restituicao {
   valor: number;
 }
 
+export type TipoValorPremio = 'PERCENTUAL' | 'FIXO';
+
 export interface FaixaPremio {
   percentualMetaMin: number;
+  /** % sobre a base (tipoValor PERCENTUAL) */
   percentualPremio: number;
+  /** R$ fixo (tipoValor FIXO) */
+  valorFixo?: number;
+  tipoValor?: TipoValorPremio;
 }
 
 export interface SequenciaPremio {
   semanasConsecutivas: number;
   percentualPremio: number;
+  valorFixo?: number;
+  tipoValor?: TipoValorPremio;
+}
+
+/** Valor do prêmio: % sobre a base ou valor fixo, conforme configuração. */
+function valorPremio(
+  premio: { percentualPremio: number; valorFixo?: number; tipoValor?: TipoValorPremio },
+  base: number
+): number {
+  if (premio.tipoValor === 'FIXO') return Math.round((premio.valorFixo ?? 0) * 100) / 100;
+  return Math.round(((base * premio.percentualPremio) / 100) * 100) / 100;
 }
 
 export interface DetalheLinha {
@@ -173,10 +190,10 @@ export function calcularFechamento(params: {
       const percentualMeta =
         v.metaSemana > 0 ? round2((baseLiquida / v.metaSemana) * 100) : 0;
 
-      // prêmio FAIXA (melhor faixa atingida) — % sobre a base líquida
+      // prêmio FAIXA (melhor faixa atingida) — % sobre a base OU valor fixo
       const faixa =
         faixasOrdenadas.find((f) => percentualMeta >= f.percentualMetaMin) ?? null;
-      const premioFaixaValor = faixa ? round2((baseLiquida * faixa.percentualPremio) / 100) : 0;
+      const premioFaixaValor = faixa ? valorPremio(faixa, baseLiquida) : 0;
 
       // prêmio SEQUENCIA: com esta semana atingida, fecha n consecutivas?
       let sequencia: SequenciaPremio | null = null;
@@ -185,7 +202,7 @@ export function calcularFechamento(params: {
         const antes = semanasAtingidasAntes.get(v.codVendedor) ?? 0;
         if (antes + 1 >= sequenciaAtiva.semanasConsecutivas) {
           sequencia = sequenciaAtiva;
-          premioSequenciaValor = round2((baseLiquida * sequenciaAtiva.percentualPremio) / 100);
+          premioSequenciaValor = valorPremio(sequenciaAtiva, baseLiquida);
         }
       }
 

@@ -56,6 +56,12 @@ const STATUS_CFG: Record<StatusRitmo, { label: string; cls: string }> = {
   CRITICO: { label: "Crítico", cls: "bg-red-100 text-red-800" },
 };
 
+function premioLabel(p: { percentualPremio: number; tipoValor?: string; valorFixo?: number }): string {
+  return p.tipoValor === "FIXO"
+    ? `R$ ${(p.valorFixo ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+    : `+${p.percentualPremio}%`;
+}
+
 function StatusBadge({ status }: { status: StatusRitmo }) {
   const cfg = STATUS_CFG[status];
   return <Badge className={cfg.cls}>{cfg.label}</Badge>;
@@ -107,7 +113,7 @@ function TabelaVendedores({ vendedores }: { vendedores: AcompanhamentoVendedor[]
             <TableCell className="text-center">
               {v.premioFaixa ? (
                 <Badge variant="secondary" title={`Atingiu ≥ ${v.premioFaixa.percentualMetaMin}%`}>
-                  <Trophy className="h-3 w-3 mr-1" />+{v.premioFaixa.percentualPremio}%
+                  <Trophy className="h-3 w-3 mr-1" />{premioLabel(v.premioFaixa)}
                 </Badge>
               ) : (
                 <span className="text-xs text-muted-foreground">—</span>
@@ -310,7 +316,7 @@ export default function AcompanhamentoSemanalPage() {
                 {minhaPosicao.eu.premioFaixa ? (
                   <p>
                     Faixa atingida: <strong>≥ {minhaPosicao.eu.premioFaixa.percentualMetaMin}%</strong>{" "}
-                    → prêmio de <strong>+{minhaPosicao.eu.premioFaixa.percentualPremio}%</strong>
+                    → prêmio de <strong>{premioLabel(minhaPosicao.eu.premioFaixa)}</strong>
                   </p>
                 ) : (
                   <p className="text-muted-foreground text-sm">

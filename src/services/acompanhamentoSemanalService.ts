@@ -30,7 +30,12 @@ export interface AcompanhamentoVendedor {
   /** Detalhamento obrigatório por origem (§2 do plano) */
   porOrigem: { vendaPeriodo: number; saldoAnterior: number };
   /** Faixa de prêmio ativa atingida (premios_config tipo FAIXA), se houver */
-  premioFaixa: { percentualMetaMin: number; percentualPremio: number } | null;
+  premioFaixa: {
+    percentualMetaMin: number;
+    percentualPremio: number;
+    tipoValor?: 'PERCENTUAL' | 'FIXO';
+    valorFixo?: number;
+  } | null;
 }
 
 export interface AcompanhamentoLoja {
@@ -131,7 +136,12 @@ export async function getAcompanhamentoSemanal(
   const premioPara = (percentual: number) => {
     const faixa = faixasPremio.find((f) => percentual >= (f.percentualMetaMin ?? Infinity));
     return faixa
-      ? { percentualMetaMin: faixa.percentualMetaMin!, percentualPremio: faixa.percentualPremio }
+      ? {
+          percentualMetaMin: faixa.percentualMetaMin!,
+          percentualPremio: faixa.percentualPremio,
+          tipoValor: faixa.tipoValor,
+          valorFixo: faixa.valorFixo,
+        }
       : null;
   };
 

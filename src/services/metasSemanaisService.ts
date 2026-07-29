@@ -79,6 +79,9 @@ export interface PremioConfig {
   percentualPremio: number;
   semanasConsecutivas: number | null;
   ativo: boolean;
+  /** PERCENTUAL = % sobre a base da semana; FIXO = valor em R$ */
+  tipoValor: 'PERCENTUAL' | 'FIXO';
+  valorFixo: number;
 }
 
 export interface GerarSemanasResult {
@@ -601,6 +604,8 @@ export async function getPremiosConfig(): Promise<PremioConfig[]> {
     percentualPremio: Number(r.percentual_premio) || 0,
     semanasConsecutivas: r.semanas_consecutivas,
     ativo: r.ativo,
+    tipoValor: (r.tipo_valor ?? 'PERCENTUAL') as 'PERCENTUAL' | 'FIXO',
+    valorFixo: Number(r.valor_fixo) || 0,
   }));
 }
 
@@ -611,6 +616,8 @@ export async function upsertPremioConfig(premio: PremioConfig): Promise<void> {
     percentual_premio: premio.percentualPremio,
     semanas_consecutivas: premio.semanasConsecutivas,
     ativo: premio.ativo,
+    tipo_valor: premio.tipoValor ?? 'PERCENTUAL',
+    valor_fixo: premio.valorFixo ?? 0,
     atualizado_em: new Date().toISOString(),
   };
   const q = premio.id
