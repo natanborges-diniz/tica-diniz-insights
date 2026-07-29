@@ -420,7 +420,7 @@ async function adicionarAoBordero(body: Record<string, unknown>) {
   // G2 — borderô só aceita lançamento com lastro válido (SPEC_P2_5 §4)
   const { data: lancs } = await supabase
     .from("lancamentos_financeiros")
-    .select("id, descricao, valor, lastro, erp_parcela_id, nf_entrada_id, rubrica_id, btg_dda_id, justificativa, pessoa_documento, data_vencimento")
+    .select("id, descricao, valor, lastro, erp_parcela_id, rubrica_id, btg_dda_id, justificativa, pessoa_documento, data_vencimento")
     .in("id", ids);
   const rubricaIds = [...new Set((lancs || []).map((l) => l.rubrica_id).filter(Boolean))] as string[];
   const rubricasMap = new Map<string, Record<string, unknown>>();
@@ -1322,7 +1322,7 @@ async function mesaAprovacao(body: Record<string, unknown>) {
 
   let query = supabase
     .from("lancamentos_financeiros")
-    .select("id, cod_empresa, tipo, descricao, pessoa_nome, pessoa_documento, valor, data_vencimento, status, natureza, categoria, lastro, erp_parcela_id, nf_entrada_id, rubrica_id, btg_dda_id, justificativa, bordero_id, criado_por, forma_pagamento")
+    .select("id, cod_empresa, tipo, descricao, pessoa_nome, pessoa_documento, valor, data_vencimento, status, natureza, categoria, lastro, erp_parcela_id, rubrica_id, btg_dda_id, justificativa, bordero_id, criado_por, forma_pagamento")
     .eq("tipo", "PAGAR")
     .in("status", ["PREVISTO", "CLASSIFICADO", "BORDERO"])
     .order("data_vencimento", { ascending: true })
