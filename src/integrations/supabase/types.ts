@@ -1504,6 +1504,144 @@ export type Database = {
           },
         ]
       }
+      lancamentos_legado_sombra_backup: {
+        Row: {
+          adquirente: string | null
+          autorizado_em: string | null
+          autorizado_por: string | null
+          baixado_em: string | null
+          baixado_por: string | null
+          bandeira: string | null
+          bordero_id: string | null
+          btg_cobranca_id: string | null
+          btg_dda_id: string | null
+          btg_extrato_id: string | null
+          btg_pagamento_id: string | null
+          categoria: string | null
+          cod_empresa: number | null
+          created_at: string | null
+          criado_por: string | null
+          dados_extras: Json | null
+          data_baixa: string | null
+          data_emissao: string | null
+          data_pagamento: string | null
+          data_vencimento: string | null
+          descricao: string | null
+          erp_cod_lancamento: number | null
+          erp_parcela_id: number | null
+          forma_pagamento: string | null
+          id: string | null
+          natureza: string | null
+          numero_parcela: number | null
+          observacao: string | null
+          origem: string | null
+          origem_id: string | null
+          pessoa_documento: string | null
+          pessoa_nome: string | null
+          recebivel_cartao_id: string | null
+          recorrencia_tipo: string | null
+          recorrente: boolean | null
+          requer_validacao: boolean | null
+          status: string | null
+          subcategoria: string | null
+          tipo: string | null
+          total_parcelas: number | null
+          updated_at: string | null
+          valor: number | null
+          valor_pago: number | null
+        }
+        Insert: {
+          adquirente?: string | null
+          autorizado_em?: string | null
+          autorizado_por?: string | null
+          baixado_em?: string | null
+          baixado_por?: string | null
+          bandeira?: string | null
+          bordero_id?: string | null
+          btg_cobranca_id?: string | null
+          btg_dda_id?: string | null
+          btg_extrato_id?: string | null
+          btg_pagamento_id?: string | null
+          categoria?: string | null
+          cod_empresa?: number | null
+          created_at?: string | null
+          criado_por?: string | null
+          dados_extras?: Json | null
+          data_baixa?: string | null
+          data_emissao?: string | null
+          data_pagamento?: string | null
+          data_vencimento?: string | null
+          descricao?: string | null
+          erp_cod_lancamento?: number | null
+          erp_parcela_id?: number | null
+          forma_pagamento?: string | null
+          id?: string | null
+          natureza?: string | null
+          numero_parcela?: number | null
+          observacao?: string | null
+          origem?: string | null
+          origem_id?: string | null
+          pessoa_documento?: string | null
+          pessoa_nome?: string | null
+          recebivel_cartao_id?: string | null
+          recorrencia_tipo?: string | null
+          recorrente?: boolean | null
+          requer_validacao?: boolean | null
+          status?: string | null
+          subcategoria?: string | null
+          tipo?: string | null
+          total_parcelas?: number | null
+          updated_at?: string | null
+          valor?: number | null
+          valor_pago?: number | null
+        }
+        Update: {
+          adquirente?: string | null
+          autorizado_em?: string | null
+          autorizado_por?: string | null
+          baixado_em?: string | null
+          baixado_por?: string | null
+          bandeira?: string | null
+          bordero_id?: string | null
+          btg_cobranca_id?: string | null
+          btg_dda_id?: string | null
+          btg_extrato_id?: string | null
+          btg_pagamento_id?: string | null
+          categoria?: string | null
+          cod_empresa?: number | null
+          created_at?: string | null
+          criado_por?: string | null
+          dados_extras?: Json | null
+          data_baixa?: string | null
+          data_emissao?: string | null
+          data_pagamento?: string | null
+          data_vencimento?: string | null
+          descricao?: string | null
+          erp_cod_lancamento?: number | null
+          erp_parcela_id?: number | null
+          forma_pagamento?: string | null
+          id?: string | null
+          natureza?: string | null
+          numero_parcela?: number | null
+          observacao?: string | null
+          origem?: string | null
+          origem_id?: string | null
+          pessoa_documento?: string | null
+          pessoa_nome?: string | null
+          recebivel_cartao_id?: string | null
+          recorrencia_tipo?: string | null
+          recorrente?: boolean | null
+          requer_validacao?: boolean | null
+          status?: string | null
+          subcategoria?: string | null
+          tipo?: string | null
+          total_parcelas?: number | null
+          updated_at?: string | null
+          valor?: number | null
+          valor_pago?: number | null
+        }
+        Relationships: []
+      }
       lojas_configuracao: {
         Row: {
           abre_domingo: boolean | null
