@@ -1374,6 +1374,8 @@ export type Database = {
           data_pagamento: string | null
           data_vencimento: string
           descricao: string
+          erp_cod_lancamento: number | null
+          erp_parcela_id: number | null
           forma_pagamento: string | null
           id: string
           natureza: string | null
@@ -1417,6 +1419,8 @@ export type Database = {
           data_pagamento?: string | null
           data_vencimento: string
           descricao: string
+          erp_cod_lancamento?: number | null
+          erp_parcela_id?: number | null
           forma_pagamento?: string | null
           id?: string
           natureza?: string | null
@@ -1460,6 +1464,8 @@ export type Database = {
           data_pagamento?: string | null
           data_vencimento?: string
           descricao?: string
+          erp_cod_lancamento?: number | null
+          erp_parcela_id?: number | null
           forma_pagamento?: string | null
           id?: string
           natureza?: string | null
@@ -3419,7 +3425,9 @@ export type Database = {
         Args: { p_extrato_id: string; p_user: string }
         Returns: Json
       }
+      get_user_cod_vendedor: { Args: { _user_id: string }; Returns: number }
       get_user_empresa: { Args: { _user_id: string }; Returns: number }
+      get_user_grupo_supervisor: { Args: { _user_id: string }; Returns: number }
       has_module_access: {
         Args: { _module: string; _user_id: string }
         Returns: boolean
