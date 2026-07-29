@@ -2537,6 +2537,8 @@ export type Database = {
       profiles: {
         Row: {
           cod_empresa: number
+          cod_grupo_supervisor: number | null
+          cod_vendedor: number | null
           created_at: string | null
           email: string | null
           id: string
@@ -2545,6 +2547,8 @@ export type Database = {
         }
         Insert: {
           cod_empresa?: number
+          cod_grupo_supervisor?: number | null
+          cod_vendedor?: number | null
           created_at?: string | null
           email?: string | null
           id: string
@@ -2553,6 +2557,8 @@ export type Database = {
         }
         Update: {
           cod_empresa?: number
+          cod_grupo_supervisor?: number | null
+          cod_vendedor?: number | null
           created_at?: string | null
           email?: string | null
           id?: string
