@@ -10,10 +10,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   decidirSync,
+  autoClassify,
   type LancamentoAtual,
   type ParcelaCacheRow,
   type PlanoMap,
 } from "../_shared/ledgerSync.ts";
+import { gerarCompetencias, montarProvisao, type RubricaProvisionavel } from "../_shared/rubricaProvisao.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -196,6 +198,50 @@ Deno.serve(async (req) => {
 
     const db = getServiceClient();
     const planoMap = await carregarPlano(db);
+
+    // ── Provisionamento por rubrica (cron mensal ou botão da tela) ──
+    if (mode === "provisionar") {
+      const hoje = new Date().toISOString().slice(0, 10);
+      const empresasAtivasList = await empresasAtivas(db);
+      const { data: rubricas } = await db
+        .from("rubricas_autorizadas")
+        .select("*")
+        .eq("status", "ATIVA")
+        .eq("provisionar", true);
+
+      const resultado = { rubricas: (rubricas || []).length, provisionados: 0, erros: [] as string[] };
+      const inserts: Record<string, unknown>[] = [];
+
+      for (const raw of (rubricas || [])) {
+        const r = raw as unknown as RubricaProvisionavel;
+        const competencias = gerarCompetencias(r, hoje, 12);
+        const alvos = r.cod_empresa != null ? [Number(r.cod_empresa)] : empresasAtivasList;
+        for (const emp of alvos) {
+          for (const c of competencias) {
+            const rec = montarProvisao(r, c, emp);
+            // origem_id única por empresa (rubrica global provisiona em cada loja)
+            rec.origem_id = `RUBRICA:${r.id}:${emp}:${c.competencia}`;
+            const cls = autoClassify(planoMap, "PAGAR", r.conta_numero);
+            rec.natureza = cls.natureza;
+            rec.categoria = cls.categoria;
+            rec.subcategoria = cls.subcategoria;
+            inserts.push(rec);
+          }
+        }
+      }
+
+      for (let i = 0; i < inserts.length; i += 200) {
+        const batch = inserts.slice(i, i + 200);
+        const { error: insErr } = await db
+          .from("lancamentos_financeiros")
+          .upsert(batch, { onConflict: "cod_empresa,rubrica_id,competencia_rubrica", ignoreDuplicates: true });
+        if (insErr) resultado.erros.push(insErr.message);
+        else resultado.provisionados += batch.length;
+      }
+
+      console.log("[sync-ledger] provisionar:", JSON.stringify(resultado));
+      return json({ ok: true, mode, ...resultado });
+    }
     const empresas = codEmpresaParam === "ALL" || codEmpresaParam === "0"
       ? await empresasAtivas(db)
       : [Number(codEmpresaParam)];

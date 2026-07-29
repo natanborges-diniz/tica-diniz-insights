@@ -55,6 +55,7 @@ export default function RubricasPage() {
   const [fTolerancia, setFTolerancia] = useState("10");
   const [fTeto, setFTeto] = useState("");
   const [fEmpresa, setFEmpresa] = useState<string>("global");
+  const [fDiaVenc, setFDiaVenc] = useState("10");
 
   const { data: rubricas = [], isLoading } = useQuery<Rubrica[]>({
     queryKey: ["rubricas"],
@@ -88,6 +89,7 @@ export default function RubricasPage() {
         valor_esperado: fEsperado ? Number(fEsperado) : null,
         tolerancia_pct: Number(fTolerancia) || 10,
         valor_teto: Number(fTeto),
+        dia_vencimento: Math.min(28, Math.max(1, Number(fDiaVenc) || 10)),
         status: "RASCUNHO",
         criado_por: user?.id,
       });
@@ -121,6 +123,22 @@ export default function RubricasPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const provisionarMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("sync-ledger", {
+        body: { mode: "provisionar" },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(String(data.error));
+      return data as { rubricas?: number; provisionados?: number };
+    },
+    onSuccess: (data) => {
+      toast.success(`${data?.rubricas ?? 0} rubrica(s) ativas — provisões dos próximos 12 meses garantidas no Contas a Pagar e no Fluxo de Caixa`);
+      queryClient.invalidateQueries({ queryKey: ["mesa-aprovacao"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const toggleSuspensaMutation = useMutation({
     mutationFn: async (r: Rubrica) => {
       const { error } = await supabase
@@ -144,7 +162,15 @@ export default function RubricasPage() {
         icon={<BookmarkCheck className="h-5 w-5" />}
       />
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          onClick={() => provisionarMutation.mutate()}
+          disabled={provisionarMutation.isPending}
+          title="Gera os lançamentos PREVISTO dos próximos 12 meses para todas as rubricas ativas (idempotente — rodar de novo não duplica)"
+        >
+          {provisionarMutation.isPending ? "Provisionando..." : "Provisionar 12 meses"}
+        </Button>
         <Button onClick={() => setDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-1" /> Nova rubrica
         </Button>
@@ -286,6 +312,10 @@ export default function RubricasPage() {
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Teto (R$) — nunca passa acima</label>
             <Input type="number" value={fTeto} onChange={(e) => setFTeto(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Dia do vencimento (1–28)</label>
+            <Input type="number" min={1} max={28} value={fDiaVenc} onChange={(e) => setFDiaVenc(e.target.value)} />
           </div>
         </div>
       </BaseDialog>
