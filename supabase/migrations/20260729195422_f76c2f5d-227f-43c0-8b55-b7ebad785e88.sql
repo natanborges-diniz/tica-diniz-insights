@@ -1,0 +1,2 @@
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'analista';
+ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'master';

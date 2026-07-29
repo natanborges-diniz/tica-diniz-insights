@@ -3734,7 +3734,7 @@ export type Database = {
       release_sync_lock: { Args: { p_lock_key: string }; Returns: undefined }
     }
     Enums: {
-      app_role: "admin" | "gestor" | "vendedor"
+      app_role: "admin" | "gestor" | "vendedor" | "analista" | "master"
       sync_run_status:
         | "pending"
         | "running"
@@ -3868,7 +3868,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "gestor", "vendedor"],
+      app_role: ["admin", "gestor", "vendedor", "analista", "master"],
       sync_run_status: ["pending", "running", "completed", "failed", "partial"],
     },
   },
