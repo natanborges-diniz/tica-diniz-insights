@@ -1500,6 +1500,7 @@ export type Database = {
           btg_pagamento_id: string | null
           categoria: string | null
           cod_empresa: number
+          competencia_rubrica: string | null
           created_at: string
           criado_por: string | null
           dados_extras: Json | null
@@ -1548,6 +1549,7 @@ export type Database = {
           btg_pagamento_id?: string | null
           categoria?: string | null
           cod_empresa: number
+          competencia_rubrica?: string | null
           created_at?: string
           criado_por?: string | null
           dados_extras?: Json | null
@@ -1596,6 +1598,7 @@ export type Database = {
           btg_pagamento_id?: string | null
           categoria?: string | null
           cod_empresa?: number
+          competencia_rubrica?: string | null
           created_at?: string
           criado_por?: string | null
           dados_extras?: Json | null
@@ -3035,11 +3038,13 @@ export type Database = {
           created_at: string
           criado_por: string
           descricao: string
+          dia_vencimento: number | null
           favorecido_chave: string | null
           favorecido_documento: string | null
           favorecido_nome: string
           id: string
           periodicidade: string
+          provisionar: boolean
           status: string
           tolerancia_pct: number
           updated_at: string
@@ -3056,11 +3061,13 @@ export type Database = {
           created_at?: string
           criado_por: string
           descricao: string
+          dia_vencimento?: number | null
           favorecido_chave?: string | null
           favorecido_documento?: string | null
           favorecido_nome: string
           id?: string
           periodicidade?: string
+          provisionar?: boolean
           status?: string
           tolerancia_pct?: number
           updated_at?: string
@@ -3077,11 +3084,13 @@ export type Database = {
           created_at?: string
           criado_por?: string
           descricao?: string
+          dia_vencimento?: number | null
           favorecido_chave?: string | null
           favorecido_documento?: string | null
           favorecido_nome?: string
           id?: string
           periodicidade?: string
+          provisionar?: boolean
           status?: string
           tolerancia_pct?: number
           updated_at?: string
