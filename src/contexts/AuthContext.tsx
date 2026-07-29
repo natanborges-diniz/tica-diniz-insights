@@ -2,13 +2,17 @@ import { createContext, useContext, useEffect, useRef, useState, useCallback } f
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-type AppRole = "admin";
+type AppRole = "admin" | "gestor" | "vendedor";
 
 interface Profile {
   id: string;
   email: string | null;
   nome: string | null;
   cod_empresa: number;
+  /** Fase 3: se preenchido, usuário é VENDEDOR e vê só a própria posição */
+  cod_vendedor?: number | null;
+  /** Fase 3: se preenchido, usuário é SUPERVISOR do grupo de lojas */
+  cod_grupo_supervisor?: number | null;
 }
 
 interface AuthContextType {
@@ -42,7 +46,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchProfile = useCallback(async (userId: string) => {
     const { data } = await supabase
       .from("profiles")
-      .select("id, email, nome, cod_empresa")
+      // select * é resiliente à ordem de deploy: cod_vendedor/cod_grupo_supervisor
+      // (Fase 3) podem ainda não existir se a migration não tiver sido aplicada.
+      .select("*")
       .eq("id", userId)
       .single();
     if (data) setProfile(data);

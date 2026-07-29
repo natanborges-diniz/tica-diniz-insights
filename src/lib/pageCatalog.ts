@@ -14,6 +14,7 @@ export const PAGE_CATALOG: PageEntry[] = [
   { key: "vendas.dashboard", module: "vendas", title: "Dashboard de Vendas", path: "/vendas" },
   { key: "vendas.familia", module: "vendas", title: "Vendas por Família", path: "/vendas/familia" },
   { key: "vendas.inteligencia", module: "vendas", title: "Inteligência de Vendas", path: "/vendas/inteligencia" },
+  { key: "vendas.acompanhamento", module: "vendas", title: "Acompanhamento Semanal", path: "/vendas/acompanhamento" },
   // Compras
   { key: "compras.fornecedor", module: "compras", title: "Compras por Fornecedor", path: "/compras" },
   // Estoque

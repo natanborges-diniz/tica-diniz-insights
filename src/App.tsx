@@ -40,6 +40,7 @@ import CarteiraRecebiveisPage from "./pages/CarteiraRecebiveisPage";
 
 import FinanceiroOverviewPage from "./pages/FinanceiroOverviewPage";
 import InteligenciaVendasDashboard from "./pages/InteligenciaVendasDashboard";
+import AcompanhamentoSemanalPage from "./pages/AcompanhamentoSemanalPage";
 import MetasConfigDashboard from "./pages/MetasConfigDashboard";
 import CentralIADashboard from "./pages/CentralIADashboard";
 import AdminUsuariosPage from "./pages/AdminUsuariosPage";
@@ -82,6 +83,7 @@ const App = () => (
                   <Route path="/vendas/familia" element={<SalesFamilyDashboard />} />
                   <Route path="/vendas-familia" element={<Navigate to="/vendas/familia" replace />} />
                   <Route path="/vendas/inteligencia" element={<InteligenciaVendasDashboard />} />
+                  <Route path="/vendas/acompanhamento" element={<AcompanhamentoSemanalPage />} />
                 </Route>
 
                 {/* Compras */}
