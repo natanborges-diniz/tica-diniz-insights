@@ -318,6 +318,7 @@ function UserEditSheet({
   serverEmpresaPerms,
   serverPagePerms,
   empresas,
+  grupos,
   onSave,
   onResetPassword,
 }: {
