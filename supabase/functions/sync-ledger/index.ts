@@ -180,6 +180,65 @@ async function sincronizarEmpresa(db: any, codEmpresa: number, mode: string, pla
     offset += PAGE;
   }
 
+  // ── Substituição de provisões: título real do ERP assume o lugar da
+  // provisão da rubrica na mesma competência (nunca duplicar — a provisão é
+  // previsão; o ERP é o registro). Match determinístico: mesma empresa,
+  // mesma conta contábil e competência do vencimento. Ambíguo não substitui.
+  try {
+    const { data: provisoes } = await db
+      .from("lancamentos_financeiros")
+      .select("id, rubrica_id, competencia_rubrica, dados_extras, valor")
+      .eq("cod_empresa", codEmpresa)
+      .eq("origem", "RUBRICA")
+      .eq("status", "PREVISTO")
+      .not("competencia_rubrica", "is", null);
+
+    let substituidas = 0;
+    for (const prov of (provisoes || [])) {
+      const contaProv = String((prov.dados_extras as Record<string, unknown>)?.conta_numero ?? "");
+      if (!contaProv || !prov.competencia_rubrica) continue;
+
+      const compIni = `${prov.competencia_rubrica}-01`;
+      const compFim = `${prov.competencia_rubrica}-31`;
+      const { data: titulos } = await db
+        .from("lancamentos_financeiros")
+        .select("id, dados_extras, rubrica_id")
+        .eq("cod_empresa", codEmpresa)
+        .eq("tipo", "PAGAR")
+        .not("erp_parcela_id", "is", null)
+        .is("rubrica_id", null)
+        .neq("status", "CANCELADO")
+        .gte("data_vencimento", compIni)
+        .lte("data_vencimento", compFim);
+
+      const candidatos = (titulos || []).filter(
+        (t) => String((t.dados_extras as Record<string, unknown>)?.conta_numero ?? "") === contaProv
+      );
+      if (candidatos.length !== 1) continue; // 0 = real ainda não chegou; 2+ = ambíguo, humano decide
+
+      const titulo = candidatos[0];
+      // 1º libera a chave de competência da provisão, depois transfere ao título
+      const provDados = (prov.dados_extras || {}) as Record<string, unknown>;
+      await db.from("lancamentos_financeiros").update({
+        status: "CANCELADO",
+        competencia_rubrica: null,
+        observacao: `Provisão substituída pelo título real do ERP (${prov.competencia_rubrica})`,
+        dados_extras: { ...provDados, substituida_por: titulo.id, competencia_original: prov.competencia_rubrica },
+      }).eq("id", prov.id);
+
+      const titDados = (titulo.dados_extras || {}) as Record<string, unknown>;
+      await db.from("lancamentos_financeiros").update({
+        rubrica_id: prov.rubrica_id,
+        competencia_rubrica: prov.competencia_rubrica,
+        dados_extras: { ...titDados, substituiu_provisao: prov.id },
+      }).eq("id", titulo.id);
+      substituidas++;
+    }
+    if (substituidas > 0) console.log(`[sync-ledger] empresa ${codEmpresa}: ${substituidas} provisões substituídas por títulos ERP`);
+  } catch (e) {
+    resultado.erros.push(`substituicao provisoes empresa ${codEmpresa}: ${String(e)}`);
+  }
+
   return resultado;
 }
 
