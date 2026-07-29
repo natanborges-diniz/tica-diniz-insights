@@ -87,16 +87,18 @@ const STATUS_BADGE: Record<StatusSemana, { label: string; variant: "default" | "
 };
 
 // ---------- export XLSX mensal (resumo consolidado + detalhe) ----------
-function exportarXlsxMensal(titulo: string, loja: LojaView) {
+function exportarXlsxMensal(titulo: string, loja: LojaView, vendedores: ResultadoVendedor[], filtro: (vs: ResultadoVendedor[]) => ResultadoVendedor[]) {
   const wb = XLSX.utils.book_new();
-  const resumo = loja.consolidado.map((v) => ({
+  const resumo = vendedores.map((v) => ({
     "Cód. Vendedor": v.codVendedor,
     Vendedor: v.vendedorNome ?? "",
     "Meta do Mês": v.metaSemana,
     "% Meta": v.percentualMeta,
-    "Base (Venda Período)": v.basePorOrigem.vendaPeriodo,
-    "Base (Saldo Anterior)": v.basePorOrigem.saldoAnterior,
-    "Base Total": v.baseTotal,
+    "Recebido no Ato (Vendas do Período)": v.basePorOrigem.vendaPeriodo,
+    "Recebido de Períodos Anteriores": v.basePorOrigem.saldoAnterior,
+    "Emitido em OS no Período": v.basePorOrigem.vendasEmitidas ?? "",
+    "Ficou a Receber (Período)": v.basePorOrigem.saldoAReceber ?? "",
+    "Base Total (Recebido)": v.baseTotal,
     Restituições: v.restituicoes,
     Comissão: v.comissao,
     Prêmios: v.premioValor,
@@ -105,7 +107,7 @@ function exportarXlsxMensal(titulo: string, loja: LojaView) {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumo), "Resumo Mensal");
 
   const porSemana = loja.semanas.flatMap((s) =>
-    s.vendedores.map((v) => ({
+    filtro(s.vendedores).map((v) => ({
       Semana: `${s.semanaInicio} a ${s.semanaFim}`,
       Status: STATUS_BADGE[s.status].label,
       "Cód. Vendedor": v.codVendedor,
@@ -120,7 +122,7 @@ function exportarXlsxMensal(titulo: string, loja: LojaView) {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(porSemana), "Por Semana");
 
   const detalhe = loja.semanas.flatMap((s) =>
-    s.vendedores.flatMap((v) =>
+    filtro(s.vendedores).flatMap((v) =>
       v.detalhe.map((d) => ({
         Semana: s.semanaInicio,
         "Cód. Vendedor": v.codVendedor,
@@ -166,9 +168,23 @@ function TabelaFechamento({ vendedores, metaLabel }: { vendedores: ResultadoVend
                 <span className="font-medium">
                   {v.vendedorNome ?? (v.codVendedor === 0 ? "Sem vendedor" : `Vendedor ${v.codVendedor}`)}
                 </span>
-                <div className="text-xs text-muted-foreground">
-                  período R$ {fmtBRL(v.basePorOrigem.vendaPeriodo)} · saldo ant. R${" "}
-                  {fmtBRL(v.basePorOrigem.saldoAnterior)}
+                <div className="text-xs text-muted-foreground space-x-2">
+                  <span title="Recebido no ato das vendas do período (entrada paga no cadastro da OS)">
+                    recebido no ato: <strong>R$ {fmtBRL(v.basePorOrigem.vendaPeriodo)}</strong>
+                  </span>
+                  <span title="Recebido no período de OS de períodos anteriores">
+                    · de períodos anteriores: <strong>R$ {fmtBRL(v.basePorOrigem.saldoAnterior)}</strong>
+                  </span>
+                  {v.basePorOrigem.vendasEmitidas != null && (
+                    <span title="Total emitido em OS no período">
+                      · emitido no período: <strong>R$ {fmtBRL(v.basePorOrigem.vendasEmitidas)}</strong>
+                    </span>
+                  )}
+                  {v.basePorOrigem.saldoAReceber != null && (
+                    <span title="Saldo das vendas do período que ficou a receber (não comissiona até ser pago)">
+                      · ficou a receber: <strong>R$ {fmtBRL(v.basePorOrigem.saldoAReceber)}</strong>
+                    </span>
+                  )}
                 </div>
               </TableCell>
               <TableCell className="text-right">R$ {fmtBRL(v.metaSemana)}</TableCell>
@@ -245,6 +261,7 @@ export default function RhFechamentoSemanalPage() {
   const [modo, setModo] = useState<ModoFechamento>("RECEBIDO");
 
   const [visao, setVisao] = useState<LojaView[]>([]);
+  const [vendedorSel, setVendedorSel] = useState<string>("ALL");
   const [gerando, setGerando] = useState(false);
   const [fechando, setFechando] = useState(false);
 
@@ -312,6 +329,19 @@ export default function RhFechamentoSemanalPage() {
       setGerando(false);
     }
   }, [lojasSel, ano, mes, modo, empresas, hoje]);
+
+  const vendedoresDaVisao = (() => {
+    const m = new Map<number, string>();
+    visao.forEach((l) =>
+      l.consolidado.forEach((v) =>
+        m.set(v.codVendedor, v.vendedorNome ?? `Vendedor ${v.codVendedor}`)
+      )
+    );
+    return Array.from(m.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  })();
+
+  const filtraVendedor = (vs: ResultadoVendedor[]) =>
+    vendedorSel === "ALL" ? vs : vs.filter((v) => String(v.codVendedor) === vendedorSel);
 
   const handleFecharSemana = async (loja: LojaView, s: SemanaView) => {
     if (!s.previa) return;
@@ -407,6 +437,25 @@ export default function RhFechamentoSemanalPage() {
               <Calculator className="h-4 w-4 mr-2" />
               {gerando ? "Calculando..." : "Gerar visão do mês"}
             </Button>
+            {visao.length > 0 && (
+              <>
+                <div className="space-y-2">
+                  <Label>Vendedor</Label>
+                  <Select value={vendedorSel} onValueChange={setVendedorSel}>
+                    <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todos os vendedores</SelectItem>
+                      {vendedoresDaVisao.map(([cod, nome]) => (
+                        <SelectItem key={cod} value={String(cod)}>{nome} ({cod})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button variant="outline" onClick={() => window.print()}>
+                  Imprimir
+                </Button>
+              </>
+            )}
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Lojas</Label>
@@ -463,7 +512,14 @@ export default function RhFechamentoSemanalPage() {
               <div className="flex gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => exportarXlsxMensal(`fechamento_mensal_${loja.codEmpresa}_${ano}-${String(mes).padStart(2, "0")}`, loja)}
+                  onClick={() => {
+                    const vs = filtraVendedor(loja.consolidado);
+                    const sufixo = vendedorSel === "ALL" ? "" : `_vend${vendedorSel}`;
+                    exportarXlsxMensal(
+                      `fechamento_mensal_${loja.codEmpresa}_${ano}-${String(mes).padStart(2, "0")}${sufixo}`,
+                      loja, vs, filtraVendedor
+                    );
+                  }}
                 >
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                   XLSX Mensal
@@ -478,7 +534,7 @@ export default function RhFechamentoSemanalPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Consolidado mensal por vendedor */}
-              <TabelaFechamento vendedores={loja.consolidado} metaLabel="Meta do mês" />
+              <TabelaFechamento vendedores={filtraVendedor(loja.consolidado)} metaLabel="Meta do mês" />
 
               {/* Semanas */}
               <Accordion type="multiple">
@@ -519,7 +575,7 @@ export default function RhFechamentoSemanalPage() {
                             </Button>
                           )}
                         </div>
-                        <TabelaFechamento vendedores={s.vendedores} metaLabel="Meta da semana" />
+                        <TabelaFechamento vendedores={filtraVendedor(s.vendedores)} metaLabel="Meta da semana" />
                       </AccordionContent>
                     </AccordionItem>
                   );

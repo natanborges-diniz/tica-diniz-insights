@@ -256,6 +256,53 @@ export async function gerarPrevia(
     semanasAtingidasAntes: atingidasAntes,
   });
 
+  // 5) transparência do período (modo RECEBIDO): emitido em OS no período e
+  // saldo que ficou a receber = emitido − recebido no ato (vendaPeriodo).
+  if (modo === 'RECEBIDO') {
+    try {
+      const emitidosRows = await apiGet<any>('/vendas/emitidos', {
+        empresa: codEmpresa,
+        dataInicio: semanaInicio,
+        dataFim: semanaFim,
+        cache: 0,
+      }, { timeoutMs: 60000 });
+      const emitidoPorVendedor = new Map<number, number>();
+      emitidosRows.forEach((r: any) => {
+        const cod = Number(r.cod_vendedor) || 0;
+        emitidoPorVendedor.set(cod, (emitidoPorVendedor.get(cod) ?? 0) + (Number(r.valor_emitido) || 0));
+      });
+      // vendedores que emitiram mas nada receberam ainda também aparecem
+      emitidoPorVendedor.forEach((_, cod) => {
+        if (!vendedores.some((v) => v.codVendedor === cod)) {
+          const nome = (emitidosRows.find((r: any) => (Number(r.cod_vendedor) || 0) === cod)?.vendedor_nome ?? '').trim() || null;
+          vendedores.push({
+            codVendedor: cod,
+            vendedorNome: nome,
+            metaSemana: metas.ajustadas.get(cod) ?? metas.padrao,
+            percentualMeta: 0,
+            basePorCategoria: {},
+            basePorOrigem: { vendaPeriodo: 0, saldoAnterior: 0 },
+            baseTotal: 0,
+            restituicoes: 0,
+            comissao: 0,
+            premioFaixa: null,
+            premioSequencia: null,
+            premioValor: 0,
+            totalPagar: 0,
+            detalhe: [],
+          });
+        }
+      });
+      vendedores.forEach((v) => {
+        const emitido = round2(emitidoPorVendedor.get(v.codVendedor) ?? 0);
+        v.basePorOrigem.vendasEmitidas = emitido;
+        v.basePorOrigem.saldoAReceber = round2(Math.max(0, emitido - v.basePorOrigem.vendaPeriodo));
+      });
+    } catch {
+      avisos.push('Não foi possível consultar o emitido do período — colunas de saldo a receber ficarão vazias.');
+    }
+  }
+
   const totais = vendedores.reduce(
     (acc, v) => ({
       base: round2(acc.base + v.baseTotal),

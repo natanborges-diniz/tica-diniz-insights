@@ -67,13 +67,24 @@ export interface DetalheLinha {
   comissao: number;
 }
 
+export interface BasePorOrigem {
+  /** recebido no ATO das vendas do período (entrada paga no cadastro da OS) */
+  vendaPeriodo: number;
+  /** recebido no período de OS de períodos ANTERIORES */
+  saldoAnterior: number;
+  /** total EMITIDO em OS no período (vendas cadastradas) */
+  vendasEmitidas?: number;
+  /** saldo que FICOU a receber das vendas do período (emitido − recebido no ato) */
+  saldoAReceber?: number;
+}
+
 export interface ResultadoVendedor {
   codVendedor: number;
   vendedorNome: string | null;
   metaSemana: number;
   percentualMeta: number;
   basePorCategoria: Record<string, number>;
-  basePorOrigem: { vendaPeriodo: number; saldoAnterior: number };
+  basePorOrigem: BasePorOrigem;
   baseTotal: number;
   restituicoes: number;
   comissao: number;
@@ -125,6 +136,12 @@ export function consolidarVendedores(listas: ResultadoVendedor[][]): ResultadoVe
       });
       c.basePorOrigem.vendaPeriodo = round2(c.basePorOrigem.vendaPeriodo + v.basePorOrigem.vendaPeriodo);
       c.basePorOrigem.saldoAnterior = round2(c.basePorOrigem.saldoAnterior + v.basePorOrigem.saldoAnterior);
+      c.basePorOrigem.vendasEmitidas = round2(
+        (c.basePorOrigem.vendasEmitidas ?? 0) + (v.basePorOrigem.vendasEmitidas ?? 0)
+      );
+      c.basePorOrigem.saldoAReceber = round2(
+        (c.basePorOrigem.saldoAReceber ?? 0) + (v.basePorOrigem.saldoAReceber ?? 0)
+      );
       c.baseTotal = round2(c.baseTotal + v.baseTotal);
       c.restituicoes = round2(c.restituicoes + v.restituicoes);
       c.comissao = round2(c.comissao + v.comissao);
