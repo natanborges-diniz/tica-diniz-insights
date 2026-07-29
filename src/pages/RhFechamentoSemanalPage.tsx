@@ -1,9 +1,10 @@
 // src/pages/RhFechamentoSemanalPage.tsx
-// Fase 4 — Fechamento semanal de comissões p/ RH
-// (docs/REVISAO_VENDAS_METAS.md §5.4 item 3): seleciona semana + lojas + modo
-// (RECEBIDO padrão / EMITIDO) → prévia por vendedor em DUAS camadas (resumo
-// por categoria×origem e detalhe por OS/venda) → "Fechar semana" congela o
-// snapshot → export XLSX → API externa via edge rh-fechamentos.
+// Fase 4 (revisada) — Fechamento de comissões p/ RH com visão MENSAL:
+// o pagamento é sempre do MÊS COMERCIAL (21→20); a tela consolida as semanas
+// do mês por vendedor, mostrando PARCIAIS ao vivo para semanas ainda não
+// fechadas (e "em andamento" para a semana corrente). Cada semana é congelada
+// individualmente (snapshot imutável); "Fechar mês" fecha todas as semanas já
+// terminadas. Export XLSX mensal consolidado + detalhe por OS.
 
 import { useState, useEffect, useCallback } from "react";
 import * as XLSX from "xlsx";
@@ -39,15 +40,37 @@ import {
   reabrirFechamento,
   semanasDoMes,
   type PreviaFechamento,
-  type FechamentoResumo,
   type ModoFechamento,
 } from "@/services/fechamentoService";
-import type { ResultadoVendedor } from "@/lib/comissoes/motorComissao";
+import {
+  consolidarVendedores,
+  type ResultadoVendedor,
+} from "@/lib/comissoes/motorComissao";
 
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
+
+type StatusSemana = "FECHADA" | "REABERTA" | "PARCIAL" | "EM_ANDAMENTO";
+
+interface SemanaView {
+  semanaInicio: string;
+  semanaFim: string;
+  status: StatusSemana;
+  fechamentoId?: string;
+  previa?: PreviaFechamento;
+  vendedores: ResultadoVendedor[];
+  avisos: string[];
+}
+
+interface LojaView {
+  codEmpresa: number;
+  nome: string;
+  semanas: SemanaView[];
+  consolidado: ResultadoVendedor[];
+  temParcial: boolean;
+}
 
 function fmtBRL(n: number): string {
   return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -56,55 +79,81 @@ function fmtData(iso: string): string {
   return new Date(iso + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
-// ---------- export XLSX (resumo + detalhe) ----------
-function exportarXlsx(titulo: string, vendedores: ResultadoVendedor[]) {
+const STATUS_BADGE: Record<StatusSemana, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  FECHADA: { label: "Fechada", variant: "default" },
+  REABERTA: { label: "Reaberta", variant: "destructive" },
+  PARCIAL: { label: "Parcial (não fechada)", variant: "secondary" },
+  EM_ANDAMENTO: { label: "Em andamento", variant: "outline" },
+};
+
+// ---------- export XLSX mensal (resumo consolidado + detalhe) ----------
+function exportarXlsxMensal(titulo: string, loja: LojaView) {
   const wb = XLSX.utils.book_new();
-  const resumo = vendedores.map((v) => ({
+  const resumo = loja.consolidado.map((v) => ({
     "Cód. Vendedor": v.codVendedor,
     Vendedor: v.vendedorNome ?? "",
-    "Meta Semana": v.metaSemana,
+    "Meta do Mês": v.metaSemana,
     "% Meta": v.percentualMeta,
     "Base (Venda Período)": v.basePorOrigem.vendaPeriodo,
     "Base (Saldo Anterior)": v.basePorOrigem.saldoAnterior,
     "Base Total": v.baseTotal,
     Restituições: v.restituicoes,
     Comissão: v.comissao,
-    Prêmio: v.premioValor,
+    Prêmios: v.premioValor,
     "Total a Pagar": v.totalPagar,
   }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumo), "Resumo");
-  const detalhe = vendedores.flatMap((v) =>
-    v.detalhe.map((d) => ({
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumo), "Resumo Mensal");
+
+  const porSemana = loja.semanas.flatMap((s) =>
+    s.vendedores.map((v) => ({
+      Semana: `${s.semanaInicio} a ${s.semanaFim}`,
+      Status: STATUS_BADGE[s.status].label,
       "Cód. Vendedor": v.codVendedor,
       Vendedor: v.vendedorNome ?? "",
-      "OS/Venda": d.codTransacao,
-      Emissão: d.dataEmissao,
-      Pagamento: d.dataPagamento,
-      Forma: d.formaCategoria,
-      Origem: d.origem,
-      Valor: d.valor,
-      "Taxa %": d.taxa,
-      Comissão: d.comissao,
+      Base: v.baseTotal,
+      Restituições: v.restituicoes,
+      Comissão: v.comissao,
+      Prêmio: v.premioValor,
+      "A Pagar": v.totalPagar,
     }))
+  );
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(porSemana), "Por Semana");
+
+  const detalhe = loja.semanas.flatMap((s) =>
+    s.vendedores.flatMap((v) =>
+      v.detalhe.map((d) => ({
+        Semana: s.semanaInicio,
+        "Cód. Vendedor": v.codVendedor,
+        Vendedor: v.vendedorNome ?? "",
+        "OS/Venda": d.codTransacao,
+        Emissão: d.dataEmissao,
+        Pagamento: d.dataPagamento,
+        Forma: d.formaCategoria,
+        Origem: d.origem,
+        Valor: d.valor,
+        "Taxa %": d.taxa,
+        Comissão: d.comissao,
+      }))
+    )
   );
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detalhe), "Detalhe por OS");
   XLSX.writeFile(wb, `${titulo}.xlsx`);
 }
 
-// ---------- tabela de vendedores (resumo + detalhe expandível) ----------
-function TabelaFechamento({ vendedores }: { vendedores: ResultadoVendedor[] }) {
+// ---------- tabela de vendedores ----------
+function TabelaFechamento({ vendedores, metaLabel }: { vendedores: ResultadoVendedor[]; metaLabel?: string }) {
   const [aberto, setAberto] = useState<number | null>(null);
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Vendedor</TableHead>
-          <TableHead className="text-right">Meta</TableHead>
+          <TableHead className="text-right">{metaLabel ?? "Meta"}</TableHead>
           <TableHead className="text-right">% Meta</TableHead>
           <TableHead className="text-right">Base</TableHead>
           <TableHead className="text-right">Restit.</TableHead>
           <TableHead className="text-right">Comissão</TableHead>
-          <TableHead className="text-right">Prêmio</TableHead>
+          <TableHead className="text-right">Prêmios</TableHead>
           <TableHead className="text-right">A pagar</TableHead>
           <TableHead />
         </TableRow>
@@ -120,9 +169,6 @@ function TabelaFechamento({ vendedores }: { vendedores: ResultadoVendedor[] }) {
                 <div className="text-xs text-muted-foreground">
                   período R$ {fmtBRL(v.basePorOrigem.vendaPeriodo)} · saldo ant. R${" "}
                   {fmtBRL(v.basePorOrigem.saldoAnterior)}
-                  {Object.entries(v.basePorCategoria).map(([c, val]) => (
-                    <span key={c}> · {c} R$ {fmtBRL(val as number)}</span>
-                  ))}
                 </div>
               </TableCell>
               <TableCell className="text-right">R$ {fmtBRL(v.metaSemana)}</TableCell>
@@ -133,23 +179,18 @@ function TabelaFechamento({ vendedores }: { vendedores: ResultadoVendedor[] }) {
               </TableCell>
               <TableCell className="text-right">R$ {fmtBRL(v.comissao)}</TableCell>
               <TableCell className="text-right">
-                {v.premioValor > 0 ? (
-                  <span title={
-                    (v.premioFaixa ? `faixa ≥${v.premioFaixa.percentualMetaMin}% ` : "") +
-                    (v.premioSequencia ? `· sequência ${v.premioSequencia.semanasConsecutivas} sem.` : "")
-                  }>
-                    R$ {fmtBRL(v.premioValor)}
-                  </span>
-                ) : "—"}
+                {v.premioValor > 0 ? `R$ ${fmtBRL(v.premioValor)}` : "—"}
               </TableCell>
               <TableCell className="text-right font-semibold">R$ {fmtBRL(v.totalPagar)}</TableCell>
               <TableCell>
-                <Button
-                  variant="ghost" size="icon" title="Detalhe por OS/venda"
-                  onClick={() => setAberto(aberto === v.codVendedor ? null : v.codVendedor)}
-                >
-                  <ChevronDown className={`h-4 w-4 transition-transform ${aberto === v.codVendedor ? "rotate-180" : ""}`} />
-                </Button>
+                {v.detalhe.length > 0 && (
+                  <Button
+                    variant="ghost" size="icon" title="Detalhe por OS/venda"
+                    onClick={() => setAberto(aberto === v.codVendedor ? null : v.codVendedor)}
+                  >
+                    <ChevronDown className={`h-4 w-4 transition-transform ${aberto === v.codVendedor ? "rotate-180" : ""}`} />
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
             {aberto === v.codVendedor && (
@@ -197,105 +238,129 @@ export default function RhFechamentoSemanalPage() {
   const { isAdmin } = useAuth();
   const { empresas } = useEmpresas();
 
-  const hoje = new Date();
-  const [ano] = useState(hoje.getFullYear());
-  const [mes, setMes] = useState(hoje.getMonth() + 1);
-  const [semanas, setSemanas] = useState<{ semanaInicio: string; semanaFim: string }[]>([]);
-  const [semanaSel, setSemanaSel] = useState("");
+  const hoje = new Date().toISOString().split("T")[0];
+  const [ano] = useState(new Date().getFullYear());
+  const [mes, setMes] = useState(new Date().getMonth() + 1);
   const [lojasSel, setLojasSel] = useState<Set<number>>(new Set());
   const [modo, setModo] = useState<ModoFechamento>("RECEBIDO");
 
-  const [previas, setPrevias] = useState<PreviaFechamento[]>([]);
+  const [visao, setVisao] = useState<LojaView[]>([]);
   const [gerando, setGerando] = useState(false);
   const [fechando, setFechando] = useState(false);
 
-  const [fechados, setFechados] = useState<FechamentoResumo[]>([]);
-  const [itensFechado, setItensFechado] = useState<Record<string, ResultadoVendedor[]>>({});
-
-  // semanas do mês
   useEffect(() => {
-    (async () => {
-      try {
-        const s = await semanasDoMes(ano, mes);
-        setSemanas(s);
-        setSemanaSel(s.length ? s[0].semanaInicio : "");
-      } catch {
-        setSemanas([]);
-      }
-    })();
-  }, [ano, mes]);
+    setVisao([]);
+  }, [mes, modo]);
 
-  const carregarFechados = useCallback(async () => {
-    try {
-      setFechados(await listarFechamentos({ ano, mes }));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao listar fechamentos");
-    }
-  }, [ano, mes]);
-
-  useEffect(() => {
-    carregarFechados();
-  }, [carregarFechados]);
-
-  const semana = semanas.find((s) => s.semanaInicio === semanaSel);
-
-  const handleGerarPrevia = async () => {
-    if (!semana || !lojasSel.size) {
-      toast.error("Selecione a semana e ao menos uma loja");
+  const gerarVisao = useCallback(async () => {
+    if (!lojasSel.size) {
+      toast.error("Selecione ao menos uma loja");
       return;
     }
     setGerando(true);
-    setPrevias([]);
     try {
-      const resultado: PreviaFechamento[] = [];
-      for (const cod of [...lojasSel].sort((a, b) => a - b)) {
-        const nome = empresas.find((e) => e.codEmpresa === cod)?.nome ?? null;
-        resultado.push(
-          await gerarPrevia(cod, nome, ano, mes, semana.semanaInicio, semana.semanaFim, modo)
-        );
+      const semanas = await semanasDoMes(ano, mes);
+      if (!semanas.length) {
+        toast.error(`Sem semanas geradas para ${MESES[mes - 1]} — configure em Metas primeiro`);
+        return;
       }
-      setPrevias(resultado);
-      toast.success(`Prévia gerada para ${resultado.length} loja(s)`);
+      const fechados = await listarFechamentos({ ano, mes });
+      const resultado: LojaView[] = [];
+      for (const cod of [...lojasSel].sort((a, b) => a - b)) {
+        const nome = empresas.find((e) => e.codEmpresa === cod)?.nome ?? `Loja ${cod}`;
+        const views: SemanaView[] = [];
+        for (const s of semanas) {
+          const fechado = fechados.find(
+            (f) => f.codEmpresa === cod && f.semanaInicio === s.semanaInicio
+          );
+          if (fechado && fechado.status === "FECHADO") {
+            views.push({
+              ...s,
+              status: "FECHADA",
+              fechamentoId: fechado.id,
+              vendedores: await getFechamentoItens(fechado.id),
+              avisos: [],
+            });
+          } else {
+            const previa = await gerarPrevia(cod, nome, ano, mes, s.semanaInicio, s.semanaFim, modo);
+            views.push({
+              ...s,
+              status: fechado?.status === "REABERTO"
+                ? "REABERTA"
+                : s.semanaFim < hoje
+                  ? "PARCIAL"
+                  : "EM_ANDAMENTO",
+              fechamentoId: fechado?.id,
+              previa,
+              vendedores: previa.vendedores,
+              avisos: previa.avisos,
+            });
+          }
+        }
+        resultado.push({
+          codEmpresa: cod,
+          nome,
+          semanas: views,
+          consolidado: consolidarVendedores(views.map((v) => v.vendedores)),
+          temParcial: views.some((v) => v.status !== "FECHADA"),
+        });
+      }
+      setVisao(resultado);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao gerar prévia");
+      toast.error(err instanceof Error ? err.message : "Erro ao gerar visão do mês");
     } finally {
       setGerando(false);
     }
-  };
+  }, [lojasSel, ano, mes, modo, empresas, hoje]);
 
-  const handleFechar = async (previa: PreviaFechamento) => {
-    if (!window.confirm(
-      `Fechar a semana ${fmtData(previa.semanaInicio)}–${fmtData(previa.semanaFim)} de ${previa.nomeEmpresa}? O fechamento é imutável (reabertura só admin).`
-    )) return;
+  const handleFecharSemana = async (loja: LojaView, s: SemanaView) => {
+    if (!s.previa) return;
+    if (s.status === "EM_ANDAMENTO" &&
+      !window.confirm("Esta semana ainda está em andamento — fechar mesmo assim?")) return;
     setFechando(true);
     try {
-      await fecharSemana(previa);
-      toast.success(`Semana fechada — ${previa.nomeEmpresa}`);
-      setPrevias((ps) => ps.filter((p) => p.codEmpresa !== previa.codEmpresa));
-      await carregarFechados();
+      await fecharSemana(s.previa);
+      toast.success(`Semana ${fmtData(s.semanaInicio)} fechada — ${loja.nome}`);
+      await gerarVisao();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao fechar");
+      toast.error(err instanceof Error ? err.message : "Erro ao fechar semana");
     } finally {
       setFechando(false);
     }
   };
 
-  const handleVerFechado = async (f: FechamentoResumo) => {
-    if (itensFechado[f.id]) return;
+  const handleFecharMes = async (loja: LojaView) => {
+    const abertas = loja.semanas.filter(
+      (s) => (s.status === "PARCIAL" || s.status === "REABERTA") && s.previa
+    );
+    if (!abertas.length) {
+      toast.info("Nenhuma semana terminada pendente de fechamento nesta loja");
+      return;
+    }
+    if (!window.confirm(
+      `Fechar ${abertas.length} semana(s) de ${MESES[mes - 1]} de ${loja.nome}? Os fechamentos são imutáveis.`
+    )) return;
+    setFechando(true);
     try {
-      const itens = await getFechamentoItens(f.id);
-      setItensFechado((m) => ({ ...m, [f.id]: itens }));
+      for (const s of abertas) {
+        await fecharSemana(s.previa!);
+      }
+      toast.success(`Mês fechado (${abertas.length} semana(s)) — ${loja.nome}`);
+      await gerarVisao();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao carregar fechamento");
+      toast.error(err instanceof Error ? err.message : "Erro ao fechar mês");
+    } finally {
+      setFechando(false);
     }
   };
 
-  const handleReabrir = async (f: FechamentoResumo) => {
-    if (!window.confirm(`Reabrir o fechamento de ${f.nomeEmpresa} (${fmtData(f.semanaInicio)})? A reabertura fica registrada.`)) return;
+  const handleReabrir = async (s: SemanaView) => {
+    if (!s.fechamentoId) return;
+    if (!window.confirm(`Reabrir a semana ${fmtData(s.semanaInicio)}? A reabertura fica registrada.`)) return;
     try {
-      await reabrirFechamento(f.id);
-      toast.success("Fechamento reaberto — gere nova prévia e feche novamente");
-      await carregarFechados();
+      await reabrirFechamento(s.fechamentoId);
+      toast.success("Semana reaberta — gere a visão novamente para refazer");
+      await gerarVisao();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao reabrir");
     }
@@ -306,10 +371,10 @@ export default function RhFechamentoSemanalPage() {
       <div>
         <h1 className="text-xl font-bold flex items-center gap-2">
           <Calculator className="h-5 w-5" />
-          Fechamento Semanal — Comissões (RH)
+          Fechamento Mensal — Comissões (RH)
         </h1>
         <p className="text-sm text-muted-foreground">
-          Base = valores recebidos na semana (padrão) · fechado é imutável e vai para o RH/integração
+          Pagamento sempre pelo mês comercial (21→20) · semanas não fechadas aparecem como PARCIAIS
         </p>
       </div>
 
@@ -318,25 +383,12 @@ export default function RhFechamentoSemanalPage() {
         <CardContent className="pt-4 space-y-4">
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-2">
-              <Label>Mês</Label>
+              <Label>Mês comercial</Label>
               <Select value={String(mes)} onValueChange={(v) => setMes(Number(v))}>
-                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {MESES.map((n, i) => (
                     <SelectItem key={i + 1} value={String(i + 1)}>{n} {ano}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Semana</Label>
-              <Select value={semanaSel} onValueChange={setSemanaSel}>
-                <SelectTrigger className="w-48"><SelectValue placeholder="Semana..." /></SelectTrigger>
-                <SelectContent>
-                  {semanas.map((s) => (
-                    <SelectItem key={s.semanaInicio} value={s.semanaInicio}>
-                      {fmtData(s.semanaInicio)} – {fmtData(s.semanaFim)}
-                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -351,9 +403,9 @@ export default function RhFechamentoSemanalPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={handleGerarPrevia} disabled={gerando}>
+            <Button onClick={gerarVisao} disabled={gerando}>
               <Calculator className="h-4 w-4 mr-2" />
-              {gerando ? "Calculando..." : "Gerar prévia"}
+              {gerando ? "Calculando..." : "Gerar visão do mês"}
             </Button>
           </div>
           <div className="space-y-1">
@@ -385,115 +437,98 @@ export default function RhFechamentoSemanalPage() {
         </CardContent>
       </Card>
 
-      {/* Prévias */}
-      {gerando && <Skeleton className="h-48" />}
-      {previas.map((p) => (
-        <Card key={p.codEmpresa}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                {p.nomeEmpresa ?? `Loja ${p.codEmpresa}`}
-                <Badge variant="outline">{p.modo}</Badge>
-                <Badge variant="secondary">prévia</Badge>
-              </CardTitle>
-              <CardDescription>
-                {fmtData(p.semanaInicio)} – {fmtData(p.semanaFim)} · base R$ {fmtBRL(p.totais.base)} ·
-                comissão R$ {fmtBRL(p.totais.comissao)} · prêmios R$ {fmtBRL(p.totais.premio)} ·{" "}
-                <strong>a pagar R$ {fmtBRL(p.totais.pagar)}</strong>
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  exportarXlsx(
-                    `fechamento_${p.codEmpresa}_${p.semanaInicio}_previa`,
-                    p.vendedores
-                  )
-                }
-              >
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                XLSX
-              </Button>
-              <Button onClick={() => handleFechar(p)} disabled={fechando}>
-                <Lock className="h-4 w-4 mr-2" />
-                Fechar semana
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {p.avisos.map((a, i) => (
-              <Alert key={i}>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>{a}</AlertDescription>
-              </Alert>
-            ))}
-            <TabelaFechamento vendedores={p.vendedores} />
-          </CardContent>
-        </Card>
-      ))}
+      {gerando && <Skeleton className="h-64" />}
 
-      {/* Fechamentos do mês */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Fechamentos de {MESES[mes - 1]} {ano}</CardTitle>
-          <CardDescription>
-            Snapshots imutáveis — é o que a API de integração entrega ao RH/sistema externo.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {fechados.length === 0 ? (
-            <p className="text-muted-foreground text-center py-6">Nenhum fechamento neste mês.</p>
-          ) : (
-            <Accordion type="multiple">
-              {fechados.map((f) => (
-                <AccordionItem key={f.id} value={f.id}>
-                  <AccordionTrigger onClick={() => handleVerFechado(f)}>
-                    <span className="flex flex-1 items-center justify-between pr-4 gap-3">
-                      <span className="font-medium">
-                        {f.nomeEmpresa ?? `Loja ${f.codEmpresa}`} · {fmtData(f.semanaInicio)}–{fmtData(f.semanaFim)}
-                      </span>
-                      <span className="flex items-center gap-3">
-                        <Badge variant="outline">{f.modo}</Badge>
-                        <Badge variant={f.status === "FECHADO" ? "default" : "destructive"}>
-                          {f.status}
-                        </Badge>
-                        <span className="text-sm font-semibold">R$ {fmtBRL(f.totalPagar)}</span>
-                      </span>
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent className="space-y-3">
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline" size="sm"
-                        onClick={() =>
-                          itensFechado[f.id] &&
-                          exportarXlsx(`fechamento_${f.codEmpresa}_${f.semanaInicio}`, itensFechado[f.id])
-                        }
-                        disabled={!itensFechado[f.id]}
-                      >
-                        <FileSpreadsheet className="h-4 w-4 mr-2" />
-                        Exportar XLSX
-                      </Button>
-                      {isAdmin && f.status === "FECHADO" && (
-                        <Button variant="outline" size="sm" onClick={() => handleReabrir(f)}>
-                          <Unlock className="h-4 w-4 mr-2" />
-                          Reabrir (admin)
-                        </Button>
-                      )}
-                    </div>
-                    {itensFechado[f.id] ? (
-                      <TabelaFechamento vendedores={itensFechado[f.id]} />
-                    ) : (
-                      <Skeleton className="h-24" />
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
-          )}
-        </CardContent>
-      </Card>
+      {visao.map((loja) => {
+        const totalMes = loja.consolidado.reduce((s, v) => s + v.totalPagar, 0);
+        return (
+          <Card key={loja.codEmpresa}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  {loja.nome}
+                  <Badge variant="outline">{modo}</Badge>
+                  {loja.temParcial ? (
+                    <Badge variant="secondary">inclui parciais</Badge>
+                  ) : (
+                    <Badge>mês 100% fechado</Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  {MESES[mes - 1]} {ano} · {loja.semanas.length} semana(s) ·{" "}
+                  <strong>total a pagar R$ {fmtBRL(totalMes)}</strong>
+                  {loja.temParcial && " (sujeito a alteração até fechar todas as semanas)"}
+                </CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => exportarXlsxMensal(`fechamento_mensal_${loja.codEmpresa}_${ano}-${String(mes).padStart(2, "0")}`, loja)}
+                >
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  XLSX Mensal
+                </Button>
+                {loja.temParcial && (
+                  <Button onClick={() => handleFecharMes(loja)} disabled={fechando}>
+                    <Lock className="h-4 w-4 mr-2" />
+                    Fechar mês
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Consolidado mensal por vendedor */}
+              <TabelaFechamento vendedores={loja.consolidado} metaLabel="Meta do mês" />
+
+              {/* Semanas */}
+              <Accordion type="multiple">
+                {loja.semanas.map((s) => {
+                  const badge = STATUS_BADGE[s.status];
+                  const totalSemana = s.vendedores.reduce((t, v) => t + v.totalPagar, 0);
+                  return (
+                    <AccordionItem key={s.semanaInicio} value={s.semanaInicio}>
+                      <AccordionTrigger>
+                        <span className="flex flex-1 items-center justify-between pr-4 gap-3">
+                          <span>
+                            Semana {fmtData(s.semanaInicio)} – {fmtData(s.semanaFim)}
+                          </span>
+                          <span className="flex items-center gap-3">
+                            <span className="text-sm">R$ {fmtBRL(totalSemana)}</span>
+                            <Badge variant={badge.variant}>{badge.label}</Badge>
+                          </span>
+                        </span>
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-3">
+                        {s.avisos.map((a, i) => (
+                          <Alert key={i}>
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertDescription>{a}</AlertDescription>
+                          </Alert>
+                        ))}
+                        <div className="flex gap-2">
+                          {(s.status === "PARCIAL" || s.status === "REABERTA" || s.status === "EM_ANDAMENTO") && s.previa && (
+                            <Button size="sm" onClick={() => handleFecharSemana(loja, s)} disabled={fechando}>
+                              <Lock className="h-4 w-4 mr-2" />
+                              Fechar semana
+                            </Button>
+                          )}
+                          {s.status === "FECHADA" && isAdmin && (
+                            <Button size="sm" variant="outline" onClick={() => handleReabrir(s)}>
+                              <Unlock className="h-4 w-4 mr-2" />
+                              Reabrir (admin)
+                            </Button>
+                          )}
+                        </div>
+                        <TabelaFechamento vendedores={s.vendedores} metaLabel="Meta da semana" />
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }

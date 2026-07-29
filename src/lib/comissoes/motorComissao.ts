@@ -89,6 +89,59 @@ function round2(n: number): number {
 }
 
 /**
+ * Consolida os resultados de VÁRIAS semanas (fechadas e/ou parciais) num
+ * total MENSAL por vendedor — o pagamento do RH é mensal (Natan): comissões e
+ * prêmios somados; metas somadas; % = base/meta do mês. Prêmios individuais
+ * das semanas não são reexibidos (já estão somados em premioValor).
+ */
+export function consolidarVendedores(listas: ResultadoVendedor[][]): ResultadoVendedor[] {
+  const mapa = new Map<number, ResultadoVendedor>();
+  for (const lista of listas) {
+    for (const v of lista) {
+      let c = mapa.get(v.codVendedor);
+      if (!c) {
+        c = {
+          codVendedor: v.codVendedor,
+          vendedorNome: v.vendedorNome,
+          metaSemana: 0,
+          percentualMeta: 0,
+          basePorCategoria: {},
+          basePorOrigem: { vendaPeriodo: 0, saldoAnterior: 0 },
+          baseTotal: 0,
+          restituicoes: 0,
+          comissao: 0,
+          premioFaixa: null,
+          premioSequencia: null,
+          premioValor: 0,
+          totalPagar: 0,
+          detalhe: [],
+        };
+        mapa.set(v.codVendedor, c);
+      }
+      c.vendedorNome = c.vendedorNome ?? v.vendedorNome;
+      c.metaSemana = round2(c.metaSemana + v.metaSemana);
+      Object.entries(v.basePorCategoria).forEach(([cat, val]) => {
+        c!.basePorCategoria[cat] = round2((c!.basePorCategoria[cat] ?? 0) + (val as number));
+      });
+      c.basePorOrigem.vendaPeriodo = round2(c.basePorOrigem.vendaPeriodo + v.basePorOrigem.vendaPeriodo);
+      c.basePorOrigem.saldoAnterior = round2(c.basePorOrigem.saldoAnterior + v.basePorOrigem.saldoAnterior);
+      c.baseTotal = round2(c.baseTotal + v.baseTotal);
+      c.restituicoes = round2(c.restituicoes + v.restituicoes);
+      c.comissao = round2(c.comissao + v.comissao);
+      c.premioValor = round2(c.premioValor + v.premioValor);
+      c.totalPagar = round2(c.totalPagar + v.totalPagar);
+      c.detalhe = c.detalhe.concat(v.detalhe);
+    }
+  }
+  return Array.from(mapa.values())
+    .map((c) => ({
+      ...c,
+      percentualMeta: c.metaSemana > 0 ? round2((c.baseTotal / c.metaSemana) * 100) : 0,
+    }))
+    .sort((a, b) => b.baseTotal - a.baseTotal);
+}
+
+/**
  * Calcula o fechamento de um conjunto de linhas (uma loja × semana).
  *
  * @param linhas parcelas pagas (modo RECEBIDO) ou vendas (modo EMITIDO)

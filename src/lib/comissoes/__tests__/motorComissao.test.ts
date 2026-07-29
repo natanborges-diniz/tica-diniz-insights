@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { calcularFechamento, type LinhaRecebimento } from '../motorComissao';
+import {
+  calcularFechamento,
+  consolidarVendedores,
+  type LinhaRecebimento,
+} from '../motorComissao';
 
 const TAXAS = {
   CARTAO_CREDITO: 2,
@@ -174,6 +178,33 @@ describe('calcularFechamento — prêmios', () => {
       semanasAtingidasAntes: new Map([[1, 5]]),
     });
     expect(r[0].premioSequencia).toBeNull();
+  });
+});
+
+describe('consolidarVendedores — mensal (soma das semanas)', () => {
+  it('soma base/comissão/prêmio das semanas e recalcula % pela meta somada', () => {
+    const s1 = calcularFechamento({
+      linhas: [linha({ valor: 10000 })],
+      taxas: TAXAS,
+      metasPorVendedor: new Map([[1, 10000]]),
+      ...semPremios,
+      faixasAtivas: [{ percentualMetaMin: 100, percentualPremio: 1 }],
+    });
+    const s2 = calcularFechamento({
+      linhas: [linha({ valor: 5000, formaCategoria: 'CARTAO_CREDITO' })],
+      taxas: TAXAS,
+      metasPorVendedor: new Map([[1, 10000]]),
+      ...semPremios,
+    });
+    const mes = consolidarVendedores([s1, s2]);
+    expect(mes).toHaveLength(1);
+    expect(mes[0].baseTotal).toBe(15000);
+    expect(mes[0].metaSemana).toBe(20000);
+    expect(mes[0].percentualMeta).toBe(75);
+    expect(mes[0].comissao).toBe(300 + 100); // 3% de 10k + 2% de 5k
+    expect(mes[0].premioValor).toBe(100); // prêmio da semana 1 (1% de 10k)
+    expect(mes[0].totalPagar).toBe(500);
+    expect(mes[0].detalhe).toHaveLength(2);
   });
 });
 

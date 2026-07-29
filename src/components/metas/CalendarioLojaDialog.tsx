@@ -20,7 +20,10 @@ import {
   upsertLojaConfiguracao,
   upsertLojaExcecao,
   deleteLojaExcecao,
+  upsertFeriado,
+  deleteFeriado,
 } from "@/services/calendarioService";
+import { feriadoAplicaALoja } from "@/lib/metas/calendario";
 import type { Feriado, LojaConfiguracao, LojaExcecao } from "@/lib/metas/calendario";
 
 interface DiaInfo {
@@ -67,6 +70,8 @@ export function CalendarioLojaDialog({
   const [excecoes, setExcecoes] = useState<LojaExcecao[]>([]);
   const [loading, setLoading] = useState(true);
   const [mudou, setMudou] = useState(false);
+  /** clique no dia: 'EXCECAO' abre/fecha a loja; 'FERIADO' cadastra/remove feriado */
+  const [modoClique, setModoClique] = useState<"EXCECAO" | "FERIADO">("EXCECAO");
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -98,7 +103,7 @@ export function CalendarioLojaDialog({
     const abreDomingo = config?.abreDomingo ?? false;
     const abreFeriado = config?.abreFeriado ?? false;
     const feriadosMap = new Map<string, Feriado>();
-    feriados.forEach((f) => {
+    feriados.filter((f) => feriadoAplicaALoja(f, config)).forEach((f) => {
       if (f.recorrente) {
         const [, mes, dia] = f.data.split("-");
         // aplica no(s) ano(s) do período
@@ -129,8 +134,49 @@ export function CalendarioLojaDialog({
 
   const diasUteis = dias.filter((d) => d.aberto).length;
 
+  // modo FERIADO: cadastra feriado municipal da cidade da loja / remove feriado
+  const handleClickFeriado = async (d: DiaInfo) => {
+    try {
+      if (d.feriado) {
+        const escopo =
+          d.feriado.tipo === "NACIONAL"
+            ? "NACIONAL (vale para TODAS as lojas)"
+            : d.feriado.tipo === "ESTADUAL"
+              ? "ESTADUAL (vale para todo o estado)"
+              : `municipal de ${d.feriado.cidade ?? "?"}`;
+        if (!window.confirm(`Remover o feriado "${d.feriado.descricao}" (${escopo})?`)) return;
+        const ok = await deleteFeriado(d.feriado.id);
+        if (!ok) throw new Error("Não foi possível remover o feriado");
+        toast.success(`Feriado "${d.feriado.descricao}" removido`);
+      } else {
+        const cidade = (config?.cidade ?? "").trim();
+        if (!cidade) {
+          toast.error("Defina a cidade da loja antes de cadastrar feriado municipal");
+          return;
+        }
+        const descricao = window.prompt(`Nome do feriado municipal de ${cidade} em ${d.dia}?`);
+        if (!descricao?.trim()) return;
+        const ok = await upsertFeriado({
+          data: d.data,
+          descricao: descricao.trim(),
+          tipo: "MUNICIPAL",
+          uf: config?.uf ?? "SP",
+          cidade,
+          recorrente: window.confirm("Este feriado se repete todo ano nesta data?"),
+        });
+        if (!ok) throw new Error("Não foi possível salvar o feriado");
+        toast.success(`Feriado "${descricao.trim()}" cadastrado para ${cidade}`);
+      }
+      setMudou(true);
+      await carregar();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro no feriado");
+    }
+  };
+
   // clique no dia: cria exceção invertendo o estado; se já há exceção, remove-a
   const handleClickDia = async (d: DiaInfo) => {
+    if (modoClique === "FERIADO") return handleClickFeriado(d);
     try {
       if (d.excecao) {
         const ok = await deleteLojaExcecao(d.excecao.id);
@@ -192,8 +238,10 @@ export function CalendarioLojaDialog({
           <DialogDescription>
             Período {new Date(dataInicio + "T12:00:00Z").toLocaleDateString("pt-BR")} a{" "}
             {new Date(dataFim + "T12:00:00Z").toLocaleDateString("pt-BR")} ·{" "}
-            <strong>{diasUteis} dias úteis</strong>. Clique num dia para abrir/fechar
-            (vira exceção); clique de novo para voltar à regra.
+            <strong>{diasUteis} dias úteis</strong>.{" "}
+            {modoClique === "EXCECAO"
+              ? "Clique num dia para abrir/fechar (exceção); clique de novo para voltar à regra."
+              : "Clique num dia para cadastrar feriado; clique num feriado para removê-lo."}
           </DialogDescription>
         </DialogHeader>
 
@@ -201,6 +249,23 @@ export function CalendarioLojaDialog({
           <p className="text-muted-foreground text-center py-8">Carregando...</p>
         ) : (
           <div className="space-y-4">
+            <div className="flex gap-1 rounded-md border p-0.5 w-fit">
+              <Button
+                size="sm"
+                variant={modoClique === "EXCECAO" ? "default" : "ghost"}
+                onClick={() => setModoClique("EXCECAO")}
+              >
+                Abrir/Fechar dias
+              </Button>
+              <Button
+                size="sm"
+                variant={modoClique === "FERIADO" ? "default" : "ghost"}
+                onClick={() => setModoClique("FERIADO")}
+              >
+                Feriados
+              </Button>
+            </div>
+
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
               <label className="flex items-center gap-2 text-sm">
                 <Switch

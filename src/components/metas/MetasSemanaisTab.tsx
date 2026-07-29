@@ -58,6 +58,7 @@ import {
 import { GradeSemanasLoja, type LinhaGradeSemana } from "./GradeSemanasLoja";
 import { CalendarioLojaDialog } from "./CalendarioLojaDialog";
 import { CortesSemanaDialog } from "./CortesSemanaDialog";
+import { MapaMetasMatriz } from "./MapaMetasMatriz";
 
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -114,6 +115,9 @@ export function MetasSemanaisTab({ empresas, ano }: MetasSemanaisTabProps) {
 
   // calendário
   const [calendarioLoja, setCalendarioLoja] = useState<LinhaLoja | null>(null);
+
+  // refresh do mapa de metas após salvar/gerar
+  const [mapaRefresh, setMapaRefresh] = useState(0);
 
   // cortes semanais manuais
   const [cortesOpen, setCortesOpen] = useState(false);
@@ -279,6 +283,7 @@ export function MetasSemanaisTab({ empresas, ano }: MetasSemanaisTabProps) {
       setAvisos(todosAvisos);
       toast.success(`Metas salvas e semanas geradas para ${linhas.length} loja(s)`);
       await carregar();
+      setMapaRefresh((k) => k + 1);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao salvar/gerar");
     } finally {
@@ -329,6 +334,17 @@ export function MetasSemanaisTab({ empresas, ano }: MetasSemanaisTabProps) {
 
   return (
     <div className="space-y-6">
+      {/* 0. Mapa geral lojas × meses */}
+      <MapaMetasMatriz
+        empresas={empresas}
+        ano={ano}
+        refreshKey={mapaRefresh}
+        onSelecionar={(cod, m) => {
+          setMes(m);
+          setLojasSel(new Set([cod]));
+        }}
+      />
+
       {/* 1. Seleção */}
       <Card>
         <CardHeader>
