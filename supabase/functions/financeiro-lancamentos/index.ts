@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, authGuard } from "../_shared/authGuard.ts";
+import { avaliarLancamento, validarJustificativa, criadorAprovadorDistintos } from "../_shared/governanca.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -102,6 +103,19 @@ async function requireAdmin(userId: string) {
   }
 }
 
+// G2 — aprovação de pagamento exige master (admin aceito na transição, até os
+// papéis serem atribuídos; apertar depois — SPEC_P2_5 §2)
+async function requireMaster(userId: string) {
+  const { data: roles } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .in("role", ["master", "admin"]);
+  if (!roles || roles.length === 0) {
+    throw new Error("Apenas o master pode aprovar pagamentos");
+  }
+}
+
 // ═══════════════════════════════════════════════════════════
 // LANÇAMENTOS
 // ═══════════════════════════════════════════════════════════
@@ -132,7 +146,18 @@ async function listar(body: Record<string, unknown>) {
 }
 
 async function criar(body: Record<string, unknown>, userId: string) {
+  // G2 — lastro na criação (SPEC_P2_5 §1). Exceção exige justificativa.
+  const lastroInformado = body.lastro ? String(body.lastro) : null;
+  const rubricaId = body.rubrica_id ? String(body.rubrica_id) : null;
+  if (lastroInformado === "EXCECAO" && !validarJustificativa(body.justificativa)) {
+    throw new Error("Exceção emergencial exige justificativa (mínimo 20 caracteres)");
+  }
+  const lastro = rubricaId ? "RUBRICA" : lastroInformado;
+
   const record = {
+    lastro,
+    rubrica_id: rubricaId,
+    justificativa: body.justificativa ? String(body.justificativa) : null,
     cod_empresa: body.cod_empresa,
     tipo: body.tipo,
     descricao: body.descricao,
@@ -383,6 +408,28 @@ async function adicionarAoBordero(body: Record<string, unknown>) {
   if (!bordero) throw new Error("Borderô não encontrado");
   if (bordero.status !== "MONTAGEM") throw new Error("Borderô não está em montagem");
 
+  // G2 — borderô só aceita lançamento com lastro válido (SPEC_P2_5 §4)
+  const { data: lancs } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id, descricao, valor, lastro, erp_parcela_id, nf_entrada_id, rubrica_id, btg_dda_id, justificativa, pessoa_documento, data_vencimento")
+    .in("id", ids);
+  const rubricaIds = [...new Set((lancs || []).map((l) => l.rubrica_id).filter(Boolean))] as string[];
+  const rubricasMap = new Map<string, Record<string, unknown>>();
+  if (rubricaIds.length > 0) {
+    const { data: rubs } = await supabase.from("rubricas_autorizadas").select("*").in("id", rubricaIds);
+    for (const r of (rubs || [])) rubricasMap.set(String(r.id), r);
+  }
+  const hoje = new Date().toISOString().slice(0, 10);
+  const rejeitados: string[] = [];
+  for (const l of (lancs || [])) {
+    const rubrica = l.rubrica_id ? (rubricasMap.get(String(l.rubrica_id)) as never) ?? null : null;
+    const av = avaliarLancamento(l as never, rubrica, hoje);
+    if (!av.podeBordero) rejeitados.push(`"${l.descricao ?? l.id}" (R$ ${Number(l.valor).toFixed(2)}): ${av.motivo}`);
+  }
+  if (rejeitados.length > 0) {
+    throw new Error(`Sem lastro para borderô — resolva antes de adicionar:\n${rejeitados.join("\n")}`);
+  }
+
   const { error } = await supabase
     .from("lancamentos_financeiros")
     .update({ bordero_id: String(bordero_id), status: "BORDERO" })
@@ -419,12 +466,16 @@ async function removerDoBordero(body: Record<string, unknown>) {
 async function aprovarBordero(body: Record<string, unknown>, userId: string) {
   const { bordero_id } = body;
   if (!bordero_id) throw new Error("bordero_id obrigatório");
-  await requireAdmin(userId);
+  await requireMaster(userId); // G2 — aprovação é do master
 
   const { data: bordero } = await supabase.from("borderos").select("*").eq("id", bordero_id).single();
   if (!bordero) throw new Error("Borderô não encontrado");
   if (bordero.status !== "MONTAGEM") throw new Error(`Borderô com status ${bordero.status} não pode ser aprovado`);
   if (bordero.qtd_lancamentos === 0) throw new Error("Borderô vazio — adicione lançamentos antes de aprovar");
+
+  // G2 — separação de funções: quem montou o borderô não o aprova
+  const distinto = criadorAprovadorDistintos(bordero.criado_por, userId);
+  if (!distinto.ok) throw new Error(distinto.motivo!);
 
   const { error: bErr } = await supabase
     .from("borderos")
