@@ -69,6 +69,8 @@ Deno.serve(async (req) => {
         return await adicionarAoBordero(body);
       case "remover_do_bordero":
         return await removerDoBordero(body);
+      case "sugerir_rubricas":
+        return await sugerirRubricas(body, auth.userId);
       case "mesa_aprovacao":
         return await mesaAprovacao(body);
       case "aprovar_excecao":
@@ -1406,4 +1408,89 @@ async function aprovarExcecao(body: Record<string, unknown>, userId: string) {
     .eq("id", String(id));
   if (error) throw new Error(error.message);
   return json({ ok: true, status: "AUTORIZADO" });
+}
+
+// ═══════════════════════════════════════════════════════════
+// Sugerir rubricas do histórico (carga inicial — SPEC_P2_5 §3)
+// Minera o ledger: favorecido+conta com recorrência mensal viram RASCUNHO
+// com valor esperado (mediana), dia de vencimento (moda) e a MESMA conta
+// contábil do ERP — pré-requisito da substituição automática de provisões.
+// ═══════════════════════════════════════════════════════════
+async function sugerirRubricas(body: Record<string, unknown>, userId: string) {
+  await requireMaster(userId);
+  const codEmpresa = body.cod_empresa ? Number(body.cod_empresa) : null;
+  const mesesMin = 4; // recorrente = apareceu em >= 4 meses distintos no último ano
+
+  const desde = new Date();
+  desde.setMonth(desde.getMonth() - 12);
+
+  let q = supabase
+    .from("lancamentos_financeiros")
+    .select("cod_empresa, pessoa_nome, pessoa_documento, valor, data_vencimento, dados_extras, natureza, origem")
+    .eq("tipo", "PAGAR")
+    .in("origem", ["ERP", "MANUAL"])
+    .gte("data_vencimento", desde.toISOString().slice(0, 10))
+    .not("pessoa_nome", "is", null)
+    .limit(20000);
+  if (codEmpresa) q = q.eq("cod_empresa", codEmpresa);
+  const { data: lancs, error } = await q;
+  if (error) throw new Error(error.message);
+
+  // Agrupa por empresa + favorecido + conta contábil
+  interface Grupo { emp: number; nome: string; doc: string | null; conta: string; valores: number[]; dias: number[]; meses: Set<string>; }
+  const grupos = new Map<string, Grupo>();
+  for (const l of (lancs || [])) {
+    const conta = String((l.dados_extras as Record<string, unknown>)?.conta_numero ?? "");
+    if (!conta || !l.pessoa_nome || !l.data_vencimento) continue;
+    const nome = String(l.pessoa_nome).trim().toUpperCase();
+    const k = `${l.cod_empresa}|${nome}|${conta}`;
+    const g = grupos.get(k) ?? { emp: l.cod_empresa, nome, doc: l.pessoa_documento ?? null, conta, valores: [], dias: [], meses: new Set<string>() };
+    g.valores.push(Number(l.valor));
+    g.dias.push(Number(String(l.data_vencimento).slice(8, 10)));
+    g.meses.add(String(l.data_vencimento).slice(0, 7));
+    if (l.pessoa_documento) g.doc = l.pessoa_documento;
+    grupos.set(k, g);
+  }
+
+  // Rubricas já existentes (não duplicar sugestão)
+  const { data: existentes } = await supabase
+    .from("rubricas_autorizadas")
+    .select("cod_empresa, favorecido_nome, conta_numero");
+  const jaTem = new Set((existentes || []).map((r) =>
+    `${r.cod_empresa ?? "G"}|${String(r.favorecido_nome).trim().toUpperCase()}|${r.conta_numero}`));
+
+  const mediana = (v: number[]) => { const s = [...v].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+  const moda = (v: number[]) => {
+    const c = new Map<number, number>();
+    for (const x of v) c.set(x, (c.get(x) || 0) + 1);
+    return [...c.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  };
+
+  const sugestoes: Record<string, unknown>[] = [];
+  for (const g of grupos.values()) {
+    if (g.meses.size < mesesMin) continue;
+    if (jaTem.has(`${g.emp}|${g.nome}|${g.conta}`) || jaTem.has(`G|${g.nome}|${g.conta}`)) continue;
+    const esperado = mediana(g.valores);
+    sugestoes.push({
+      cod_empresa: g.emp,
+      descricao: `${g.nome} (sugerida do histórico)`,
+      favorecido_nome: g.nome,
+      favorecido_documento: g.doc,
+      conta_numero: g.conta,
+      periodicidade: "MENSAL",
+      valor_esperado: Math.round(esperado * 100) / 100,
+      tolerancia_pct: 15,
+      valor_teto: Math.round(esperado * 2 * 100) / 100, // teto conservador: 2x a mediana — revisar na aprovação
+      dia_vencimento: Math.min(28, moda(g.dias)),
+      status: "RASCUNHO",
+      criado_por: userId,
+    });
+  }
+
+  if (sugestoes.length > 0) {
+    const { error: insErr } = await supabase.from("rubricas_autorizadas").insert(sugestoes);
+    if (insErr) throw new Error(insErr.message);
+  }
+
+  return json({ ok: true, grupos_analisados: grupos.size, sugeridas: sugestoes.length });
 }

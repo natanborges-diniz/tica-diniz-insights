@@ -123,6 +123,30 @@ export default function RubricasPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const sugerirMutation = useMutation({
+    mutationFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Sessão expirada");
+      const { data, error } = await supabase.functions.invoke("financeiro-lancamentos", {
+        body: { action: "sugerir_rubricas" },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(String(data.error));
+      return data as { sugeridas?: number; grupos_analisados?: number };
+    },
+    onSuccess: (data) => {
+      toast.success(
+        (data?.sugeridas ?? 0) > 0
+          ? `${data.sugeridas} rubrica(s) sugeridas do histórico (rascunho) — revise valores/tetos e aprove com outro usuário`
+          : "Nenhuma recorrência nova encontrada no histórico (12 meses)"
+      );
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const provisionarMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke("sync-ledger", {
@@ -163,6 +187,14 @@ export default function RubricasPage() {
       />
 
       <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          onClick={() => sugerirMutation.mutate()}
+          disabled={sugerirMutation.isPending}
+          title="Minera 12 meses do ledger (ERP + manuais): favorecido+conta com recorrência mensal viram rascunhos com valor mediano, dia de vencimento e a MESMA conta contábil do ERP"
+        >
+          {sugerirMutation.isPending ? "Minerando..." : "Sugerir do histórico"}
+        </Button>
         <Button
           variant="outline"
           onClick={() => provisionarMutation.mutate()}
