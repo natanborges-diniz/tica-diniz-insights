@@ -130,7 +130,8 @@ function exportarXlsxMensal(titulo: string, loja: LojaView, vendedores: Resultad
         Semana: s.semanaInicio,
         "Cód. Vendedor": v.codVendedor,
         Vendedor: v.vendedorNome ?? "",
-        Venda: d.codTransacao,
+        Venda: d.numeroVenda ?? d.codTransacao,
+        NF: d.numeroNf ?? "",
         "OS(s)": d.osList ?? "",
         Emissão: d.dataEmissao,
         Pagamento: d.dataPagamento,
@@ -151,7 +152,8 @@ function exportarXlsxMensal(titulo: string, loja: LojaView, vendedores: Resultad
         loja.saldosAbertos.map((sa) => ({
           "Cód. Vendedor": sa.codVendedor,
           Vendedor: sa.vendedorNome ?? "",
-          Venda: sa.codTransacao,
+          Venda: sa.numeroVenda ?? sa.codTransacao,
+          NF: sa.numeroNf ?? "",
           "OS(s)": sa.osList ?? "",
           Emissão: sa.dataEmissao,
           Vencimento: sa.dataVencimento ?? "",
@@ -245,6 +247,7 @@ function TabelaFechamento({ vendedores, metaLabel, origemFiltro = "ALL" }: {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Venda</TableHead>
+                        <TableHead>NF</TableHead>
                         <TableHead>OS(s)</TableHead>
                         <TableHead>Emissão</TableHead>
                         <TableHead>Pagamento</TableHead>
@@ -258,7 +261,8 @@ function TabelaFechamento({ vendedores, metaLabel, origemFiltro = "ALL" }: {
                     <TableBody>
                       {filtraDetalhe(v.detalhe).map((d, i) => (
                         <TableRow key={i}>
-                          <TableCell>{d.codTransacao}</TableCell>
+                          <TableCell>{d.numeroVenda ?? d.codTransacao}</TableCell>
+                          <TableCell className="text-xs">{d.numeroNf ?? "—"}</TableCell>
                           <TableCell className="text-xs">{d.osList ?? "—"}</TableCell>
                           <TableCell>{fmtData(d.dataEmissao)}</TableCell>
                           <TableCell>{fmtData(d.dataPagamento)}</TableCell>
@@ -605,7 +609,8 @@ export default function RhFechamentoSemanalPage() {
                         v.detalhe.map((d) => ({
                           "Cód. Vendedor": v.codVendedor,
                           Vendedor: v.vendedorNome ?? "",
-                          Venda: d.codTransacao,
+                          Venda: d.numeroVenda ?? d.codTransacao,
+                          NF: d.numeroNf ?? "",
                           "OS(s)": d.osList ?? "",
                           Emissão: d.dataEmissao,
                           Pagamento: d.dataPagamento,
@@ -769,7 +774,7 @@ export default function RhFechamentoSemanalPage() {
                                 <TableCell className="font-medium">
                                   {sa.vendedorNome ?? `Vendedor ${sa.codVendedor}`}
                                 </TableCell>
-                                <TableCell>{sa.codTransacao}</TableCell>
+                                <TableCell>{sa.numeroVenda ?? sa.codTransacao}</TableCell>
                                 <TableCell className="text-xs">{sa.osList ?? "—"}</TableCell>
                                 <TableCell>{fmtData(sa.dataEmissao)}</TableCell>
                                 <TableCell>{sa.dataVencimento ? fmtData(sa.dataVencimento) : "—"}</TableCell>

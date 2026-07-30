@@ -17,6 +17,10 @@ export interface LinhaRecebimento {
   codVendedor: number;
   vendedorNome: string | null;
   codTransacao: number;
+  /** numero da venda visivel no ERP (numerotransacao) */
+  numeroVenda?: number | string | null;
+  /** numero da NFC-e, se houver */
+  numeroNf?: number | string | null;
   /** OS que compoem a venda (ex.: "1234,1235") */
   osList?: string | null;
   dataEmissao: string;
@@ -60,6 +64,8 @@ function valorPremio(
 
 export interface DetalheLinha {
   codTransacao: number;
+  numeroVenda?: number | string | null;
+  numeroNf?: number | string | null;
   osList?: string | null;
   dataEmissao: string;
   dataPagamento: string;
@@ -229,6 +235,8 @@ export function calcularFechamento(params: {
 
     v.detalhe.push({
       codTransacao: l.codTransacao,
+      numeroVenda: l.numeroVenda ?? null,
+      numeroNf: l.numeroNf ?? null,
       osList: l.osList ?? null,
       dataEmissao: l.dataEmissao,
       dataPagamento: l.dataPagamento,

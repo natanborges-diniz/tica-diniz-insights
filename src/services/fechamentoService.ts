@@ -159,6 +159,8 @@ export async function gerarPrevia(
       codVendedor: Number(r.cod_vendedor) || 0,
       vendedorNome: (r.vendedor_nome ?? '').trim() || null,
       codTransacao: Number(r.cod_transacao),
+      numeroVenda: r.numero_venda ?? null,
+      numeroNf: r.numero_nf ?? null,
       osList: (() => { const v = (r.os_list ?? '').toString().trim(); return v && v !== 'SEM_OS' ? v : null; })(),
       dataEmissao: String(r.dataemissao ?? '').slice(0, 10),
       dataPagamento: String(r.data_pagamento ?? '').slice(0, 10),
@@ -177,6 +179,7 @@ export async function gerarPrevia(
       codVendedor: Number(r.cod_vendedor) || 0,
       vendedorNome: (r.vendedor_nome ?? '').trim() || null,
       codTransacao: Number(r.cod_transacao),
+      numeroVenda: r.numero_venda ?? null,
       dataEmissao: String(r.dataemissao ?? '').slice(0, 10),
       dataPagamento: String(r.dataemissao ?? '').slice(0, 10),
       formaCategoria: 'EMITIDO',
@@ -507,6 +510,8 @@ export interface SaldoAberto {
   codVendedor: number;
   vendedorNome: string | null;
   codTransacao: number;
+  numeroVenda: number | string | null;
+  numeroNf: number | string | null;
   osList: string | null;
   dataEmissao: string;
   dataVencimento: string | null;
@@ -535,6 +540,8 @@ export async function getSaldosAbertos(
     codVendedor: Number(r.cod_vendedor) || 0,
     vendedorNome: (r.vendedor_nome ?? '').trim() || null,
     codTransacao: Number(r.cod_transacao),
+    numeroVenda: r.numero_venda ?? null,
+    numeroNf: r.numero_nf ?? null,
     osList: (() => { const v = (r.os_list ?? '').toString().trim(); return v && v !== 'SEM_OS' ? v : null; })(),
     dataEmissao: String(r.dataemissao ?? '').slice(0, 10),
     dataVencimento: r.data_vencimento ? String(r.data_vencimento).slice(0, 10) : null,
