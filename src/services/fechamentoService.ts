@@ -535,7 +535,7 @@ export async function getSaldosAbertos(
     codVendedor: Number(r.cod_vendedor) || 0,
     vendedorNome: (r.vendedor_nome ?? '').trim() || null,
     codTransacao: Number(r.cod_transacao),
-    osList: (r.os_list ?? '').toString().trim() || null,
+    osList: (() => { const v = (r.os_list ?? '').toString().trim(); return v && v !== 'SEM_OS' ? v : null; })(),
     dataEmissao: String(r.dataemissao ?? '').slice(0, 10),
     dataVencimento: r.data_vencimento ? String(r.data_vencimento).slice(0, 10) : null,
     formaCategoria: String(r.forma_categoria ?? 'OUTROS').trim(),
