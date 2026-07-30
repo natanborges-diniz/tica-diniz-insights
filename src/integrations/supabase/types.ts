@@ -229,6 +229,7 @@ export type Database = {
           account_id: string | null
           agencia: string | null
           ativa: boolean
+          chave_pix: string | null
           cnpj: string | null
           cod_empresa: number
           company_id: string | null
@@ -240,6 +241,7 @@ export type Database = {
           account_id?: string | null
           agencia?: string | null
           ativa?: boolean
+          chave_pix?: string | null
           cnpj?: string | null
           cod_empresa: number
           company_id?: string | null
@@ -251,6 +253,7 @@ export type Database = {
           account_id?: string | null
           agencia?: string | null
           ativa?: boolean
+          chave_pix?: string | null
           cnpj?: string | null
           cod_empresa?: number
           company_id?: string | null
