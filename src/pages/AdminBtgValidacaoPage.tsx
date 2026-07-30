@@ -30,7 +30,8 @@ const ESCOPOS_REQUERIDOS: { scope: string; recurso: string }[] = [
   { scope: "brn:btg:empresas:receivables:credit-card.readonly", recurso: "Recebíveis cartão" },
   { scope: "brn:btg:empresas:receivables:credit-card", recurso: "Recebíveis cartão" },
   { scope: "brn:btg:empresas:banking:collections", recurso: "Cobranças" },
-  { scope: "brn:btg:empresas:banking:instant-collections", recurso: "Pix dinâmico" },
+  // Grafia oficial (developers.empresas.btgpactual.com/reference/pix-cobrança)
+  { scope: "empresas.btgpactual.com/pix-cash-in", recurso: "Pix dinâmico" },
 ];
 
 // ─── Types ───────────────────────────────────────────────────

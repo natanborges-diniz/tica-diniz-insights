@@ -84,10 +84,10 @@ async function getBtgToken(admin: any, codEmpresa: number): Promise<string> {
 }
 
 // deno-lint-ignore no-explicit-any
-async function getContaBtg(admin: any, codEmpresa: number): Promise<{ cnpj: string; accountId: string; chavePix: string | null }> {
+async function getContaBtg(admin: any, codEmpresa: number): Promise<{ cnpj: string; chavePix: string | null }> {
   const { data: conta } = await admin
     .from("btg_contas_bancarias")
-    .select("cnpj, account_id, chave_pix")
+    .select("cnpj, chave_pix")
     .eq("cod_empresa", codEmpresa)
     .eq("ativa", true)
     .single();
@@ -97,8 +97,7 @@ async function getContaBtg(admin: any, codEmpresa: number): Promise<{ cnpj: stri
     cnpj = emp?.cnpj ? String(emp.cnpj).replace(/\D/g, "") : "";
   }
   if (!cnpj) throw new Error(`CNPJ não encontrado para empresa ${codEmpresa}`);
-  if (!conta?.account_id) throw new Error(`Account ID BTG não configurado para empresa ${codEmpresa}.`);
-  return { cnpj, accountId: conta.account_id, chavePix: conta.chave_pix || null };
+  return { cnpj, chavePix: conta?.chave_pix || null };
 }
 
 // ─── QR helpers ──────────────────────────────────────────────
@@ -127,10 +126,11 @@ function extractEmv(d: Record<string, unknown>): string | null {
 }
 
 function extractPagador(d: Record<string, unknown>): { nome: string | null; documento: string | null } {
-  const payer = (d.payer ?? d.debtor ?? d.pagador ?? {}) as Record<string, unknown>;
+  // Webhook instant-collection.paid traz o pagador em `paidBy` ({name, taxId}).
+  const payer = (d.paidBy ?? d.payer ?? d.debtor ?? d.pagador ?? {}) as Record<string, unknown>;
   return {
     nome: pick(payer, ["name", "nome"]) || pick(d, ["payerName", "debtorName"]),
-    documento: pick(payer, ["document", "taxId", "documento", "cpf", "cnpj"]) || pick(d, ["payerDocument", "payerTaxId"]),
+    documento: pick(payer, ["taxId", "document", "documento", "cpf", "cnpj"]) || pick(d, ["payerDocument", "payerTaxId"]),
   };
 }
 
@@ -280,18 +280,34 @@ async function verificarNoBtg(admin: any, link: Record<string, unknown>): Promis
     const codEmpresa = Number(link.cod_empresa);
     const token = await getBtgToken(admin, codEmpresa);
     const { cnpj } = await getContaBtg(admin, codEmpresa);
-    const res = await fetch(`${apiBase}/${cnpj}/banking/instant-collections/${collectionId}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    });
-    if (!res.ok) {
-      console.warn(`[pix-charges] verificar BTG ${res.status} link=${link.id}`);
-      return "ATIVO";
+    const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
+
+    // API oficial só expõe GET de lista (não por id): tenta por id e cai pra lista.
+    let raw: Record<string, unknown> | null = null;
+    const resById = await fetch(`${apiBase}/v1/companies/${cnpj}/pix-cash-in/instant-collections/${collectionId}`, { headers });
+    if (resById.ok) {
+      const body = await resById.json();
+      raw = (body?.data ?? body) as Record<string, unknown>;
+    } else {
+      const resList = await fetch(`${apiBase}/v1/companies/${cnpj}/pix-cash-in/instant-collections`, { headers });
+      if (!resList.ok) {
+        console.warn(`[pix-charges] verificar BTG ${resById.status}/${resList.status} link=${link.id}`);
+        return "ATIVO";
+      }
+      const body = await resList.json();
+      const items = (Array.isArray(body) ? body : (body?.data ?? body?.items ?? [])) as Array<Record<string, unknown>>;
+      const txidLocal = String(dados.txid ?? "");
+      raw = items.find((it) =>
+        String(it.id ?? "") === collectionId ||
+        String(it.txId ?? it.txid ?? "") === collectionId ||
+        (txidLocal && String(it.txId ?? it.txid ?? "") === txidLocal)
+      ) || null;
     }
-    const body = await res.json();
-    const raw = (body?.data ?? body) as Record<string, unknown>;
+    if (!raw) return "ATIVO";
+
     const st = String(raw.status ?? "").toUpperCase();
     const PAID_WORDS = ["PAID", "COMPLETED", "EXECUTED", "SETTLED", "PROCESSED", "LIQUIDATED", "DONE"];
-    const FAILED_WORDS = ["REJECTED", "REFUSED", "FAILED", "CANCELLED", "CANCELED", "ERROR", "EXPIRED"];
+    const FAILED_WORDS = ["REJECTED", "REFUSED", "FAILED", "CANCELLED", "CANCELED", "ERROR", "EXPIRED", "UNLINKED", "REMOVED"];
     if (PAID_WORDS.some((w) => st.includes(w))) {
       await confirmarPagamento(admin, link, raw);
       return "PAGO";
@@ -354,26 +370,32 @@ serve(async (req) => {
           emv = `00020126580014br.gov.bcb.pix0136sandbox-${crypto.randomUUID()}5204000053039865406${valorNum.toFixed(2)}5802BR5913OTICAS DINIZ6009SAO PAULO62070503***6304ABCD`;
         } else {
           const token = await getBtgToken(admin, codEmpresaNum);
-          const { cnpj, accountId, chavePix } = await getContaBtg(admin, codEmpresaNum);
+          const { cnpj, chavePix } = await getContaBtg(admin, codEmpresaNum);
+
+          // Contrato oficial: POST /v1/companies/{cnpj}/pix-cash-in/instant-collections
+          // (developers.empresas.btgpactual.com — Pix cobrança dinâmico).
+          // pixKey é obrigatória: cadastrar em btg_contas_bancarias.chave_pix.
+          if (!chavePix) {
+            throw new Error(`Empresa ${codEmpresaNum} sem chave_pix cadastrada em btg_contas_bancarias — obrigatória para Pix Cobrança.`);
+          }
 
           const btgPayload: Record<string, unknown> = {
-            amount: Number(valorNum.toFixed(2)),
-            account: { accountId },
-            description: String(descricao).slice(0, 140),
-            expiration: expiracaoSeg,
+            pixKey: chavePix,
+            expiresIn: expiracaoSeg,
+            amount: {
+              value: Number(valorNum.toFixed(2)),
+              allowCustomerChangeValue: false,
+            },
+            displayText: String(descricao).slice(0, 140),
+            tags: {
+              origem: linkOrigem,
+              ...(origem_ref ? { origem_ref: String(origem_ref) } : {}),
+            },
           };
-          if (chavePix) btgPayload.key = chavePix;
-          if (cliente_nome) {
-            const doc = String(cliente_documento || "").replace(/\D/g, "");
-            btgPayload.payer = {
-              name: String(cliente_nome),
-              ...(doc ? { document: doc, personType: doc.length > 11 ? "J" : "F" } : {}),
-            };
-          }
 
           console.log("[pix-charges] BTG payload:", JSON.stringify(btgPayload).slice(0, 500));
 
-          const btgRes = await fetch(`${apiBase}/${cnpj}/banking/instant-collections`, {
+          const btgRes = await fetch(`${apiBase}/v1/companies/${cnpj}/pix-cash-in/instant-collections`, {
             method: "POST",
             headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
             body: JSON.stringify(btgPayload),
@@ -388,8 +410,11 @@ serve(async (req) => {
           }
 
           btgCollectionId = pick(d, ["instantCollectionId", "collectionId", "id"]) || "";
-          txid = pick(d, ["txid", "txId", "transactionId"]) || btgCollectionId;
+          txid = pick(d, ["txId", "txid", "transactionId"]) || btgCollectionId;
           emv = extractEmv(d) || "";
+          // O BTG também hospeda a imagem do QR (location.url, PNG) — guardamos como alternativa.
+          const loc = (d.location ?? {}) as Record<string, unknown>;
+          if (loc.url) btgRaw = { ...btgRaw, qr_image_url: String(loc.url) };
 
           if (!emv) {
             console.error("[pix-charges] BTG sem EMV no retorno:", btgText.slice(0, 500));
