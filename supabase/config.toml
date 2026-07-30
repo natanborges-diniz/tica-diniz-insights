@@ -117,3 +117,6 @@ verify_jwt = false
 
 [functions.pix-charges]
 verify_jwt = false
+
+[functions.pix-charges-v2]
+verify_jwt = false

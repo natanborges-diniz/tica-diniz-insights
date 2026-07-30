@@ -38,7 +38,7 @@ export default function PixPage() {
 
     const fetchPix = async () => {
       try {
-        const res = await fetch(`${SUPABASE_URL}/functions/v1/pix-charges`, {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/pix-charges-v2`, {
           method: "POST",
           headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY },
           body: JSON.stringify({ action: "detalhe_publico", link_id: chargeId }),

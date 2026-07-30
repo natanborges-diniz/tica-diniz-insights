@@ -434,7 +434,7 @@ async function pollPixCharges(db: any) {
   for (const link of (links || [])) {
     try {
       resultado.verificadas++;
-      const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/pix-charges`, {
+      const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/pix-charges-v2`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,

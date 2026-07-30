@@ -195,7 +195,7 @@ export async function processarEvento(db: any, eventType: string, rawPayload: Re
         if (st !== "PAGO") {
           return { processed: true, detail: `pix ${pixLink.id}: status ${payload.status} — sem efeito` };
         }
-        const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pix-charges`;
+        const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pix-charges-v2`;
         const res = await fetch(url, {
           method: "POST",
           headers: {
