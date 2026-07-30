@@ -39,8 +39,10 @@ import {
   getFechamentoItens,
   reabrirFechamento,
   semanasDoMes,
+  getSaldosAbertos,
   type PreviaFechamento,
   type ModoFechamento,
+  type SaldoAberto,
 } from "@/services/fechamentoService";
 import {
   consolidarVendedores,
@@ -70,6 +72,7 @@ interface LojaView {
   semanas: SemanaView[];
   consolidado: ResultadoVendedor[];
   temParcial: boolean;
+  saldosAbertos: SaldoAberto[];
 }
 
 function fmtBRL(n: number): string {
@@ -127,7 +130,8 @@ function exportarXlsxMensal(titulo: string, loja: LojaView, vendedores: Resultad
         Semana: s.semanaInicio,
         "Cód. Vendedor": v.codVendedor,
         Vendedor: v.vendedorNome ?? "",
-        "OS/Venda": d.codTransacao,
+        Venda: d.codTransacao,
+        "OS(s)": d.osList ?? "",
         Emissão: d.dataEmissao,
         Pagamento: d.dataPagamento,
         Forma: d.formaCategoria,
@@ -139,12 +143,37 @@ function exportarXlsxMensal(titulo: string, loja: LojaView, vendedores: Resultad
     )
   );
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detalhe), "Detalhe por OS");
+
+  if (loja.saldosAbertos.length) {
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(
+        loja.saldosAbertos.map((sa) => ({
+          "Cód. Vendedor": sa.codVendedor,
+          Vendedor: sa.vendedorNome ?? "",
+          Venda: sa.codTransacao,
+          "OS(s)": sa.osList ?? "",
+          Emissão: sa.dataEmissao,
+          Vencimento: sa.dataVencimento ?? "",
+          "Forma Registrada": sa.formaCategoria,
+          "Valor em Aberto": sa.valorAberto,
+        }))
+      ),
+      "Saldos a Receber"
+    );
+  }
   XLSX.writeFile(wb, `${titulo}.xlsx`);
 }
 
 // ---------- tabela de vendedores ----------
-function TabelaFechamento({ vendedores, metaLabel }: { vendedores: ResultadoVendedor[]; metaLabel?: string }) {
+function TabelaFechamento({ vendedores, metaLabel, origemFiltro = "ALL" }: {
+  vendedores: ResultadoVendedor[];
+  metaLabel?: string;
+  origemFiltro?: "ALL" | "VENDA_PERIODO" | "SALDO_ANTERIOR";
+}) {
   const [aberto, setAberto] = useState<number | null>(null);
+  const filtraDetalhe = (d: ResultadoVendedor["detalhe"]) =>
+    origemFiltro === "ALL" ? d : d.filter((x) => x.origem === origemFiltro);
   return (
     <Table>
       <TableHeader>
@@ -215,7 +244,8 @@ function TabelaFechamento({ vendedores, metaLabel }: { vendedores: ResultadoVend
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>OS/Venda</TableHead>
+                        <TableHead>Venda</TableHead>
+                        <TableHead>OS(s)</TableHead>
                         <TableHead>Emissão</TableHead>
                         <TableHead>Pagamento</TableHead>
                         <TableHead>Forma</TableHead>
@@ -226,9 +256,10 @@ function TabelaFechamento({ vendedores, metaLabel }: { vendedores: ResultadoVend
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {v.detalhe.map((d, i) => (
+                      {filtraDetalhe(v.detalhe).map((d, i) => (
                         <TableRow key={i}>
                           <TableCell>{d.codTransacao}</TableCell>
+                          <TableCell className="text-xs">{d.osList ?? "—"}</TableCell>
                           <TableCell>{fmtData(d.dataEmissao)}</TableCell>
                           <TableCell>{fmtData(d.dataPagamento)}</TableCell>
                           <TableCell>{d.formaCategoria}</TableCell>
@@ -263,6 +294,7 @@ export default function RhFechamentoSemanalPage() {
   const [visao, setVisao] = useState<LojaView[]>([]);
   const [vendedorSel, setVendedorSel] = useState<string>("ALL");
   const [agrupamento, setAgrupamento] = useState<"LOJA" | "VENDEDOR">("LOJA");
+  const [origemSel, setOrigemSel] = useState<"ALL" | "VENDA_PERIODO" | "SALDO_ANTERIOR">("ALL");
   const [gerando, setGerando] = useState(false);
   const [fechando, setFechando] = useState(false);
 
@@ -315,12 +347,23 @@ export default function RhFechamentoSemanalPage() {
             });
           }
         }
+        let saldosAbertos: SaldoAberto[] = [];
+        try {
+          saldosAbertos = await getSaldosAbertos(
+            cod,
+            semanas[0].semanaInicio,
+            semanas[semanas.length - 1].semanaFim
+          );
+        } catch {
+          toast.warning(`${nome}: não foi possível carregar os saldos a receber`);
+        }
         resultado.push({
           codEmpresa: cod,
           nome,
           semanas: views,
           consolidado: consolidarVendedores(views.map((v) => v.vendedores)),
           temParcial: views.some((v) => v.status !== "FECHADA"),
+          saldosAbertos,
         });
       }
       setVisao(resultado);
@@ -462,6 +505,17 @@ export default function RhFechamentoSemanalPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>Origem (detalhe)</Label>
+                  <Select value={origemSel} onValueChange={(v) => setOrigemSel(v as typeof origemSel)}>
+                    <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todas as origens</SelectItem>
+                      <SelectItem value="VENDA_PERIODO">Venda do período</SelectItem>
+                      <SelectItem value="SALDO_ANTERIOR">Recebimento de períodos anteriores</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button variant="outline" onClick={() => window.print()}>
                   Imprimir
                 </Button>
@@ -551,7 +605,8 @@ export default function RhFechamentoSemanalPage() {
                         v.detalhe.map((d) => ({
                           "Cód. Vendedor": v.codVendedor,
                           Vendedor: v.vendedorNome ?? "",
-                          "OS/Venda": d.codTransacao,
+                          Venda: d.codTransacao,
+                          "OS(s)": d.osList ?? "",
                           Emissão: d.dataEmissao,
                           Pagamento: d.dataPagamento,
                           Forma: d.formaCategoria,
@@ -573,7 +628,7 @@ export default function RhFechamentoSemanalPage() {
               </Button>
             </CardHeader>
             <CardContent>
-              <TabelaFechamento vendedores={todos} metaLabel="Meta do mês" />
+              <TabelaFechamento vendedores={todos} metaLabel="Meta do mês" origemFiltro={origemSel} />
             </CardContent>
           </Card>
         );
@@ -625,7 +680,7 @@ export default function RhFechamentoSemanalPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Consolidado mensal por vendedor */}
-              <TabelaFechamento vendedores={filtraVendedor(loja.consolidado)} metaLabel="Meta do mês" />
+              <TabelaFechamento vendedores={filtraVendedor(loja.consolidado)} metaLabel="Meta do mês" origemFiltro={origemSel} />
 
               {/* Semanas */}
               <Accordion type="multiple">
@@ -666,12 +721,69 @@ export default function RhFechamentoSemanalPage() {
                             </Button>
                           )}
                         </div>
-                        <TabelaFechamento vendedores={filtraVendedor(s.vendedores)} metaLabel="Meta da semana" />
+                        <TabelaFechamento vendedores={filtraVendedor(s.vendedores)} metaLabel="Meta da semana" origemFiltro={origemSel} />
                       </AccordionContent>
                     </AccordionItem>
                   );
                 })}
               </Accordion>
+
+              {/* Saldos a receber em aberto (vendas do mês) */}
+              {loja.saldosAbertos.length > 0 && (() => {
+                const saldosFiltrados = vendedorSel === "ALL"
+                  ? loja.saldosAbertos
+                  : loja.saldosAbertos.filter((sa) => String(sa.codVendedor) === vendedorSel);
+                const totalAberto = saldosFiltrados.reduce((t, sa) => t + sa.valorAberto, 0);
+                return (
+                  <Accordion type="single" collapsible>
+                    <AccordionItem value="saldos">
+                      <AccordionTrigger>
+                        <span className="flex flex-1 items-center justify-between pr-4">
+                          <span className="font-medium">Saldos a receber em aberto (vendas do mês)</span>
+                          <span className="flex items-center gap-2">
+                            <Badge variant="secondary">{saldosFiltrados.length} parcela(s)</Badge>
+                            <span className="text-sm font-semibold">R$ {fmtBRL(totalAberto)}</span>
+                          </span>
+                        </span>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Saldo ainda não tem forma de pagamento definida — a comissão assume a forma
+                          quando o cliente pagar. Cartões não geram saldo (comissionam no processamento).
+                        </p>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Vendedor</TableHead>
+                              <TableHead>Venda</TableHead>
+                              <TableHead>OS(s)</TableHead>
+                              <TableHead>Emissão</TableHead>
+                              <TableHead>Vencimento</TableHead>
+                              <TableHead>Forma registrada</TableHead>
+                              <TableHead className="text-right">Valor em aberto</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {saldosFiltrados.map((sa, i) => (
+                              <TableRow key={i}>
+                                <TableCell className="font-medium">
+                                  {sa.vendedorNome ?? `Vendedor ${sa.codVendedor}`}
+                                </TableCell>
+                                <TableCell>{sa.codTransacao}</TableCell>
+                                <TableCell className="text-xs">{sa.osList ?? "—"}</TableCell>
+                                <TableCell>{fmtData(sa.dataEmissao)}</TableCell>
+                                <TableCell>{sa.dataVencimento ? fmtData(sa.dataVencimento) : "—"}</TableCell>
+                                <TableCell className="text-xs">{sa.formaCategoria}</TableCell>
+                                <TableCell className="text-right">R$ {fmtBRL(sa.valorAberto)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                );
+              })()}
             </CardContent>
           </Card>
         );

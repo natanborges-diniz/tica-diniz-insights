@@ -159,6 +159,7 @@ export async function gerarPrevia(
       codVendedor: Number(r.cod_vendedor) || 0,
       vendedorNome: (r.vendedor_nome ?? '').trim() || null,
       codTransacao: Number(r.cod_transacao),
+      osList: (r.os_list ?? '').toString().trim() || null,
       dataEmissao: String(r.dataemissao ?? '').slice(0, 10),
       dataPagamento: String(r.data_pagamento ?? '').slice(0, 10),
       formaCategoria: String(r.forma_categoria ?? 'OUTROS').trim(),
@@ -500,6 +501,46 @@ export async function reabrirFechamento(fechamentoId: string): Promise<void> {
     })
     .eq('id', fechamentoId);
   if (error) throw new Error(`Erro ao reabrir: ${error.message}`);
+}
+
+export interface SaldoAberto {
+  codVendedor: number;
+  vendedorNome: string | null;
+  codTransacao: number;
+  osList: string | null;
+  dataEmissao: string;
+  dataVencimento: string | null;
+  formaCategoria: string;
+  valorAberto: number;
+}
+
+/**
+ * Saldos a receber EM ABERTO de vendas emitidas no período (formas com
+ * inadimplência; cartões de verdade ficam fora — comissionam no
+ * processamento). O saldo ainda não tem forma definida: a comissão assume a
+ * forma do pagamento quando ele acontecer.
+ */
+export async function getSaldosAbertos(
+  codEmpresa: number,
+  dataInicio: string,
+  dataFim: string
+): Promise<SaldoAberto[]> {
+  const rows = await apiGet<any>('/vendas/saldos-aberto', {
+    empresa: codEmpresa,
+    dataInicio,
+    dataFim,
+    cache: 0,
+  }, { timeoutMs: 60000 });
+  return rows.map((r: any) => ({
+    codVendedor: Number(r.cod_vendedor) || 0,
+    vendedorNome: (r.vendedor_nome ?? '').trim() || null,
+    codTransacao: Number(r.cod_transacao),
+    osList: (r.os_list ?? '').toString().trim() || null,
+    dataEmissao: String(r.dataemissao ?? '').slice(0, 10),
+    dataVencimento: r.data_vencimento ? String(r.data_vencimento).slice(0, 10) : null,
+    formaCategoria: String(r.forma_categoria ?? 'OUTROS').trim(),
+    valorAberto: Number(r.valor_aberto) || 0,
+  }));
 }
 
 /** Semanas do mês (cortes ou metas geradas) para o seletor da tela. */

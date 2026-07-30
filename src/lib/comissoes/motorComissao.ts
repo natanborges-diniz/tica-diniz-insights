@@ -17,6 +17,8 @@ export interface LinhaRecebimento {
   codVendedor: number;
   vendedorNome: string | null;
   codTransacao: number;
+  /** OS que compoem a venda (ex.: "1234,1235") */
+  osList?: string | null;
   dataEmissao: string;
   dataPagamento: string;
   formaCategoria: string;
@@ -58,6 +60,7 @@ function valorPremio(
 
 export interface DetalheLinha {
   codTransacao: number;
+  osList?: string | null;
   dataEmissao: string;
   dataPagamento: string;
   formaCategoria: string;
@@ -226,6 +229,7 @@ export function calcularFechamento(params: {
 
     v.detalhe.push({
       codTransacao: l.codTransacao,
+      osList: l.osList ?? null,
       dataEmissao: l.dataEmissao,
       dataPagamento: l.dataPagamento,
       formaCategoria: categoria,
