@@ -58,6 +58,7 @@ import AdminAdquirentesPage from "./pages/AdminAdquirentesPage";
 import AdminDreConfigPage from "./pages/AdminDreConfigPage";
 import SystemPlayground from "./pages/_SystemPlayground";
 import CheckoutPage from "./pages/CheckoutPage";
+import PixPage from "./pages/PixPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -73,6 +74,7 @@ const App = () => (
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/pay/:linkId" element={<CheckoutPage />} />
+            <Route path="/pix/:chargeId" element={<PixPage />} />
 
             {/* Protected */}
             <Route element={<ProtectedRoute />}>

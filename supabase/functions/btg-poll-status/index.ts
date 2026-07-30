@@ -416,6 +416,47 @@ async function importarExtratos(db: any, apiBase: string, isSandbox: boolean) {
   return resultado;
 }
 
+// ─── 5. Cobranças Pix (payment_links PIX_BTG) — rede de segurança ──
+// Expiração é aplicada mesmo em sandbox; a consulta ao BTG só ocorre em produção
+// (dentro do pix-charges/verificar). A confirmação em si (baixa + notificação ao
+// Atrium) é centralizada no pix-charges.
+// deno-lint-ignore no-explicit-any
+async function pollPixCharges(db: any) {
+  const resultado = { verificadas: 0, pagas: 0, expiradas: 0, erros: [] as string[] };
+
+  const { data: links } = await db
+    .from("payment_links")
+    .select("id")
+    .eq("adquirente", "PIX_BTG")
+    .eq("status", "ATIVO")
+    .limit(100);
+
+  for (const link of (links || [])) {
+    try {
+      resultado.verificadas++;
+      const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/pix-charges`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "verificar", link_id: link.id }),
+      });
+      if (!res.ok) {
+        resultado.erros.push(`pix ${link.id}: pix-charges ${res.status}`);
+        continue;
+      }
+      const data = await res.json();
+      if (data?.status === "PAGO") resultado.pagas++;
+      else if (data?.status === "EXPIRADO") resultado.expiradas++;
+    } catch (e) {
+      resultado.erros.push(`pix ${link.id}: ${String(e)}`);
+    }
+  }
+
+  return resultado;
+}
+
 // ─── MAIN ────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -442,10 +483,11 @@ Deno.serve(async (req) => {
       const borderos = await pollBorderos(db, apiBase, isSandbox);
       const pagamentos = await pollPagamentos(db, apiBase, isSandbox);
       const cobrancas = await pollCobrancas(db, apiBase, isSandbox);
+      const pix = await pollPixCharges(db);
       // E5 — cron de segurança: reprocessa eventos de webhook parados >10 min (spec §5.2)
       const eventos = await reprocessarEventosPendentes(db, 10);
-      console.log("[btg-poll-status] executar:", JSON.stringify({ borderos, pagamentos, cobrancas, eventos }));
-      return json({ success: true, borderos, pagamentos, cobrancas, eventos });
+      console.log("[btg-poll-status] executar:", JSON.stringify({ borderos, pagamentos, cobrancas, pix, eventos }));
+      return json({ success: true, borderos, pagamentos, cobrancas, pix, eventos });
     }
 
     return json({ error: `Ação desconhecida: '${action}'. Use: executar, importar_extratos` }, 400);

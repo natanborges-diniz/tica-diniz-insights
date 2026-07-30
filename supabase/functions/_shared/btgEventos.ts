@@ -166,10 +166,53 @@ export async function processarEvento(db: any, eventType: string, rawPayload: Re
   }
 
   if (tipo === "COBRANCA") {
-    const receivableId = String(payload.collectionId ?? payload.boletoId ?? payload.id ?? "");
+    const receivableId = String(payload.collectionId ?? payload.instantCollectionId ?? payload.boletoId ?? payload.id ?? "");
     if (!receivableId) return { processed: true, detail: "evento de cobrança sem id — ignorado" };
 
     const st = normStatus(payload.status);
+
+    // ── Pix dinâmico (instant-collections.*) criado pelo pix-charges? ──
+    // Cobre eventos da família instant-collections e qualquer collection cujo id/txid
+    // corresponda a um payment_link PIX_BTG. Delegamos a confirmação ao pix-charges,
+    // que centraliza baixa do ledger + notificação ao Atrium/Connect & Flow.
+    const pixRefs = [receivableId, payload.txid, payload.txId, payload.transactionId]
+      .map((v) => String(v ?? "").trim())
+      .filter((v) => v.length > 0);
+    if (pixRefs.length > 0) {
+      const orFilter = [...new Set(pixRefs)]
+        .map((r) => `dados_extras->>txid.eq.${r},dados_extras->>btg_collection_id.eq.${r}`)
+        .join(",");
+      const { data: pixLink } = await db
+        .from("payment_links")
+        .select("id, status")
+        .eq("adquirente", "PIX_BTG")
+        .or(orFilter)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (pixLink) {
+        if (st !== "PAGO") {
+          return { processed: true, detail: `pix ${pixLink.id}: status ${payload.status} — sem efeito` };
+        }
+        const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pix-charges`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "confirmar_pagamento",
+            link_id: pixLink.id,
+            btg_payload: payload,
+          }),
+        });
+        if (!res.ok) throw new Error(`pix-charges confirmar_pagamento falhou: ${res.status}`);
+        return { processed: true, detail: `pix ${pixLink.id}: PAGO — delegado ao pix-charges` };
+      }
+    }
+
     if (st !== "PAGO") return { processed: true, detail: `cobrança ${receivableId}: status ${payload.status} — sem efeito` };
 
     const { data: cobs } = await db

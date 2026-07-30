@@ -21,6 +21,18 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
+// ─── Escopos requeridos ──────────────────────────────────────
+// Fonte única para o selo de setup da tabela de contas. Manter em sincronia
+// com a lista solicitada em supabase/functions/btg-auth/index.ts (authorize).
+// Ao adicionar um recurso novo (novo escopo), basta incluir uma linha aqui —
+// as empresas com token antigo passam a exibir "Re-autorizar: <recurso>".
+const ESCOPOS_REQUERIDOS: { scope: string; recurso: string }[] = [
+  { scope: "brn:btg:empresas:receivables:credit-card.readonly", recurso: "Recebíveis cartão" },
+  { scope: "brn:btg:empresas:receivables:credit-card", recurso: "Recebíveis cartão" },
+  { scope: "brn:btg:empresas:banking:collections", recurso: "Cobranças" },
+  { scope: "brn:btg:empresas:banking:instant-collections", recurso: "Pix dinâmico" },
+];
+
 // ─── Types ───────────────────────────────────────────────────
 interface ContaBancaria {
   id: string;
@@ -547,26 +559,23 @@ export default function AdminBtgValidacaoPage() {
                           )}
                           {/* Account ID configurado — setup completo */}
                           {isAuth && conta.account_id && (() => {
-                            const requiredScopes = [
-                              "brn:btg:empresas:receivables:credit-card.readonly",
-                              "brn:btg:empresas:receivables:credit-card",
-                            ];
                             const currentScopes: string[] = (status?.scopes as string[]) || [];
-                            const missingScopes = requiredScopes.some(s => !currentScopes.includes(s));
-                            return (
-                              <>
-                                {missingScopes ? (
-                                  <Badge variant="outline" className="text-amber-700 border-amber-300">
-                                    <AlertTriangle className="h-3 w-3 mr-1" />
-                                    Escopos incompletos
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="text-emerald-700 border-emerald-300">
-                                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                                    Setup completo
-                                  </Badge>
-                                )}
-                              </>
+                            const faltantes = ESCOPOS_REQUERIDOS.filter(e => !currentScopes.includes(e.scope));
+                            const recursosFaltantes = [...new Set(faltantes.map(e => e.recurso))];
+                            return faltantes.length > 0 ? (
+                              <Badge
+                                variant="outline"
+                                className="text-amber-700 border-amber-300"
+                                title={`Token sem: ${faltantes.map(e => e.scope).join(", ")}. Clique em Re-autorizar para atualizar.`}
+                              >
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                Re-autorizar: {recursosFaltantes.join(", ")}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-emerald-700 border-emerald-300">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Setup completo
+                              </Badge>
                             );
                           })()}
                           {!isAuth && (

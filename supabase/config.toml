@@ -114,3 +114,6 @@ verify_jwt = false
 
 [functions.rh-fechamentos]
 verify_jwt = false
+
+[functions.pix-charges]
+verify_jwt = false

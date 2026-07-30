@@ -445,6 +445,12 @@ async function handleAuthorize(req: Request) {
     "openid",
     "brn:btg:empresas:banking:payments.readonly",
     "brn:btg:empresas:banking:collections.readonly",
+    // Pix dinâmico (pix-charges): escrita em collections/instant-collections.
+    // Confirmar a grafia exata no painel/portal de desenvolvedores do BTG;
+    // tokens existentes precisam ser reautorizados após a inclusão.
+    "brn:btg:empresas:banking:collections",
+    "brn:btg:empresas:banking:instant-collections",
+    "brn:btg:empresas:banking:instant-collections.readonly",
     "brn:btg:empresas:receivables:credit-card.readonly",
     "brn:btg:empresas:receivables:credit-card",
     "empresas.btgpactual.com/accounts.readonly",
