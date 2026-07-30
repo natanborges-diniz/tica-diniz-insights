@@ -41,6 +41,7 @@ interface ContaBancaria {
   cnpj: string | null;
   company_id: string | null;
   account_id: string | null;
+  chave_pix: string | null;
   agencia: string | null;
   conta: string | null;
   ativa: boolean;
@@ -273,6 +274,25 @@ export default function AdminBtgValidacaoPage() {
     onError: (err: Error) => toast.error(`Erro ao cadastrar conta: ${err.message}`),
   });
 
+  // Chave Pix da conta BTG (obrigatória para o Pix dinâmico / pix-charges)
+  const [pixInputs, setPixInputs] = useState<Record<number, string>>({});
+  const [pixEditando, setPixEditando] = useState<number | null>(null);
+  const chavePixMutation = useMutation({
+    mutationFn: async ({ codEmpresa, chave }: { codEmpresa: number; chave: string }) => {
+      const { error } = await supabase
+        .from("btg_contas_bancarias")
+        .update({ chave_pix: chave.trim() || null })
+        .eq("cod_empresa", codEmpresa);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      toast.success("Chave Pix salva.");
+      setPixEditando(null);
+      queryClient.invalidateQueries({ queryKey: ["btg-contas"] });
+    },
+    onError: (err: Error) => toast.error(`Erro ao salvar chave Pix: ${err.message}`),
+  });
+
   // Empresas ainda sem conta BTG vinculada
   const empresasDisponiveis = empresas.filter(
     (e) => !contas.some((c) => c.cod_empresa === e.cod_empresa)
@@ -494,6 +514,43 @@ export default function AdminBtgValidacaoPage() {
                         ) : (
                           <span className="text-muted-foreground">não descoberto</span>
                         )}
+                        <div className="mt-1 flex items-center gap-1">
+                          {pixEditando === conta.cod_empresa ? (
+                            <>
+                              <Input
+                                className="h-6 w-48 font-mono text-[11px]"
+                                placeholder="Chave Pix da conta (CNPJ, e-mail, aleatória…)"
+                                value={pixInputs[conta.cod_empresa] ?? conta.chave_pix ?? ""}
+                                onChange={(e) =>
+                                  setPixInputs((p) => ({ ...p, [conta.cod_empresa]: e.target.value }))
+                                }
+                              />
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-1.5"
+                                disabled={chavePixMutation.isPending}
+                                onClick={() =>
+                                  chavePixMutation.mutate({
+                                    codEmpresa: conta.cod_empresa,
+                                    chave: pixInputs[conta.cod_empresa] ?? conta.chave_pix ?? "",
+                                  })
+                                }
+                              >
+                                <Save className="h-3 w-3" />
+                              </Button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              title="Chave Pix da conta BTG — obrigatória para gerar cobranças Pix dinâmicas"
+                              className={`text-[11px] underline-offset-2 hover:underline ${conta.chave_pix ? "text-emerald-700" : "text-amber-600"}`}
+                              onClick={() => setPixEditando(conta.cod_empresa)}
+                            >
+                              💠 Pix: {conta.chave_pix || "cadastrar chave"}
+                            </button>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {isAuth ? (
