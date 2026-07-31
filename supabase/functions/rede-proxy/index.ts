@@ -100,6 +100,8 @@ const REDE_RETURN_CODES: Record<string, RedeErrorInfo> = {
   "303": { userMessage: "Tempo de processamento excedido.", category: "RETRY", retryable: true, suggestion: "Tente novamente." },
   "475": { userMessage: "Antifraude recusou a transação.", category: "ISSUER", retryable: false, suggestion: "Verifique seus dados ou tente outro cartão." },
   "569": { userMessage: "Pagamento não autorizado pelo emissor.", category: "ISSUER", retryable: false, suggestion: "Entre em contato com seu banco ou use outro cartão." },
+  // Erros de configuração do PV/filiação (lado do lojista, não do cartão)
+  "3301": { userMessage: "Pagamento temporariamente indisponível nesta loja.", category: "MERCHANT", retryable: false, suggestion: "A loja foi avisada. Tente novamente mais tarde ou fale com a loja para pagar de outra forma." },
 };
 
 function classifyRedeError(returnCode: unknown, returnMessage?: string): RedeErrorInfo {
