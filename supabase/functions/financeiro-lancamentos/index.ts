@@ -661,6 +661,8 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   // é essa correlação que permite baixa automática por polling/webhook (SPEC P1 §5.5).
   let aceitos = 0;
   let falhas = 0;
+  const motivos: string[] = [];
+
 
   for (const lanc of (lancamentos || [])) {
     const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
@@ -744,17 +746,27 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     } else {
       const errText = await payRes.text();
       console.error(`[financeiro-lancamentos] Pagamento rejeitado no batch (lanc ${lanc.id}):`, payRes.status, errText);
+      let detalhe = errText.slice(0, 300);
+      try {
+        const parsed = JSON.parse(errText);
+        const first = Array.isArray(parsed?.errors) ? parsed.errors[0] : null;
+        if (first?.detail) detalhe = `${first.detail}${first.code ? ` (${first.code})` : ""}`;
+      } catch { /* corpo não-JSON */ }
+      motivos.push(`${payRes.status}: ${detalhe}`);
       await supabase.from("lancamentos_financeiros").update({
         requer_validacao: true,
-        observacao: `Falha ao incluir no batch BTG (${payRes.status}): ${errText.slice(0, 300)}`,
+        observacao: `Falha ao incluir no batch BTG (${payRes.status}): ${detalhe.slice(0, 250)}`,
       }).eq("id", lanc.id);
       falhas++;
     }
   }
 
   if (aceitos === 0) {
-    throw new Error(`Nenhum pagamento foi aceito pelo BTG (${falhas} falhas). Borderô mantido em APROVADO — revise os lançamentos marcados.`);
+    throw new Error(
+      `Nenhum pagamento foi aceito pelo BTG (${falhas} falhas). Motivo BTG — ${motivos.join(" | ") || "sem detalhe"}. Borderô mantido em APROVADO — revise os lançamentos marcados.`,
+    );
   }
+
 
   // 3. Process the batch
   await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}`, {
