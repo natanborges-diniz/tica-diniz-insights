@@ -663,7 +663,14 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       amount: Number(lanc.valor),
       details: paymentDetails,
     };
-    if (dados.scheduledDate) paymentPayload.scheduledDate = dados.scheduledDate;
+    // Agendamento automático pelo vencimento (31/07): sem isto, enviar hoje o
+    // borderô da semana que vem pagaria TUDO hoje — caixa drenado antecipado.
+    // Vencimento futuro → agenda para a data; vencido/hoje → paga já.
+    const hojePg = new Date().toISOString().slice(0, 10);
+    const agendarPara = dados.scheduledDate
+      ? String(dados.scheduledDate)
+      : (lanc.data_vencimento && String(lanc.data_vencimento) > hojePg ? String(lanc.data_vencimento) : null);
+    if (agendarPara) paymentPayload.scheduledDate = agendarPara;
 
     const payRes = await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}/payments`, {
       method: "POST",
