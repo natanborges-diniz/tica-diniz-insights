@@ -526,6 +526,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       const { data: rubs } = await supabase.from("rubricas_autorizadas").select("*").in("id", rubIds);
       for (const r of (rubs || [])) rubMap.set(String(r.id), r);
     }
+    if ((lancsAvaliar || []).length === 0) throw new Error("Borderô vazio — adicione lançamentos antes de enviar");
     const hojeAv = new Date().toISOString().slice(0, 10);
     const naoAutoAprovaveis: string[] = [];
     for (const l of (lancsAvaliar || [])) {
