@@ -515,16 +515,18 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   // Qualquer AMARELO (fora da faixa), exceção ou sem lastro → Mesa (admin)
   // obrigatória antes do envio.
   if (bordero.status === "MONTAGEM") {
-    const { data: lancsAvaliar } = await supabase
+    const { data: lancsAvaliar, error: errAvaliar } = await supabase
       .from("lancamentos_financeiros")
-      .select("id, descricao, valor, lastro, erp_parcela_id, nf_entrada_id, rubrica_id, btg_dda_id, justificativa, pessoa_documento, data_vencimento")
+      .select("id, descricao, valor, lastro, erp_parcela_id, rubrica_id, btg_dda_id, justificativa, pessoa_documento, data_vencimento")
       .eq("bordero_id", bordero_id);
+    if (errAvaliar) throw new Error(`Falha ao ler lançamentos do borderô: ${errAvaliar.message}`);
     const rubIds = [...new Set((lancsAvaliar || []).map((l) => l.rubrica_id).filter(Boolean))] as string[];
     const rubMap = new Map<string, Record<string, unknown>>();
     if (rubIds.length > 0) {
       const { data: rubs } = await supabase.from("rubricas_autorizadas").select("*").in("id", rubIds);
       for (const r of (rubs || [])) rubMap.set(String(r.id), r);
     }
+    if ((lancsAvaliar || []).length === 0) throw new Error("Borderô vazio — adicione lançamentos antes de enviar");
     const hojeAv = new Date().toISOString().slice(0, 10);
     const naoAutoAprovaveis: string[] = [];
     for (const l of (lancsAvaliar || [])) {
