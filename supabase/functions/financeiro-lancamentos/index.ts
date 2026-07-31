@@ -763,7 +763,12 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
 
   if (aceitos === 0) {
     const motivo = motivos.join(" | ") || "sem detalhe";
-    const mensagem = `Nenhum pagamento foi aceito pelo BTG (${falhas} falhas). Motivo BTG — ${motivo}. Borderô mantido em APROVADO — confira o extrato antes de tentar novamente.`;
+    // Neste passo o BTG apenas VALIDA a iniciação — nada é executado nem
+    // debitado (dinheiro só se move após confirmação no app). O texto do banco
+    // ("execução do pagamento"/"cheque seu extrato") é genérico da API deles.
+    const mensagem = `O BTG recusou a inclusão dos pagamentos no lote (${falhas} falha${falhas > 1 ? "s" : ""}). ` +
+      `Nada foi executado nem debitado — o borderô segue APROVADO, é só reenviar. ` +
+      `Resposta do banco (texto genérico deles): ${motivo}`;
     console.warn(`[financeiro-lancamentos] ${mensagem}`);
 
     // Rejeição do provedor é um resultado operacional recuperável, não uma falha
