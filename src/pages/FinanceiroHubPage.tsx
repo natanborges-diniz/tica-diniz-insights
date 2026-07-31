@@ -215,7 +215,7 @@ export default function FinanceiroHubPage() {
       lancamento_ids: Array.from(selectedIds),
     }),
     onSuccess: () => {
-      toast.success("Borderô criado — aprovação é na Mesa de Aprovação");
+      toast.success("Borderô criado — 100% no lastro envia direto; itens fora da faixa passam pela Mesa");
       invalidateAll(); setBorderoDialogOpen(false); setSelectedIds(new Set()); setFormBorderoDesc(""); setActiveTab("borderos");
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao criar borderô"),

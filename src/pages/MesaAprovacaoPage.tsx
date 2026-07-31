@@ -132,7 +132,7 @@ export default function MesaAprovacaoPage() {
     <div className="space-y-6">
       <ModuleHeader
         title="Mesa de Aprovação"
-        subtitle="Todo pagamento com seu lastro à vista — aprove o verde/azul em lote, decida o amarelo, trate o vermelho individualmente"
+        subtitle="Só o que precisa de você: fora da faixa (amarelo), exceções (vermelho) e sem lastro. O que está no lastro (verde/azul) segue sozinho."
         icon={<ShieldCheck className="h-5 w-5" />}
       />
 
@@ -225,16 +225,26 @@ export default function MesaAprovacaoPage() {
                     ))}
                     {b.qtd_lancamentos === 0 && <span className="text-xs text-muted-foreground">vazio</span>}
                   </div>
-                  {b.status === "MONTAGEM" && isAdmin && (
-                    <Button
-                      size="sm"
-                      className="w-full"
-                      disabled={aprovarBorderoMutation.isPending || b.qtd_lancamentos === 0}
-                      onClick={() => aprovarBorderoMutation.mutate(b.id)}
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1" />
-                      Aprovar borderô
-                    </Button>
+                  {b.status === "MONTAGEM" && (
+                    problema === 0 && amarelos === 0 && b.qtd_lancamentos > 0 ? (
+                      <p className="text-xs text-success flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        100% no lastro — envio direto pelo Contas a Pagar, sem aprovação aqui
+                      </p>
+                    ) : isAdmin ? (
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        disabled={aprovarBorderoMutation.isPending || b.qtd_lancamentos === 0}
+                        onClick={() => aprovarBorderoMutation.mutate(b.id)}
+                        title={amarelos > 0 ? "Contém itens fora da faixa — sua decisão libera o envio" : "Contém itens sem lastro/exceção — resolver ou aprovar conscientemente"}
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                        Aprovar borderô ({amarelos > 0 ? `${amarelos} fora da faixa` : "com pendências"})
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Aguardando decisão do admin (itens fora da faixa/pendências)</p>
+                    )
                   )}
                 </CardContent>
               </Card>
