@@ -4,7 +4,10 @@ import { ptBR } from "date-fns/locale";
 import {
   Pencil, CreditCard, XCircle, ArrowDown, RotateCcw,
   MoreHorizontal, Unlink, ChevronDown, ChevronRight, CheckCircle2,
+  ArrowUp, ArrowUpDown, Filter,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -261,30 +264,93 @@ function LancamentoRow({
   );
 }
 
-// Cabeçalho com checkbox mestre — seleciona/limpa todos os PAGAR selecionáveis
-// de uma vez (feedback do teste: cancelar/preparar exigia clicar um a um).
-const makeTableHeaders = (onToggleSelectAll: () => void, allSelected: boolean, anySelectable: boolean) => (
-  <TableRow>
-    <TableHead className="w-[40px]">
-      {anySelectable && (
-        <Checkbox
-          checked={allSelected}
-          onCheckedChange={onToggleSelectAll}
-          title={allSelected ? "Limpar seleção" : "Selecionar todos os pagamentos elegíveis"}
-          aria-label="Selecionar todos"
+// Cabeçalho interativo: checkbox mestre (seleção múltipla) + ordenação por
+// clique no rótulo + filtros de coluna (Fornecedor/Conta por texto).
+type SortKey = "descricao" | "pessoa_nome" | "data_vencimento" | "valor" | "subcategoria" | "status";
+
+interface HeaderCtrl {
+  onToggleSelectAll: () => void;
+  allSelected: boolean;
+  anySelectable: boolean;
+  sortKey: SortKey;
+  sortDir: "asc" | "desc";
+  onSort: (k: SortKey) => void;
+  filtroFornecedor: string;
+  setFiltroFornecedor: (v: string) => void;
+  filtroConta: string;
+  setFiltroConta: (v: string) => void;
+}
+
+function FiltroTexto({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" className="ml-1 align-middle" title="Filtrar" onClick={(e) => e.stopPropagation()}>
+          <Filter className={`h-3 w-3 ${value ? "text-primary" : "opacity-30 hover:opacity-70"}`} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-2" align="start">
+        <Input
+          autoFocus
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="h-8 text-sm"
         />
-      )}
-    </TableHead>
-    <TableHead>Descrição</TableHead>
-    <TableHead>Fornecedor</TableHead>
-    <TableHead className="w-[95px]">Vencimento</TableHead>
-    <TableHead className="w-[110px] text-right">Valor</TableHead>
-    <TableHead className="w-[140px]">Conta</TableHead>
-    <TableHead className="w-[100px]">Status</TableHead>
-    <TableHead className="w-[70px]">DDA</TableHead>
-    <TableHead className="w-[120px] text-right">Ações</TableHead>
-  </TableRow>
-);
+        {value && (
+          <button type="button" className="text-xs text-muted-foreground mt-1.5 hover:text-foreground" onClick={() => onChange("")}>
+            Limpar filtro
+          </button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+const makeTableHeaders = (ctrl: HeaderCtrl) => {
+  const SortLabel = ({ k, children, alignEnd }: { k: SortKey; children: React.ReactNode; alignEnd?: boolean }) => (
+    <button
+      type="button"
+      onClick={() => ctrl.onSort(k)}
+      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${alignEnd ? "justify-end w-full" : ""}`}
+      title="Clique para ordenar"
+    >
+      {children}
+      {ctrl.sortKey === k
+        ? (ctrl.sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)
+        : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+    </button>
+  );
+
+  return (
+    <TableRow>
+      <TableHead className="w-[40px]">
+        {ctrl.anySelectable && (
+          <Checkbox
+            checked={ctrl.allSelected}
+            onCheckedChange={ctrl.onToggleSelectAll}
+            title={ctrl.allSelected ? "Limpar seleção" : "Selecionar todos os pagamentos elegíveis"}
+            aria-label="Selecionar todos"
+          />
+        )}
+      </TableHead>
+      <TableHead><SortLabel k="descricao">Descrição</SortLabel></TableHead>
+      <TableHead>
+        <SortLabel k="pessoa_nome">Fornecedor</SortLabel>
+        <FiltroTexto value={ctrl.filtroFornecedor} onChange={ctrl.setFiltroFornecedor} placeholder="Filtrar fornecedor..." />
+      </TableHead>
+      <TableHead className="w-[95px]"><SortLabel k="data_vencimento">Vencimento</SortLabel></TableHead>
+      <TableHead className="w-[110px] text-right"><SortLabel k="valor" alignEnd>Valor</SortLabel></TableHead>
+      <TableHead className="w-[140px]">
+        <SortLabel k="subcategoria">Conta</SortLabel>
+        <FiltroTexto value={ctrl.filtroConta} onChange={ctrl.setFiltroConta} placeholder="Filtrar conta..." />
+      </TableHead>
+      <TableHead className="w-[100px]"><SortLabel k="status">Status</SortLabel></TableHead>
+      <TableHead className="w-[70px]">DDA</TableHead>
+      <TableHead className="w-[120px] text-right">Ações</TableHead>
+    </TableRow>
+  );
+};
 
 export function ContasPagarTable({
   lancamentos: rawLancamentos, isLoading, selectedIds, isAdmin, stepFilter,
@@ -296,20 +362,61 @@ export function ContasPagarTable({
   const [validadosOpen, setValidadosOpen] = useState(true);
   const [finalizadosOpen, setFinalizadosOpen] = useState(false);
 
+  // Ordenação e filtros de coluna
+  const [sortKey, setSortKey] = useState<SortKey>("data_vencimento");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [filtroFornecedor, setFiltroFornecedor] = useState("");
+  const [filtroConta, setFiltroConta] = useState("");
+  const onSort = (k: SortKey) => {
+    if (k === sortKey) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortKey(k); setSortDir("asc"); }
+  };
+
   // Checkbox mestre do cabeçalho (seleção múltipla)
   const selecionaveis = rawLancamentos.filter(
     (l) => l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status)
   );
   const allSelected = selecionaveis.length > 0 && selecionaveis.every((l) => selectedIds.has(l.id));
-  const TABLE_HEADERS = makeTableHeaders(onToggleSelectAll, allSelected, selecionaveis.length > 0);
+  const TABLE_HEADERS = makeTableHeaders({
+    onToggleSelectAll, allSelected, anySelectable: selecionaveis.length > 0,
+    sortKey, sortDir, onSort,
+    filtroFornecedor, setFiltroFornecedor, filtroConta, setFiltroConta,
+  });
 
   // Apply step-based filtering
-  const lancamentos = stepFilter ? rawLancamentos.filter(l => {
+  const stepFiltered = stepFilter ? rawLancamentos.filter(l => {
     if (stepFilter === 1) return true;
     if (stepFilter === 2) return l.status === "PREVISTO" && !l.subcategoria;
     if (stepFilter === 3) return l.status === "PREVISTO" && !!l.subcategoria && !hasPaymentData(l);
     return true;
   }) : rawLancamentos;
+
+  // Filtros de coluna + ordenação (valem dentro de cada seção)
+  const lancamentos = useMemo(() => {
+    const norm = (v: unknown) => String(v ?? "").toLowerCase();
+    let arr = stepFiltered;
+    if (filtroFornecedor.trim()) {
+      const f = filtroFornecedor.trim().toLowerCase();
+      arr = arr.filter((l) => norm(l.pessoa_nome).includes(f) || norm(l.descricao).includes(f));
+    }
+    if (filtroConta.trim()) {
+      const f = filtroConta.trim().toLowerCase();
+      arr = arr.filter((l) => norm(l.subcategoria).includes(f) || norm(l.dados_extras?.conta_descricao).includes(f));
+    }
+    const dir = sortDir === "asc" ? 1 : -1;
+    const keyOf = (l: Lancamento): string | number => {
+      if (sortKey === "valor") return Number(l.valor);
+      if (sortKey === "subcategoria") return norm(l.subcategoria || l.dados_extras?.conta_descricao);
+      return norm(l[sortKey]);
+    };
+    return [...arr].sort((a, b) => {
+      const va = keyOf(a);
+      const vb = keyOf(b);
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+  }, [stepFiltered, filtroFornecedor, filtroConta, sortKey, sortDir]);
 
   // Split into sections
   const pendentes = useMemo(() => lancamentos.filter(l => l.status === "PREVISTO"), [lancamentos]);
