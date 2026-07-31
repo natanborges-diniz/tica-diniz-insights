@@ -674,6 +674,11 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       : (lanc.data_vencimento && String(lanc.data_vencimento) > hojePg ? String(lanc.data_vencimento) : null);
     if (agendarPara) paymentPayload.scheduledDate = agendarPara;
 
+    console.log(
+      `[financeiro-lancamentos] BTG request POST /${cnpj}/banking/batch-payments/${batchId}/payments (lanc ${lanc.id}):`,
+      JSON.stringify(paymentPayload),
+    );
+
     const payRes = await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}/payments`, {
       method: "POST",
       headers: {
