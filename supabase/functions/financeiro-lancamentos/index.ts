@@ -1,6 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, authGuard } from "../_shared/authGuard.ts";
 import { avaliarLancamento, validarJustificativa, criadorAprovadorDistintos } from "../_shared/governanca.ts";
+import { paraCodigoBarras } from "../_shared/boleto.ts";
+import { hojeBrt, proximaSegunda, descricaoBordero, dataAgendamento } from "../_shared/agendamento.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -359,16 +361,31 @@ async function listarBorderos(body: Record<string, unknown>) {
 }
 
 async function criarBordero(body: Record<string, unknown>, userId: string) {
-  const { cod_empresa, descricao, lancamento_ids } = body;
+  const { cod_empresa, descricao, lancamento_ids, data_pagamento } = body;
   if (!cod_empresa) throw new Error("cod_empresa obrigatório");
 
   const ids = (lancamento_ids as string[]) || [];
+
+  // Prática da casa: pagamentos executados na segunda. Default da data de
+  // pagamento = próxima segunda; descrição automática "Borderô Semana dd/MM/yyyy"
+  // (com " — N" a partir do segundo borderô da mesma data/empresa).
+  const dataPg = data_pagamento ? String(data_pagamento) : proximaSegunda(hojeBrt());
+  let descFinal = descricao ? String(descricao) : null;
+  if (!descFinal) {
+    const { count } = await supabase
+      .from("borderos")
+      .select("id", { count: "exact", head: true })
+      .eq("cod_empresa", Number(cod_empresa))
+      .eq("data_pagamento", dataPg);
+    descFinal = descricaoBordero(dataPg, count || 0);
+  }
 
   const { data: bordero, error: bErr } = await supabase
     .from("borderos")
     .insert({
       cod_empresa: Number(cod_empresa),
-      descricao: descricao ? String(descricao) : null,
+      descricao: descFinal,
+      data_pagamento: dataPg,
       criado_por: userId,
       status: "MONTAGEM",
       qtd_lancamentos: ids.length,
@@ -653,9 +670,21 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     const paymentDetails: Record<string, unknown> = {};
 
     if (lanc.btg_dda_id && dados.linha_digitavel) {
-      // DDA-linked: force BANKSLIP with barcode
+      // DDA-linked: força BANKSLIP. O DDA traz a LINHA DIGITÁVEL (47 dígitos);
+      // a API do BTG espera o CÓDIGO DE BARRAS (44) — enviar 47 dá 500 genérico.
       paymentType = "BANKSLIP";
-      paymentDetails.barcode = String(dados.linha_digitavel);
+      try {
+        paymentDetails.barcode = paraCodigoBarras(dados.linha_digitavel);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[financeiro-lancamentos] Boleto inválido (lanc ${lanc.id}):`, msg);
+        await supabase.from("lancamentos_financeiros").update({
+          requer_validacao: true,
+          observacao: `Boleto não enviado ao BTG: ${msg.slice(0, 250)}`,
+        }).eq("id", lanc.id);
+        falhas++;
+        continue;
+      }
     } else if (dados.btg_details) {
       Object.assign(paymentDetails, dados.btg_details as Record<string, unknown>);
     }
@@ -665,13 +694,16 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       amount: Number(lanc.valor),
       details: paymentDetails,
     };
-    // Agendamento automático pelo vencimento (31/07): sem isto, enviar hoje o
-    // borderô da semana que vem pagaria TUDO hoje — caixa drenado antecipado.
-    // Vencimento futuro → agenda para a data; vencido/hoje → paga já.
-    const hojePg = new Date().toISOString().slice(0, 10);
+    // Agendamento: data_pagamento do borderô (prática da casa: segunda-feira);
+    // vencimento antes dela → agenda no vencimento (sem juros); sem data no
+    // borderô → fallback pelo vencimento. Data passada/hoje → paga já.
     const agendarPara = dados.scheduledDate
       ? String(dados.scheduledDate)
-      : (lanc.data_vencimento && String(lanc.data_vencimento) > hojePg ? String(lanc.data_vencimento) : null);
+      : dataAgendamento(
+          lanc.data_vencimento ? String(lanc.data_vencimento) : null,
+          bordero.data_pagamento ? String(bordero.data_pagamento) : null,
+          hojeBrt(),
+        );
     if (agendarPara) paymentPayload.scheduledDate = agendarPara;
 
     console.log(

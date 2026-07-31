@@ -213,7 +213,7 @@ function LancamentoRow({
         {l.requer_validacao && <Badge variant="outline" className="ml-2 text-[10px]">VALIDAR</Badge>}
       </TableCell>
       <TableCell className="text-sm">{l.pessoa_nome?.toUpperCase() || "—"}</TableCell>
-      <TableCell className="text-sm">{format(new Date(l.data_vencimento), "dd/MM/yy")}</TableCell>
+      <TableCell className="text-sm">{format(new Date(l.data_vencimento + "T12:00:00"), "dd/MM/yy")}</TableCell>
       <TableCell className="text-sm text-right font-medium">{fmtCurrency(l.valor)}</TableCell>
       <TableCell className="text-xs">
         {contaNome ? (

@@ -83,7 +83,9 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
     onSave(lancamento.id, dadosExtras);
   };
 
-  const isVencido = lancamento && new Date(lancamento.data_vencimento) < new Date();
+  // Comparação por string local (yyyy-MM-dd) — new Date("yyyy-MM-dd") é UTC e
+  // marcava como vencido boleto que vence HOJE (off-by-one de fuso).
+  const isVencido = lancamento && String(lancamento.data_vencimento) < format(new Date(), "yyyy-MM-dd");
 
   return (
     <Sheet open={!!lancamento} onOpenChange={open => { if (!open) onClose(); }}>
@@ -124,7 +126,7 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
               <div className="flex gap-2 items-center">
                 <p className={cn("text-xs", isVencido ? "text-destructive font-medium" : "text-muted-foreground")}>
                   {isVencido ? "⚠ Vencido em " : "Vencimento: "}
-                  {format(new Date(lancamento.data_vencimento), "dd/MM/yyyy")}
+                  {format(new Date(lancamento.data_vencimento + "T12:00:00"), "dd/MM/yyyy")}
                 </p>
                 {lancamento.btg_dda_id && (
                   <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">

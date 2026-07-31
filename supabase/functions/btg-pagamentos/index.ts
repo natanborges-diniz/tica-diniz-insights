@@ -5,6 +5,7 @@
 // BTG Payment Types: PIX_KEY, PIX_QR_CODE, PIX_MANUAL, TED, BANKSLIP, UTILITIES, DARF, PIX_REVERSAL
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { paraCodigoBarras } from "../_shared/boleto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -149,14 +150,16 @@ function buildBtgPayload(pagamento: Record<string, unknown>): Record<string, unk
       break;
 
     case "BANKSLIP":
+      // Aceita linha digitável (47) ou código de barras (44) — normaliza p/ 44
       payload.details = {
-        barcode: String(dados.codigo_barras || dados.barcode || dados.linha_digitavel || ""),
+        barcode: paraCodigoBarras(dados.codigo_barras || dados.barcode || dados.linha_digitavel || ""),
       };
       break;
 
     case "UTILITIES":
+      // Arrecadação: linha digitável de 48 → barras de 44
       payload.details = {
-        barcode: String(dados.codigo_barras || dados.barcode || ""),
+        barcode: paraCodigoBarras(dados.codigo_barras || dados.barcode || dados.linha_digitavel || ""),
       };
       break;
 

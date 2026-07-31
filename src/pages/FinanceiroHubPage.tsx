@@ -112,6 +112,13 @@ export default function FinanceiroHubPage() {
   const [baixaValorPago, setBaixaValorPago] = useState("");
   const [baixaDataPgto, setBaixaDataPgto] = useState("");
   const [formBorderoDesc, setFormBorderoDesc] = useState("");
+  // Prática da casa: pagamentos executados na segunda → default = próxima segunda
+  const proximaSegundaStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + ((8 - d.getDay()) % 7));
+    return format(d, "yyyy-MM-dd");
+  };
+  const [formBorderoDataPg, setFormBorderoDataPg] = useState<string>(proximaSegundaStr);
   const [classificarLoteOpen, setClassificarLoteOpen] = useState(false);
 
   // Edit classification state
@@ -212,11 +219,12 @@ export default function FinanceiroHubPage() {
     mutationFn: () => invokeAction("criar_bordero", {
       cod_empresa: codEmpresa,
       descricao: formBorderoDesc || null,
+      data_pagamento: formBorderoDataPg || null,
       lancamento_ids: Array.from(selectedIds),
     }),
     onSuccess: () => {
       toast.success("Borderô criado — 100% no lastro envia direto; itens fora da faixa passam pela Mesa");
-      invalidateAll(); setBorderoDialogOpen(false); setSelectedIds(new Set()); setFormBorderoDesc(""); setActiveTab("borderos");
+      invalidateAll(); setBorderoDialogOpen(false); setSelectedIds(new Set()); setFormBorderoDesc(""); setFormBorderoDataPg(proximaSegundaStr()); setActiveTab("borderos");
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao criar borderô"),
   });
@@ -461,8 +469,21 @@ export default function FinanceiroHubPage() {
               </div>
             </div>
             <div className="space-y-1">
+              <Label>Data de pagamento</Label>
+              <Input type="date" value={formBorderoDataPg} onChange={e => setFormBorderoDataPg(e.target.value)} />
+              <p className="text-xs text-muted-foreground">
+                Todos os itens serão agendados para esta data; vencimento anterior a ela é pago no vencimento (sem juros).
+              </p>
+            </div>
+            <div className="space-y-1">
               <Label>Descrição do lote (opcional)</Label>
-              <Input value={formBorderoDesc} onChange={e => setFormBorderoDesc(e.target.value)} placeholder="Ex: Fornecedores Janeiro" />
+              <Input
+                value={formBorderoDesc}
+                onChange={e => setFormBorderoDesc(e.target.value)}
+                placeholder={formBorderoDataPg
+                  ? `Borderô Semana ${format(new Date(formBorderoDataPg + "T12:00:00"), "dd/MM/yyyy")} (automático)`
+                  : "Ex: Fornecedores Janeiro"}
+              />
             </div>
           </div>
         </BaseDialog>
@@ -504,7 +525,7 @@ export default function FinanceiroHubPage() {
                     <TableRow key={l.id}>
                       <TableCell className="text-sm">{l.descricao.toUpperCase()}</TableCell>
                       <TableCell className="text-sm">{l.pessoa_nome?.toUpperCase() || "—"}</TableCell>
-                      <TableCell className="text-sm">{format(new Date(l.data_vencimento), "dd/MM/yy")}</TableCell>
+                      <TableCell className="text-sm">{format(new Date(l.data_vencimento + "T12:00:00"), "dd/MM/yy")}</TableCell>
                       <TableCell className="text-sm text-right">{fmtCurrency(l.valor)}</TableCell>
                       <TableCell>
                         {payType ? (
