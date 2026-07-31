@@ -261,9 +261,20 @@ function LancamentoRow({
   );
 }
 
-const TABLE_HEADERS = (
+// Cabeçalho com checkbox mestre — seleciona/limpa todos os PAGAR selecionáveis
+// de uma vez (feedback do teste: cancelar/preparar exigia clicar um a um).
+const makeTableHeaders = (onToggleSelectAll: () => void, allSelected: boolean, anySelectable: boolean) => (
   <TableRow>
-    <TableHead className="w-[40px]" />
+    <TableHead className="w-[40px]">
+      {anySelectable && (
+        <Checkbox
+          checked={allSelected}
+          onCheckedChange={onToggleSelectAll}
+          title={allSelected ? "Limpar seleção" : "Selecionar todos os pagamentos elegíveis"}
+          aria-label="Selecionar todos"
+        />
+      )}
+    </TableHead>
     <TableHead>Descrição</TableHead>
     <TableHead>Fornecedor</TableHead>
     <TableHead className="w-[95px]">Vencimento</TableHead>
@@ -284,6 +295,13 @@ export function ContasPagarTable({
   const [pendentesOpen, setPendentesOpen] = useState(true);
   const [validadosOpen, setValidadosOpen] = useState(true);
   const [finalizadosOpen, setFinalizadosOpen] = useState(false);
+
+  // Checkbox mestre do cabeçalho (seleção múltipla)
+  const selecionaveis = rawLancamentos.filter(
+    (l) => l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status)
+  );
+  const allSelected = selecionaveis.length > 0 && selecionaveis.every((l) => selectedIds.has(l.id));
+  const TABLE_HEADERS = makeTableHeaders(onToggleSelectAll, allSelected, selecionaveis.length > 0);
 
   // Apply step-based filtering
   const lancamentos = stepFilter ? rawLancamentos.filter(l => {
