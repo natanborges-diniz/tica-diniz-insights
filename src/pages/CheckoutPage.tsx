@@ -76,6 +76,35 @@ export default function CheckoutPage() {
     setSuccess(true);
   };
 
+  // Renovação pelo cliente: reemite a cobrança expirada com dados idênticos
+  const [renovando, setRenovando] = useState(false);
+  const [renovarErro, setRenovarErro] = useState("");
+  const renovar = async () => {
+    if (!linkId || renovando) return;
+    setRenovando(true);
+    setRenovarErro("");
+    try {
+      const res = await fetch(
+        "https://kvggebtnqmxydtwaumqz.supabase.co/functions/v1/renovar-cobranca-v1",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ payment_link_id: linkId }),
+        },
+      );
+      const data = await res.json();
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setRenovarErro(data?.error || "Não foi possível gerar agora. Tente novamente.");
+    } catch {
+      setRenovarErro("Falha de conexão. Tente novamente.");
+    } finally {
+      setRenovando(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center p-4">
@@ -118,6 +147,22 @@ export default function CheckoutPage() {
               <p className="text-xs text-slate-400">{linkData.descricao}</p>
               <p className="text-lg font-bold text-slate-700">{fmtCurrency(linkData.valor)}</p>
             </div>
+            {linkData.status === "EXPIRADO" && (
+              <div className="pt-2 space-y-2">
+                <p className="text-xs text-slate-500">
+                  Você pode gerar um novo link agora mesmo, com os mesmos dados desta cobrança.
+                </p>
+                <button
+                  type="button"
+                  disabled={renovando}
+                  onClick={renovar}
+                  className="w-full rounded-lg bg-slate-800 text-white text-sm font-medium py-2.5 hover:bg-slate-700 disabled:opacity-60 transition-colors"
+                >
+                  {renovando ? "Gerando novo link…" : "Gerar novo link de pagamento"}
+                </button>
+                {renovarErro && <p className="text-xs text-red-500">{renovarErro}</p>}
+              </div>
+            )}
             {linkData.status === "PAGO" && (
               <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 flex gap-2 items-start text-left">
                 <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />

@@ -79,6 +79,34 @@ export default function PixPage() {
     });
   };
 
+  const [renovando, setRenovando] = useState(false);
+  const [renovarErro, setRenovarErro] = useState("");
+  const renovar = async () => {
+    if (!chargeId || renovando) return;
+    setRenovando(true);
+    setRenovarErro("");
+    try {
+      const res = await fetch(
+        "https://kvggebtnqmxydtwaumqz.supabase.co/functions/v1/renovar-cobranca-v1",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ payment_link_id: chargeId }),
+        },
+      );
+      const data = await res.json();
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setRenovarErro(data?.error || "Não foi possível gerar agora. Tente novamente.");
+    } catch {
+      setRenovarErro("Falha de conexão. Tente novamente.");
+    } finally {
+      setRenovando(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/30">
@@ -133,9 +161,28 @@ export default function PixPage() {
             <h1 className="text-lg font-semibold">
               {pixData.status === "EXPIRADO" ? "Cobrança expirada" : "Cobrança cancelada"}
             </h1>
-            <p className="text-sm text-muted-foreground">
-              Peça um novo QR Code Pix à loja para concluir o pagamento.
-            </p>
+            {pixData.status === "EXPIRADO" ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Sem problema — você pode gerar um novo QR Code agora mesmo, com os
+                  mesmos dados da cobrança.
+                </p>
+                <Button onClick={renovar} disabled={renovando} className="w-full mt-2">
+                  {renovando ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Gerando novo Pix…</>
+                  ) : (
+                    "Gerar novo QR Code Pix"
+                  )}
+                </Button>
+                {renovarErro && (
+                  <p className="text-xs text-destructive">{renovarErro}</p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Esta cobrança foi cancelada pela loja. Fale com a loja se ainda precisar pagar.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
