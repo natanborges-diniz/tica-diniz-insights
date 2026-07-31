@@ -46,10 +46,20 @@ interface BorderoMesa {
   selos: Record<string, number>;
 }
 
+interface DdaSemEntrada {
+  id: string;
+  emissor: string | null;
+  documento_emissor: string | null;
+  valor: number;
+  data_vencimento: string | null;
+  banco_emissor: string | null;
+}
+
 interface MesaData {
   lancamentos: LancMesa[];
   borderos: BorderoMesa[];
   resumo_selos: Record<string, number>;
+  dda_sem_entrada?: DdaSemEntrada[];
 }
 
 const SELO_CFG: Record<string, { label: string; cls: string }> = {
@@ -152,6 +162,45 @@ export default function MesaAprovacaoPage() {
           ))}
         </div>
       </div>
+
+      {/* Cobranças chegando sem entrada no ERP (DDA órfão) */}
+      {(mesa?.dda_sem_entrada ?? []).length > 0 && (
+        <Card className="border-warning/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2 text-warning">
+              <AlertTriangle className="h-4 w-4" />
+              Cobranças no banco sem entrada no ERP ({mesa!.dda_sem_entrada!.length}) — provável nota sem lançamento
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5">
+            {mesa!.dda_sem_entrada!.map((d) => {
+              const vencido = d.data_vencimento && d.data_vencimento < new Date().toISOString().slice(0, 10);
+              return (
+                <div key={d.id} className="flex items-center justify-between gap-3 p-2 rounded-lg border text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{d.emissor || "Emissor não identificado"}
+                      {d.documento_emissor && <span className="text-muted-foreground font-normal"> · {d.documento_emissor}</span>}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {fmtCurrency(Number(d.valor))}
+                      {d.data_vencimento && (
+                        <> · vence {format(new Date(d.data_vencimento + "T12:00:00"), "dd/MM/yy")}
+                          {vencido && <span className="text-danger font-medium"> (VENCIDO)</span>}
+                        </>
+                      )}
+                      {d.banco_emissor && <> · {d.banco_emissor}</>}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="shrink-0 text-warning border-warning/40">Dar entrada no Dataweb</Badge>
+                </div>
+              );
+            })}
+            <p className="text-xs text-muted-foreground pt-1">
+              Boleto sem título não é pagável (sem lastro). Após a entrada no ERP, o título chega no sync das 8h e casa com o boleto sozinho. Cobrança desconhecida? Investigar — pode ser boleto indevido.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Borderôs prontos para aprovar */}
       {(mesa?.borderos ?? []).length > 0 && (

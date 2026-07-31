@@ -1361,7 +1361,30 @@ async function mesaAprovacao(body: Record<string, unknown>) {
   const porSelo: Record<string, number> = {};
   for (const l of avaliados) porSelo[l.selo] = (porSelo[l.selo] || 0) + 1;
 
-  return json({ lancamentos: avaliados, borderos: borderosResumo, resumo_selos: porSelo });
+  // Cobranças sem entrada: DDA (boleto no banco) sem título correspondente no
+  // ledger = nota provavelmente sem entrada no ERP. Aparece na Mesa ANTES do
+  // vencimento — o "não me dei conta" vira alerta acionável, não juros.
+  let ddaQ = supabase
+    .from("btg_dda_titulos")
+    .select("id, emissor, documento_emissor, valor, data_vencimento, banco_emissor")
+    .eq("status", "PENDENTE")
+    .order("data_vencimento", { ascending: true })
+    .limit(100);
+  if (codEmpresa) ddaQ = ddaQ.eq("cod_empresa", codEmpresa);
+  const { data: ddaPendentes } = await ddaQ;
+
+  let ddaSemEntrada: Record<string, unknown>[] = [];
+  if (ddaPendentes && ddaPendentes.length > 0) {
+    const { data: vinculados } = await supabase
+      .from("lancamentos_financeiros")
+      .select("btg_dda_id")
+      .in("btg_dda_id", ddaPendentes.map((d) => d.id))
+      .neq("status", "CANCELADO");
+    const comTitulo = new Set((vinculados || []).map((v) => v.btg_dda_id));
+    ddaSemEntrada = ddaPendentes.filter((d) => !comTitulo.has(d.id));
+  }
+
+  return json({ lancamentos: avaliados, borderos: borderosResumo, resumo_selos: porSelo, dda_sem_entrada: ddaSemEntrada });
 }
 
 // Exceção emergencial: aprovação individual do master, fora do borderô.
