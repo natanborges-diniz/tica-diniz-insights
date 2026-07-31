@@ -239,6 +239,62 @@ async function sincronizarEmpresa(db: any, codEmpresa: number, mode: string, pla
     resultado.erros.push(`substituicao provisoes empresa ${codEmpresa}: ${String(e)}`);
   }
 
+  // ── Fusão de órfãos DDA × títulos ERP (dedup de 31/07): o btg-dda antigo
+  // criava um lançamento para cada boleto, duplicando com o título do sync.
+  // Aqui os pares são fundidos: o título ERP herda o boleto (btg_dda_id +
+  // linha digitável) e o órfão é cancelado com trilha. Ambíguo não funde.
+  try {
+    const { data: orfaos } = await db
+      .from("lancamentos_financeiros")
+      .select("id, valor, data_vencimento, pessoa_documento, btg_dda_id, observacao, dados_extras")
+      .eq("cod_empresa", codEmpresa)
+      .eq("origem", "DDA")
+      .eq("tipo", "PAGAR")
+      .in("status", ["PREVISTO", "CLASSIFICADO"])
+      .is("bordero_id", null)
+      .not("btg_dda_id", "is", null);
+
+    let fundidos = 0;
+    for (const orf of (orfaos || [])) {
+      if (!orf.data_vencimento) continue;
+      const { data: titulos } = await db
+        .from("lancamentos_financeiros")
+        .select("id, dados_extras")
+        .eq("cod_empresa", codEmpresa)
+        .eq("tipo", "PAGAR")
+        .in("status", ["PREVISTO", "CLASSIFICADO"])
+        .not("erp_parcela_id", "is", null)
+        .is("btg_dda_id", null)
+        .eq("data_vencimento", orf.data_vencimento)
+        .gte("valor", Number(orf.valor) - 0.10)
+        .lte("valor", Number(orf.valor) + 0.10);
+
+      if (!titulos || titulos.length !== 1) continue; // 0 = órfão real; 2+ = humano decide
+
+      const alvo = titulos[0];
+      const orfExtras = (orf.dados_extras || {}) as Record<string, unknown>;
+      const linha = (orfExtras.linha_digitavel as string)
+        ?? (String(orf.observacao ?? "").match(/Linha digitável:\s*(\S+)/)?.[1] ?? null);
+      const alvoExtras = (alvo.dados_extras || {}) as Record<string, unknown>;
+
+      await db.from("lancamentos_financeiros").update({
+        btg_dda_id: orf.btg_dda_id,
+        forma_pagamento: "BOLETO",
+        dados_extras: { ...alvoExtras, ...(linha ? { linha_digitavel: linha, btg_payment_type: "BANKSLIP" } : {}), fundido_de_dda: orf.id },
+      }).eq("id", alvo.id);
+
+      await db.from("lancamentos_financeiros").update({
+        status: "CANCELADO",
+        btg_dda_id: null, // libera o vínculo para o título que assumiu
+        observacao: `${orf.observacao ?? ""} [Duplicado: fundido com título ERP ${alvo.id}]`.trim(),
+      }).eq("id", orf.id);
+      fundidos++;
+    }
+    if (fundidos > 0) console.log(`[sync-ledger] empresa ${codEmpresa}: ${fundidos} órfãos DDA fundidos com títulos ERP`);
+  } catch (e) {
+    resultado.erros.push(`fusao dda empresa ${codEmpresa}: ${String(e)}`);
+  }
+
   return resultado;
 }
 

@@ -246,7 +246,11 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
         .maybeSingle();
 
       if (ddaRow) {
-        // Check if lancamento already exists for this DDA
+        // Governança (31/07): DDA é COBRANÇA, não dívida — nunca mais criamos
+        // lançamento órfão (era a causa da duplicação DDA × título ERP no Hub).
+        // Comportamento novo: anexar o boleto ao título existente; sem título
+        // correspondente, o boleto fica pendente e aparece no card "Cobranças
+        // sem entrada" da Mesa de Aprovação (humano investiga/dá entrada).
         const { data: existingLanc } = await db
           .from("lancamentos_financeiros")
           .select("id")
@@ -254,25 +258,43 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
           .eq("cod_empresa", ce)
           .maybeSingle();
 
-        if (!existingLanc) {
-          await db.from("lancamentos_financeiros").insert({
-            cod_empresa: ce,
-            tipo: "PAGAR",
-            descricao: `DDA - ${emissorVal || "Título"}`,
-            valor: valorVal,
-            data_vencimento: vencVal,
-            pessoa_nome: emissorVal,
-            pessoa_documento: docEmissorVal,
-            natureza: null,
-            categoria: null,
-            forma_pagamento: "BOLETO",
-            origem: "DDA",
-            origem_id: btgDdaId || null,
-            btg_dda_id: ddaRow.id,
-            status: "PREVISTO",
-            observacao: linhaVal ? `Linha digitável: ${linhaVal}` : null,
-          });
-          lancamentosGerados++;
+        if (!existingLanc && vencVal) {
+          // Match: mesmo vencimento + valor com tolerância de centavos (juros/
+          // arredondamento do emissor) + CNPJ quando ambos os lados têm.
+          const { data: candidatos } = await db
+            .from("lancamentos_financeiros")
+            .select("id, valor, pessoa_documento, dados_extras")
+            .eq("cod_empresa", ce)
+            .eq("tipo", "PAGAR")
+            .in("status", ["PREVISTO", "CLASSIFICADO"])
+            .is("btg_dda_id", null)
+            .eq("data_vencimento", vencVal)
+            .gte("valor", Number(valorVal) - 0.10)
+            .lte("valor", Number(valorVal) + 0.10);
+
+          const soDig = (s: unknown) => String(s ?? "").replace(/\D/g, "");
+          let match = (candidatos || []);
+          if (docEmissorVal && match.length > 1) {
+            const porDoc = match.filter((c) => soDig(c.pessoa_documento) === soDig(docEmissorVal));
+            if (porDoc.length >= 1) match = porDoc;
+          }
+
+          if (match.length === 1) {
+            const alvo = match[0];
+            const extras = (alvo.dados_extras || {}) as Record<string, unknown>;
+            await db.from("lancamentos_financeiros").update({
+              btg_dda_id: ddaRow.id,
+              forma_pagamento: "BOLETO",
+              dados_extras: {
+                ...extras,
+                linha_digitavel: linhaVal || extras.linha_digitavel,
+                dda_emissor: emissorVal,
+                btg_payment_type: "BANKSLIP",
+              },
+            }).eq("id", alvo.id);
+            lancamentosGerados++; // reaproveitado como contador de vínculos
+          }
+          // 0 ou 2+ candidatos: não cria nada — card da Mesa cuida da visibilidade
         }
       }
     } else {
