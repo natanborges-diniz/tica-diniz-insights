@@ -103,4 +103,8 @@ viu**. Print ajuda. Divergência de número sem o caso concreto não é acionáv
 2. **Processo atual das contas de consumo**: quais chegam por DDA, quais por
    e-mail/papel, quem paga como (define o fino das rubricas).
 3. **Folha**: como é paga hoje (individual? arquivo do banco?) — define a v2.
-4. Lista de quem deve ser **admin** (aprovador) além do titular — mínimo 2.
+4. **Papéis definidos**: o analista cria (operador), o titular aprova (admin).
+   Com essa divisão, um admin basta — a trava "quem cria não aprova" é atendida
+   naturalmente. Regra prática: **o admin não cria nada** (nem exceção, nem
+   rubrica); emergência é o operador quem lança. Um admin reserva (contingência
+   de férias/ausência) é recomendável, mas não bloqueia o início.
