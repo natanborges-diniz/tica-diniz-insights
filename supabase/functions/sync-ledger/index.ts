@@ -257,6 +257,9 @@ async function sincronizarEmpresa(db: any, codEmpresa: number, mode: string, pla
     let fundidos = 0;
     for (const orf of (orfaos || [])) {
       if (!orf.data_vencimento) continue;
+      // Sem filtro por btg_dda_id do título: o fluxo antigo vinculava títulos a
+      // IDs de DDA depois apagados/reimportados — o vínculo velho não pode
+      // impedir a fusão (aprendizado da limpeza de 31/07: 5 pares vs 300+ reais)
       const { data: titulos } = await db
         .from("lancamentos_financeiros")
         .select("id, dados_extras")
@@ -264,7 +267,6 @@ async function sincronizarEmpresa(db: any, codEmpresa: number, mode: string, pla
         .eq("tipo", "PAGAR")
         .in("status", ["PREVISTO", "CLASSIFICADO"])
         .not("erp_parcela_id", "is", null)
-        .is("btg_dda_id", null)
         .eq("data_vencimento", orf.data_vencimento)
         .gte("valor", Number(orf.valor) - 0.10)
         .lte("valor", Number(orf.valor) + 0.10);
