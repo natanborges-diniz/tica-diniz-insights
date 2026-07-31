@@ -3825,6 +3825,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      pix_verificar_pendentes: { Args: never; Returns: Json }
       release_sync_lock: { Args: { p_lock_key: string }; Returns: undefined }
     }
     Enums: {
