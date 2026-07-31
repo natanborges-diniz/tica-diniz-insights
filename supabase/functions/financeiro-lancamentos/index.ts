@@ -503,19 +503,18 @@ async function aprovarBordero(body: Record<string, unknown>, userId: string) {
 async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   const { bordero_id } = body;
   if (!bordero_id) throw new Error("bordero_id obrigatório");
-  await requireAdmin(userId);
 
   const { data: bordero } = await supabase.from("borderos").select("*").eq("id", bordero_id).single();
   if (!bordero) throw new Error("Borderô não encontrado");
 
-  // Decisão do stakeholder (31/07): borderô 100% lastreado dentro da faixa
-  // (VERDE/AZUL) dispensa a etapa de aprovação na Mesa — o envio pelo admin já
-  // é o ato de aprovação (e a autorização final continua no app BTG).
-  // Qualquer AMARELO (fora da faixa), exceção ou sem lastro → Mesa obrigatória.
+  // Decisão do stakeholder (31/07, refinada): borderô 100% lastreado dentro da
+  // faixa (VERDE/AZUL) pode ser ENVIADO PELO OPERADOR — a aprovação do dinheiro
+  // é a confirmação do admin no app BTG (destino/valor à vista, biometria do
+  // banco). A separação de funções está no desenho: quem prepara não tem a
+  // credencial bancária; quem confirma no banco não preparou.
+  // Qualquer AMARELO (fora da faixa), exceção ou sem lastro → Mesa (admin)
+  // obrigatória antes do envio.
   if (bordero.status === "MONTAGEM") {
-    const distinto = criadorAprovadorDistintos(bordero.criado_por, userId);
-    if (!distinto.ok) throw new Error(`${distinto.motivo} — outro admin deve enviar este borderô`);
-
     const { data: lancsAvaliar } = await supabase
       .from("lancamentos_financeiros")
       .select("id, descricao, valor, lastro, erp_parcela_id, nf_entrada_id, rubrica_id, btg_dda_id, justificativa, pessoa_documento, data_vencimento")
@@ -540,10 +539,12 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     }
     if ((lancsAvaliar || []).length === 0) throw new Error("Borderô vazio");
 
-    // Auto-aprovação: 100% verde/azul — o envio é a aprovação
+    // Auto-aprovação: 100% verde/azul — lastro validado na origem (nota no ERP
+    // ou rubrica ativada pelo admin). aprovado_por fica NULL = aprovação
+    // estrutural pelo lastro; a trilha de quem enviou fica em autorizado_por.
     await supabase.from("borderos").update({
       status: "APROVADO",
-      aprovado_por: userId,
+      aprovado_por: null,
       aprovado_em: new Date().toISOString(),
     }).eq("id", bordero_id);
     await supabase.from("lancamentos_financeiros").update({

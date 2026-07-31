@@ -53,13 +53,24 @@ export function BorderoGuidedActions({
         </div>
       )}
 
-      {status === "MONTAGEM" && isAdmin && (
-        <Button size="sm" variant="outline" onClick={onAprovar} disabled={isPendingAprovar}
-          title="A aprovação acontece na Mesa, com os selos de lastro à vista">
-          <FileCheck className="h-3.5 w-3.5 mr-1" /> Aprovar na Mesa
-        </Button>
+      {status === "MONTAGEM" && (
+        <>
+          {/* 100% lastreado (verde/azul) envia direto — a aprovação do dinheiro é a
+              confirmação do admin no app BTG. Itens fora da faixa/exceção/sem lastro
+              são bloqueados pelo backend com orientação para a Mesa. */}
+          <Button size="sm" variant="default" onClick={onEnviar} disabled={isPendingEnviar}
+            title="Borderô 100% com lastro na faixa envia direto; o admin confirma no app BTG">
+            <Send className="h-3.5 w-3.5 mr-1" /> Enviar BTG
+          </Button>
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={onAprovar} disabled={isPendingAprovar}
+              title="Para borderôs com itens fora da faixa — aprovação na Mesa com os selos à vista">
+              <FileCheck className="h-3.5 w-3.5 mr-1" /> Mesa
+            </Button>
+          )}
+        </>
       )}
-      {status === "APROVADO" && isAdmin && (
+      {status === "APROVADO" && (
         <Button size="sm" variant="default" onClick={onEnviar} disabled={isPendingEnviar}>
           <Send className="h-3.5 w-3.5 mr-1" /> Enviar BTG
         </Button>
