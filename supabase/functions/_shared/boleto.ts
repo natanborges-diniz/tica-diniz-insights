@@ -1,9 +1,12 @@
-// Conversão de código de boleto — padrão FEBRABAN.
+// Códigos de boleto — padrão FEBRABAN.
 //
-// O DDA do BTG entrega a LINHA DIGITÁVEL (47 dígitos, cobrança; 48, arrecadação),
-// mas a API de pagamentos espera o CÓDIGO DE BARRAS (44 dígitos). Enviar a linha
-// digitável no campo `barcode` causa erro 500 genérico no BTG (bug real: boleto
-// Luxottica R$ 15,96, 31/07/2026).
+// Docs BTG (developers.empresas.btgpactual.com/docs/pagamentos):
+// - BANKSLIP exige `digitableLine` (linha digitável de cobrança, 47 dígitos)
+//   e NÃO aceita linhas iniciadas em 8;
+// - UTILITIES (arrecadação: água/luz/tributos, inicia em 8) aceita
+//   `digitableLine` (48) ou `barcode` (44).
+// Bug real coberto: enviar o campo `barcode` num BANKSLIP → 500 genérico
+// (boleto Luxottica R$ 15,96, 31/07/2026).
 //
 // Módulo puro — testado em src/lib/financeiro/__tests__/boleto.test.ts.
 
@@ -73,6 +76,45 @@ export function paraCodigoBarras(entrada: unknown): string {
     let barcode = "";
     for (let i = 0; i < 4; i++) barcode += d.slice(i * 12, i * 12 + 11);
     return barcode;
+  }
+
+  throw new Error(
+    `Código de boleto com ${d.length} dígitos — esperado 44 (barras), 47 (cobrança) ou 48 (arrecadação)`,
+  );
+}
+
+/**
+ * Normaliza para a LINHA DIGITÁVEL — formato que a API de pagamentos do BTG
+ * espera no `digitableLine`.
+ *
+ * - 47 dígitos → valida os DVs (via conversão) e retorna;
+ * - 48 dígitos → arrecadação, retorna como está;
+ * - 44 dígitos (código de barras de cobrança) → monta a linha digitável
+ *   calculando os DVs mod10 dos 3 campos; se iniciar em 8 (arrecadação em
+ *   barras), retorna os 44 (a API aceita `barcode` nesse caso);
+ * - outro tamanho → erro.
+ */
+export function paraLinhaDigitavel(entrada: unknown): string {
+  const d = somenteDigitos(entrada);
+
+  if (d.length === 47) {
+    paraCodigoBarras(d); // valida DVs — lança se a linha veio corrompida
+    return d;
+  }
+  if (d.length === 48) return d;
+  if (d.length === 44) {
+    if (d[0] === "8") return d; // arrecadação em barras: enviar como barcode
+    const livre = d.slice(19); // campo livre (25)
+    const c1 = d.slice(0, 4) + livre.slice(0, 5); // banco+moeda+livre 1-5
+    const c2 = livre.slice(5, 15);
+    const c3 = livre.slice(15, 25);
+    return (
+      c1 + String(mod10(c1)) +
+      c2 + String(mod10(c2)) +
+      c3 + String(mod10(c3)) +
+      d[4] + // DV geral
+      d.slice(5, 19) // fator vencimento + valor
+    );
   }
 
   throw new Error(

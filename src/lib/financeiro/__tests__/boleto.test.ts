@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   paraCodigoBarras,
+  paraLinhaDigitavel,
   somenteDigitos,
   mod10,
 } from '../../../../supabase/functions/_shared/boleto';
@@ -65,5 +66,30 @@ describe('paraCodigoBarras', () => {
   it('rejeita tamanho inesperado com mensagem clara', () => {
     expect(() => paraCodigoBarras('123456')).toThrow(/6 dígitos/);
     expect(() => paraCodigoBarras('')).toThrow(/0 dígitos/);
+  });
+});
+
+describe('paraLinhaDigitavel (formato que o BTG exige no digitableLine)', () => {
+  it('valida e devolve a linha de 47 como está (caso real Luxottica)', () => {
+    expect(paraLinhaDigitavel(LINHA_LUXOTTICA)).toBe(LINHA_LUXOTTICA);
+    expect(paraLinhaDigitavel('03399.94030 80900.001985 84636.301016 4 15310000001596'))
+      .toBe(LINHA_LUXOTTICA);
+  });
+
+  it('reconstrói a linha de 47 a partir do código de barras de 44 (ida e volta)', () => {
+    expect(paraLinhaDigitavel(BARRAS_LUXOTTICA)).toBe(LINHA_LUXOTTICA);
+  });
+
+  it('arrecadação: 48 passa como está; 44 iniciado em 8 fica em barras', () => {
+    const arrecadacao48 = '846700000017435900240209024050002435842126912197';
+    expect(paraLinhaDigitavel(arrecadacao48)).toBe(arrecadacao48);
+    const arrecadacao44 = '84670000001435900240200240500024384212691219';
+    expect(paraLinhaDigitavel(arrecadacao44)).toBe(arrecadacao44);
+  });
+
+  it('rejeita linha corrompida e tamanho inesperado', () => {
+    const corrompida = LINHA_LUXOTTICA.slice(0, 4) + '0' + LINHA_LUXOTTICA.slice(5);
+    expect(() => paraLinhaDigitavel(corrompida)).toThrow(/DV do campo/);
+    expect(() => paraLinhaDigitavel('123')).toThrow(/3 dígitos/);
   });
 });

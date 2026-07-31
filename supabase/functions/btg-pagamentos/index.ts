@@ -5,7 +5,7 @@
 // BTG Payment Types: PIX_KEY, PIX_QR_CODE, PIX_MANUAL, TED, BANKSLIP, UTILITIES, DARF, PIX_REVERSAL
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { paraCodigoBarras } from "../_shared/boleto.ts";
+import { paraLinhaDigitavel } from "../_shared/boleto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -150,18 +150,19 @@ function buildBtgPayload(pagamento: Record<string, unknown>): Record<string, unk
       break;
 
     case "BANKSLIP":
-      // Aceita linha digitável (47) ou código de barras (44) — normaliza p/ 44
+      // Docs BTG: BANKSLIP exige digitableLine (linha digitável de cobrança).
+      // Aceita 47 direto ou monta a partir do código de barras de 44.
       payload.details = {
-        barcode: paraCodigoBarras(dados.codigo_barras || dados.barcode || dados.linha_digitavel || ""),
+        digitableLine: paraLinhaDigitavel(dados.linha_digitavel || dados.digitableLine || dados.codigo_barras || dados.barcode || ""),
       };
       break;
 
-    case "UTILITIES":
-      // Arrecadação: linha digitável de 48 → barras de 44
-      payload.details = {
-        barcode: paraCodigoBarras(dados.codigo_barras || dados.barcode || dados.linha_digitavel || ""),
-      };
+    case "UTILITIES": {
+      // Arrecadação (inicia em 8): digitableLine (48) ou barcode (44)
+      const cod = paraLinhaDigitavel(dados.linha_digitavel || dados.digitableLine || dados.codigo_barras || dados.barcode || "");
+      payload.details = cod.length === 44 ? { barcode: cod } : { digitableLine: cod };
       break;
+    }
 
     case "DARF":
       payload.details = {

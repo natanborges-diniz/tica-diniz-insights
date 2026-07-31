@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, authGuard } from "../_shared/authGuard.ts";
 import { avaliarLancamento, validarJustificativa, criadorAprovadorDistintos } from "../_shared/governanca.ts";
-import { paraCodigoBarras } from "../_shared/boleto.ts";
+import { paraLinhaDigitavel } from "../_shared/boleto.ts";
 import { hojeBrt, proximaSegunda, descricaoBordero, dataAgendamento } from "../_shared/agendamento.ts";
 
 const supabase = createClient(
@@ -670,11 +670,19 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     const paymentDetails: Record<string, unknown> = {};
 
     if (lanc.btg_dda_id && dados.linha_digitavel) {
-      // DDA-linked: força BANKSLIP. O DDA traz a LINHA DIGITÁVEL (47 dígitos);
-      // a API do BTG espera o CÓDIGO DE BARRAS (44) — enviar 47 dá 500 genérico.
-      paymentType = "BANKSLIP";
+      // DDA-linked. Docs BTG: BANKSLIP exige `digitableLine` (linha digitável);
+      // enviar campo `barcode` dá 500 genérico. Linha iniciada em 8 é
+      // arrecadação (água/luz/tributos) → tipo UTILITIES.
       try {
-        paymentDetails.barcode = paraCodigoBarras(dados.linha_digitavel);
+        const linha = paraLinhaDigitavel(dados.linha_digitavel);
+        if (linha[0] === "8") {
+          paymentType = "UTILITIES";
+          if (linha.length === 44) paymentDetails.barcode = linha;
+          else paymentDetails.digitableLine = linha;
+        } else {
+          paymentType = "BANKSLIP";
+          paymentDetails.digitableLine = linha;
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error(`[financeiro-lancamentos] Boleto inválido (lanc ${lanc.id}):`, msg);
