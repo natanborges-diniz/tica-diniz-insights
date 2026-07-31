@@ -443,6 +443,12 @@ async function handleAuthorize(req: Request) {
 
   const scopes = [
     "openid",
+    // Escopos de ESCRITA de pagamentos (31/07): exigidos pelo batch-payments —
+    // erro 403 "Insufficient scope. Required: empresas.btgpactual.com/payments,
+    // brn:btg:empresas:banking:payments". Sem eles, borderô não envia.
+    // Tokens existentes precisam ser REAUTORIZADOS por loja após esta inclusão.
+    "empresas.btgpactual.com/payments",
+    "brn:btg:empresas:banking:payments",
     "brn:btg:empresas:banking:payments.readonly",
     "brn:btg:empresas:banking:collections.readonly",
     "brn:btg:empresas:banking:collections",
