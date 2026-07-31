@@ -232,7 +232,14 @@ export default function FinanceiroHubPage() {
 
   const enviarBorderoMutation = useMutation({
     mutationFn: (id: string) => invokeAction("enviar_bordero_btg", { bordero_id: id }),
-    onSuccess: (data: { sandbox?: boolean }) => {
+    onSuccess: (data: { sandbox?: boolean; ok?: boolean; error?: string }) => {
+      if (data?.ok === false) {
+        toast.error(data.error || "O BTG não aceitou o pagamento. Confira o extrato antes de tentar novamente.", {
+          duration: 12000,
+        });
+        invalidateAll();
+        return;
+      }
       toast.success(data?.sandbox ? "Enviado ao BTG (sandbox)" : "Enviado ao BTG — aguarde processamento");
       invalidateAll();
     },
