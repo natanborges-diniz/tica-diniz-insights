@@ -22,18 +22,34 @@ foge do padrão passa pela sua mesa.
 
 ## Fluxo do dia a dia
 
-### Operador (Felix)
+### Operador (Felix) — botão a botão no Contas a Pagar
 
-1. **Contas a Pagar**: os títulos do ERP entram sozinhos toda manhã (~8h).
-   Selecione os que vencem, prepare o pagamento (PIX/boleto) e **monte o borderô**.
-2. **Enviar BTG**: se o borderô está 100% verde/azul, o botão envia direto —
-   sem esperar ninguém. Se tiver item fora da faixa, o sistema bloqueia e lista
-   o que precisa do admin na Mesa.
-3. **Conta manual** (Novo Lançamento): o formulário exige o lastro — escolha a
-   **rubrica** (recorrentes) ou marque **exceção** com justificativa (mín. 20
-   caracteres). Sem lastro, o botão não habilita.
-4. **Rubrica nova**: cadastre em Financeiro → Rubricas (nasce em rascunho; o
-   admin ativa). Use "Sugerir do histórico" para não digitar do zero.
+Cada linha mostra **a próxima ação daquela conta** (o botão muda conforme o
+estágio):
+
+1. **"Validar"** (azul) = a conta ainda não tem classificação DRE. Clique,
+   escolha a conta do plano, salve. *Para várias de uma vez: marque os círculos
+   à esquerda e use "Validar em Lote".*
+2. **"Preparar Pgto"** = classificada, mas sem instrumento de pagamento.
+   Clique e informe como paga: chave PIX ou linha digitável do boleto.
+   *Se o chip da linha diz "Boleto anexado", o DDA já trouxe a linha digitável
+   — pode pular direto para o borderô.*
+3. **Selecionar → "Criar Borderô"**: marque os círculos das contas prontas e
+   crie o lote (aba Borderôs mostra o resultado).
+4. **"Enviar BTG"** (aba Borderôs): 100% verde/azul envia direto. Item fora da
+   faixa → o sistema bloqueia e lista o que precisa do admin na Mesa.
+5. **Conta manual** (Novo Lançamento): o formulário exige lastro — rubrica ou
+   exceção com justificativa (mín. 20 caracteres). Sem isso, não habilita.
+6. **Rubrica nova**: Financeiro → Rubricas (nasce em rascunho; admin ativa).
+   Use "Sugerir do histórico".
+
+**Chips da coluna DDA** (são sobre o *boleto*, não sobre aprovação):
+"Boleto anexado" = linha digitável veio sozinha pelo banco · "Sem boleto" =
+informar PIX/linha em Preparar Pgto · "Boleto s/ entrada" (laranja) = banco
+cobra mas não há nota no ERP — verificar antes de pagar.
+
+**Nota**: a seção "Pendentes de Validação" ignora o filtro de datas de
+propósito — ela mostra TUDO que requer atenção, inclusive pendências antigas.
 
 ### Admin (você)
 
@@ -64,6 +80,15 @@ foge do padrão passa pela sua mesa.
 - No dia seguinte ao pagamento, a linha do extrato casa sozinha com o lançamento.
 - Provisões das rubricas: horizonte de 12 meses mantido automaticamente; quando
   o título real chega do ERP, substitui a provisão do mês (nunca duplica).
+
+## Limpeza de estreia (uma vez, antes dos testes)
+
+A seção "Pendentes de Validação" acumula pendências **legadas** (anteriores à
+governança — DDAs órfãos antigos, lançamentos manuais de anos passados). Na
+primeira sessão, o operador revisa item a item: o que não é dívida real hoje →
+menu "⋯" → **Cancelar** (o backup fica no histórico). O que é dívida real →
+Validar e seguir o fluxo. Meta: zerar a seção — a partir daí, o que aparecer
+nela é sinal novo, não ruído velho.
 
 ## Roteiro do primeiro teste (30 min, os dois juntos)
 

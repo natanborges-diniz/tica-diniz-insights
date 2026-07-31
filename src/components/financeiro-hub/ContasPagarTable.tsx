@@ -82,15 +82,18 @@ const hasPaymentData = (l: Lancamento) => {
   return !!(d.btg_payment_type || d.linha_digitavel || d.pix_key);
 };
 
+// Indicador do INSTRUMENTO de pagamento (boleto via DDA) — não confundir com o
+// selo de lastro da Mesa. Vocabulário neutro para não colidir com verde/azul
+// da governança.
 const getDdaBadge = (l: Lancamento) => {
   if (l.btg_dda_id && l.origem === "DDA" && l.requer_validacao) {
-    return <Badge variant="outline" className="text-[10px] bg-orange-50 text-orange-700 border-orange-200">DDA SEM ERP</Badge>;
+    return <Badge variant="outline" className="text-[10px] bg-orange-50 text-orange-700 border-orange-200" title="Boleto chegou pelo banco mas não há nota/título no ERP — verificar antes de pagar">Boleto s/ entrada</Badge>;
   }
   if (l.btg_dda_id) {
-    return <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">✓ DDA</Badge>;
+    return <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground" title="Boleto anexado automaticamente via DDA — pronto para o borderô">Boleto anexado</Badge>;
   }
   if (l.tipo === "PAGAR" && !l.btg_dda_id && l.status === "PREVISTO") {
-    return <Badge variant="outline" className="text-[10px] bg-yellow-50 text-yellow-700 border-yellow-200">⚠ SEM DDA</Badge>;
+    return <Badge variant="outline" className="text-[10px] bg-muted text-muted-foreground" title="Sem boleto via DDA — informe PIX/linha digitável em Preparar Pgto">Sem boleto</Badge>;
   }
   return null;
 };
