@@ -762,9 +762,22 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   }
 
   if (aceitos === 0) {
-    throw new Error(
-      `Nenhum pagamento foi aceito pelo BTG (${falhas} falhas). Motivo BTG — ${motivos.join(" | ") || "sem detalhe"}. Borderô mantido em APROVADO — revise os lançamentos marcados.`,
-    );
+    const motivo = motivos.join(" | ") || "sem detalhe";
+    const mensagem = `Nenhum pagamento foi aceito pelo BTG (${falhas} falhas). Motivo BTG — ${motivo}. Borderô mantido em APROVADO — confira o extrato antes de tentar novamente.`;
+    console.warn(`[financeiro-lancamentos] ${mensagem}`);
+
+    // Rejeição do provedor é um resultado operacional recuperável, não uma falha
+    // inesperada da function. Responder 200 evita que o cliente transforme o caso
+    // em RUNTIME_ERROR/tela em branco, sem avançar o estado financeiro do borderô.
+    return json({
+      ok: false,
+      code: "BTG_PAYMENT_REJECTED",
+      error: mensagem,
+      status: "APROVADO",
+      btg_batch_id: batchId,
+      falhas,
+      motivos,
+    });
   }
 
 
