@@ -507,6 +507,53 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
 
   const { data: bordero } = await supabase.from("borderos").select("*").eq("id", bordero_id).single();
   if (!bordero) throw new Error("Borderô não encontrado");
+
+  // Decisão do stakeholder (31/07): borderô 100% lastreado dentro da faixa
+  // (VERDE/AZUL) dispensa a etapa de aprovação na Mesa — o envio pelo admin já
+  // é o ato de aprovação (e a autorização final continua no app BTG).
+  // Qualquer AMARELO (fora da faixa), exceção ou sem lastro → Mesa obrigatória.
+  if (bordero.status === "MONTAGEM") {
+    const distinto = criadorAprovadorDistintos(bordero.criado_por, userId);
+    if (!distinto.ok) throw new Error(`${distinto.motivo} — outro admin deve enviar este borderô`);
+
+    const { data: lancsAvaliar } = await supabase
+      .from("lancamentos_financeiros")
+      .select("id, descricao, valor, lastro, erp_parcela_id, nf_entrada_id, rubrica_id, btg_dda_id, justificativa, pessoa_documento, data_vencimento")
+      .eq("bordero_id", bordero_id);
+    const rubIds = [...new Set((lancsAvaliar || []).map((l) => l.rubrica_id).filter(Boolean))] as string[];
+    const rubMap = new Map<string, Record<string, unknown>>();
+    if (rubIds.length > 0) {
+      const { data: rubs } = await supabase.from("rubricas_autorizadas").select("*").in("id", rubIds);
+      for (const r of (rubs || [])) rubMap.set(String(r.id), r);
+    }
+    const hojeAv = new Date().toISOString().slice(0, 10);
+    const naoAutoAprovaveis: string[] = [];
+    for (const l of (lancsAvaliar || [])) {
+      const rubrica = l.rubrica_id ? (rubMap.get(String(l.rubrica_id)) as never) ?? null : null;
+      const av = avaliarLancamento(l as never, rubrica, hojeAv);
+      if (av.selo !== "VERDE" && av.selo !== "AZUL") {
+        naoAutoAprovaveis.push(`"${l.descricao ?? l.id}": ${av.motivo}`);
+      }
+    }
+    if (naoAutoAprovaveis.length > 0) {
+      throw new Error(`Borderô tem itens que exigem aprovação na Mesa antes do envio:\n${naoAutoAprovaveis.join("\n")}`);
+    }
+    if ((lancsAvaliar || []).length === 0) throw new Error("Borderô vazio");
+
+    // Auto-aprovação: 100% verde/azul — o envio é a aprovação
+    await supabase.from("borderos").update({
+      status: "APROVADO",
+      aprovado_por: userId,
+      aprovado_em: new Date().toISOString(),
+    }).eq("id", bordero_id);
+    await supabase.from("lancamentos_financeiros").update({
+      status: "AUTORIZADO",
+      autorizado_por: userId,
+      autorizado_em: new Date().toISOString(),
+    }).eq("bordero_id", bordero_id).eq("status", "BORDERO");
+    bordero.status = "APROVADO";
+  }
+
   if (bordero.status !== "APROVADO") throw new Error("Borderô precisa estar APROVADO para envio ao banco");
 
   // Get BTG environment config
