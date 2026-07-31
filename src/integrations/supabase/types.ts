@@ -106,6 +106,7 @@ export type Database = {
           cod_empresa: number
           created_at: string
           criado_por: string | null
+          data_pagamento: string | null
           descricao: string | null
           id: string
           qtd_lancamentos: number
@@ -120,6 +121,7 @@ export type Database = {
           cod_empresa: number
           created_at?: string
           criado_por?: string | null
+          data_pagamento?: string | null
           descricao?: string | null
           id?: string
           qtd_lancamentos?: number
@@ -134,6 +136,7 @@ export type Database = {
           cod_empresa?: number
           created_at?: string
           criado_por?: string | null
+          data_pagamento?: string | null
           descricao?: string | null
           id?: string
           qtd_lancamentos?: number
