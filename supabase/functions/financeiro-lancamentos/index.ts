@@ -661,6 +661,8 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   // é essa correlação que permite baixa automática por polling/webhook (SPEC P1 §5.5).
   let aceitos = 0;
   let falhas = 0;
+  const motivos: string[] = [];
+
 
   for (const lanc of (lancamentos || [])) {
     const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
