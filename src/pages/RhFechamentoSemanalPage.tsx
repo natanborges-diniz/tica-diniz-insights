@@ -529,7 +529,17 @@ export default function RhFechamentoSemanalPage() {
               <>
                 <div className="space-y-2">
                   <Label>Agrupar por</Label>
-                  <Select value={agrupamento} onValueChange={(v) => setAgrupamento(v as "LOJA" | "VENDEDOR")}>
+                  <Select
+                    value={agrupamento}
+                    onValueChange={(v) => {
+                      const novo = v as "LOJA" | "VENDEDOR";
+                      setAgrupamento(novo);
+                      if (novo === "VENDEDOR" && lojasSel.size < empresas.length) {
+                        setLojasSel(new Set(empresas.map((e) => e.codEmpresa)));
+                        toast.info("Agrupando por vendedor: todas as lojas foram selecionadas — clique em Gerar visão do mês para incluir passagens por outras lojas");
+                      }
+                    }}
+                  >
                     <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="LOJA">Loja</SelectItem>
@@ -612,7 +622,7 @@ export default function RhFechamentoSemanalPage() {
                   {temParcial && <Badge variant="secondary">inclui parciais</Badge>}
                 </CardTitle>
                 <CardDescription>
-                  {visao.length} loja(s) selecionada(s) · cada linha traz as fontes do valor
+                  {visao.length} loja(s) consideradas (passagens por outras lojas incluídas) · cada linha traz as fontes do valor
                   (recebido no ato, de períodos anteriores, emitido e a receber) — expanda para o
                   detalhe por OS/venda · <strong>total a pagar R$ {fmtBRL(totalGeral)}</strong>
                 </CardDescription>
@@ -672,7 +682,40 @@ export default function RhFechamentoSemanalPage() {
                 XLSX por Vendedor
               </Button>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {vendedorSel !== "ALL" && todos.length === 1 && (() => {
+                const v = todos[0];
+                const Tile = ({ rotulo, valor, destaque, hint }: { rotulo: string; valor: number; destaque?: boolean; hint?: string }) => (
+                  <div className={`rounded-lg border p-3 ${destaque ? "bg-primary/5 border-primary/30" : "bg-muted/30"}`} title={hint}>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{rotulo}</p>
+                    <p className={`text-xl font-bold ${destaque ? "text-primary" : ""}`}>R$ {fmtBRL(valor)}</p>
+                  </div>
+                );
+                return (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">
+                      Extrato de {v.vendedorNome ?? `Vendedor ${v.codVendedor}`} — {MESES[mes - 1]} {ano}
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <Tile rotulo="Vendeu no mês (emitido em OS)" valor={v.basePorOrigem.vendasEmitidas ?? 0}
+                        hint="Total emitido em OS/vendas cadastradas no mês comercial" />
+                      <Tile rotulo="Recebido no ato (vendas do mês)" valor={v.basePorOrigem.vendaPeriodo}
+                        hint="Pago no cadastramento da OS + cartões processados (valor integral)" />
+                      <Tile rotulo="Recebido de meses anteriores" valor={v.basePorOrigem.saldoAnterior}
+                        hint="Saldos de OS de períodos anteriores pagos neste mês" />
+                      <Tile rotulo="Ficou a receber (vendas do mês)" valor={v.basePorOrigem.saldoAReceber ?? 0}
+                        hint="Saldo das vendas do mês ainda em aberto — comissiona quando o cliente pagar" />
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <Tile rotulo="Base comissionável" valor={v.baseTotal}
+                        hint="Recebido no ato + recebido de meses anteriores − restituições" />
+                      <Tile rotulo="Comissão" valor={v.comissao} />
+                      <Tile rotulo="Prêmios" valor={v.premioValor} />
+                      <Tile rotulo="Total a pagar" valor={v.totalPagar} destaque />
+                    </div>
+                  </div>
+                );
+              })()}
               <TabelaFechamento vendedores={todos} metaLabel="Meta do mês" origemFiltro={origemSel} />
             </CardContent>
           </Card>
