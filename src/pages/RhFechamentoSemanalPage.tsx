@@ -312,6 +312,7 @@ export default function RhFechamentoSemanalPage() {
       return;
     }
     setGerando(true);
+    setProgresso(null);
     try {
       const semanas = await semanasDoMes(ano, mes);
       if (!semanas.length) {
@@ -319,25 +320,44 @@ export default function RhFechamentoSemanalPage() {
         return;
       }
       const fechados = await listarFechamentos({ ano, mes });
-      const resultado: LojaView[] = [];
-      for (const cod of [...lojasSel].sort((a, b) => a - b)) {
+      const codigos = [...lojasSel].sort((a, b) => a - b);
+
+      // Cada célula loja×semana é uma consulta ao ERP (até 60s cada).
+      // Executamos em paralelo com limite de concorrência para não travar.
+      const tarefas: Array<{ cod: number; nome: string; idx: number; s: typeof semanas[number] }> = [];
+      codigos.forEach((cod) => {
         const nome = empresas.find((e) => e.codEmpresa === cod)?.nome ?? `Loja ${cod}`;
-        const views: SemanaView[] = [];
-        for (const s of semanas) {
+        semanas.forEach((s, idx) => tarefas.push({ cod, nome, idx, s }));
+      });
+
+      const total = tarefas.length;
+      let concluidas = 0;
+      setProgresso({ feitas: 0, total });
+
+      const buckets = new Map<number, SemanaView[]>();
+      codigos.forEach((cod) => buckets.set(cod, new Array(semanas.length)));
+
+      let cursor = 0;
+      const CONCORRENCIA = 5;
+      const worker = async () => {
+        while (cursor < tarefas.length) {
+          const t = tarefas[cursor++];
+          const { cod, nome, idx, s } = t;
           const fechado = fechados.find(
             (f) => f.codEmpresa === cod && f.semanaInicio === s.semanaInicio
           );
+          let view: SemanaView;
           if (fechado && fechado.status === "FECHADO") {
-            views.push({
+            view = {
               ...s,
               status: "FECHADA",
               fechamentoId: fechado.id,
               vendedores: await getFechamentoItens(fechado.id),
               avisos: [],
-            });
+            };
           } else {
             const previa = await gerarPrevia(cod, nome, ano, mes, s.semanaInicio, s.semanaFim, modo);
-            views.push({
+            view = {
               ...s,
               status: fechado?.status === "REABERTO"
                 ? "REABERTA"
@@ -348,9 +368,21 @@ export default function RhFechamentoSemanalPage() {
               previa,
               vendedores: previa.vendedores,
               avisos: previa.avisos,
-            });
+            };
           }
+          buckets.get(cod)![idx] = view;
+          concluidas += 1;
+          setProgresso({ feitas: concluidas, total });
         }
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(CONCORRENCIA, tarefas.length) }, () => worker())
+      );
+
+      const resultado: LojaView[] = [];
+      for (const cod of codigos) {
+        const nome = empresas.find((e) => e.codEmpresa === cod)?.nome ?? `Loja ${cod}`;
+        const views = (buckets.get(cod) ?? []).filter(Boolean) as SemanaView[];
         let saldosAbertos: SaldoAberto[] = [];
         try {
           saldosAbertos = await getSaldosAbertos(
@@ -375,8 +407,10 @@ export default function RhFechamentoSemanalPage() {
       toast.error(err instanceof Error ? err.message : "Erro ao gerar visão do mês");
     } finally {
       setGerando(false);
+      setProgresso(null);
     }
   }, [lojasSel, ano, mes, modo, empresas, hoje]);
+
 
   const vendedoresDaVisao = (() => {
     const m = new Map<number, string>();
