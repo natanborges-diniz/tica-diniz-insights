@@ -519,7 +519,11 @@ export default function RhFechamentoSemanalPage() {
             </div>
             <Button onClick={gerarVisao} disabled={gerando}>
               <Calculator className="h-4 w-4 mr-2" />
-              {gerando ? "Calculando..." : "Gerar visão do mês"}
+              {gerando
+                ? progresso
+                  ? `Calculando ${progresso.feitas}/${progresso.total}...`
+                  : "Calculando..."
+                : "Gerar visão do mês"}
             </Button>
             {visao.length > 0 && (
               <>
