@@ -300,6 +300,8 @@ export default function RhFechamentoSemanalPage() {
   const [agrupamento, setAgrupamento] = useState<"LOJA" | "VENDEDOR">("LOJA");
   const [origemSel, setOrigemSel] = useState<"ALL" | "VENDA_PERIODO" | "SALDO_ANTERIOR">("ALL");
   const [gerando, setGerando] = useState(false);
+  const [progresso, setProgresso] = useState<{ feitas: number; total: number } | null>(null);
+
   const [fechando, setFechando] = useState(false);
 
   useEffect(() => {
