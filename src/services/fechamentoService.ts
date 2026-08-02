@@ -142,9 +142,16 @@ export async function gerarPrevia(
   mes: number,
   semanaInicio: string,
   semanaFim: string,
-  modo: ModoFechamento
+  modo: ModoFechamento,
+  opts?: { permitirCache?: boolean }
 ): Promise<PreviaFechamento> {
   const avisos: string[] = [];
+  // semanas ja ENCERRADAS sao estaveis: cache de 6h no bridge evita bater no
+  // Firebird a cada visualizacao; semana corrente sempre ao vivo (cache=0)
+  const CACHE_6H = 6 * 60 * 60 * 1000;
+  const cacheParams = opts?.permitirCache
+    ? { cache: 1, cacheTtlMs: CACHE_6H }
+    : { cache: 0 };
 
   // 1) linhas do bridge (regime conforme o modo)
   let linhas: LinhaRecebimento[] = [];
@@ -153,7 +160,7 @@ export async function gerarPrevia(
       empresa: codEmpresa,
       dataInicio: semanaInicio,
       dataFim: semanaFim,
-      cache: 0,
+      ...cacheParams,
     }, { timeoutMs: 60000 });
     linhas = rows.map((r: any) => ({
       codVendedor: Number(r.cod_vendedor) || 0,
@@ -173,7 +180,7 @@ export async function gerarPrevia(
       empresa: codEmpresa,
       dataInicio: semanaInicio,
       dataFim: semanaFim,
-      cache: 0,
+      ...cacheParams,
     }, { timeoutMs: 60000 });
     linhas = rows.map((r: any) => ({
       codVendedor: Number(r.cod_vendedor) || 0,
@@ -198,7 +205,7 @@ export async function gerarPrevia(
       empresa: codEmpresa,
       dataInicio: semanaInicio,
       dataFim: semanaFim,
-      cache: 0,
+      ...cacheParams,
     }, { timeoutMs: 60000 });
     restituicoes = rows.map((r: any) => ({
       codVendedor: Number(r.cod_vendedor) || 0,
@@ -269,7 +276,7 @@ export async function gerarPrevia(
         empresa: codEmpresa,
         dataInicio: semanaInicio,
         dataFim: semanaFim,
-        cache: 0,
+        ...cacheParams,
       }, { timeoutMs: 60000 });
       const emitidoPorVendedor = new Map<number, number>();
       emitidosRows.forEach((r: any) => {
@@ -534,7 +541,8 @@ export async function getSaldosAbertos(
     empresa: codEmpresa,
     dataInicio,
     dataFim,
-    cache: 0,
+    cache: 1,
+    cacheTtlMs: 10 * 60 * 1000,
   }, { timeoutMs: 60000 });
   return rows.map((r: any) => ({
     codVendedor: Number(r.cod_vendedor) || 0,
@@ -548,6 +556,27 @@ export async function getSaldosAbertos(
     formaCategoria: String(r.forma_categoria ?? 'OUTROS').trim(),
     valorAberto: Number(r.valor_aberto) || 0,
   }));
+}
+
+/**
+ * Executa tarefas com limite de concorrência (evita rajada no Firebird e
+ * derruba o tempo total de "Gerar visão do mês" — antes tudo era sequencial).
+ */
+export async function comConcorrencia<T>(
+  tarefas: (() => Promise<T>)[],
+  limite = 4
+): Promise<T[]> {
+  const resultados: T[] = new Array(tarefas.length);
+  let i = 0;
+  async function worker() {
+    for (;;) {
+      const idx = i++;
+      if (idx >= tarefas.length) return;
+      resultados[idx] = await tarefas[idx]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limite, tarefas.length) }, worker));
+  return resultados;
 }
 
 /** Semanas do mês (cortes ou metas geradas) para o seletor da tela. */

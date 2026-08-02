@@ -40,6 +40,7 @@ import {
   reabrirFechamento,
   semanasDoMes,
   getSaldosAbertos,
+  comConcorrencia,
   type PreviaFechamento,
   type ModoFechamento,
   type SaldoAberto,
@@ -529,17 +530,7 @@ export default function RhFechamentoSemanalPage() {
               <>
                 <div className="space-y-2">
                   <Label>Agrupar por</Label>
-                  <Select
-                    value={agrupamento}
-                    onValueChange={(v) => {
-                      const novo = v as "LOJA" | "VENDEDOR";
-                      setAgrupamento(novo);
-                      if (novo === "VENDEDOR" && lojasSel.size < empresas.length) {
-                        setLojasSel(new Set(empresas.map((e) => e.codEmpresa)));
-                        toast.info("Agrupando por vendedor: todas as lojas foram selecionadas — clique em Gerar visão do mês para incluir passagens por outras lojas");
-                      }
-                    }}
-                  >
+                  <Select value={agrupamento} onValueChange={(v) => setAgrupamento(v as "LOJA" | "VENDEDOR")}>
                     <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="LOJA">Loja</SelectItem>
@@ -577,7 +568,7 @@ export default function RhFechamentoSemanalPage() {
             )}
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Lojas</Label>
+            <Label className="text-xs text-muted-foreground">Lojas (nenhuma selecionada = rede toda)</Label>
             <div className="flex flex-wrap gap-2">
               {empresas.map((emp) => (
                 <label
