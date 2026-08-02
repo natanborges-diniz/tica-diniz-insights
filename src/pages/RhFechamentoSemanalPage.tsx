@@ -40,7 +40,6 @@ import {
   reabrirFechamento,
   semanasDoMes,
   getSaldosAbertos,
-  comConcorrencia,
   type PreviaFechamento,
   type ModoFechamento,
   type SaldoAberto,
@@ -310,8 +309,13 @@ export default function RhFechamentoSemanalPage() {
   }, [mes, modo]);
 
   const gerarVisao = useCallback(async () => {
-    if (!lojasSel.size) {
-      toast.error("Selecione ao menos uma loja");
+    // lojas OPCIONAIS: nada selecionado = rede toda (a comissão do vendedor
+    // precisa enxergar passagens por qualquer loja)
+    const lojasAlvo = lojasSel.size
+      ? [...lojasSel]
+      : empresas.map((e) => e.codEmpresa);
+    if (!lojasAlvo.length) {
+      toast.error("Nenhuma loja disponível");
       return;
     }
     setGerando(true);
@@ -323,7 +327,7 @@ export default function RhFechamentoSemanalPage() {
         return;
       }
       const fechados = await listarFechamentos({ ano, mes });
-      const codigos = [...lojasSel].sort((a, b) => a - b);
+      const codigos = lojasAlvo.sort((a, b) => a - b);
 
       // Cada célula loja×semana é uma consulta ao ERP (até 60s cada).
       // Executamos em paralelo com limite de concorrência para não travar.
@@ -359,7 +363,11 @@ export default function RhFechamentoSemanalPage() {
               avisos: [],
             };
           } else {
-            const previa = await gerarPrevia(cod, nome, ano, mes, s.semanaInicio, s.semanaFim, modo);
+            // semanas encerradas: cache de 6h no bridge (dados estáveis);
+            // só a semana corrente vai ao Firebird ao vivo
+            const previa = await gerarPrevia(cod, nome, ano, mes, s.semanaInicio, s.semanaFim, modo, {
+              permitirCache: s.semanaFim < hoje,
+            });
             view = {
               ...s,
               status: fechado?.status === "REABERTO"
