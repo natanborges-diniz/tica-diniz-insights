@@ -48,11 +48,20 @@ import {
   consolidarVendedores,
   type ResultadoVendedor,
 } from "@/lib/comissoes/motorComissao";
+import { gerarPdfFechamento, type LojaPdf } from "@/utils/exportFechamentoPdf";
+import { getMetasSemanais } from "@/services/metasSemanaisService";
 
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
+
+// última consulta gerada sobrevive à navegação entre telas (memória da sessão)
+let ultimaConsulta: {
+  mes: number;
+  modo: string;
+  visao: LojaView[];
+} | null = null;
 
 type StatusSemana = "FECHADA" | "REABERTA" | "PARCIAL" | "EM_ANDAMENTO";
 
@@ -168,14 +177,30 @@ function exportarXlsxMensal(titulo: string, loja: LojaView, vendedores: Resultad
 }
 
 // ---------- tabela de vendedores ----------
-function TabelaFechamento({ vendedores, metaLabel, origemFiltro = "ALL" }: {
+function TabelaFechamento({ vendedores, metaLabel, origemFiltro = "ALL", formaFiltro = "ALL" }: {
   vendedores: ResultadoVendedor[];
   metaLabel?: string;
   origemFiltro?: "ALL" | "VENDA_PERIODO" | "SALDO_ANTERIOR";
+  formaFiltro?: string;
 }) {
   const [aberto, setAberto] = useState<number | null>(null);
   const filtraDetalhe = (d: ResultadoVendedor["detalhe"]) =>
-    origemFiltro === "ALL" ? d : d.filter((x) => x.origem === origemFiltro);
+    d.filter(
+      (x) =>
+        (origemFiltro === "ALL" || x.origem === origemFiltro) &&
+        (formaFiltro === "ALL" || x.formaCategoria === formaFiltro)
+    );
+  const tot = vendedores.reduce(
+    (t, v) => ({
+      meta: t.meta + v.metaSemana,
+      base: t.base + v.baseTotal,
+      restit: t.restit + v.restituicoes,
+      comissao: t.comissao + v.comissao,
+      premios: t.premios + v.premioValor,
+      pagar: t.pagar + v.totalPagar,
+    }),
+    { meta: 0, base: 0, restit: 0, comissao: 0, premios: 0, pagar: 0 }
+  );
   return (
     <Table>
       <TableHeader>
@@ -280,6 +305,23 @@ function TabelaFechamento({ vendedores, metaLabel, origemFiltro = "ALL" }: {
             )}
           </>
         ))}
+        <TableRow className="bg-muted/50">
+          <TableCell className="font-bold">Subtotal ({vendedores.length} vendedor(es))</TableCell>
+          <TableCell className="text-right font-bold">R$ {fmtBRL(tot.meta)}</TableCell>
+          <TableCell className="text-right font-bold">
+            {tot.meta > 0 ? `${Math.round((tot.base / tot.meta) * 10000) / 100}%` : "—"}
+          </TableCell>
+          <TableCell className="text-right font-bold">R$ {fmtBRL(tot.base)}</TableCell>
+          <TableCell className="text-right font-bold">
+            {tot.restit > 0 ? `- R$ ${fmtBRL(tot.restit)}` : "—"}
+          </TableCell>
+          <TableCell className="text-right font-bold">R$ {fmtBRL(tot.comissao)}</TableCell>
+          <TableCell className="text-right font-bold">
+            {tot.premios > 0 ? `R$ ${fmtBRL(tot.premios)}` : "—"}
+          </TableCell>
+          <TableCell className="text-right font-bold">R$ {fmtBRL(tot.pagar)}</TableCell>
+          <TableCell />
+        </TableRow>
       </TableBody>
     </Table>
   );
@@ -295,17 +337,32 @@ export default function RhFechamentoSemanalPage() {
   const [lojasSel, setLojasSel] = useState<Set<number>>(new Set());
   const [modo, setModo] = useState<ModoFechamento>("RECEBIDO");
 
-  const [visao, setVisao] = useState<LojaView[]>([]);
+  const [visao, setVisaoState] = useState<LojaView[]>([]);
+  const setVisao = (v: LojaView[], persistir?: { mes: number; modo: string }) => {
+    setVisaoState(v);
+    if (persistir && v.length) ultimaConsulta = { ...persistir, visao: v };
+  };
   const [vendedorSel, setVendedorSel] = useState<string>("ALL");
   const [agrupamento, setAgrupamento] = useState<"LOJA" | "VENDEDOR">("LOJA");
   const [origemSel, setOrigemSel] = useState<"ALL" | "VENDA_PERIODO" | "SALDO_ANTERIOR">("ALL");
+  const [formaSel, setFormaSel] = useState<string>("ALL");
   const [gerando, setGerando] = useState(false);
   const [progresso, setProgresso] = useState<{ feitas: number; total: number } | null>(null);
 
   const [fechando, setFechando] = useState(false);
 
+  // restaura a última consulta ao voltar para a tela
   useEffect(() => {
-    setVisao([]);
+    if (ultimaConsulta && ultimaConsulta.mes === mes && ultimaConsulta.modo === modo && !visao.length) {
+      setVisaoState(ultimaConsulta.visao);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!(ultimaConsulta && ultimaConsulta.mes === mes && ultimaConsulta.modo === modo)) {
+      setVisaoState([]);
+    }
   }, [mes, modo]);
 
   const gerarVisao = useCallback(async () => {
@@ -413,7 +470,7 @@ export default function RhFechamentoSemanalPage() {
           saldosAbertos,
         });
       }
-      setVisao(resultado);
+      setVisao(resultado, { mes, modo });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao gerar visão do mês");
     } finally {
@@ -474,6 +531,50 @@ export default function RhFechamentoSemanalPage() {
       toast.error(err instanceof Error ? err.message : "Erro ao fechar mês");
     } finally {
       setFechando(false);
+    }
+  };
+
+  const exportarPdf = async (analitico: boolean) => {
+    if (!visao.length) {
+      toast.error("Gere a visão do mês antes de exportar");
+      return;
+    }
+    try {
+      const lojasPdf: LojaPdf[] = [];
+      for (const loja of visao) {
+        // meta da LOJA por semana (interpretativo: meta × realizado × prêmio)
+        const metasLoja = await getMetasSemanais({ tipo: "LOJA", codEmpresa: loja.codEmpresa, ano, mes });
+        lojasPdf.push({
+          nome: loja.nome,
+          consolidado: filtraVendedor(loja.consolidado),
+          temParcial: loja.temParcial,
+          semanas: loja.semanas.map((sv) => {
+            const vend = filtraVendedor(sv.vendedores);
+            return {
+              semanaInicio: sv.semanaInicio,
+              semanaFim: sv.semanaFim,
+              statusLabel: STATUS_BADGE[sv.status].label,
+              metaLoja: metasLoja.find((m) => m.semanaInicio === sv.semanaInicio)?.metaValor ?? 0,
+              baseTotal: vend.reduce((t, v) => t + v.baseTotal, 0),
+              comissao: vend.reduce((t, v) => t + v.comissao, 0),
+              premios: vend.reduce((t, v) => t + v.premioValor, 0),
+              aPagar: vend.reduce((t, v) => t + v.totalPagar, 0),
+            };
+          }),
+        });
+      }
+      const vendedorLabel =
+        vendedorSel === "ALL" ? "" : ` — ${vendedoresDaVisao.find(([c]) => String(c) === vendedorSel)?.[1] ?? vendedorSel}`;
+      gerarPdfFechamento(
+        {
+          titulo: `Fechamento de Comissões ${MESES[mes - 1]} ${ano}${vendedorLabel}`,
+          periodoLabel: `Mês comercial ${MESES[mes - 1]} ${ano} (21→20) · modo ${modo}`,
+          lojas: lojasPdf,
+        },
+        analitico
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao gerar PDF");
     }
   };
 
@@ -569,8 +670,26 @@ export default function RhFechamentoSemanalPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>Forma (detalhe)</Label>
+                  <Select value={formaSel} onValueChange={setFormaSel}>
+                    <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Todas as formas</SelectItem>
+                      {["CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "AVISTA", "CREDIARIO", "CHEQUE", "CONVENIO", "CREDITOS", "OUTROS"].map((f) => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button variant="outline" onClick={() => window.print()}>
                   Imprimir
+                </Button>
+                <Button variant="outline" onClick={() => exportarPdf(false)}>
+                  PDF Resumido
+                </Button>
+                <Button variant="outline" onClick={() => exportarPdf(true)}>
+                  PDF Analítico
                 </Button>
               </>
             )}
@@ -684,12 +803,32 @@ export default function RhFechamentoSemanalPage() {
             <CardContent className="space-y-4">
               {vendedorSel !== "ALL" && todos.length === 1 && (() => {
                 const v = todos[0];
-                const Tile = ({ rotulo, valor, destaque, hint }: { rotulo: string; valor: number; destaque?: boolean; hint?: string }) => (
-                  <div className={`rounded-lg border p-3 ${destaque ? "bg-primary/5 border-primary/30" : "bg-muted/30"}`} title={hint}>
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{rotulo}</p>
-                    <p className={`text-xl font-bold ${destaque ? "text-primary" : ""}`}>R$ {fmtBRL(valor)}</p>
-                  </div>
-                );
+                const Tile = ({ rotulo, valor, destaque, hint, filtroOrigem }: {
+                  rotulo: string; valor: number; destaque?: boolean; hint?: string;
+                  filtroOrigem?: "VENDA_PERIODO" | "SALDO_ANTERIOR";
+                }) => {
+                  const ativo = filtroOrigem && origemSel === filtroOrigem;
+                  return (
+                    <div
+                      className={[
+                        "rounded-lg border p-3 transition-colors",
+                        destaque ? "bg-primary/5 border-primary/30" : "bg-muted/30",
+                        filtroOrigem ? "cursor-pointer hover:border-primary" : "",
+                        ativo ? "ring-2 ring-primary border-primary" : "",
+                      ].join(" ")}
+                      title={filtroOrigem ? `${hint ?? ""} — clique para filtrar o detalhe` : hint}
+                      onClick={() => {
+                        if (!filtroOrigem) return;
+                        setOrigemSel(ativo ? "ALL" : filtroOrigem);
+                        toast.info(ativo ? "Filtro de origem removido" : `Detalhe filtrado: ${rotulo}`);
+                      }}
+                    >
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{rotulo}</p>
+                      <p className={`text-xl font-bold ${destaque ? "text-primary" : ""}`}>R$ {fmtBRL(valor)}</p>
+                      {ativo && <p className="text-[10px] text-primary">filtrando detalhe ✕</p>}
+                    </div>
+                  );
+                };
                 return (
                   <div className="space-y-2">
                     <p className="text-sm font-medium">
@@ -699,9 +838,9 @@ export default function RhFechamentoSemanalPage() {
                       <Tile rotulo="Vendeu no mês (emitido em OS)" valor={v.basePorOrigem.vendasEmitidas ?? 0}
                         hint="Total emitido em OS/vendas cadastradas no mês comercial" />
                       <Tile rotulo="Recebido no ato (vendas do mês)" valor={v.basePorOrigem.vendaPeriodo}
-                        hint="Pago no cadastramento da OS + cartões processados (valor integral)" />
+                        hint="Pago no cadastramento da OS + cartões processados (valor integral)" filtroOrigem="VENDA_PERIODO" />
                       <Tile rotulo="Recebido de meses anteriores" valor={v.basePorOrigem.saldoAnterior}
-                        hint="Saldos de OS de períodos anteriores pagos neste mês" />
+                        hint="Saldos de OS de períodos anteriores pagos neste mês" filtroOrigem="SALDO_ANTERIOR" />
                       <Tile rotulo="Ficou a receber (vendas do mês)" valor={v.basePorOrigem.saldoAReceber ?? 0}
                         hint="Saldo das vendas do mês ainda em aberto — comissiona quando o cliente pagar" />
                     </div>
@@ -715,7 +854,7 @@ export default function RhFechamentoSemanalPage() {
                   </div>
                 );
               })()}
-              <TabelaFechamento vendedores={todos} metaLabel="Meta do mês" origemFiltro={origemSel} />
+              <TabelaFechamento vendedores={todos} metaLabel="Meta do mês" origemFiltro={origemSel} formaFiltro={formaSel} />
             </CardContent>
           </Card>
         );
@@ -767,7 +906,7 @@ export default function RhFechamentoSemanalPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Consolidado mensal por vendedor */}
-              <TabelaFechamento vendedores={filtraVendedor(loja.consolidado)} metaLabel="Meta do mês" origemFiltro={origemSel} />
+              <TabelaFechamento vendedores={filtraVendedor(loja.consolidado)} metaLabel="Meta do mês" origemFiltro={origemSel} formaFiltro={formaSel} />
 
               {/* Semanas */}
               <Accordion type="multiple">
@@ -808,7 +947,7 @@ export default function RhFechamentoSemanalPage() {
                             </Button>
                           )}
                         </div>
-                        <TabelaFechamento vendedores={filtraVendedor(s.vendedores)} metaLabel="Meta da semana" origemFiltro={origemSel} />
+                        <TabelaFechamento vendedores={filtraVendedor(s.vendedores)} metaLabel="Meta da semana" origemFiltro={origemSel} formaFiltro={formaSel} />
                       </AccordionContent>
                     </AccordionItem>
                   );

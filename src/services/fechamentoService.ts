@@ -499,6 +499,59 @@ export async function getFechamentoItens(fechamentoId: string): Promise<Resultad
   }));
 }
 
+export interface MeuFechamento {
+  fechamentoId: string;
+  nomeEmpresa: string | null;
+  semanaInicio: string;
+  semanaFim: string;
+  status: 'FECHADO' | 'REABERTO';
+  criadoEm: string;
+  metaSemana: number;
+  baseTotal: number;
+  comissao: number;
+  premioValor: number;
+  totalPagar: number;
+}
+
+/**
+ * Espelho do vendedor: seus itens em fechamentos CONGELADOS (documento
+ * probatório do pagamento). RLS garante que cada vendedor lê só os próprios.
+ */
+export async function getMeusFechamentos(codVendedor: number): Promise<MeuFechamento[]> {
+  const { data: itens, error } = await (supabase as any)
+    .from('fechamentos_comissao_itens')
+    .select('fechamento_id, meta_semana, base_total, comissao, premio_valor, total_pagar')
+    .eq('cod_vendedor', codVendedor);
+  if (error) throw new Error(`Erro ao ler seus fechamentos: ${error.message}`);
+  const ids = ((itens ?? []) as any[]).map((i) => i.fechamento_id);
+  if (!ids.length) return [];
+  const { data: headers, error: e2 } = await (supabase as any)
+    .from('fechamentos_comissao')
+    .select('id, nome_empresa, semana_inicio, semana_fim, status, criado_em')
+    .in('id', ids);
+  if (e2) throw new Error(`Erro ao ler fechamentos: ${e2.message}`);
+  return ((itens ?? []) as any[])
+    .map((i) => {
+      const h = ((headers ?? []) as any[]).find((x) => x.id === i.fechamento_id);
+      if (!h) return null;
+      return {
+        fechamentoId: i.fechamento_id,
+        nomeEmpresa: h.nome_empresa,
+        semanaInicio: h.semana_inicio,
+        semanaFim: h.semana_fim,
+        status: h.status,
+        criadoEm: h.criado_em,
+        metaSemana: Number(i.meta_semana) || 0,
+        baseTotal: Number(i.base_total) || 0,
+        comissao: Number(i.comissao) || 0,
+        premioValor: Number(i.premio_valor) || 0,
+        totalPagar: Number(i.total_pagar) || 0,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b!.semanaInicio.localeCompare(a!.semanaInicio)) as MeuFechamento[];
+}
+
 /** Reabertura (admin, com log) — permite refazer o fechamento. */
 export async function reabrirFechamento(fechamentoId: string): Promise<void> {
   const { data: userData } = await supabase.auth.getUser();

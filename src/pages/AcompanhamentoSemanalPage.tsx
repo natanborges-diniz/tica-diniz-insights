@@ -39,6 +39,7 @@ import {
 } from "@/services/acompanhamentoSemanalService";
 import { getGruposLojas } from "@/services/metasSemanaisService";
 import { getUltimoSyncRecebimentos } from "@/services/recebimentosService";
+import { getMeusFechamentos, type MeuFechamento } from "@/services/fechamentoService";
 import { supabase } from "@/integrations/supabase/client";
 
 function fmtBRL(n: number): string {
@@ -134,6 +135,7 @@ export default function AcompanhamentoSemanalPage() {
   const [dados, setDados] = useState<AcompanhamentoLoja[]>([]);
   const [loading, setLoading] = useState(true);
   const [ultimoSync, setUltimoSync] = useState<string | null>(null);
+  const [meusFechamentos, setMeusFechamentos] = useState<MeuFechamento[]>([]);
 
   // ---------- escopo por perfil ----------
   const codVendedorUsuario = profile?.cod_vendedor ?? null;
@@ -215,6 +217,15 @@ export default function AcompanhamentoSemanalPage() {
     carregar();
   }, [carregar]);
 
+  // espelho: fechamentos congelados do próprio vendedor (documento de pagamento)
+  useEffect(() => {
+    if (perfil === "VENDEDOR" && codVendedorUsuario != null) {
+      getMeusFechamentos(codVendedorUsuario)
+        .then(setMeusFechamentos)
+        .catch(() => setMeusFechamentos([]));
+    }
+  }, [perfil, codVendedorUsuario]);
+
   // ---------- consolidado ----------
   const consolidado = useMemo(() => {
     const meta = dados.reduce((s, l) => s + l.meta, 0);
@@ -276,6 +287,51 @@ export default function AcompanhamentoSemanalPage() {
             Nenhuma semana com metas geradas. Configure em Configurações de Metas → Semanas.
           </AlertDescription>
         </Alert>
+      )}
+
+      {perfil === "VENDEDOR" && meusFechamentos.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Meus fechamentos de comissão</CardTitle>
+            <CardDescription>
+              Documentos congelados do pagamento — valores definitivos, não mudam com o banco.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Semana</TableHead>
+                  <TableHead>Loja</TableHead>
+                  <TableHead className="text-right">Meta</TableHead>
+                  <TableHead className="text-right">Base</TableHead>
+                  <TableHead className="text-right">Comissão</TableHead>
+                  <TableHead className="text-right">Prêmios</TableHead>
+                  <TableHead className="text-right">Recebi</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {meusFechamentos.map((f) => (
+                  <TableRow key={`${f.fechamentoId}`}>
+                    <TableCell>{fmtData(f.semanaInicio)} – {fmtData(f.semanaFim)}</TableCell>
+                    <TableCell>{f.nomeEmpresa ?? "—"}</TableCell>
+                    <TableCell className="text-right">R$ {fmtBRL(f.metaSemana)}</TableCell>
+                    <TableCell className="text-right">R$ {fmtBRL(f.baseTotal)}</TableCell>
+                    <TableCell className="text-right">R$ {fmtBRL(f.comissao)}</TableCell>
+                    <TableCell className="text-right">{f.premioValor > 0 ? `R$ ${fmtBRL(f.premioValor)}` : "—"}</TableCell>
+                    <TableCell className="text-right font-semibold">R$ {fmtBRL(f.totalPagar)}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant={f.status === "FECHADO" ? "default" : "destructive"}>
+                        {f.status === "FECHADO" ? "Fechado" : "Reaberto"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       {loading ? (
