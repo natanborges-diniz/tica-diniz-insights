@@ -306,7 +306,15 @@ function TabelaFechamento({ vendedores, metaLabel, origemFiltro = "ALL", formaFi
           </>
         ))}
         <TableRow className="bg-muted/50">
-          <TableCell className="font-bold">Subtotal ({vendedores.length} vendedor(es))</TableCell>
+          <TableCell>
+            <span className="font-bold">Subtotal ({vendedores.length} vendedor(es))</span>
+            <div className="text-[11px] text-muted-foreground font-normal">
+              no ato: <strong>R$ {fmtBRL(vendedores.reduce((t, v) => t + v.basePorOrigem.vendaPeriodo, 0))}</strong>
+              {" · "}de anteriores: <strong>R$ {fmtBRL(vendedores.reduce((t, v) => t + v.basePorOrigem.saldoAnterior, 0))}</strong>
+              {" · "}emitido: <strong>R$ {fmtBRL(vendedores.reduce((t, v) => t + (v.basePorOrigem.vendasEmitidas ?? 0), 0))}</strong>
+              {" · "}a receber: <strong>R$ {fmtBRL(vendedores.reduce((t, v) => t + (v.basePorOrigem.saldoAReceber ?? 0), 0))}</strong>
+            </div>
+          </TableCell>
           <TableCell className="text-right font-bold">R$ {fmtBRL(tot.meta)}</TableCell>
           <TableCell className="text-right font-bold">
             {tot.meta > 0 ? `${Math.round((tot.base / tot.meta) * 10000) / 100}%` : "—"}
@@ -346,6 +354,7 @@ export default function RhFechamentoSemanalPage() {
   const [agrupamento, setAgrupamento] = useState<"LOJA" | "VENDEDOR">("LOJA");
   const [origemSel, setOrigemSel] = useState<"ALL" | "VENDA_PERIODO" | "SALDO_ANTERIOR">("ALL");
   const [formaSel, setFormaSel] = useState<string>("ALL");
+  const [mostrarSaldosVendedor, setMostrarSaldosVendedor] = useState(false);
   const [gerando, setGerando] = useState(false);
   const [progresso, setProgresso] = useState<{ feitas: number; total: number } | null>(null);
 
@@ -554,7 +563,11 @@ export default function RhFechamentoSemanalPage() {
               semanaInicio: sv.semanaInicio,
               semanaFim: sv.semanaFim,
               statusLabel: STATUS_BADGE[sv.status].label,
-              metaLoja: metasLoja.find((m) => m.semanaInicio === sv.semanaInicio)?.metaValor ?? 0,
+              // com vendedor filtrado, a meta da semana é a DELE (não a da loja)
+              metaLoja:
+                vendedorSel === "ALL"
+                  ? metasLoja.find((m) => m.semanaInicio === sv.semanaInicio)?.metaValor ?? 0
+                  : vend.reduce((t, v) => t + v.metaSemana, 0),
               baseTotal: vend.reduce((t, v) => t + v.baseTotal, 0),
               comissao: vend.reduce((t, v) => t + v.comissao, 0),
               premios: vend.reduce((t, v) => t + v.premioValor, 0),
@@ -570,6 +583,7 @@ export default function RhFechamentoSemanalPage() {
           titulo: `Fechamento de Comissões ${MESES[mes - 1]} ${ano}${vendedorLabel}`,
           periodoLabel: `Mês comercial ${MESES[mes - 1]} ${ano} (21→20) · modo ${modo}`,
           lojas: lojasPdf,
+          metaLabel: vendedorSel === "ALL" ? "Meta da loja" : "Meta do vendedor",
         },
         analitico
       );
@@ -841,8 +855,10 @@ export default function RhFechamentoSemanalPage() {
                         hint="Pago no cadastramento da OS + cartões processados (valor integral)" filtroOrigem="VENDA_PERIODO" />
                       <Tile rotulo="Recebido de meses anteriores" valor={v.basePorOrigem.saldoAnterior}
                         hint="Saldos de OS de períodos anteriores pagos neste mês" filtroOrigem="SALDO_ANTERIOR" />
-                      <Tile rotulo="Ficou a receber (vendas do mês)" valor={v.basePorOrigem.saldoAReceber ?? 0}
-                        hint="Saldo das vendas do mês ainda em aberto — comissiona quando o cliente pagar" />
+                      <div onClick={() => setMostrarSaldosVendedor((m) => !m)}>
+                        <Tile rotulo="Ficou a receber (vendas do mês)" valor={v.basePorOrigem.saldoAReceber ?? 0}
+                          hint="Saldo das vendas do mês ainda em aberto — clique para ver OS a OS" />
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                       <Tile rotulo="Base comissionável" valor={v.baseTotal}
@@ -854,6 +870,106 @@ export default function RhFechamentoSemanalPage() {
                   </div>
                 );
               })()}
+              {vendedorSel !== "ALL" && (() => {
+                // apuração semana a semana do vendedor (explica prêmios com % mensal < 100:
+                // o prêmio é POR SEMANA — pago nas semanas em que a meta foi atingida)
+                const linhasSemana = visao.flatMap((l) =>
+                  l.semanas.flatMap((sv) => {
+                    const eu = sv.vendedores.find((vv) => String(vv.codVendedor) === vendedorSel);
+                    if (!eu || (eu.baseTotal === 0 && eu.totalPagar === 0)) return [];
+                    return [{ loja: l.nome, sv, eu }];
+                  })
+                );
+                if (!linhasSemana.length) return null;
+                return (
+                  <div className="rounded-lg border p-3 space-y-1">
+                    <p className="text-sm font-medium">
+                      Apuração semana a semana
+                      <span className="text-xs text-muted-foreground font-normal"> — prêmios são apurados POR SEMANA (pagos nas semanas com meta atingida, mesmo que o mês feche abaixo de 100%)</span>
+                    </p>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Semana</TableHead>
+                          <TableHead>Loja</TableHead>
+                          <TableHead className="text-right">Meta da semana</TableHead>
+                          <TableHead className="text-right">Base</TableHead>
+                          <TableHead className="text-right">% Meta</TableHead>
+                          <TableHead className="text-right">Comissão</TableHead>
+                          <TableHead className="text-right">Prêmio</TableHead>
+                          <TableHead className="text-center">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {linhasSemana.map(({ loja, sv, eu }, i) => (
+                          <TableRow key={i} className={eu.premioValor > 0 ? "bg-emerald-50/50" : ""}>
+                            <TableCell>{fmtData(sv.semanaInicio)} – {fmtData(sv.semanaFim)}</TableCell>
+                            <TableCell className="text-xs">{loja}</TableCell>
+                            <TableCell className="text-right">R$ {fmtBRL(eu.metaSemana)}</TableCell>
+                            <TableCell className="text-right">R$ {fmtBRL(eu.baseTotal)}</TableCell>
+                            <TableCell className="text-right font-medium">{eu.percentualMeta}%</TableCell>
+                            <TableCell className="text-right">R$ {fmtBRL(eu.comissao)}</TableCell>
+                            <TableCell className="text-right">
+                              {eu.premioValor > 0 ? `R$ ${fmtBRL(eu.premioValor)} ✓` : "—"}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant={STATUS_BADGE[sv.status].variant}>{STATUS_BADGE[sv.status].label}</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                );
+              })()}
+
+              {mostrarSaldosVendedor && vendedorSel !== "ALL" && (() => {
+                const saldos = visao
+                  .flatMap((l) => l.saldosAbertos.map((sa) => ({ ...sa, loja: l.nome })))
+                  .filter((sa) => String(sa.codVendedor) === vendedorSel);
+                const totalAberto = saldos.reduce((t, sa) => t + sa.valorAberto, 0);
+                return (
+                  <div className="rounded-lg border border-amber-300 p-3 space-y-1">
+                    <p className="text-sm font-medium">
+                      Saldos a receber em aberto — OS a OS
+                      <span className="text-xs text-muted-foreground font-normal"> · total R$ {fmtBRL(totalAberto)} · comissiona quando o cliente pagar, na forma do pagamento</span>
+                    </p>
+                    {saldos.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Nenhum saldo em aberto das vendas do mês.</p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Loja</TableHead>
+                            <TableHead>Venda</TableHead>
+                            <TableHead>NF</TableHead>
+                            <TableHead>OS(s)</TableHead>
+                            <TableHead>Emissão</TableHead>
+                            <TableHead>Vencimento</TableHead>
+                            <TableHead>Forma registrada</TableHead>
+                            <TableHead className="text-right">Valor em aberto</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {saldos.map((sa, i) => (
+                            <TableRow key={i}>
+                              <TableCell className="text-xs">{sa.loja}</TableCell>
+                              <TableCell>{sa.numeroVenda ?? sa.codTransacao}</TableCell>
+                              <TableCell className="text-xs">{sa.numeroNf ?? "—"}</TableCell>
+                              <TableCell className="text-xs">{sa.osList ?? "—"}</TableCell>
+                              <TableCell>{fmtData(sa.dataEmissao)}</TableCell>
+                              <TableCell>{sa.dataVencimento ? fmtData(sa.dataVencimento) : "—"}</TableCell>
+                              <TableCell className="text-xs">{sa.formaCategoria}</TableCell>
+                              <TableCell className="text-right">R$ {fmtBRL(sa.valorAberto)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </div>
+                );
+              })()}
+
               <TabelaFechamento vendedores={todos} metaLabel="Meta do mês" origemFiltro={origemSel} formaFiltro={formaSel} />
             </CardContent>
           </Card>

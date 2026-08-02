@@ -12,6 +12,7 @@ export interface SemanaPdf {
   semanaInicio: string;
   semanaFim: string;
   statusLabel: string;
+  /** meta do recorte: da LOJA (sem filtro) ou do VENDEDOR filtrado */
   metaLoja: number;
   baseTotal: number;
   comissao: number;
@@ -31,6 +32,8 @@ export interface FechamentoPdfParams {
   periodoLabel: string; // "Junho 2026 (21/05 a 20/06) — modo RECEBIDO"
   lojas: LojaPdf[];
   geradoEm?: Date;
+  /** rótulo da coluna de meta semanal ("Meta da loja" | "Meta do vendedor") */
+  metaLabel?: string;
 }
 
 const brl = (n: number) =>
@@ -71,7 +74,8 @@ function rodapeParcial(doc: jsPDF, y: number, temParcial: boolean): number {
 function secaoLoja(
   doc: jsPDF,
   loja: LojaPdf,
-  analitico: boolean
+  analitico: boolean,
+  metaLabel: string
 ): void {
   const startY = (doc as any).lastAutoTable?.finalY
     ? (doc as any).lastAutoTable.finalY + 8
@@ -87,7 +91,7 @@ function secaoLoja(
   // metas e prêmios por semana (interpretativo)
   autoTable(doc, {
     startY: y + 1,
-    head: [["Semana", "Status", "Meta da loja", "Base recebida", "Comissão", "Prêmios", "A pagar"]],
+    head: [["Semana", "Status", metaLabel, "Base recebida", "Comissão", "Prêmios (apurados por semana)", "A pagar"]],
     body: loja.semanas.map((s) => [
       `${dt(s.semanaInicio)} – ${dt(s.semanaFim)}`,
       s.statusLabel,
@@ -223,10 +227,14 @@ function totalGeral(doc: jsPDF, lojas: LojaPdf[]) {
 export function gerarPdfFechamento(params: FechamentoPdfParams, analitico: boolean) {
   const doc = new jsPDF({ orientation: "landscape" });
   cabecalho(doc, params, analitico ? "Relatório ANALÍTICO (expandido por operações)" : "Relatório RESUMIDO");
-  for (const loja of params.lojas) {
-    secaoLoja(doc, loja, analitico);
+  // só lojas com movimento no recorte filtrado — sem seções vazias
+  const relevantes = params.lojas.filter(
+    (l) => l.consolidado.length > 0 && l.consolidado.some((v) => v.baseTotal > 0 || v.totalPagar > 0)
+  );
+  for (const loja of relevantes) {
+    secaoLoja(doc, loja, analitico, params.metaLabel ?? "Meta da loja");
   }
-  totalGeral(doc, params.lojas);
+  totalGeral(doc, relevantes);
   const sufixo = analitico ? "analitico" : "resumido";
   doc.save(`${params.titulo.replace(/\s+/g, "_").toLowerCase()}_${sufixo}.pdf`);
 }
