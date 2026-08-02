@@ -910,11 +910,18 @@ export default function RhFechamentoSemanalPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {linhasSemana.map(({ loja, sv, eu }, i) => (
+                        {linhasSemana.map(({ loja, sv, eu }, i) => {
+                          // meta da semana visível mesmo sem movimento: ajustada
+                          // do vendedor ou derivada padrão da loja/semana
+                          const metaSemVinculo =
+                            sv.previa?.metasAjustadas?.[Number(vendedorSel)] ??
+                            sv.previa?.metaVendedorPadrao ??
+                            null;
+                          return (
                           <TableRow key={i} className={eu && eu.premioValor > 0 ? "bg-emerald-50/50" : !eu ? "opacity-60" : ""}>
                             <TableCell>{fmtData(sv.semanaInicio)} – {fmtData(sv.semanaFim)}</TableCell>
                             <TableCell className="text-xs">{loja}</TableCell>
-                            <TableCell className="text-right">{eu ? `R$ ${fmtBRL(eu.metaSemana)}` : "—"}</TableCell>
+                            <TableCell className="text-right">{eu ? `R$ ${fmtBRL(eu.metaSemana)}` : metaSemVinculo != null && metaSemVinculo > 0 ? `R$ ${fmtBRL(metaSemVinculo)}` : "—"}</TableCell>
                             <TableCell className="text-right">{eu ? `R$ ${fmtBRL(eu.baseTotal)}` : "R$ 0,00"}</TableCell>
                             <TableCell className="text-right font-medium">{eu ? `${eu.percentualMeta}%` : "0%"}</TableCell>
                             <TableCell className="text-right">{eu ? `R$ ${fmtBRL(eu.comissao)}` : "—"}</TableCell>
@@ -925,7 +932,8 @@ export default function RhFechamentoSemanalPage() {
                               <Badge variant={STATUS_BADGE[sv.status].variant}>{STATUS_BADGE[sv.status].label}</Badge>
                             </TableCell>
                           </TableRow>
-                        ))}
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>

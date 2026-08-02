@@ -50,6 +50,10 @@ export interface PreviaFechamento {
   vendedores: ResultadoVendedor[];
   totais: { base: number; restituicoes: number; comissao: number; premio: number; pagar: number };
   avisos: string[];
+  /** meta derivada padrão do vendedor nesta loja/semana (p/ exibir mesmo sem movimento) */
+  metaVendedorPadrao?: number;
+  /** metas AJUSTADAS por codVendedor nesta semana */
+  metasAjustadas?: Record<number, number>;
 }
 
 export interface FechamentoResumo {
@@ -373,6 +377,8 @@ export async function gerarPrevia(
   return {
     codEmpresa, nomeEmpresa, ano, mes, semanaInicio, semanaFim, modo,
     taxas, faixas, sequencia, vendedores, totais, avisos,
+    metaVendedorPadrao: metas.padrao,
+    metasAjustadas: Object.fromEntries(metas.ajustadas),
   };
 }
 
