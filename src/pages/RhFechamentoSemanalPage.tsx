@@ -873,12 +873,21 @@ export default function RhFechamentoSemanalPage() {
               {vendedorSel !== "ALL" && (() => {
                 // apuração semana a semana do vendedor (explica prêmios com % mensal < 100:
                 // o prêmio é POR SEMANA — pago nas semanas em que a meta foi atingida)
-                const linhasSemana = visao.flatMap((l) =>
-                  l.semanas.flatMap((sv) => {
-                    const eu = sv.vendedores.find((vv) => String(vv.codVendedor) === vendedorSel);
-                    if (!eu || (eu.baseTotal === 0 && eu.totalPagar === 0)) return [];
-                    return [{ loja: l.nome, sv, eu }];
-                  })
+                // TODAS as semanas configuradas do mês (cortes), zeradas quando o
+                // vendedor não teve movimento — só lojas onde ele atuou no mês
+                const lojasComMovimento = visao.filter((l) =>
+                  l.semanas.some((sv) =>
+                    sv.vendedores.some(
+                      (vv) => String(vv.codVendedor) === vendedorSel && (vv.baseTotal > 0 || vv.totalPagar > 0)
+                    )
+                  )
+                );
+                const linhasSemana = lojasComMovimento.flatMap((l) =>
+                  l.semanas.map((sv) => ({
+                    loja: l.nome,
+                    sv,
+                    eu: sv.vendedores.find((vv) => String(vv.codVendedor) === vendedorSel) ?? null,
+                  }))
                 );
                 if (!linhasSemana.length) return null;
                 return (
@@ -902,15 +911,15 @@ export default function RhFechamentoSemanalPage() {
                       </TableHeader>
                       <TableBody>
                         {linhasSemana.map(({ loja, sv, eu }, i) => (
-                          <TableRow key={i} className={eu.premioValor > 0 ? "bg-emerald-50/50" : ""}>
+                          <TableRow key={i} className={eu && eu.premioValor > 0 ? "bg-emerald-50/50" : !eu ? "opacity-60" : ""}>
                             <TableCell>{fmtData(sv.semanaInicio)} – {fmtData(sv.semanaFim)}</TableCell>
                             <TableCell className="text-xs">{loja}</TableCell>
-                            <TableCell className="text-right">R$ {fmtBRL(eu.metaSemana)}</TableCell>
-                            <TableCell className="text-right">R$ {fmtBRL(eu.baseTotal)}</TableCell>
-                            <TableCell className="text-right font-medium">{eu.percentualMeta}%</TableCell>
-                            <TableCell className="text-right">R$ {fmtBRL(eu.comissao)}</TableCell>
+                            <TableCell className="text-right">{eu ? `R$ ${fmtBRL(eu.metaSemana)}` : "—"}</TableCell>
+                            <TableCell className="text-right">{eu ? `R$ ${fmtBRL(eu.baseTotal)}` : "R$ 0,00"}</TableCell>
+                            <TableCell className="text-right font-medium">{eu ? `${eu.percentualMeta}%` : "0%"}</TableCell>
+                            <TableCell className="text-right">{eu ? `R$ ${fmtBRL(eu.comissao)}` : "—"}</TableCell>
                             <TableCell className="text-right">
-                              {eu.premioValor > 0 ? `R$ ${fmtBRL(eu.premioValor)} ✓` : "—"}
+                              {eu && eu.premioValor > 0 ? `R$ ${fmtBRL(eu.premioValor)} ✓` : "—"}
                             </TableCell>
                             <TableCell className="text-center">
                               <Badge variant={STATUS_BADGE[sv.status].variant}>{STATUS_BADGE[sv.status].label}</Badge>
