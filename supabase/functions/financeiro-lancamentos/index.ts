@@ -1825,6 +1825,9 @@ async function classificarLote(body: Record<string, unknown>, _userId: string) {
   if (!Array.isArray(ids) || ids.length === 0) throw new Error("ids obrigatório (array)");
   if (!subcategoria) throw new Error("subcategoria obrigatório");
 
+  // Classificar NÃO muda o status: o título continua em PREVISTO (preparo) até
+  // entrar num borderô. O que muda é o preenchimento da conta DRE — a tela
+  // sinaliza "pronto p/ borderô" quando conta + dados de pagamento existem.
   const { data, error } = await supabase
     .from("lancamentos_financeiros")
     .update({
@@ -1832,10 +1835,9 @@ async function classificarLote(body: Record<string, unknown>, _userId: string) {
       categoria: categoria || null,
       subcategoria: subcategoria,
       requer_validacao: false,
-      status: "CLASSIFICADO",
     })
     .in("id", ids as string[])
-    .in("status", ["PREVISTO"])
+    .in("status", ["PREVISTO", "CLASSIFICADO"])
     .select("id");
 
   if (error) throw new Error(error.message);
@@ -1899,13 +1901,10 @@ async function reverterCancelamento(body: Record<string, unknown>) {
   if (qErr) throw new Error(qErr.message);
   if (!alvos || alvos.length === 0) return json({ ok: true, revertidos: 0, mensagem: "Nada a reverter" });
 
-  const classificados = alvos.filter((l) => l.subcategoria && l.requer_validacao === false).map((l) => l.id);
-  const previstos = alvos.filter((l) => !(l.subcategoria && l.requer_validacao === false)).map((l) => l.id);
+  // Todos voltam para PREVISTO (preparo). Classificação é atributo, não status.
+  const classificados: string[] = [];
+  const previstos = alvos.map((l) => l.id);
 
-  if (classificados.length > 0) {
-    await supabase.from("lancamentos_financeiros")
-      .update({ status: "CLASSIFICADO" }).in("id", classificados);
-  }
   if (previstos.length > 0) {
     await supabase.from("lancamentos_financeiros")
       .update({ status: "PREVISTO" }).in("id", previstos);
