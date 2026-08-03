@@ -126,8 +126,21 @@ export default function MesaAprovacaoPage() {
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-  const lancamentos = (mesa?.lancamentos ?? []).filter((l) => filtroSelo === "todos" || l.selo === filtroSelo);
-  const excecoesPendentes = (mesa?.lancamentos ?? []).filter((l) => l.selo === "VERMELHO" && l.status !== "AUTORIZADO");
+  const noFoco = (l: LancMesa) => !borderoFoco || l.bordero_id === borderoFoco;
+  const lancamentos = (mesa?.lancamentos ?? [])
+    .filter(noFoco)
+    .filter((l) => filtroSelo === "todos" || l.selo === filtroSelo);
+  const excecoesPendentes = (mesa?.lancamentos ?? [])
+    .filter(noFoco)
+    .filter((l) => l.selo === "VERMELHO" && l.status !== "AUTORIZADO");
+  const borderosVisiveis = (mesa?.borderos ?? []).filter((b) => !borderoFoco || b.id === borderoFoco);
+  const borderoFocoNome = borderoFoco
+    ? (mesa?.borderos ?? []).find((b) => b.id === borderoFoco)?.descricao || `BORDERÔ ${borderoFoco.slice(0, 8).toUpperCase()}`
+    : null;
+  const pendentesFoco = (mesa?.lancamentos ?? [])
+    .filter(noFoco)
+    .filter((l) => ["SEM_LASTRO", "AMARELO", "VERMELHO"].includes(l.selo));
+
 
   const seloBadge = (l: LancMesa) => {
     const cfg = SELO_CFG[l.selo] ?? SELO_CFG.SEM_LASTRO;
