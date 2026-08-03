@@ -80,7 +80,7 @@ interface Bordero {
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   PREVISTO: { label: "Previsto", variant: "secondary" },
-  CLASSIFICADO: { label: "Classificado", variant: "outline" },
+  CLASSIFICADO: { label: "Em preparo", variant: "secondary" },
   BORDERO: { label: "Borderô", variant: "outline" },
   AUTORIZADO: { label: "Autorizado", variant: "default" },
   PROCESSANDO: { label: "Processando", variant: "outline" },

@@ -87,8 +87,8 @@ const getSeloBadge = (l: Lancamento) => {
 };
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  PREVISTO: { label: "Pendente", variant: "secondary" },
-  CLASSIFICADO: { label: "Validado", variant: "outline" },
+  PREVISTO: { label: "Em preparo", variant: "secondary" },
+  CLASSIFICADO: { label: "Em preparo", variant: "secondary" },
   BORDERO: { label: "Borderô", variant: "outline" },
   AUTORIZADO: { label: "Autorizado", variant: "default" },
   PROCESSANDO: { label: "Processando", variant: "outline" },
