@@ -350,9 +350,7 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
 // uma afirmação nossa. Buscamos sob demanda em vez de guardar: o PDF é gerado
 // pelo banco e não faz sentido replicar o arquivo aqui.
 async function handleComprovante(body: Record<string, unknown> | null, url: URL) {
-  const paymentId = getParam(body, url, "payment_id");
   const codEmpresa = getParam(body, url, "cod_empresa");
-  if (!paymentId) return json({ error: "payment_id obrigatório" }, 400);
   if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
   const { apiBase, isSandbox } = await getBtgUrls();
@@ -360,6 +358,43 @@ async function handleComprovante(body: Record<string, unknown> | null, url: URL)
 
   const accessToken = await getBtgToken(Number(codEmpresa));
   const cnpj = await getCnpj(Number(codEmpresa));
+
+  let paymentId = getParam(body, url, "payment_id");
+
+  // Sem o id guardado, resolvemos pelo lote: lista os pagamentos do batch e
+  // acha o de mesmo valor. Necessário para pagamentos anteriores à integração
+  // completa — o 201 da iniciação nunca devolveu paymentId, e por um tempo a
+  // baixa automática o perdia ao gravar. Assim o comprovante funciona sem
+  // depender de o dado ter sido capturado na hora certa.
+  if (!paymentId) {
+    const batchId = getParam(body, url, "batch_id");
+    const valor = getParam(body, url, "valor");
+    if (!batchId || !valor) {
+      return json({ error: "Informe payment_id, ou batch_id e valor para localizar o pagamento" }, 400);
+    }
+
+    const qs = new URLSearchParams({ pageSize: "200", pageNumber: "1", batchId });
+    const lista = await fetch(`${apiBase}/${cnpj}/banking/payments?${qs}`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+    });
+    if (!lista.ok) {
+      return json({ error: `Não foi possível localizar o pagamento no lote (${lista.status})` }, 502);
+    }
+    const dados = await lista.json();
+    const itens = (Array.isArray(dados?.data) ? dados.data : []) as Array<Record<string, unknown>>;
+    const alvo = Number(valor).toFixed(2);
+    const candidatos = itens.filter((p) => Number(p.amount ?? 0).toFixed(2) === alvo);
+
+    if (candidatos.length !== 1) {
+      return json({
+        error: candidatos.length === 0
+          ? "Pagamento não encontrado no lote"
+          : "Mais de um pagamento com este valor no lote — não dá para saber qual é o comprovante",
+      }, 404);
+    }
+    paymentId = String(candidatos[0].paymentId ?? candidatos[0].id ?? "");
+    if (!paymentId) return json({ error: "Pagamento localizado, mas o banco não devolveu o identificador" }, 502);
+  }
 
   const res = await fetch(`${apiBase}/${cnpj}/banking/payments/${paymentId}/receipt`, {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/pdf" },

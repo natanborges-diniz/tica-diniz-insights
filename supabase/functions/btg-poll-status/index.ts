@@ -117,15 +117,37 @@ function extractAmount(obj: Record<string, unknown>): number | null {
 
 // ─── Baixa de lançamento com dados reais ─────────────────────
 // deno-lint-ignore no-explicit-any
-async function baixarLancamento(db: any, lanc: Record<string, unknown>, valorPago: number, dataPagamento: string, statusBtg: string) {
+async function baixarLancamento(
+  db: any,
+  lanc: Record<string, unknown>,
+  valorPago: number,
+  dataPagamento: string,
+  statusBtg: string,
+  pay?: Record<string, unknown>,
+) {
   const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
+
+  // O paymentId e o código de autenticação entram AQUI, no mesmo update.
+  // Antes eram gravados num update separado logo antes deste, e este os
+  // apagava — reescrevia dados_extras a partir da cópia lida no início do
+  // laço. Resultado: baixa correta, mas sem identificador, e o comprovante
+  // ficava indisponível para sempre.
+  const paymentId = pay?.paymentId ?? pay?.id ?? dados.btg_payment_id ?? null;
+
   await db.from("lancamentos_financeiros").update({
     status: "BAIXADO",
     valor_pago: valorPago,
     data_pagamento: dataPagamento,
     data_baixa: dataPagamento,
     baixado_em: new Date().toISOString(),
-    dados_extras: { ...dados, btg_payment_status: statusBtg, baixa_automatica: "btg-poll-status" },
+    dados_extras: {
+      ...dados,
+      btg_payment_id: paymentId ? String(paymentId) : null,
+      // Prova do pagamento do lado do banco — string curta, vale guardar.
+      btg_authentication_code: pay?.authenticationCode ?? dados.btg_authentication_code ?? null,
+      btg_payment_status: statusBtg,
+      baixa_automatica: "btg-poll-status",
+    },
   }).eq("id", lanc.id);
 
   // Pagamento unificado: os componentes são baixados junto, rateando o valor
@@ -282,8 +304,10 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
         // Legado sem correlação: só baixa se o lote inteiro é terminal-pago
         const st = pay ? normStatus(pay.status) : batchStatus;
 
-        // Primeira vez que vemos o paymentId real: guarda para recibo/estorno.
-        if (pay && !pid && (pay.paymentId || pay.id)) {
+        // Primeira vez que vemos o paymentId real e o lançamento ainda não vai
+        // ser baixado agora: guarda assim mesmo, para o comprovante já ficar
+        // disponível enquanto o pagamento está em trânsito.
+        if (pay && !pid && (pay.paymentId || pay.id) && st !== "PAGO") {
           await db.from("lancamentos_financeiros").update({
             dados_extras: { ...extras, btg_payment_id: String(pay.paymentId ?? pay.id) },
           }).eq("id", lanc.id);
@@ -292,7 +316,7 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
         if (st === "PAGO") {
           const valorPago = (pay && extractAmount(pay)) || Number(lanc.valor);
           const dataPag = pay ? extractDate(pay, hoje) : hoje;
-          await baixarLancamento(db, lanc, valorPago, dataPag, String(pay?.status ?? "BATCH_PAGO"));
+          await baixarLancamento(db, lanc, valorPago, dataPag, String(pay?.status ?? "BATCH_PAGO"), pay);
           resultado.baixados++;
         } else if (st === "FALHA") {
           await rejeitarLancamento(db, lanc, String(pay?.status ?? "BATCH_FALHA"));

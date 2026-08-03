@@ -371,7 +371,10 @@ export default function FinanceiroHubPage() {
         body: {
           action: "comprovante",
           cod_empresa: l.cod_empresa,
-          payment_id: (l.dados_extras || {}).btg_payment_id,
+          // Sem o id guardado, o backend localiza pelo lote + valor.
+          payment_id: (l.dados_extras || {}).btg_payment_id ?? null,
+          batch_id: (l.dados_extras || {}).btg_batch_id ?? null,
+          valor: l.valor_pago ?? l.valor,
         },
       });
       if (error) throw error;
@@ -1271,7 +1274,7 @@ export default function FinanceiroHubPage() {
                     ) : pagos.map(l => {
                       const pago = Number(l.valor_pago ?? l.valor);
                       const dif = Number((pago - l.valor).toFixed(2));
-                      const temComprovante = !!(l.dados_extras || {}).btg_payment_id;
+                      const temComprovante = !!((l.dados_extras || {}).btg_payment_id || (l.dados_extras || {}).btg_batch_id);
                       return (
                         <TableRow key={l.id}>
                           <TableCell className="text-sm whitespace-nowrap">
@@ -1309,7 +1312,7 @@ export default function FinanceiroHubPage() {
                               </Button>
                             ) : (
                               <span className="text-[11px] text-muted-foreground"
-                                title="Baixa manual ou pagamento anterior à integração — o banco não tem recibo vinculado">
+                                title="Baixa manual ou pagamento fora do BTG — não há recibo emitido pelo banco">
                                 sem recibo no banco
                               </span>
                             )}
