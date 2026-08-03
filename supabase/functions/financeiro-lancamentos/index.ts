@@ -1503,23 +1503,51 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   });
 
   if (!fecharRes.ok) {
-    // Os itens já entraram no lote; o que falhou foi o fechamento. Não marcamos
-    // ENVIADO para não esconder um lote que ninguém vai conseguir aprovar.
+    // Os itens entraram no lote, mas o lote não fechou — e lote que não fecha
+    // não chega à aprovação do app, ou seja NÃO vai ao banco e nunca vira baixa.
+    //
+    // Aqui estava o bug que deixava títulos presos: eles já tinham sido virados
+    // para PROCESSANDO item a item (linha ~1428) e ficavam assim para sempre.
+    // O reenvio só busca AUTORIZADO, então achava 0 itens e devolvia "o BTG
+    // recusou (0 falha)"; e o cancelamento do borderô pula PROCESSANDO, então
+    // os títulos ficavam órfãos, sem nenhuma ação possível na tela.
+    //
+    // Correção: desfaz o PROCESSANDO (volta a AUTORIZADO, pronto para reenviar)
+    // e abandona o lote no BTG para não deixar remessa fantasma pendurada.
     const errText = await fecharRes.text();
     console.error(`[financeiro-lancamentos] Falha ao fechar lote ${batchId}:`, fecharRes.status, errText);
+
+    await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    }).catch((e) => console.warn("[financeiro-lancamentos] Falha ao abandonar lote não fechado:", e));
+
+    const { data: revertidos } = await supabase
+      .from("lancamentos_financeiros")
+      .update({
+        status: "AUTORIZADO",
+        observacao: `Lote BTG ${String(batchId).slice(0, 8)} não fechou (${fecharRes.status}) — não foi ao banco, reenviar.`,
+      })
+      .eq("bordero_id", bordero_id)
+      .eq("status", "PROCESSANDO")
+      .select("id");
+
     return json({
       ok: false,
       code: "BTG_BATCH_NOT_FINISHED",
       error:
         `Os ${aceitos} pagamento(s) foram aceitos, mas o BTG recusou o fechamento do lote ` +
-        `(${fecharRes.status}). Nada foi executado nem debitado. ` +
+        `(${fecharRes.status}). Nada foi executado nem debitado, e o lote foi abandonado. ` +
+        `Os ${(revertidos || []).length} título(s) voltaram para autorizados — reenvie o borderô. ` +
         `Detalhe do banco: ${descreverErroBtg(errText).slice(0, 300)}`,
       status: "APROVADO",
       btg_batch_id: batchId,
       aceitos,
       falhas,
+      revertidos: (revertidos || []).length,
     });
   }
+
 
   // 4. Consome os créditos de liberação usados nesta remessa.
   //
