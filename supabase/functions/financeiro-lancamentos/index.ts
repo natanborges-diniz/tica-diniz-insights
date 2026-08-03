@@ -844,6 +844,15 @@ async function adicionarAoBordero(body: Record<string, unknown>) {
   return json({ ok: true });
 }
 
+/**
+ * Tirar item do borderô = desautorizar aquele título e devolvê-lo ao preparo.
+ *
+ * Vale também com o borderô já APROVADO: era o caso sem saída da tela — o
+ * item aparecia em "Em Borderô / Autorizados" e a única forma de mexer nele
+ * era cancelar a remessa inteira. Como a composição mudou, o borderô volta a
+ * MONTAGEM e precisa ser aprovado de novo (a aprovação valia para aquele
+ * conjunto, não para outro).
+ */
 async function removerDoBordero(body: Record<string, unknown>) {
   const { bordero_id, lancamento_ids } = body;
   if (!bordero_id) throw new Error("bordero_id obrigatório");
@@ -852,7 +861,9 @@ async function removerDoBordero(body: Record<string, unknown>) {
 
   const { data: bordero } = await supabase.from("borderos").select("status").eq("id", bordero_id).single();
   if (!bordero) throw new Error("Borderô não encontrado");
-  if (bordero.status !== "MONTAGEM") throw new Error("Borderô não está em montagem");
+  if (!["MONTAGEM", "APROVADO"].includes(bordero.status)) {
+    throw new Error("Borderô já enviado ao banco — não é possível desautorizar itens");
+  }
 
   const { error } = await supabase
     .from("lancamentos_financeiros")
@@ -862,7 +873,16 @@ async function removerDoBordero(body: Record<string, unknown>) {
 
   if (error) throw new Error(error.message);
   await recalcBordero(String(bordero_id));
-  return json({ ok: true });
+
+  if (bordero.status === "APROVADO") {
+    await supabase.from("borderos").update({
+      status: "MONTAGEM",
+      aprovado_por: null,
+      aprovado_em: null,
+    }).eq("id", bordero_id);
+  }
+
+  return json({ ok: true, reaprovar: bordero.status === "APROVADO" });
 }
 
 /**
