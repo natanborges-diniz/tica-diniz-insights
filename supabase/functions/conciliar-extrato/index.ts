@@ -31,6 +31,53 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/**
+ * Copia a classificação do lançamento conciliado para a linha de extrato.
+ *
+ * A conta do DRE já foi decidida uma vez, quando o título entrou no borderô.
+ * Pedir de novo no extrato é retrabalho e, pior, abre espaço para a mesma
+ * despesa cair em contas diferentes nas duas pontas.
+ *
+ * Só herda de alocação única: rateio entre vários lançamentos pode misturar
+ * naturezas, e aí a escolha é do humano.
+ */
+// deno-lint-ignore no-explicit-any
+async function herdarClassificacaoDoLancamento(
+  db: any,
+  extratoId: string,
+  alocacoes: Array<{ alvo_tipo: string; alvo_id?: string | null }>,
+) {
+  const lancamentos = alocacoes.filter((a) => a.alvo_tipo === "LANCAMENTO" && a.alvo_id);
+  if (lancamentos.length !== 1) return;
+
+  const { data: l } = await db
+    .from("lancamentos_financeiros")
+    .select("natureza, categoria, subcategoria, dados_extras")
+    .eq("id", lancamentos[0].alvo_id)
+    .single();
+
+  if (!l?.natureza) return; // lançamento sem classificação: não há o que herdar
+
+  // btg_extrato só tem a coluna `natureza`; categoria e subcategoria vão para
+  // dados_extras, junto com a origem da herança — assim dá para auditar de onde
+  // veio a classificação sem precisar refazer o caminho.
+  const { data: atual } = await db
+    .from("btg_extrato").select("dados_extras").eq("id", extratoId).single();
+  const dados = (atual?.dados_extras || {}) as Record<string, unknown>;
+
+  await db.from("btg_extrato").update({
+    natureza: l.natureza,
+    dados_extras: {
+      ...dados,
+      categoria: l.categoria ?? null,
+      subcategoria: l.subcategoria ?? null,
+      conta_numero: (l.dados_extras as Record<string, unknown> | null)?.conta_numero ?? null,
+      classificacao_herdada_de: lancamentos[0].alvo_id,
+    },
+    updated_at: new Date().toISOString(),
+  }).eq("id", extratoId);
+}
+
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -378,6 +425,16 @@ async function handleExecutar(db: ReturnType<typeof getServiceClient>, body: Rec
           for (const a of result.alocacoes) {
             if (a.alvo_id) usados.add(`${a.alvo_tipo}|${a.alvo_id}`);
           }
+
+          // Herda a classificação do lançamento conciliado.
+          //
+          // `fn_conciliar_extrato` vincula, mas não copiava natureza/categoria —
+          // só o ramo das regras automáticas gravava `natureza`. Resultado: o
+          // pagamento saía do borderô classificado, o extrato casava com ele, e
+          // a tela pedia para classificar de novo a mesma despesa. Trabalho
+          // repetido e risco de o extrato acabar num DRE diferente do borderô.
+          await herdarClassificacaoDoLancamento(db, e.id, result.alocacoes);
+
           resultado.conciliados++;
         } else {
           const dados = (entry.dados_extras || {}) as Record<string, unknown>;
