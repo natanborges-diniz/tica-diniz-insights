@@ -1677,6 +1677,19 @@ async function consumirLiberacoes(lancamentos: Array<Record<string, unknown>>) {
   }
 }
 
+/**
+ * Cancelar borderô = desmanchar a remessa, não descartar os títulos.
+ *
+ * Todo lançamento que estava nele volta para "Em Preparo" (PREVISTO, sem
+ * autorização e sem vínculo), pronto para ser selecionado num borderô novo. A
+ * classificação e os dados de pagamento continuam gravados — o trabalho de
+ * preparação não se perde.
+ *
+ * O filtro de status é largo de propósito: antes só BORDERO/AUTORIZADO eram
+ * devolvidos, e itens AGRUPADO/CLASSIFICADO ficavam pendurados na seção
+ * "Em Borderô" apontando para um borderô cancelado — a confusão que se via na
+ * tela. Só PROCESSANDO e BAIXADO ficam de fora: esses já foram ao banco.
+ */
 async function cancelarBordero(body: Record<string, unknown>) {
   const { bordero_id } = body;
   if (!bordero_id) throw new Error("bordero_id obrigatório");
@@ -1687,15 +1700,20 @@ async function cancelarBordero(body: Record<string, unknown>) {
     throw new Error("Borderô já enviado ou processado não pode ser cancelado");
   }
 
-  await supabase
+  const { data: devolvidos } = await supabase
     .from("lancamentos_financeiros")
     .update({ bordero_id: null, status: "PREVISTO", autorizado_por: null, autorizado_em: null })
     .eq("bordero_id", bordero_id)
-    .in("status", ["BORDERO", "AUTORIZADO"]);
+    .in("status", ["BORDERO", "AUTORIZADO", "AGRUPADO", "CLASSIFICADO", "PREVISTO"])
+    .select("id");
 
   await supabase.from("borderos").update({ status: "CANCELADO" }).eq("id", bordero_id);
 
-  return json({ ok: true, status: "CANCELADO" });
+  return json({
+    ok: true,
+    status: "CANCELADO",
+    devolvidos: (devolvidos || []).length,
+  });
 }
 
 async function detalheBordero(body: Record<string, unknown>) {
