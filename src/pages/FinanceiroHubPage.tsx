@@ -767,6 +767,15 @@ export default function FinanceiroHubPage() {
           footer={
             <>
               <Button variant="outline" onClick={() => setLiberarBorderoId(null)}>Fechar</Button>
+              {/* Saída para o caso que não se resolve num clique: a Mesa já
+                  filtrada por este borderô. Deixa de ser o caminho obrigatório
+                  e passa a ser o aprofundamento. */}
+              {diagnostico && diagnostico.travados > 0 && (
+                <Button variant="ghost" size="sm"
+                  onClick={() => { window.location.href = `/financeiro/mesa?bordero=${liberarBorderoId}&empresa=${codEmpresa}`; }}>
+                  Ver na Mesa
+                </Button>
+              )}
               {diagnostico?.pode_liberar && (
                 <Button
                   onClick={() => aprovarEEnviarMutation.mutate(liberarBorderoId!)}
