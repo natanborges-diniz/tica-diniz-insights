@@ -1510,7 +1510,14 @@ export default function FinanceiroHubPage() {
                                 onAprovar={() => setLiberarBorderoId(b.id)}
                                 onEnviar={() => enviarBorderoMutation.mutate(b.id)}
                                 onConfirmar={() => confirmarProcessamentoMutation.mutate(b.id)}
-                                onCancelar={() => cancelarBorderoMutation.mutate(b.id)}
+                                onCancelar={() => {
+                                  const ok = window.confirm(
+                                    `Cancelar o borderô "${b.descricao}"?\n\n` +
+                                    `Os ${b.qtd_lancamentos} título(s) voltam para "Em Preparo" com a classificação e os dados de pagamento mantidos, ` +
+                                    `e podem ser selecionados de novo para um borderô novo.\n\nNada é excluído e nada vai ao banco.`
+                                  );
+                                  if (ok) cancelarBorderoMutation.mutate(b.id);
+                                }}
                                 isPendingAprovar={false}
                                 isPendingEnviar={enviarBorderoMutation.isPending}
                                 isPendingConfirmar={confirmarProcessamentoMutation.isPending}
