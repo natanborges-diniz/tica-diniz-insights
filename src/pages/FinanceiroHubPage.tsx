@@ -112,6 +112,8 @@ export default function FinanceiroHubPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [borderoDialogOpen, setBorderoDialogOpen] = useState(false);
   const [borderoDetalheId, setBorderoDetalheId] = useState<string | null>(null);
+  const [borderoBloqueio, setBorderoBloqueio] = useState<BorderoBloqueioPayload | null>(null);
+
   const [activeTab, setActiveTab] = useState("contas-pagar");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [prepPaymentLanc, setPrepPaymentLanc] = useState<Lancamento | null>(null);
