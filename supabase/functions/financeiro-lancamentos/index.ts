@@ -844,6 +844,15 @@ async function adicionarAoBordero(body: Record<string, unknown>) {
   return json({ ok: true });
 }
 
+/**
+ * Tirar item do borderô = desautorizar aquele título e devolvê-lo ao preparo.
+ *
+ * Vale também com o borderô já APROVADO: era o caso sem saída da tela — o
+ * item aparecia em "Em Borderô / Autorizados" e a única forma de mexer nele
+ * era cancelar a remessa inteira. Como a composição mudou, o borderô volta a
+ * MONTAGEM e precisa ser aprovado de novo (a aprovação valia para aquele
+ * conjunto, não para outro).
+ */
 async function removerDoBordero(body: Record<string, unknown>) {
   const { bordero_id, lancamento_ids } = body;
   if (!bordero_id) throw new Error("bordero_id obrigatório");
@@ -852,7 +861,9 @@ async function removerDoBordero(body: Record<string, unknown>) {
 
   const { data: bordero } = await supabase.from("borderos").select("status").eq("id", bordero_id).single();
   if (!bordero) throw new Error("Borderô não encontrado");
-  if (bordero.status !== "MONTAGEM") throw new Error("Borderô não está em montagem");
+  if (!["MONTAGEM", "APROVADO"].includes(bordero.status)) {
+    throw new Error("Borderô já enviado ao banco — não é possível desautorizar itens");
+  }
 
   const { error } = await supabase
     .from("lancamentos_financeiros")
@@ -862,7 +873,16 @@ async function removerDoBordero(body: Record<string, unknown>) {
 
   if (error) throw new Error(error.message);
   await recalcBordero(String(bordero_id));
-  return json({ ok: true });
+
+  if (bordero.status === "APROVADO") {
+    await supabase.from("borderos").update({
+      status: "MONTAGEM",
+      aprovado_por: null,
+      aprovado_em: null,
+    }).eq("id", bordero_id);
+  }
+
+  return json({ ok: true, reaprovar: bordero.status === "APROVADO" });
 }
 
 /**
@@ -1677,6 +1697,19 @@ async function consumirLiberacoes(lancamentos: Array<Record<string, unknown>>) {
   }
 }
 
+/**
+ * Cancelar borderô = desmanchar a remessa, não descartar os títulos.
+ *
+ * Todo lançamento que estava nele volta para "Em Preparo" (PREVISTO, sem
+ * autorização e sem vínculo), pronto para ser selecionado num borderô novo. A
+ * classificação e os dados de pagamento continuam gravados — o trabalho de
+ * preparação não se perde.
+ *
+ * O filtro de status é largo de propósito: antes só BORDERO/AUTORIZADO eram
+ * devolvidos, e itens AGRUPADO/CLASSIFICADO ficavam pendurados na seção
+ * "Em Borderô" apontando para um borderô cancelado — a confusão que se via na
+ * tela. Só PROCESSANDO e BAIXADO ficam de fora: esses já foram ao banco.
+ */
 async function cancelarBordero(body: Record<string, unknown>) {
   const { bordero_id } = body;
   if (!bordero_id) throw new Error("bordero_id obrigatório");
@@ -1687,15 +1720,20 @@ async function cancelarBordero(body: Record<string, unknown>) {
     throw new Error("Borderô já enviado ou processado não pode ser cancelado");
   }
 
-  await supabase
+  const { data: devolvidos } = await supabase
     .from("lancamentos_financeiros")
     .update({ bordero_id: null, status: "PREVISTO", autorizado_por: null, autorizado_em: null })
     .eq("bordero_id", bordero_id)
-    .in("status", ["BORDERO", "AUTORIZADO"]);
+    .in("status", ["BORDERO", "AUTORIZADO", "AGRUPADO", "CLASSIFICADO", "PREVISTO"])
+    .select("id");
 
   await supabase.from("borderos").update({ status: "CANCELADO" }).eq("id", bordero_id);
 
-  return json({ ok: true, status: "CANCELADO" });
+  return json({
+    ok: true,
+    status: "CANCELADO",
+    devolvidos: (devolvidos || []).length,
+  });
 }
 
 async function detalheBordero(body: Record<string, unknown>) {

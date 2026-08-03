@@ -274,11 +274,13 @@ function LancamentoRow({
   if (l.status === "BAIXADO" && isAdmin) {
     secondaryActions.push({ label: "Reabrir", icon: RotateCcw, onClick: () => onReabrir(l.id) });
   }
-  if (l.bordero_id && ["BORDERO", "AUTORIZADO"].includes(l.status) && onRemoverDoBordero) {
-    secondaryActions.push({ label: "Remover do Borderô", icon: Unlink, onClick: () => onRemoverDoBordero(l), destructive: true });
+  // Item preso em borderô: desautorizar devolve ao preparo e o deixa selecionável
+  // de novo. Sem isso a única saída era cancelar a remessa inteira.
+  if (l.bordero_id && ["BORDERO", "AUTORIZADO", "AGRUPADO"].includes(l.status) && onRemoverDoBordero) {
+    secondaryActions.push({ label: "Desautorizar (voltar p/ Em Preparo)", icon: Unlink, onClick: () => onRemoverDoBordero(l), destructive: true });
   }
   if (!l.bordero_id && l.status === "AUTORIZADO") {
-    secondaryActions.push({ label: "Desautorizar", icon: RotateCcw, onClick: () => onReabrir(l.id) });
+    secondaryActions.push({ label: "Desautorizar (voltar p/ Em Preparo)", icon: RotateCcw, onClick: () => onReabrir(l.id) });
   }
 
   return (

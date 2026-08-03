@@ -373,15 +373,31 @@ export default function FinanceiroHubPage() {
 
   const cancelarBorderoMutation = useMutation({
     mutationFn: (id: string) => invokeAction("cancelar_bordero", { bordero_id: id }),
-    onSuccess: () => { toast.success("Borderô cancelado"); invalidateAll(); },
+    onSuccess: (data: { devolvidos?: number }) => {
+      const n = data?.devolvidos ?? 0;
+      toast.success(
+        n > 0
+          ? `Borderô cancelado — ${n} título${n > 1 ? "s" : ""} voltou para "Em Preparo" (classificação e dados de pagamento mantidos)`
+          : "Borderô cancelado"
+      );
+      invalidateAll();
+      setActiveTab("pagar");
+    },
     onError: (e: Error) => toast.error(e.message || "Erro ao cancelar"),
   });
 
   const removerDoBorderoMutation = useMutation({
     mutationFn: ({ bordero_id, lancamento_ids }: { bordero_id: string; lancamento_ids: string[] }) =>
       invokeAction("remover_do_bordero", { bordero_id, lancamento_ids }),
-    onSuccess: () => { toast.success("Lançamento removido do borderô"); invalidateAll(); },
-    onError: (e: Error) => toast.error(e.message || "Erro ao remover do borderô"),
+    onSuccess: (data: { reaprovar?: boolean }) => {
+      toast.success(
+        data?.reaprovar
+          ? 'Título desautorizado e devolvido a "Em Preparo" — o borderô voltou para montagem e precisa ser aprovado de novo'
+          : 'Título desautorizado e devolvido a "Em Preparo"'
+      );
+      invalidateAll();
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro ao desautorizar título"),
   });
 
   const prepararPagamentoMutation = useMutation({
@@ -1494,7 +1510,14 @@ export default function FinanceiroHubPage() {
                                 onAprovar={() => setLiberarBorderoId(b.id)}
                                 onEnviar={() => enviarBorderoMutation.mutate(b.id)}
                                 onConfirmar={() => confirmarProcessamentoMutation.mutate(b.id)}
-                                onCancelar={() => cancelarBorderoMutation.mutate(b.id)}
+                                onCancelar={() => {
+                                  const ok = window.confirm(
+                                    `Cancelar o borderô "${b.descricao}"?\n\n` +
+                                    `Os ${b.qtd_lancamentos} título(s) voltam para "Em Preparo" com a classificação e os dados de pagamento mantidos, ` +
+                                    `e podem ser selecionados de novo para um borderô novo.\n\nNada é excluído e nada vai ao banco.`
+                                  );
+                                  if (ok) cancelarBorderoMutation.mutate(b.id);
+                                }}
                                 isPendingAprovar={false}
                                 isPendingEnviar={enviarBorderoMutation.isPending}
                                 isPendingConfirmar={confirmarProcessamentoMutation.isPending}

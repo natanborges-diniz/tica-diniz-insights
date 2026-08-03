@@ -130,8 +130,9 @@ export function BorderoGuidedActions({
       )}
 
       {["MONTAGEM", "APROVADO"].includes(status) && (
-        <Button size="sm" variant="ghost" onClick={onCancelar} disabled={isPendingCancelar}>
-          <XCircle className="h-3.5 w-3.5" />
+        <Button size="sm" variant="ghost" onClick={onCancelar} disabled={isPendingCancelar}
+          title='Cancelar o borderô: os títulos voltam para "Em Preparo" e podem ser selecionados de novo'>
+          <XCircle className="h-3.5 w-3.5 mr-1" /> Desmanchar
         </Button>
       )}
     </div>
