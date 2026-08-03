@@ -138,13 +138,25 @@ async function handleImportarTodas() {
     erros: [] as Array<{ cod_empresa: number; erro: string }>,
   };
 
+  // Orçamento de tempo: a edge function morre em 150s (IDLE_TIMEOUT) e o
+  // relatório inteiro se perde. Paramos antes e devolvemos o que já entrou —
+  // as lojas restantes entram na passada seguinte do cron.
+  const inicio = Date.now();
+  const ORCAMENTO_MS = 110_000;
+
   for (const t of (tokens || [])) {
     const ce = Number(t.cod_empresa);
+
+    if (Date.now() - inicio > ORCAMENTO_MS) {
+      resultado.ignoradas.push({ cod_empresa: ce, motivo: "tempo esgotado nesta execução — entra na próxima rodada" });
+      continue;
+    }
 
     if (new Date(t.expires_at) < agora) {
       resultado.ignoradas.push({ cod_empresa: ce, motivo: "token BTG expirado — reautorizar a loja" });
       continue;
     }
+
 
     try {
       const res = await importarEmpresa(ce);
