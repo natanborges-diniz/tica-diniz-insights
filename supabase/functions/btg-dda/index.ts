@@ -575,25 +575,63 @@ async function importarEmpresa(ce: number): Promise<Response> {
       .select("id, linha_digitavel")
       .eq("cod_empresa", ce);
 
+    // Compara SÓ DÍGITOS dos dois lados. A primeira versão comparava a linha
+    // crua contra o conjunto normalizado; como os registros antigos estavam
+    // gravados com pontuação, quase todos pareceram "sumidos" — e a limpeza
+    // apagou boleto legítimo em 04/08/2026.
     const sumiram = (locais || [])
-      .filter((t) => t.linha_digitavel && !linhasDoBanco.has(String(t.linha_digitavel)))
+      .filter((t) => {
+        const linha = String(t.linha_digitavel ?? "").replace(/\D/g, "");
+        return linha.length > 0 && !linhasDoBanco.has(linha);
+      })
       .map((t) => String(t.id));
 
-    if (sumiram.length > 0) {
-      const { data: comVinculo } = await db
-        .from("lancamentos_financeiros")
-        .select("btg_dda_id")
-        .in("btg_dda_id", sumiram);
-      const protegidos = new Set((comVinculo || []).map((l) => String(l.btg_dda_id)));
+    // Trava de sanidade: se o "espelho" quer apagar quase tudo, quem está
+    // errado é o espelho. Falha de rede, resposta truncada ou mudança de
+    // formato não podem virar exclusão em massa.
+    const limite = Math.max(20, Math.floor((locais || []).length * 0.3));
+    if (sumiram.length > limite) {
+      console.warn(
+        `[btg-dda] empresa ${ce}: limpeza ABORTADA — ${sumiram.length} de ${(locais || []).length} ` +
+        `títulos apareceriam como removidos (limite ${limite}). Provável divergência de formato ou resposta incompleta do BTG.`,
+      );
+    } else if (sumiram.length > 0) {
+      // Vínculos em lotes: `.in()` com centenas de UUIDs estoura o limite de
+      // URL do PostgREST. Antes o erro não era checado, a lista de protegidos
+      // vinha vazia e a exclusão levava junto o que tinha vínculo.
+      const protegidos = new Set<string>();
+      let falhouChecagem = false;
 
-      const apagar = sumiram.filter((id) => !protegidos.has(id));
-      if (apagar.length > 0) {
-        const { count } = await db
-          .from("btg_dda_titulos")
-          .delete({ count: "exact" })
-          .in("id", apagar);
-        removidos = count ?? apagar.length;
-        console.log(`[btg-dda] empresa ${ce}: ${removidos} títulos removidos (não constam mais no banco)`);
+      for (let i = 0; i < sumiram.length; i += 50) {
+        const fatia = sumiram.slice(i, i + 50);
+        const { data: comVinculo, error } = await db
+          .from("lancamentos_financeiros")
+          .select("btg_dda_id")
+          .in("btg_dda_id", fatia);
+        if (error) {
+          console.error(`[btg-dda] empresa ${ce}: falha ao checar vínculos — limpeza abortada:`, error.message);
+          falhouChecagem = true;
+          break;
+        }
+        for (const l of (comVinculo || [])) protegidos.add(String(l.btg_dda_id));
+      }
+
+      // Na dúvida, não apaga. Título a mais na tela é ruído; título a menos é
+      // boleto perdido.
+      if (!falhouChecagem) {
+        const apagar = sumiram.filter((id) => !protegidos.has(id));
+        if (apagar.length > 0) {
+          const { count, error } = await db
+            .from("btg_dda_titulos")
+            .delete({ count: "exact" })
+            .in("id", apagar);
+          if (error) {
+            console.error(`[btg-dda] empresa ${ce}: erro ao remover títulos:`, error.message);
+          } else {
+            removidos = count ?? apagar.length;
+            console.log(`[btg-dda] empresa ${ce}: ${removidos} títulos removidos (não constam mais no banco)`);
+          }
+        }
       }
     }
   }
