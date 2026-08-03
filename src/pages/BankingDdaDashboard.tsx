@@ -49,6 +49,9 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   CONCILIADO: { label: "Conciliado", variant: "default" },
   IGNORADO: { label: "Ignorado", variant: "secondary" },
   PAGO: { label: "Pago", variant: "default" },
+  // Envelhecido sem par — o BTG devolve todo o histórico da conta, e título
+  // vencido há mais de 90 dias sem lançamento não vai mais encontrar um.
+  ARQUIVADO: { label: "Arquivado", variant: "secondary" },
 };
 
 function formatCnpj(raw: string | null): string {

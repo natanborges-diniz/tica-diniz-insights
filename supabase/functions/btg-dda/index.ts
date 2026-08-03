@@ -179,6 +179,50 @@ async function handleImportarTodas() {
  * Roda ao fim de toda importação, então o sistema se conserta sozinho na
  * passada seguinte, sem ninguém precisar apertar nada.
  */
+/**
+ * Vencido há mais tempo que isto e ainda sem lançamento: é arquivo, não pendência.
+ *
+ * O DDA do BTG devolve tudo que já passou pela conta — as lojas 1, 2 e 4 têm
+ * título desde fevereiro de 2018. Essa dívida nunca esteve neste sistema, então
+ * não existe lançamento para vincular e nunca vai existir. Sem arquivar, ela
+ * infla a contagem de "sem boleto" para sempre.
+ */
+const DIAS_PARA_ARQUIVAR = 90;
+
+/**
+ * Tira de circulação os títulos velhos que nunca acharão par.
+ *
+ * Só toca no que está sem vínculo: título ligado a um lançamento guarda o
+ * histórico do pagamento e permanece, por mais antigo que seja.
+ */
+async function arquivarTitulosVelhos(ce: number): Promise<number> {
+  const db = getServiceClient();
+  const limite = new Date(Date.now() - DIAS_PARA_ARQUIVAR * 86_400_000).toISOString().slice(0, 10);
+
+  const { data: candidatos } = await db
+    .from("btg_dda_titulos")
+    .select("id")
+    .eq("cod_empresa", ce)
+    .lt("data_vencimento", limite)
+    .not("status", "in", "(ARQUIVADO,PAGO,IGNORADO)");
+
+  if (!candidatos || candidatos.length === 0) return 0;
+
+  const ids = candidatos.map((t) => String(t.id));
+  const { data: comVinculo } = await db
+    .from("lancamentos_financeiros")
+    .select("btg_dda_id")
+    .in("btg_dda_id", ids);
+  const protegidos = new Set((comVinculo || []).map((l) => String(l.btg_dda_id)));
+
+  const arquivar = ids.filter((id) => !protegidos.has(id));
+  if (arquivar.length === 0) return 0;
+
+  await db.from("btg_dda_titulos").update({ status: "ARQUIVADO" }).in("id", arquivar);
+  console.log(`[btg-dda] empresa ${ce}: ${arquivar.length} títulos arquivados (vencidos há mais de ${DIAS_PARA_ARQUIVAR} dias, sem vínculo)`);
+  return arquivar.length;
+}
+
 async function reconciliarEmpresa(ce: number): Promise<{ vinculados: number; sem_match: number }> {
   const db = getServiceClient();
 
@@ -561,11 +605,16 @@ async function importarEmpresa(ce: number): Promise<Response> {
   // não conciliava nada (eles entram como duplicados e pulam a checagem).
   const recon = await reconciliarEmpresa(ce);
 
+  // Depois de tentar vincular, o que é velho demais sai de circulação.
+  // A ordem importa: arquivar antes tiraria da mesa um título que ainda casaria.
+  const arquivados = await arquivarTitulosVelhos(ce);
+
   return json({
     success: true,
     importados: inseridos,
     duplicados,
     removidos,
+    arquivados,
     total_btg_paginado: btgData.length,
     reconciliados: recon.vinculados,
     sem_match: recon.sem_match,
