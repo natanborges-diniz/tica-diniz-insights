@@ -445,7 +445,6 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
     return json({ cod_empresa: codEmpresa, lancamentos: mockEntries, sandbox: true });
   }
 
-  const accessToken = await getBtgToken(codEmpresa);
   const cnpj = await getCnpj(codEmpresa);
   const accountId = await getAccountId(codEmpresa);
 
@@ -454,16 +453,20 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
   if (dataFim) params.set("endDate", dataFim);
 
   const qs = params.toString() ? `?${params}` : "";
-  const res = await fetch(
+  const res = await btgGet(
+    codEmpresa,
     `${apiBase}/${cnpj}/banking/accounts/${accountId}/statements${qs}`,
-    { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
   );
 
   if (!res.ok) {
     const resBody = await res.text();
     console.error("[btg-extrato] Extrato error:", res.status, resBody);
-    return json({ error: "Erro ao consultar extrato", status: res.status, details: resBody }, 502);
+    const msg = res.status === 401
+      ? `Autorização BTG da empresa ${codEmpresa} inválida — reautorize a loja em /admin/btg-validacao.`
+      : "Erro ao consultar extrato";
+    return json({ error: msg, status: res.status, details: resBody }, res.status === 401 ? 401 : 502);
   }
+
 
   const data = await res.json();
   console.log("[btg-extrato] handleExtrato raw keys:", Object.keys(data || {}));
