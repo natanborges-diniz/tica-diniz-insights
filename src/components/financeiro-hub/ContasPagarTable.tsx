@@ -115,6 +115,8 @@ interface ContasPagarTableProps {
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
   onRemoverDoBordero?: (lancamento: Lancamento) => void;
+  /** Destrava título parado em PROCESSANDO cujo lote nunca fechou no banco. */
+  onLiberarProcessando?: (lancamento: Lancamento) => void;
   isCancelando: boolean;
   isReabrindo: boolean;
   isRemovendoDoBordero?: boolean;
