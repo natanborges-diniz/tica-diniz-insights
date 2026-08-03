@@ -241,6 +241,38 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
     (l.tipo === "RECEBER" ? fortesCredito : fortesDebito).push(cand);
   }
 
+  // Débito ← lançamentos em trânsito num borderô (PROCESSANDO).
+  //
+  // O extrato chega antes de o polling baixar: o pagamento sai do banco na hora,
+  // e a baixa entra na rodada seguinte do cron. Sem este pool, o movimento
+  // aparecia "sem candidato" e a tela pedia para classificar de novo uma despesa
+  // que já tinha conta definida no borderô.
+  //
+  // Casamos por `valor_enviado`, não por `valor`: o lançamento guarda o número
+  // do ERP e o banco debitou o do boleto — é justamente o ajuste que o envio faz
+  // (o boleto registrado manda). Com o valor do ERP, a tolerância de centavos da
+  // fase 1 nunca fecharia.
+  const { data: lancTransito } = await db
+    .from("lancamentos_financeiros")
+    .select("id, valor, data_vencimento, descricao, tipo, dados_extras")
+    .eq("cod_empresa", codEmpresa)
+    .eq("status", "PROCESSANDO")
+    .is("btg_extrato_id", null)
+    .not("bordero_id", "is", null);
+  for (const l of (lancTransito || [])) {
+    if (usados.has(`LANCAMENTO|${l.id}`)) continue;
+    const extras = (l.dados_extras || {}) as Record<string, unknown>;
+    const cand: CandidatoForte = {
+      alvo_tipo: "LANCAMENTO",
+      id: l.id,
+      valor: Number(extras.valor_enviado ?? l.valor),
+      // Data do pagamento combinada com o banco; o vencimento pode ser outro.
+      data: (extras.btg_payment_date as string) ?? l.data_vencimento,
+      label: `Em trânsito no borderô: ${l.descricao ?? ""}`.trim(),
+    };
+    (l.tipo === "RECEBER" ? fortesCredito : fortesDebito).push(cand);
+  }
+
   // Ambos ← títulos do ERP já baixados (pagos por fora do BTG: caixa, débito
   // automático, DDA no banco) sem linha de extrato vinculada. É o caso da
   // maioria das linhas históricas do extrato — sem este pool, tudo "sem match".
