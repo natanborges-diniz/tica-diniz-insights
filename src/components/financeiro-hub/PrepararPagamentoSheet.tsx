@@ -23,7 +23,7 @@ interface Lancamento {
 
 const PAYMENT_TYPES = [
   { value: "PIX_KEY", label: "PIX (Chave)", icon: CreditCard, hint: "Informe a chave PIX do beneficiário (CPF, CNPJ, e-mail, telefone ou aleatória)" },
-  { value: "BANKSLIP", label: "Boleto", icon: FileText, hint: "Informe o código de barras ou linha digitável do boleto" },
+  { value: "BANKSLIP", label: "Boleto ou conta", icon: FileText, hint: "Boleto de fornecedor ou conta de concessionária (água, luz, gás, telefone) — informe a linha digitável ou o código de barras" },
   { value: "TED", label: "TED", icon: Building2, hint: "Informe os dados bancários do beneficiário para transferência" },
   { value: "DARF", label: "DARF (Tributo)", icon: Banknote, hint: "Informe o código de barras do DARF ou guia de tributo" },
 ];
