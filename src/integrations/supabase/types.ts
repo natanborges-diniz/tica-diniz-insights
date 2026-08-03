@@ -3279,6 +3279,7 @@ export type Database = {
           conta_numero: string
           created_at: string
           criado_por: string
+          dados_media: Json | null
           descricao: string
           dia_vencimento: number | null
           favorecido_chave: string | null
@@ -3303,6 +3304,7 @@ export type Database = {
           conta_numero: string
           created_at?: string
           criado_por: string
+          dados_media?: Json | null
           descricao: string
           dia_vencimento?: number | null
           favorecido_chave?: string | null
@@ -3327,6 +3329,7 @@ export type Database = {
           conta_numero?: string
           created_at?: string
           criado_por?: string
+          dados_media?: Json | null
           descricao?: string
           dia_vencimento?: number | null
           favorecido_chave?: string | null
