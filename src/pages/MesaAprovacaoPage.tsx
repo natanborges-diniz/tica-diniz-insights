@@ -77,8 +77,18 @@ export default function MesaAprovacaoPage() {
   const { codEmpresa: codEmpresaDefault, isAdmin } = useDefaultEmpresa();
   const queryClient = useQueryClient();
 
-  const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
+  // Foco por borderô: quem chega do Contas a Pagar ("Resolver na Mesa") não deve
+  // cair na Mesa inteira — entra já filtrado no borderô que travou.
+  const params = new URLSearchParams(window.location.search);
+  const borderoFocoParam = params.get("bordero");
+  const empresaParam = params.get("empresa");
+
+  const [codEmpresa, setCodEmpresa] = useState<number>(
+    empresaParam ? Number(empresaParam) : (codEmpresaDefault || 1),
+  );
   const [filtroSelo, setFiltroSelo] = useState<string>("todos");
+  const [borderoFoco, setBorderoFoco] = useState<string | null>(borderoFocoParam);
+
 
   const invokeAction = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
