@@ -400,6 +400,25 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao desautorizar título"),
   });
 
+  // Saída para títulos travados em PROCESSANDO por envio que morreu antes de
+  // fechar o lote. O backend recusa se houver lote de verdade no BTG.
+  const liberarProcessandoMutation = useMutation({
+    mutationFn: (lancamento_ids: string[]) =>
+      invokeAction("liberar_processando_orfao", { lancamento_ids }),
+    onSuccess: (data: { liberados?: number; bloqueados?: { descricao: string; motivo: string }[] }) => {
+      if (data?.liberados) {
+        toast.success(`${data.liberados} título(s) destravado(s) e de volta em "Em Preparo"`);
+      }
+      for (const b of (data?.bloqueados || [])) {
+        toast.error(`${b.descricao}: ${b.motivo}`, { duration: 8000 });
+      }
+      invalidateAll();
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro ao destravar título"),
+  });
+
+
+
   const prepararPagamentoMutation = useMutation({
     mutationFn: async ({ id, dadosExtras }: { id: string; dadosExtras: Record<string, unknown> }) => {
       return invokeAction("editar", { id, dados_extras: dadosExtras });
