@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import {
   Landmark, Plus, CheckCircle2, XCircle,
   ArrowDownCircle, ArrowUpCircle, AlertTriangle,
-  Package, FileCheck, Download, Eye, Layers,
+  Package, FileCheck, Download, Eye, Layers, Trash2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -336,12 +336,30 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao classificar em lote"),
   });
 
+  const reverterCancelamentoMutation = useMutation({
+    mutationFn: async (ids: string[]) => invokeAction("reverter_cancelamento", { ids }),
+    onSuccess: (data: { revertidos?: number }) => {
+      toast.success(`${data?.revertidos || 0} lançamento(s) restaurado(s)`);
+      invalidateAll();
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro ao reverter"),
+  });
+
   const cancelarLoteMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      return invokeAction("cancelar_lote", { ids });
+      const r = await invokeAction("cancelar_lote", { ids });
+      return { ...(r as Record<string, unknown>), ids };
     },
-    onSuccess: (data: { cancelados?: number }) => {
-      toast.success(`${data?.cancelados || 0} lançamentos cancelados`);
+    // Desfazer no próprio toast: cancelamento é reversível e o erro de clique
+    // já aconteceu uma vez (21 títulos com boleto anexado).
+    onSuccess: (data: { cancelados?: number; ids?: string[] }) => {
+      toast.success(`${data?.cancelados || 0} lançamentos cancelados`, {
+        duration: 15000,
+        action: {
+          label: "Desfazer",
+          onClick: () => reverterCancelamentoMutation.mutate(data.ids || []),
+        },
+      });
       invalidateAll(); setSelectedIds(new Set());
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao cancelar em lote"),
@@ -1138,6 +1156,14 @@ export default function FinanceiroHubPage() {
             <span className="text-sm text-muted-foreground font-medium">
               {selectedIds.size} selecionado(s) — {fmtCurrency(selectedTotal)}
             </span>
+            {/* Limpar seleção fica colado na contagem, que é onde a mão procura.
+                Antes só existia "Cancelar" (destrutivo) e a leitura natural era
+                "cancelar a seleção" — 21 títulos foram cancelados assim. */}
+            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}
+              title="Desmarca todos, sem alterar nada">
+              <XCircle className="h-4 w-4 mr-1" /> Limpar seleção
+            </Button>
+            <span className="h-5 w-px bg-border" aria-hidden />
             <div className="flex items-center gap-2">
               <Button size="sm" variant="default" onClick={() => setClassificarLoteOpen(true)}>
                 <CheckCircle2 className="h-4 w-4 mr-1" /> Validar
@@ -1153,16 +1179,18 @@ export default function FinanceiroHubPage() {
               )}
               <Button
                 size="sm"
-                variant="ghost"
-                className="text-destructive hover:text-destructive"
+                variant="destructive"
                 onClick={() => {
-                  if (confirm(`Cancelar ${selectedIds.size} lançamento(s)?`)) {
-                    cancelarLoteMutation.mutate(Array.from(selectedIds));
-                  }
+                  const n = selectedIds.size;
+                  const ok = confirm(
+                    `Isto CANCELA ${n} lançamento(s) — eles saem das contas a pagar.\n\n` +
+                    `Se a intenção era apenas desmarcar, use "Limpar seleção".\n\nCancelar mesmo assim?`,
+                  );
+                  if (ok) cancelarLoteMutation.mutate(Array.from(selectedIds));
                 }}
                 disabled={cancelarLoteMutation.isPending}
               >
-                <XCircle className="h-4 w-4 mr-1" /> Cancelar
+                <Trash2 className="h-4 w-4 mr-1" /> Cancelar lançamentos
               </Button>
             </div>
           </div>

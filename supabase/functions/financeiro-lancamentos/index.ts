@@ -70,6 +70,8 @@ Deno.serve(async (req) => {
         return await classificar(body, auth.userId);
       case "classificar_lote":
         return await classificarLote(body, auth.userId);
+      case "reverter_cancelamento":
+        return await reverterCancelamento(body);
       case "cancelar_lote":
         return await cancelarLote(body);
       case "listar_pendentes_validacao":
@@ -1643,6 +1645,64 @@ async function cancelarLote(body: Record<string, unknown>) {
 
   if (error) throw new Error(error.message);
   return json({ ok: true, cancelados: (data || []).length });
+}
+
+/**
+ * Desfaz cancelamentos.
+ *
+ * Nasceu de um acidente de uso: para limpar a seleção da tabela, o operador
+ * clicou em "Cancelar" — que cancela os lançamentos, não a seleção. Vinte e um
+ * títulos com boleto anexado foram cancelados de uma vez.
+ *
+ * O estado anterior é reconstruído com fidelidade porque nada foi apagado:
+ * quem tem subcategoria e não pede validação estava CLASSIFICADO; o resto
+ * estava PREVISTO. O cancelamento em lote, aliás, só atinge PREVISTO — então
+ * na prática o risco de errar aqui é baixo.
+ *
+ * Aceita `ids` explícitos ou `cod_empresa` + `horas` para desfazer uma janela
+ * inteira, que é o caso de socorro.
+ */
+async function reverterCancelamento(body: Record<string, unknown>) {
+  const ids = Array.isArray(body.ids) ? (body.ids as string[]) : null;
+  const codEmpresa = body.cod_empresa ? Number(body.cod_empresa) : null;
+  const horas = Number(body.horas ?? 24);
+
+  if (!ids && !codEmpresa) throw new Error("Informe ids ou cod_empresa");
+
+  let query = supabase
+    .from("lancamentos_financeiros")
+    .select("id, subcategoria, requer_validacao")
+    .eq("status", "CANCELADO");
+
+  if (ids) {
+    query = query.in("id", ids);
+  } else {
+    const desde = new Date(Date.now() - horas * 3600 * 1000).toISOString();
+    query = query.eq("cod_empresa", codEmpresa!).gte("updated_at", desde);
+  }
+
+  const { data: alvos, error: qErr } = await query;
+  if (qErr) throw new Error(qErr.message);
+  if (!alvos || alvos.length === 0) return json({ ok: true, revertidos: 0, mensagem: "Nada a reverter" });
+
+  const classificados = alvos.filter((l) => l.subcategoria && l.requer_validacao === false).map((l) => l.id);
+  const previstos = alvos.filter((l) => !(l.subcategoria && l.requer_validacao === false)).map((l) => l.id);
+
+  if (classificados.length > 0) {
+    await supabase.from("lancamentos_financeiros")
+      .update({ status: "CLASSIFICADO" }).in("id", classificados);
+  }
+  if (previstos.length > 0) {
+    await supabase.from("lancamentos_financeiros")
+      .update({ status: "PREVISTO" }).in("id", previstos);
+  }
+
+  return json({
+    ok: true,
+    revertidos: alvos.length,
+    para_classificado: classificados.length,
+    para_previsto: previstos.length,
+  });
 }
 
 async function listarPendentesValidacao(body: Record<string, unknown>) {
