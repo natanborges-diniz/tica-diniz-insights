@@ -7,6 +7,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { EmpresaParam, aplicarFiltroEmpresaSupabase } from '@/services/firebirdBridge';
 import { isVendaValida, calcularTicketMedio } from '@/lib/vendas/formaPagamento';
+import { codLojaLogico, nomeLojaLogico, lojasEquivalentes } from '@/lib/metas/lojas';
 
 // ============================================
 // TIPOS
@@ -149,19 +150,25 @@ export function useComparativoAnual(): ComparativoResult {
     setLoading(true);
     setError(null);
 
-    // Determinar empresas a iterar
+    // Determinar empresas a iterar — regra 13/18: as duas empresas viram UMA
+    // série (loja lógica 18, nome DINIZ SUPER SHOPPING)
     const multiEmpresa = Array.isArray(empresa) && empresa.length > 1;
-    const empresasIter: (number | null)[] = multiEmpresa ? (empresa as number[]) : [null];
+    const empresasIter: (number | null)[] = multiEmpresa
+      ? Array.from(new Set((empresa as number[]).map(codLojaLogico)))
+      : [null];
 
     try {
       const tasks: Promise<DadosAnuais>[] = [];
       for (const ano of anosComparar) {
         const periodo = deslocarPeriodoParaAno(dataInicio, dataFim, ano);
         for (const emp of empresasIter) {
-          const empParaFetch: EmpresaParam = emp === null ? empresa : emp;
+          const empParaFetch: EmpresaParam = emp === null ? empresa : lojasEquivalentes(emp);
           const nome = emp === null
             ? null
-            : empresasCatalogo.find((e) => e.codEmpresa === emp)?.nome ?? `Loja ${emp}`;
+            : nomeLojaLogico(
+                emp,
+                empresasCatalogo.find((e) => e.codEmpresa === emp)?.nome ?? `Loja ${emp}`
+              );
           const label = emp === null ? String(ano) : `${ano} · ${nome}`;
           tasks.push(
             buscarAgregadosPeriodo(periodo.inicio, periodo.fim, empParaFetch).then((r) => {

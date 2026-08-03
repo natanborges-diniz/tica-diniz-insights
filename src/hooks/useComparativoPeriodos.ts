@@ -5,6 +5,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { EmpresaParam } from '@/services/firebirdBridge';
 import { buscarAgregadosPeriodo, IndicadorComparativo } from './useComparativoAnual';
+import { unificarCatalogoLojas } from '@/lib/metas/lojas';
 
 export type { IndicadorComparativo } from './useComparativoAnual';
 export { INDICADORES_LABELS } from './useComparativoAnual';
@@ -56,14 +57,28 @@ function toAgregado(r: {
   return { ...r, percentualDesconto, ticketMedio };
 }
 
-/** Resolve o conjunto de empresas a iterar quando agrupamos por loja. */
-function resolveEmpresas(empresa: EmpresaParam, catalogo: EmpresaCatalog[]): number[] {
+interface UnidadeLoja {
+  codEmpresa: number;
+  nome: string;
+  cods: number[];
+}
+
+/**
+ * Resolve as UNIDADES de loja a iterar quando agrupamos por loja.
+ * Regra 13/18: as duas empresas viram UMA unidade "DINIZ SUPER SHOPPING"
+ * (soma da movimentação, nome atual).
+ */
+function resolveUnidades(empresa: EmpresaParam, catalogo: EmpresaCatalog[]): UnidadeLoja[] {
+  const unificado = unificarCatalogoLojas(catalogo);
   if (empresa === 'ALL' || empresa === null || empresa === undefined) {
-    return catalogo.map((c) => c.codEmpresa);
+    return unificado;
   }
-  if (Array.isArray(empresa)) return empresa;
-  const n = typeof empresa === 'string' ? parseInt(empresa, 10) : empresa;
-  return Number.isNaN(n as number) ? [] : [n as number];
+  const cods = Array.isArray(empresa)
+    ? empresa
+    : [typeof empresa === 'string' ? parseInt(empresa, 10) : empresa].filter(
+        (n) => !Number.isNaN(n as number)
+      ) as number[];
+  return unificado.filter((u) => u.cods.some((c) => cods.includes(c)));
 }
 
 export function useComparativoPeriodos(
@@ -92,8 +107,8 @@ export function useComparativoPeriodos(
         let resultado: LinhaComparativa[] = [];
 
         if (agruparPorLoja) {
-          const cods = resolveEmpresas(empresa, empresasCatalogo);
-          if (cods.length === 0) {
+          const unidades = resolveUnidades(empresa, empresasCatalogo);
+          if (unidades.length === 0) {
             const [b, c] = await Promise.all([
               buscarAgregadosPeriodo(baseInicio, baseFim, empresa),
               buscarAgregadosPeriodo(compInicio, compFim, empresa),
@@ -107,16 +122,15 @@ export function useComparativoPeriodos(
             }];
           } else {
             const pares = await Promise.all(
-              cods.map(async (cod) => {
+              unidades.map(async (u) => {
                 const [b, c] = await Promise.all([
-                  buscarAgregadosPeriodo(baseInicio, baseFim, cod),
-                  buscarAgregadosPeriodo(compInicio, compFim, cod),
+                  buscarAgregadosPeriodo(baseInicio, baseFim, u.cods),
+                  buscarAgregadosPeriodo(compInicio, compFim, u.cods),
                 ]);
-                const nome = empresasCatalogo.find((e) => e.codEmpresa === cod)?.nome ?? `Loja ${cod}`;
                 return {
-                  chave: `loja-${cod}`,
-                  empresaCod: cod,
-                  empresaNome: nome,
+                  chave: `loja-${u.codEmpresa}`,
+                  empresaCod: u.codEmpresa,
+                  empresaNome: u.nome,
                   base: toAgregado(b),
                   comp: toAgregado(c),
                 } as LinhaComparativa;

@@ -284,6 +284,17 @@ export function empresaFilterList(empresa: EmpresaParam): number[] | null {
  * Aplica filtro de empresa a uma query supabase (.eq quando 1 valor, .in quando N).
  * Aceita array, string, number, 'ALL' ou null.
  */
+/**
+ * Regra 13/18 (loja lógica DINIZ SUPER SHOPPING): selecionar 13 ou 18 sempre
+ * inclui a outra — mesma operação, códigos diferentes no ERP.
+ */
+function expandir1318(cods: number[]): number[] {
+  if (cods.includes(13) || cods.includes(18)) {
+    return Array.from(new Set([...cods, 13, 18]));
+  }
+  return cods;
+}
+
 export function aplicarFiltroEmpresaSupabase<Q extends { eq: any; in: any }>(
   query: Q,
   empresa: EmpresaParam,
@@ -292,12 +303,15 @@ export function aplicarFiltroEmpresaSupabase<Q extends { eq: any; in: any }>(
   if (empresa === null || empresa === undefined || empresa === 'ALL') return query;
   if (Array.isArray(empresa)) {
     if (empresa.length === 0) return query;
-    if (empresa.length === 1) return query.eq(coluna, empresa[0]);
-    return query.in(coluna, empresa);
+    const cods = expandir1318(empresa);
+    if (cods.length === 1) return query.eq(coluna, cods[0]);
+    return query.in(coluna, cods);
   }
   const cod = typeof empresa === 'string' ? parseInt(empresa, 10) : empresa;
   if (Number.isNaN(cod)) return query;
-  return query.eq(coluna, cod);
+  const cods = expandir1318([cod]);
+  if (cods.length === 1) return query.eq(coluna, cods[0]);
+  return query.in(coluna, cods);
 }
 
 /**

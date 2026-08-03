@@ -177,6 +177,7 @@ export async function gerarPrevia(
       dataPagamento: String(r.data_pagamento ?? '').slice(0, 10),
       formaCategoria: String(r.forma_categoria ?? 'OUTROS').trim(),
       origem: String(r.origem ?? 'VENDA_PERIODO').trim(),
+      natureza: r.natureza ? String(r.natureza).trim() : null,
       valor: Number(r.valor_recebido) || 0,
     }));
   } else {

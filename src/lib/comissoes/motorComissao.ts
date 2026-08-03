@@ -27,6 +27,8 @@ export interface LinhaRecebimento {
   dataPagamento: string;
   formaCategoria: string;
   origem: 'VENDA_PERIODO' | 'SALDO_ANTERIOR' | string;
+  /** natureza do recebimento: ATO | QUITACAO_SALDO | CREDIARIO (Natan 2026-08-03) */
+  natureza?: 'ATO' | 'QUITACAO_SALDO' | 'CREDIARIO' | string | null;
   valor: number;
 }
 
@@ -71,6 +73,7 @@ export interface DetalheLinha {
   dataPagamento: string;
   formaCategoria: string;
   origem: string;
+  natureza?: string | null;
   valor: number;
   taxa: number;
   comissao: number;
@@ -242,6 +245,7 @@ export function calcularFechamento(params: {
       dataPagamento: l.dataPagamento,
       formaCategoria: categoria,
       origem: l.origem,
+      natureza: l.natureza ?? null,
       valor: round2(l.valor),
       taxa,
       comissao: comissaoLinha,

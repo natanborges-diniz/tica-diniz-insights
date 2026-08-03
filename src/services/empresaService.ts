@@ -4,6 +4,7 @@
 import { apiGet } from './firebirdBridge';
 import { supabase } from '@/integrations/supabase/client';
 import { isAbortError } from '@/lib/isAbortError';
+import { unificarCatalogoLojas } from '@/lib/metas/lojas';
 
 // ============================================
 // INTERFACES
@@ -32,10 +33,14 @@ export async function getEmpresas(): Promise<Empresa[]> {
     .order('cod_empresa');
   
   if (!error && data && data.length > 0) {
-    return data.map(e => ({
-      codEmpresa: e.cod_empresa,
-      nome: e.nome_fantasia || `Loja ${e.cod_empresa}`,
-    }));
+    // regra 13/18: uma única loja lógica "DINIZ SUPER SHOPPING" (evita
+    // dupla contagem — o bridge/cache já soma as duas para qualquer uma)
+    return unificarCatalogoLojas(
+      data.map(e => ({
+        codEmpresa: e.cod_empresa,
+        nome: e.nome_fantasia || `Loja ${e.cod_empresa}`,
+      }))
+    ).map(({ codEmpresa, nome }) => ({ codEmpresa, nome }));
   }
   
   // FALLBACK: Se Supabase falhar, tentar Firebird Bridge com timeout reduzido.
@@ -50,10 +55,12 @@ export async function getEmpresas(): Promise<Empresa[]> {
     const raw = await apiGet<EmpresaRaw>('/empresas', undefined, { timeoutMs: 10000 });
     
     if (raw && raw.length > 0) {
-      return raw.map((r) => ({
-        codEmpresa: r.cod_empresa,
-        nome: r.empresa_nome,
-      }));
+      return unificarCatalogoLojas(
+        raw.map((r) => ({
+          codEmpresa: r.cod_empresa,
+          nome: r.empresa_nome,
+        }))
+      ).map(({ codEmpresa, nome }) => ({ codEmpresa, nome }));
     }
   } catch (err) {
     console.error('Ambas as fontes falharam para buscar empresas:', err);

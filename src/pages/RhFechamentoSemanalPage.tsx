@@ -50,6 +50,7 @@ import {
 } from "@/lib/comissoes/motorComissao";
 import { gerarPdfFechamento, type LojaPdf } from "@/utils/exportFechamentoPdf";
 import { getMetasSemanais } from "@/services/metasSemanaisService";
+import { DetalhamentoFormasLoja } from "@/components/rh/DetalhamentoFormasLoja";
 
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -988,6 +989,15 @@ export default function RhFechamentoSemanalPage() {
               })()}
 
               <TabelaFechamento vendedores={todos} metaLabel="Meta do mês" origemFiltro={origemSel} formaFiltro={formaSel} />
+
+              {/* Subtotais expandíveis por forma de pagamento (todas as lojas
+                  do recorte), com o "a receber (não pago)" agrupado junto */}
+              <DetalhamentoFormasLoja
+                vendedores={todos}
+                saldosAbertos={visao
+                  .flatMap((l) => l.saldosAbertos)
+                  .filter((sa) => vendedorSel === "ALL" || String(sa.codVendedor) === vendedorSel)}
+              />
             </CardContent>
           </Card>
         );
@@ -1040,6 +1050,17 @@ export default function RhFechamentoSemanalPage() {
             <CardContent className="space-y-4">
               {/* Consolidado mensal por vendedor */}
               <TabelaFechamento vendedores={filtraVendedor(loja.consolidado)} metaLabel="Meta do mês" origemFiltro={origemSel} formaFiltro={formaSel} />
+
+              {/* Subtotais expandíveis: forma de pagamento → operações, com o
+                  "a receber (não pago)" agrupado junto */}
+              <DetalhamentoFormasLoja
+                vendedores={filtraVendedor(loja.consolidado)}
+                saldosAbertos={
+                  vendedorSel === "ALL"
+                    ? loja.saldosAbertos
+                    : loja.saldosAbertos.filter((sa) => String(sa.codVendedor) === vendedorSel)
+                }
+              />
 
               {/* Semanas */}
               <Accordion type="multiple">

@@ -13,6 +13,7 @@ import {
 } from "@/services/vendasService";
 import { EmpresaParam, aplicarFiltroEmpresaSupabase } from "@/services/firebirdBridge";
 import { isCredito, isDevolucao, calcularTicketMedio } from "@/lib/vendas/formaPagamento";
+import { codLojaLogico, nomeLojaLogico } from "@/lib/metas/lojas";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
@@ -333,9 +334,14 @@ function cacheToFormasPagamento(
   }>,
   empresasMap: Map<number, string>
 ): ResumoFormaPagamento[] {
+  // regra 13/18: movimentacao das duas empresas soma na loja logica (18),
+  // exibida sempre com o nome atual DINIZ SUPER SHOPPING
   return cacheData.map(d => ({
-    codEmpresa: d.cod_empresa,
-    empresa: empresasMap.get(d.cod_empresa) || `Loja ${d.cod_empresa}`,
+    codEmpresa: codLojaLogico(d.cod_empresa),
+    empresa: nomeLojaLogico(
+      d.cod_empresa,
+      empresasMap.get(d.cod_empresa) || `Loja ${d.cod_empresa}`
+    ),
     vendedor: d.vendedor,
     formaPagamento: d.forma_pagamento,
     totalGeral: Number(d.total_vendido) || 0,
