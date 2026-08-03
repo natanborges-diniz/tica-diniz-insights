@@ -226,9 +226,10 @@ export default function MesaAprovacaoPage() {
       )}
 
       {/* Borderôs prontos para aprovar */}
-      {(mesa?.borderos ?? []).length > 0 && (
+      {borderosVisiveis.length > 0 && (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {mesa!.borderos.map((b) => {
+          {borderosVisiveis.map((b) => {
+
             const problema = (b.selos.SEM_LASTRO ?? 0) + (b.selos.VERMELHO ?? 0);
             const amarelos = b.selos.AMARELO ?? 0;
             return (
