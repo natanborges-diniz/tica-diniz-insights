@@ -392,20 +392,23 @@ async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
     });
   }
 
-  const accessToken = await getBtgToken(codEmpresa);
   const cnpj = await getCnpj(codEmpresa);
   const accountId = await getAccountId(codEmpresa);
 
-  const res = await fetch(
+  const res = await btgGet(
+    codEmpresa,
     `${apiBase}/${cnpj}/banking/accounts/${accountId}/balances`,
-    { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
   );
 
   if (!res.ok) {
     const resBody = await res.text();
     console.error("[btg-extrato] Saldo error:", res.status, resBody);
-    return json({ error: "Erro ao consultar saldo", status: res.status, details: resBody }, 502);
+    const msg = res.status === 401
+      ? `Autorização BTG da empresa ${codEmpresa} inválida — reautorize a loja em /admin/btg-validacao.`
+      : "Erro ao consultar saldo";
+    return json({ error: msg, status: res.status, details: resBody }, res.status === 401 ? 401 : 502);
   }
+
 
   // BTG returns: { accountId, available: { amount, currency }, blocked: { amount, currency, blockedDate } }
   const data = await res.json();
