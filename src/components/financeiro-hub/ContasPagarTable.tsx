@@ -186,6 +186,7 @@ const formatMonthTitle = (monthKey: string) => {
 function LancamentoRow({
   l, selectedIds, onToggleSelect, onClassificar, onPrepararPagamento,
   onBaixaManual, onComprovante, onVirarRubrica, onCancelar, onReabrir, onRemoverDoBordero,
+  onLiberarProcessando,
   isCancelando, isReabrindo, isRemovendoDoBordero, isAdmin,
 }: {
   l: Lancamento;
@@ -200,6 +201,7 @@ function LancamentoRow({
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
   onRemoverDoBordero?: (l: Lancamento) => void;
+  onLiberarProcessando?: (l: Lancamento) => void;
   isCancelando: boolean;
   isReabrindo: boolean;
   isRemovendoDoBordero?: boolean;
