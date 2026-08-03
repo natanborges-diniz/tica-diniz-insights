@@ -19,6 +19,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   matchEntry,
   extrairPistasPayload,
+  extrairReferencias,
+  referenciasDoLancamento,
   type ExtratoEntry,
   type Pools,
   type CandidatoForte,
@@ -213,18 +215,25 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
   // Débito ← pagamentos BTG enviados/pagos
   const { data: pagamentos } = await db
     .from("btg_pagamentos")
-    .select("id, valor, status, beneficiario")
+    .select("id, valor, status, beneficiario, btg_payment_id")
     .eq("cod_empresa", codEmpresa)
     .in("status", ["ENVIADO_BTG", "AGUARDANDO_APROVACAO_BTG", "PAGO"]);
   for (const p of (pagamentos || [])) {
     if (usados.has(`PAGAMENTO_BTG|${p.id}`)) continue;
-    fortesDebito.push({ alvo_tipo: "PAGAMENTO_BTG", id: p.id, valor: Number(p.valor), data: null, label: `Pagamento BTG ${p.beneficiario ?? ""}`.trim() });
+    fortesDebito.push({
+      alvo_tipo: "PAGAMENTO_BTG",
+      id: p.id,
+      valor: Number(p.valor),
+      data: null,
+      label: `Pagamento BTG ${p.beneficiario ?? ""}`.trim(),
+      referencias: referenciasDoLancamento(p.id, { btg_payment_id: p.btg_payment_id }),
+    });
   }
 
   // Débito ← lançamentos baixados via polling (batch), ainda sem extrato vinculado
   const { data: lancPoll } = await db
     .from("lancamentos_financeiros")
-    .select("id, valor, valor_pago, data_pagamento, descricao, tipo")
+    .select("id, valor, valor_pago, data_pagamento, descricao, tipo, dados_extras")
     .eq("cod_empresa", codEmpresa)
     .eq("status", "BAIXADO")
     .is("btg_extrato_id", null)
@@ -237,6 +246,9 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
       valor: Number(l.valor_pago ?? l.valor),
       data: l.data_pagamento,
       label: `Lançamento pago via BTG: ${l.descricao ?? ""}`.trim(),
+      // O banco disse qual pagamento é este na volta do borderô; a linha do
+      // extrato traz os mesmos identificadores. F0 casa sem olhar valor/data.
+      referencias: referenciasDoLancamento(l.id, l.dados_extras as Record<string, unknown> | null),
     };
     (l.tipo === "RECEBER" ? fortesCredito : fortesDebito).push(cand);
   }
@@ -269,6 +281,7 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
       // Data do pagamento combinada com o banco; o vencimento pode ser outro.
       data: (extras.btg_payment_date as string) ?? l.data_vencimento,
       label: `Em trânsito no borderô: ${l.descricao ?? ""}`.trim(),
+      referencias: referenciasDoLancamento(l.id, extras),
     };
     (l.tipo === "RECEBER" ? fortesCredito : fortesDebito).push(cand);
   }
@@ -279,7 +292,7 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
   // Referência forte: valor exato + data_pagamento ±2 dias (fase 1).
   const { data: lancErp } = await db
     .from("lancamentos_financeiros")
-    .select("id, valor, valor_pago, data_pagamento, descricao, tipo")
+    .select("id, valor, valor_pago, data_pagamento, descricao, tipo, dados_extras")
     .eq("cod_empresa", codEmpresa)
     .eq("status", "BAIXADO")
     .eq("origem", "ERP")
@@ -296,6 +309,7 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
       valor: Number(l.valor_pago ?? l.valor),
       data: l.data_pagamento,
       label: `Título ERP pago: ${l.descricao ?? ""}`.trim(),
+      referencias: referenciasDoLancamento(l.id, l.dados_extras as Record<string, unknown> | null),
     };
     (l.tipo === "RECEBER" ? fortesCredito : fortesDebito).push(cand);
   }
@@ -421,6 +435,7 @@ async function handleExecutar(db: ReturnType<typeof getServiceClient>, body: Rec
           tipo: entry.tipo,
           bandeira: pistas.bandeira,
           cnpj_contraparte: pistas.cnpj_contraparte,
+          referencias: extrairReferencias(entry.dados_extras),
         };
         const pool = e.tipo === "DEBITO" ? pools.debito : pools.credito;
         const result = matchEntry(e, pool, usados);

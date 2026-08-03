@@ -8,7 +8,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { flattenStatements, normalizeMovement, assignDedupeKeys } from "../_shared/btgExtrato.ts";
-import { reprocessarEventosPendentes } from "../_shared/btgEventos.ts";
+import { reprocessarEventosPendentes, baixarLancamentoBtg } from "../_shared/btgEventos.ts";
 import { ratearValorPago } from "../_shared/rateio.ts";
 import { conciliarAgora } from "../_shared/conciliacaoAuto.ts";
 
@@ -117,66 +117,6 @@ function extractAmount(obj: Record<string, unknown>): number | null {
 }
 
 // ─── Baixa de lançamento com dados reais ─────────────────────
-// deno-lint-ignore no-explicit-any
-async function baixarLancamento(
-  db: any,
-  lanc: Record<string, unknown>,
-  valorPago: number,
-  dataPagamento: string,
-  statusBtg: string,
-  pay?: Record<string, unknown>,
-) {
-  const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
-
-  // O paymentId e o código de autenticação entram AQUI, no mesmo update.
-  // Antes eram gravados num update separado logo antes deste, e este os
-  // apagava — reescrevia dados_extras a partir da cópia lida no início do
-  // laço. Resultado: baixa correta, mas sem identificador, e o comprovante
-  // ficava indisponível para sempre.
-  const paymentId = pay?.paymentId ?? pay?.id ?? dados.btg_payment_id ?? null;
-
-  await db.from("lancamentos_financeiros").update({
-    status: "BAIXADO",
-    valor_pago: valorPago,
-    data_pagamento: dataPagamento,
-    data_baixa: dataPagamento,
-    baixado_em: new Date().toISOString(),
-    dados_extras: {
-      ...dados,
-      btg_payment_id: paymentId ? String(paymentId) : null,
-      // Prova do pagamento do lado do banco — string curta, vale guardar.
-      btg_authentication_code: pay?.authenticationCode ?? dados.btg_authentication_code ?? null,
-      btg_payment_status: statusBtg,
-      baixa_automatica: "btg-poll-status",
-    },
-  }).eq("id", lanc.id);
-
-  // Pagamento unificado: os componentes são baixados junto, rateando o valor
-  // efetivamente pago. Sem isso eles ficariam pendurados para sempre e o DRE
-  // por rubrica não fecharia com o caixa.
-  const { data: filhos } = await db
-    .from("lancamentos_financeiros")
-    .select("id, valor")
-    .eq("lancamento_pai_id", lanc.id)
-    .neq("status", "BAIXADO");
-
-  if (filhos && filhos.length > 0) {
-    const rateado = ratearValorPago(
-      filhos.map((f: Record<string, unknown>) => ({ id: String(f.id), valor: Number(f.valor) })),
-      valorPago,
-    );
-    for (const parte of rateado) {
-      await db.from("lancamentos_financeiros").update({
-        status: "BAIXADO",
-        valor_pago: parte.valor,
-        data_pagamento: dataPagamento,
-        data_baixa: dataPagamento,
-        baixado_em: new Date().toISOString(),
-      }).eq("id", parte.id);
-    }
-  }
-}
-
 // deno-lint-ignore no-explicit-any
 async function rejeitarLancamento(db: any, lanc: Record<string, unknown>, statusBtg: string) {
   const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
@@ -320,7 +260,14 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
         if (st === "PAGO") {
           const valorPago = (pay && extractAmount(pay)) || Number(lanc.valor);
           const dataPag = pay ? extractDate(pay, hoje) : hoje;
-          await baixarLancamento(db, lanc, valorPago, dataPag, String(pay?.status ?? "BATCH_PAGO"), pay);
+          await baixarLancamentoBtg(db, lanc, {
+            valorPago,
+            dataPagamento: dataPag,
+            statusBtg: String(pay?.status ?? "BATCH_PAGO"),
+            origem: "btg-poll-status",
+            pay,
+            ratear: ratearValorPago,
+          });
           comBaixa.add(Number(bordero.cod_empresa));
           resultado.baixados++;
         } else if (st === "FALHA") {
@@ -394,7 +341,14 @@ async function pollPagamentos(db: any, apiBase: string, isSandbox: boolean) {
           .eq("btg_pagamento_id", pag.id)
           .not("status", "in", '("BAIXADO","CANCELADO")');
         for (const lanc of (lancs || [])) {
-          await baixarLancamento(db, lanc, extractAmount(raw) || Number(lanc.valor), extractDate(raw, hoje), String(raw.status));
+          await baixarLancamentoBtg(db, lanc, {
+            valorPago: extractAmount(raw) || Number(lanc.valor),
+            dataPagamento: extractDate(raw, hoje),
+            statusBtg: String(raw.status),
+            origem: "btg-poll-status",
+            pay: raw,
+            ratear: ratearValorPago,
+          });
         }
         resultado.pagos++;
       } else if (st === "FALHA") {
@@ -460,7 +414,14 @@ async function pollCobrancas(db: any, apiBase: string, isSandbox: boolean) {
           .eq("btg_cobranca_id", cob.id)
           .not("status", "in", '("BAIXADO","CANCELADO")');
         for (const lanc of (lancs || [])) {
-          await baixarLancamento(db, lanc, valorPago, dataPag, String(raw.status));
+          await baixarLancamentoBtg(db, lanc, {
+            valorPago,
+            dataPagamento: dataPag,
+            statusBtg: String(raw.status),
+            origem: "btg-poll-status",
+            pay: raw,
+            ratear: ratearValorPago,
+          });
         }
         resultado.pagas++;
       } else if (String(raw.status ?? "").toUpperCase().includes("OVERDUE") && cob.status !== "VENCIDO") {

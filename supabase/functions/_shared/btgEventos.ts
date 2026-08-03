@@ -5,6 +5,8 @@
 // linha correspondente do extrato chegar, ela casa por referência forte com o
 // pagamento já PAGO — os três lados fecham.
 
+import { ratearValorPago } from "./rateio.ts";
+
 declare const Deno: { env: { get(key: string): string | undefined } };
 
 // ─── Vocabulário de status BTG (tolerante — pendência #1 da spec §9) ──
@@ -53,18 +55,107 @@ export function classificarEvento(eventType: string, payload: Record<string, unk
   return "DESCONHECIDO";
 }
 
+// ─── Identificadores do pagamento ────────────────────────────
+/**
+ * Tudo que serve para dizer "este pagamento é aquele movimento do extrato".
+ *
+ * Guardar isso na baixa é o que permite a conciliação casar por identidade em
+ * vez de adivinhar por valor e data. Antes a baixa via webhook não gravava nada
+ * disso — o banco dizia exatamente qual boleto tinha sido pago, a informação
+ * era descartada, e a conciliação reconstruía o vínculo no chute.
+ *
+ * O id do lançamento entra na lista porque é o que enviamos como
+ * `tags.externalId`: se o banco devolver, casa direto.
+ */
+export function referenciasDoPagamento(
+  pay: Record<string, unknown> | null | undefined,
+  lancamentoId?: string | null,
+): string[] {
+  const brutas = [
+    lancamentoId,
+    pay?.paymentId, pay?.id, pay?.endToEndId, pay?.e2eId,
+    pay?.authenticationCode, pay?.transactionId, pay?.externalId,
+    (pay?.tags as Record<string, unknown> | undefined)?.externalId,
+  ];
+  const vistos = new Set<string>();
+  for (const v of brutas) {
+    const s = String(v ?? "").trim().toUpperCase();
+    if (s.length >= 8 && s.length <= 120) vistos.add(s);
+  }
+  return [...vistos];
+}
+
 // ─── Efeitos ─────────────────────────────────────────────────
+/**
+ * Baixa de lançamento por retorno do BTG — único caminho, webhook ou polling.
+ *
+ * Havia duas cópias desta função: a do polling gravava paymentId e código de
+ * autenticação e rateava o pagamento unificado entre os componentes; a do
+ * webhook não fazia nem uma coisa nem outra. Como o webhook chega primeiro, o
+ * caminho pior é que costumava vencer — baixa sem identificador e componentes
+ * pendurados. Agora é uma só.
+ */
 // deno-lint-ignore no-explicit-any
-async function baixarLancamento(db: any, lanc: Record<string, unknown>, valorPago: number, dataPagamento: string, statusBtg: string, origem: string) {
+export async function baixarLancamentoBtg(
+  db: any,
+  lanc: Record<string, unknown>,
+  args: {
+    valorPago: number;
+    dataPagamento: string;
+    statusBtg: string;
+    origem: string;
+    pay?: Record<string, unknown> | null;
+    /** Rateia a baixa entre os componentes do pagamento unificado. */
+    ratear?: (filhos: Array<{ id: string; valor: number }>, total: number) => Array<{ id: string; valor: number }>;
+  },
+) {
   const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
+  const pay = args.pay ?? null;
+  const paymentId = pay?.paymentId ?? pay?.id ?? dados.btg_payment_id ?? null;
+
   await db.from("lancamentos_financeiros").update({
     status: "BAIXADO",
-    valor_pago: valorPago,
-    data_pagamento: dataPagamento,
-    data_baixa: dataPagamento,
+    valor_pago: args.valorPago,
+    data_pagamento: args.dataPagamento,
+    data_baixa: args.dataPagamento,
     baixado_em: new Date().toISOString(),
-    dados_extras: { ...dados, btg_payment_status: statusBtg, baixa_automatica: origem },
+    dados_extras: {
+      ...dados,
+      btg_payment_id: paymentId ? String(paymentId) : null,
+      // Prova do pagamento do lado do banco — string curta, vale guardar.
+      btg_authentication_code: pay?.authenticationCode ?? dados.btg_authentication_code ?? null,
+      btg_end_to_end_id: pay?.endToEndId ?? pay?.e2eId ?? dados.btg_end_to_end_id ?? null,
+      // Âncora da conciliação por identidade (conciliacaoMotor F0).
+      btg_referencias: referenciasDoPagamento(pay, String(lanc.id)),
+      btg_payment_status: args.statusBtg,
+      baixa_automatica: args.origem,
+    },
   }).eq("id", lanc.id);
+
+  // Pagamento unificado: os componentes são baixados junto, rateando o valor
+  // efetivamente pago. Sem isso eles ficariam pendurados para sempre e o DRE
+  // por rubrica não fecharia com o caixa.
+  if (!args.ratear) return;
+  const { data: filhos } = await db
+    .from("lancamentos_financeiros")
+    .select("id, valor")
+    .eq("lancamento_pai_id", lanc.id)
+    .neq("status", "BAIXADO");
+  if (!filhos || filhos.length === 0) return;
+
+  const rateado = args.ratear(
+    filhos.map((f: Record<string, unknown>) => ({ id: String(f.id), valor: Number(f.valor) })),
+    args.valorPago,
+  );
+  for (const parte of rateado) {
+    await db.from("lancamentos_financeiros").update({
+      status: "BAIXADO",
+      valor_pago: parte.valor,
+      data_pagamento: args.dataPagamento,
+      data_baixa: args.dataPagamento,
+      baixado_em: new Date().toISOString(),
+    }).eq("id", parte.id);
+  }
 }
 
 // deno-lint-ignore no-explicit-any
@@ -104,6 +195,8 @@ async function fecharBorderoSeCompleto(db: any, borderoId: string) {
 export interface ResultadoEvento {
   processed: boolean;
   detail: string;
+  /** Lojas que tiveram baixa/rejeição — o chamador usa para disparar a conciliação. */
+  empresas?: number[];
 }
 
 // deno-lint-ignore no-explicit-any
@@ -126,12 +219,34 @@ export async function processarEvento(db: any, eventType: string, rawPayload: Re
     const st = normStatus(payload.status);
     if (st === "PENDENTE") return { processed: true, detail: `status intermediário (${payload.status}) — sem efeito` };
 
-    // Lançamentos correlacionados pelo btg_payment_id salvo no envio do borderô (E2 §5.5)
-    const { data: lancs } = await db
+    // Correlação do evento com o lançamento.
+    //
+    // Por btg_payment_id sozinho não bastava: o 201 da iniciação devolve
+    // batchId/contractGuid, nunca um paymentId, então no momento em que o
+    // webhook chega a maioria dos lançamentos ainda não tem esse campo — e o
+    // evento morria como "sem correlato local". O externalId que enviamos em
+    // `tags` é o id do lançamento e volta no retorno; é a âncora primária.
+    const externalId = String(
+      payload.externalId
+        ?? (payload.tags as Record<string, unknown> | undefined)?.externalId
+        ?? "",
+    ).trim();
+
+    const { data: porPaymentId } = await db
       .from("lancamentos_financeiros")
       .select("*")
       .eq("dados_extras->>btg_payment_id", paymentId)
       .not("status", "in", '("BAIXADO","CANCELADO")');
+
+    let lancs = porPaymentId || [];
+    if (lancs.length === 0 && /^[0-9a-f-]{36}$/i.test(externalId)) {
+      const { data: porExternal } = await db
+        .from("lancamentos_financeiros")
+        .select("*")
+        .eq("id", externalId)
+        .not("status", "in", '("BAIXADO","CANCELADO")');
+      lancs = porExternal || [];
+    }
 
     // Registro em btg_pagamentos, quando existir
     const { data: pags } = await db
@@ -144,25 +259,38 @@ export async function processarEvento(db: any, eventType: string, rawPayload: Re
     }
 
     const borderos = new Set<string>();
+    const empresas = new Set<number>();
     if (st === "PAGO") {
       for (const p of (pags || [])) {
         await db.from("btg_pagamentos").update({ status: "PAGO" }).eq("id", p.id);
       }
-      for (const lanc of (lancs || [])) {
-        await baixarLancamento(db, lanc, extractAmount(payload) || Number(lanc.valor), extractDate(payload, hoje), String(payload.status), "btg-webhook");
+      for (const lanc of lancs) {
+        await baixarLancamentoBtg(db, lanc, {
+          valorPago: extractAmount(payload) || Number(lanc.valor),
+          dataPagamento: extractDate(payload, hoje),
+          statusBtg: String(payload.status),
+          origem: "btg-webhook",
+          pay: payload,
+          ratear: ratearValorPago,
+        });
         if (lanc.bordero_id) borderos.add(String(lanc.bordero_id));
+        if (lanc.cod_empresa != null) empresas.add(Number(lanc.cod_empresa));
       }
     } else {
       for (const p of (pags || [])) {
         await db.from("btg_pagamentos").update({ status: "REJEITADO" }).eq("id", p.id);
       }
-      for (const lanc of (lancs || [])) {
+      for (const lanc of lancs) {
         await rejeitarLancamento(db, lanc, String(payload.status));
         if (lanc.bordero_id) borderos.add(String(lanc.bordero_id));
       }
     }
     for (const b of borderos) await fecharBorderoSeCompleto(db, b);
-    return { processed: true, detail: `pagamento ${paymentId}: ${st} — ${(lancs || []).length} lançamento(s)` };
+    return {
+      processed: true,
+      detail: `pagamento ${paymentId}: ${st} — ${lancs.length} lançamento(s)`,
+      empresas: [...empresas],
+    };
   }
 
   if (tipo === "COBRANCA") {
@@ -215,6 +343,7 @@ export async function processarEvento(db: any, eventType: string, rawPayload: Re
 
     if (st !== "PAGO") return { processed: true, detail: `cobrança ${receivableId}: status ${payload.status} — sem efeito` };
 
+    const empresasCobranca = new Set<number>();
     const { data: cobs } = await db
       .from("btg_cobrancas")
       .select("*")
@@ -239,10 +368,18 @@ export async function processarEvento(db: any, eventType: string, rawPayload: Re
         .eq("btg_cobranca_id", cob.id)
         .not("status", "in", '("BAIXADO","CANCELADO")');
       for (const lanc of (lancs || [])) {
-        await baixarLancamento(db, lanc, valorPago, dataPag, String(payload.status), "btg-webhook");
+        await baixarLancamentoBtg(db, lanc, {
+          valorPago, dataPagamento: dataPag, statusBtg: String(payload.status),
+          origem: "btg-webhook", pay: payload, ratear: ratearValorPago,
+        });
+        if (lanc.cod_empresa != null) empresasCobranca.add(Number(lanc.cod_empresa));
       }
     }
-    return { processed: true, detail: `cobrança ${receivableId}: PAGO — ${cobs.length} registro(s)` };
+    return {
+      processed: true,
+      detail: `cobrança ${receivableId}: PAGO — ${cobs.length} registro(s)`,
+      empresas: [...empresasCobranca],
+    };
   }
 
   if (tipo === "DDA") {

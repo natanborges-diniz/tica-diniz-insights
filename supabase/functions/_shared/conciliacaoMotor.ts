@@ -4,6 +4,7 @@
 // src/lib/financeiro/__tests__/conciliacaoMotor.test.ts
 //
 // Waterfall por prioridade — primeira fase que casar vence; ambiguidade nunca casa sozinha:
+//   F0 identidade (mesmo paymentId/endToEndId/externalId dos dois lados)
 //   F1 referência forte (pagamentos BTG / cobranças / lançamentos baixados por polling)
 //   F2 recebíveis de cartão (individual ou combinação do dia, tolerância max(R$1, 1%))
 //   F3 lançamento individual (valor exato, ±3d score 90 / ±7d score 70)
@@ -19,6 +20,107 @@ export interface ExtratoEntry {
   /** Extraídos do payload BTG (dados_extras) quando disponíveis — desempate */
   bandeira?: string | null;
   cnpj_contraparte?: string | null;
+  /** Identificadores do movimento (paymentId, endToEndId, externalId, …) — F0 */
+  referencias?: string[];
+}
+
+// ─── Identificadores ─────────────────────────────────────────
+// Chaves que o BTG usa para nomear "este pagamento" — nos webhooks, na consulta
+// de pagamentos e no extrato. Quando o mesmo identificador aparece dos dois
+// lados, não há o que adivinhar: é o mesmo fato.
+const CHAVES_REFERENCIA = new Set([
+  "endtoendid", "e2eid", "endtoend",
+  "paymentid", "transactionid", "transactionidentification", "entryid",
+  "externalid", "clientcode", "correlationid", "txid", "authenticationcode",
+]);
+
+/** E2E do Pix: E + ISPB(8) + yyyyMMddHHmm(12) + sufixo(11) = 32 caracteres. */
+const RE_E2E = /\bE\d{8}[0-9A-Za-z]{23}\b/g;
+const RE_UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+
+export function normalizarReferencia(v: unknown): string | null {
+  const s = String(v ?? "").trim().toUpperCase();
+  // Identificador curto demais não identifica nada: "1", "OK", códigos de banco.
+  // O piso de 8 evita casar por acaso e ainda aceita transactionId curto do BTG.
+  return s.length >= 8 && s.length <= 120 ? s : null;
+}
+
+/**
+ * Varre o payload bruto do extrato atrás de identificadores do pagamento.
+ *
+ * Recursivo porque o BTG aninha (`data.payment.endToEndId`), e complementado por
+ * regex no texto: o E2E costuma vir embutido na descrição do movimento, fora de
+ * qualquer campo nomeado. UUID entra porque é o formato do nosso `externalId`
+ * (id do lançamento) — se o banco devolver, casamos direto com o lançamento.
+ */
+export function extrairReferencias(dadosExtras: unknown): string[] {
+  const achados = new Set<string>();
+
+  const visitar = (no: unknown, profundidade: number) => {
+    if (no == null || profundidade > 6) return;
+    if (Array.isArray(no)) {
+      for (const item of no) visitar(item, profundidade + 1);
+      return;
+    }
+    if (typeof no !== "object") return;
+    for (const [k, v] of Object.entries(no as Record<string, unknown>)) {
+      if (v != null && typeof v !== "object" && CHAVES_REFERENCIA.has(k.toLowerCase())) {
+        const ref = normalizarReferencia(v);
+        if (ref) achados.add(ref);
+      }
+      visitar(v, profundidade + 1);
+    }
+  };
+  visitar(dadosExtras, 0);
+
+  if (dadosExtras != null) {
+    const texto = typeof dadosExtras === "string" ? dadosExtras : JSON.stringify(dadosExtras);
+    for (const re of [RE_E2E, RE_UUID]) {
+      re.lastIndex = 0;
+      for (const m of texto.matchAll(re)) {
+        const ref = normalizarReferencia(m[0]);
+        if (ref) achados.add(ref);
+      }
+    }
+  }
+
+  return [...achados];
+}
+
+/**
+ * Identificadores do lado de cá: o que sabemos sobre o pagamento de um
+ * lançamento, para comparar com o que veio no extrato.
+ *
+ * O próprio id entra porque é o que mandamos ao banco como `tags.externalId`.
+ * Vale mesmo antes da baixa: um lançamento ainda PROCESSANDO já tem essa
+ * âncora, e é justamente ele que costuma aparecer no extrato primeiro.
+ */
+export function referenciasDoLancamento(
+  id: string,
+  dadosExtras: Record<string, unknown> | null | undefined,
+): string[] {
+  const d = dadosExtras ?? {};
+  const guardadas = Array.isArray(d.btg_referencias) ? d.btg_referencias : [];
+  const brutas = [
+    id,
+    ...guardadas,
+    d.btg_payment_id,
+    d.btg_end_to_end_id,
+    d.btg_authentication_code,
+  ];
+  const vistos = new Set<string>();
+  for (const v of brutas) {
+    const ref = normalizarReferencia(v);
+    if (ref) vistos.add(ref);
+  }
+  return [...vistos];
+}
+
+/** Há identificador em comum entre os dois lados? */
+export function referenciasCasam(a?: string[] | null, b?: string[] | null): boolean {
+  if (!a?.length || !b?.length) return false;
+  const setB = new Set(b);
+  return a.some((r) => setB.has(r));
 }
 
 // Extrai bandeira e CNPJ do payload bruto do BTG. Formato observado em produção
@@ -59,6 +161,8 @@ export interface CandidatoForte {
   valor: number;
   data: string | null; // data de pagamento/execução
   label: string;
+  /** paymentId, endToEndId, código de autenticação, o próprio id (externalId) — F0 */
+  referencias?: string[];
 }
 
 export interface CandidatoRecebivel {
@@ -139,7 +243,7 @@ export interface Sugestao {
 
 export interface MatchResult {
   status: "MATCH" | "SUGESTAO" | "NENHUM";
-  metodo?: "EXATO" | "TOLERANCIA" | "AGRUPADO" | "REGRA";
+  metodo?: "IDENTIDADE" | "EXATO" | "TOLERANCIA" | "AGRUPADO" | "REGRA";
   score?: number;
   alocacoes?: Alocacao[];
   /** Presente quando a regra é de classificação pura: concilia sem criar lançamento */
@@ -221,6 +325,44 @@ function alocarFechado(itens: Array<{ alvo_tipo: string; alvo_id: string; valor:
 // ─── Motor principal ─────────────────────────────────────────
 export function matchEntry(entry: ExtratoEntry, pools: Pools, usados: Set<string>): MatchResult {
   const sugestoes: Sugestao[] = [];
+
+  // ── F0: identidade — o banco já disse qual pagamento é este ──
+  //
+  // Quando o borderô volta processado, o retorno traz paymentId, endToEndId e o
+  // externalId que enviamos (o id do lançamento). Guardamos isso na baixa; o
+  // extrato traz os mesmos identificadores. Casar por valor e data nesse caso é
+  // adivinhar o que já está escrito — e adivinhar erra: dois boletos de R$ 122,60
+  // no mesmo dia viram ambiguidade e caem na fila do operador, quando o banco
+  // sabe exatamente qual é qual.
+  //
+  // Sem valor nem data na comparação de propósito: o débito pode sair com valor
+  // ajustado pelo título registrado e em data diferente da combinada. O
+  // identificador não muda por isso.
+  if (entry.referencias?.length) {
+    const porIdentidade = pools.fortes.filter(
+      (c) => !usados.has(chave(c.alvo_tipo, c.id)) && referenciasCasam(entry.referencias, c.referencias),
+    );
+    if (porIdentidade.length === 1) {
+      const c = porIdentidade[0];
+      return {
+        status: "MATCH",
+        metodo: "IDENTIDADE",
+        score: 100,
+        alocacoes: [{ alvo_tipo: c.alvo_tipo, alvo_id: c.id, valor_alocado: entry.valor }],
+        sugestoes: [],
+      };
+    }
+    // Mais de um alvo com o mesmo identificador é dado inconsistente, não
+    // ambiguidade legítima: não casa e segue para as fases por valor.
+    for (const c of porIdentidade) {
+      sugestoes.push({
+        alvo_tipo: c.alvo_tipo,
+        alvo_id: c.id,
+        score: 95,
+        motivo: `${c.label || "Identificador do banco"} — mesmo identificador em mais de um alvo`,
+      });
+    }
+  }
 
   // ── F1: referência forte (valor ±1 centavo, data ±2 dias) ──
   const fortes = pools.fortes.filter(

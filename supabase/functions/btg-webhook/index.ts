@@ -21,6 +21,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { processarEvento } from "../_shared/btgEventos.ts";
+import { conciliarAgora } from "../_shared/conciliacaoAuto.ts";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -148,7 +149,17 @@ Deno.serve(async (req) => {
           erro: r.processed ? null : r.detail,
           tentativas: 1,
         }).eq("id", eventId);
-        console.log(`[btg-webhook] evento ${eventId}: ${r.detail}`);
+
+        // O webhook é o gatilho natural da conciliação: é o instante em que o
+        // banco confirma o pagamento. A baixa acabou de gravar paymentId e
+        // endToEndId no lançamento, então o motor casa a linha do extrato por
+        // identidade — sem depender de valor e data baterem.
+        if (r.empresas?.length) {
+          const c = await conciliarAgora(r.empresas);
+          console.log(`[btg-webhook] evento ${eventId}: ${r.detail} · conciliados ${c.conciliados}`);
+        } else {
+          console.log(`[btg-webhook] evento ${eventId}: ${r.detail}`);
+        }
       } catch (e) {
         // fica processed=false — btg-poll-status reprocessa em ≤ 30 min
         console.error(`[btg-webhook] processamento do evento ${eventId} falhou:`, e);
