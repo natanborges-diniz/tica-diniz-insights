@@ -1325,7 +1325,7 @@ export default function FinanceiroHubPage() {
                                 isAdmin={!!authIsAdmin}
                                 enviadoEm={b.updated_at}
                                 dataPagamento={b.data_pagamento}
-                                onAprovar={() => { window.location.href = "/financeiro/mesa"; }}
+                                onAprovar={() => { window.location.href = `/financeiro/mesa?bordero=${b.id}&empresa=${codEmpresa}`; }}
                                 onEnviar={() => enviarBorderoMutation.mutate(b.id)}
                                 onConfirmar={() => confirmarProcessamentoMutation.mutate(b.id)}
                                 onCancelar={() => cancelarBorderoMutation.mutate(b.id)}
