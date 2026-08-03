@@ -64,7 +64,7 @@ export function BorderoBloqueioDialog({ payload, onOpenChange }: Props) {
             (liberados > 0 ? ` · ${liberados} item(ns) já com lastro aguardando` : "")
           : undefined
       }
-      size="lg"
+      size="md"
       footer={
         <div className="flex w-full items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
