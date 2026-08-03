@@ -1912,7 +1912,7 @@ async function reverterCancelamento(body: Record<string, unknown>) {
   return json({
     ok: true,
     revertidos: alvos.length,
-    para_classificado: classificados.length,
+    para_classificado: 0,
     para_previsto: previstos.length,
   });
 }
