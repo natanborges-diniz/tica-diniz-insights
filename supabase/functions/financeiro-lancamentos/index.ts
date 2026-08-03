@@ -1,8 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, authGuard } from "../_shared/authGuard.ts";
 import { avaliarLancamento, validarJustificativa, criadorAprovadorDistintos } from "../_shared/governanca.ts";
-import { paraLinhaDigitavel } from "../_shared/boleto.ts";
 import { hojeBrt, proximaSegunda, descricaoBordero, dataAgendamento } from "../_shared/agendamento.ts";
+import {
+  montarItem,
+  montarCorpo,
+  chaveIdempotencia,
+  descreverErroBtg,
+} from "../_shared/btgPayment.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -608,6 +613,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
         dados_extras: {
           ...dados,
           btg_batch_id: mockBatchId,
+          btg_external_id: lanc.id,
           btg_payment_id: `sandbox-pay-${lanc.id.slice(0, 8)}`,
         },
       }).eq("id", lanc.id);
@@ -628,7 +634,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
 
   const { data: conta } = await supabase
     .from("btg_contas_bancarias")
-    .select("cnpj")
+    .select("cnpj, agencia, conta")
     .eq("cod_empresa", bordero.cod_empresa)
     .eq("ativa", true)
     .single();
@@ -636,16 +642,27 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   const cnpj = conta?.cnpj?.replace(/\D/g, "");
   if (!cnpj) throw new Error("CNPJ não encontrado");
 
+  // `debitParty` é obrigatório em TODO item (schema BankSlipPaymentIssue).
+  // A doc do BTG instrui usar agência "50" para conta PJ.
+  if (!conta?.conta) {
+    throw new Error(
+      `Conta BTG da empresa ${bordero.cod_empresa} sem número cadastrado — ` +
+      `preencha btg_contas_bancarias.conta antes de enviar o borderô`,
+    );
+  }
+  const debitParty = { branchCode: conta.agencia || "50", number: String(conta.conta) };
+
   const apiBase = "https://api.empresas.btgpactual.com";
 
-  // 1. Open batch
+  // 1. Abrir lote — POST /{companyId}/banking/batch-payments
+  //    Body exige `taxId` (CNPJ). A resposta traz batchId, expiresAt e maxSize.
   const batchRes = await fetch(`${apiBase}/${cnpj}/banking/batch-payments`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${tokenData.access_token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ description: bordero.descricao || `Borderô ${bordero.id.slice(0, 8)}` }),
+    body: JSON.stringify({ taxId: cnpj }),
   });
 
   if (!batchRes.ok) {
@@ -655,79 +672,102 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
 
   const batchData = await batchRes.json();
   const batchId = batchData.batchId || batchData.id;
+  const maxSize = Number(batchData.maxSize ?? 200);
 
-  // 2. Add each payment to the batch — auto-detect type from dados_extras.
-  // A resposta de cada POST é capturada para guardar o btg_payment_id no lançamento:
-  // é essa correlação que permite baixa automática por polling/webhook (SPEC P1 §5.5).
+  if ((lancamentos || []).length > maxSize) {
+    throw new Error(
+      `Borderô tem ${lancamentos?.length} itens e o lote do BTG aceita no máximo ${maxSize}. ` +
+      `Divida em borderôs menores.`,
+    );
+  }
+
+  // 2. Incluir cada pagamento no lote.
+  //
+  // ATENÇÃO ao contrato (fonte do 500 genérico até 03/08/2026): NÃO existe a
+  // rota .../batch-payments/{batchId}/payments. Os itens entram pelo endpoint
+  // normal POST /{companyId}/banking/payments, com envelope `{ items: [...] }`
+  // (1 item por requisição) e o `batchId` DENTRO do corpo do item.
+  //
+  // O 201 devolve { batchId, contractGuid, operationNeedsApproval } — não um
+  // paymentId. A correlação para baixa automática vem de `tags.externalId`
+  // (= id do lançamento), que volta em todos os webhooks (SPEC P1 §5.5).
   let aceitos = 0;
   let falhas = 0;
   const motivos: string[] = [];
 
-
   for (const lanc of (lancamentos || [])) {
     const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
 
-    // Auto-detect payment type: DDA-linked → BANKSLIP, otherwise use configured type
+    // Tipo: boleto vindo do DDA tem linha digitável → BANKSLIP, ou UTILITIES
+    // quando inicia em 8 (arrecadação: água/luz/tributos). Caso contrário usa
+    // o tipo configurado no lançamento.
     let paymentType = String(dados.btg_payment_type || "PIX_KEY");
-    const paymentDetails: Record<string, unknown> = {};
+    let dadosItem: Record<string, unknown> = (dados.btg_details as Record<string, unknown>) || dados;
 
     if (lanc.btg_dda_id && dados.linha_digitavel) {
-      // DDA-linked. Docs BTG: BANKSLIP exige `digitableLine` (linha digitável);
-      // enviar campo `barcode` dá 500 genérico. Linha iniciada em 8 é
-      // arrecadação (água/luz/tributos) → tipo UTILITIES.
-      try {
-        const linha = paraLinhaDigitavel(dados.linha_digitavel);
-        if (linha[0] === "8") {
-          paymentType = "UTILITIES";
-          if (linha.length === 44) paymentDetails.barcode = linha;
-          else paymentDetails.digitableLine = linha;
-        } else {
-          paymentType = "BANKSLIP";
-          paymentDetails.digitableLine = linha;
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error(`[financeiro-lancamentos] Boleto inválido (lanc ${lanc.id}):`, msg);
-        await supabase.from("lancamentos_financeiros").update({
-          requer_validacao: true,
-          observacao: `Boleto não enviado ao BTG: ${msg.slice(0, 250)}`,
-        }).eq("id", lanc.id);
-        falhas++;
-        continue;
-      }
-    } else if (dados.btg_details) {
-      Object.assign(paymentDetails, dados.btg_details as Record<string, unknown>);
+      const linha = String(dados.linha_digitavel).replace(/\D/g, "");
+      paymentType = linha[0] === "8" ? "UTILITIES" : "BANKSLIP";
+      dadosItem = { ...dadosItem, linha_digitavel: dados.linha_digitavel };
     }
 
-    const paymentPayload: Record<string, unknown> = {
-      type: paymentType,
-      amount: Number(lanc.valor),
-      details: paymentDetails,
-    };
     // Agendamento: data_pagamento do borderô (prática da casa: segunda-feira);
     // vencimento antes dela → agenda no vencimento (sem juros); sem data no
-    // borderô → fallback pelo vencimento. Data passada/hoje → paga já.
-    const agendarPara = dados.scheduledDate
-      ? String(dados.scheduledDate)
-      : dataAgendamento(
-          lanc.data_vencimento ? String(lanc.data_vencimento) : null,
-          bordero.data_pagamento ? String(bordero.data_pagamento) : null,
-          hojeBrt(),
-        );
-    if (agendarPara) paymentPayload.scheduledDate = agendarPara;
+    // borderô → fallback pelo vencimento. Data passada/hoje → paga hoje.
+    //
+    // `paymentDate` é obrigatório: quando não há agendamento futuro, mandamos
+    // a data de hoje (o campo `scheduledDate` que usávamos não existe na
+    // entrada da API — só nos webhooks de saída).
+    const hoje = hojeBrt();
+    const paymentDate = dataAgendamento(
+      lanc.data_vencimento ? String(lanc.data_vencimento) : null,
+      bordero.data_pagamento ? String(bordero.data_pagamento) : null,
+      hoje,
+    ) || hoje;
+
+    // Montagem e validação locais: melhor barrar aqui, com mensagem legível,
+    // do que receber um `unmapped-error` opaco do banco.
+    let item: Record<string, unknown>;
+    let idempotencyKey: string;
+    try {
+      item = montarItem({
+        tipo: paymentType,
+        valor: Number(lanc.valor),
+        dados: dadosItem,
+        debitParty,
+        paymentDate,
+        batchId,
+        externalId: lanc.id,
+        descricao: bordero.descricao,
+        descricaoInterna: `bordero ${String(bordero.id).slice(0, 8)}`,
+      });
+      // Determinística por (lote, lançamento): duplo-clique no mesmo envio não
+      // duplica; reenvio após correção abre lote novo → chave nova.
+      idempotencyKey = await chaveIdempotencia(String(batchId), String(lanc.id));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[financeiro-lancamentos] Item inválido (lanc ${lanc.id}):`, msg);
+      motivos.push(`validação local: ${msg}`);
+      await supabase.from("lancamentos_financeiros").update({
+        requer_validacao: true,
+        observacao: `Não enviado ao BTG: ${msg.slice(0, 250)}`,
+      }).eq("id", lanc.id);
+      falhas++;
+      continue;
+    }
 
     console.log(
-      `[financeiro-lancamentos] BTG request POST /${cnpj}/banking/batch-payments/${batchId}/payments (lanc ${lanc.id}):`,
-      JSON.stringify(paymentPayload),
+      `[financeiro-lancamentos] BTG request POST /${cnpj}/banking/payments (lanc ${lanc.id}):`,
+      JSON.stringify(montarCorpo(item)),
     );
 
-    const payRes = await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}/payments`, {
+    const payRes = await fetch(`${apiBase}/${cnpj}/banking/payments`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
         "Content-Type": "application/json",
+        "x-idempotency-key": idempotencyKey,
       },
-      body: JSON.stringify(paymentPayload),
+      body: JSON.stringify(montarCorpo(item)),
     });
 
     if (payRes.ok) {
@@ -738,30 +778,38 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
         dados_extras: {
           ...dados,
           btg_batch_id: batchId,
+          // Âncora de conciliação: o 201 não traz paymentId, ele chega depois
+          // pelo webhook/listagem casando por este externalId.
+          btg_external_id: lanc.id,
           btg_payment_id: btgPaymentId != null ? String(btgPaymentId) : null,
+          btg_idempotency_key: idempotencyKey,
           btg_payment_response: payData,
         },
       }).eq("id", lanc.id);
       aceitos++;
     } else {
       const errText = await payRes.text();
-      console.error(`[financeiro-lancamentos] Pagamento rejeitado no batch (lanc ${lanc.id}):`, payRes.status, errText);
+      console.error(`[financeiro-lancamentos] Pagamento rejeitado no lote (lanc ${lanc.id}):`, payRes.status, errText);
       let detalhe = errText.slice(0, 300);
       try {
-        const parsed = JSON.parse(errText);
-        const first = Array.isArray(parsed?.errors) ? parsed.errors[0] : null;
-        if (first?.detail) detalhe = `${first.detail}${first.code ? ` (${first.code})` : ""}`;
+        detalhe = descreverErroBtg(JSON.parse(errText)).slice(0, 300);
       } catch { /* corpo não-JSON */ }
       motivos.push(`${payRes.status}: ${detalhe}`);
       await supabase.from("lancamentos_financeiros").update({
         requer_validacao: true,
-        observacao: `Falha ao incluir no batch BTG (${payRes.status}): ${detalhe.slice(0, 250)}`,
+        observacao: `Falha ao incluir no lote BTG (${payRes.status}): ${detalhe.slice(0, 250)}`,
       }).eq("id", lanc.id);
       falhas++;
     }
   }
 
   if (aceitos === 0) {
+    // Lote vazio não deve ficar pendurado até o `expiresAt` — abandona.
+    await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    }).catch((e) => console.warn("[financeiro-lancamentos] Falha ao abandonar lote:", e));
+
     const motivo = motivos.join(" | ") || "sem detalhe";
     // Neste passo o BTG apenas VALIDA a iniciação — nada é executado nem
     // debitado (dinheiro só se move após confirmação no app). O texto do banco
@@ -786,15 +834,35 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   }
 
 
-  // 3. Process the batch
-  await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}`, {
+  // 3. Fechar o lote — PATCH espera { isFinished: true } e responde 202.
+  //    Sem isso o lote nunca chega à área de aprovação do app/internet banking.
+  const fecharRes = await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}`, {
     method: "PATCH",
     headers: {
       Authorization: `Bearer ${tokenData.access_token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ action: "PROCESS" }),
+    body: JSON.stringify({ isFinished: true }),
   });
+
+  if (!fecharRes.ok) {
+    // Os itens já entraram no lote; o que falhou foi o fechamento. Não marcamos
+    // ENVIADO para não esconder um lote que ninguém vai conseguir aprovar.
+    const errText = await fecharRes.text();
+    console.error(`[financeiro-lancamentos] Falha ao fechar lote ${batchId}:`, fecharRes.status, errText);
+    return json({
+      ok: false,
+      code: "BTG_BATCH_NOT_FINISHED",
+      error:
+        `Os ${aceitos} pagamento(s) foram aceitos, mas o BTG recusou o fechamento do lote ` +
+        `(${fecharRes.status}). Nada foi executado nem debitado. ` +
+        `Detalhe do banco: ${descreverErroBtg(errText).slice(0, 300)}`,
+      status: "APROVADO",
+      btg_batch_id: batchId,
+      aceitos,
+      falhas,
+    });
+  }
 
   // 4. Update local records
   await supabase.from("borderos").update({

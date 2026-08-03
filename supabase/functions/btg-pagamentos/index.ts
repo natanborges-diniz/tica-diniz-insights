@@ -5,7 +5,14 @@
 // BTG Payment Types: PIX_KEY, PIX_QR_CODE, PIX_MANUAL, TED, BANKSLIP, UTILITIES, DARF, PIX_REVERSAL
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { paraLinhaDigitavel } from "../_shared/boleto.ts";
+import {
+  montarItem,
+  montarCorpo,
+  chaveIdempotencia,
+  descreverErroBtg,
+  TIPOS_BTG,
+} from "../_shared/btgPayment.ts";
+import { hojeBrt } from "../_shared/agendamento.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -94,92 +101,35 @@ async function getCnpj(codEmpresa: number): Promise<string> {
   throw json({ error: `CNPJ não encontrado para empresa ${codEmpresa}` }, 400);
 }
 
+/**
+ * Conta debitada. `debitParty` é obrigatório em todo item do schema
+ * BankSlipPaymentIssue — a doc do BTG instrui usar agência "50" para PJ.
+ */
+async function getDebitParty(codEmpresa: number): Promise<{ branchCode: string; number: string }> {
+  const db = getServiceClient();
+  const { data } = await db
+    .from("btg_contas_bancarias")
+    .select("agencia, conta")
+    .eq("cod_empresa", codEmpresa)
+    .eq("ativa", true)
+    .single();
+  if (!data?.conta) {
+    throw json({
+      error: `Conta BTG da empresa ${codEmpresa} sem número cadastrado — ` +
+        `preencha btg_contas_bancarias.conta antes de enviar pagamentos.`,
+    }, 400);
+  }
+  return { branchCode: data.agencia || "50", number: String(data.conta) };
+}
+
 function getParam(body: Record<string, unknown> | null, url: URL, key: string): string | null {
   if (body && body[key] !== undefined && body[key] !== null) return String(body[key]);
   return url.searchParams.get(key);
 }
 
-// ─── Build BTG payment payload per type ──────────────────────
-// BTG API expects: { type, amount, scheduledDate?, details: {...per type} }
-function buildBtgPayload(pagamento: Record<string, unknown>): Record<string, unknown> {
-  const tipo = String(pagamento.tipo);
-  const dados = (pagamento.dados_pagamento || {}) as Record<string, unknown>;
-  const amount = Number(pagamento.valor);
-
-  const payload: Record<string, unknown> = {
-    type: tipo,
-    amount,
-  };
-
-  if (dados.scheduledDate) payload.scheduledDate = String(dados.scheduledDate);
-  if (dados.description) payload.description = String(dados.description);
-
-  switch (tipo) {
-    case "PIX_KEY":
-      payload.details = {
-        pixKey: String(dados.chave_pix || dados.pixKey || ""),
-      };
-      break;
-
-    case "PIX_QR_CODE":
-      payload.details = {
-        emv: String(dados.emv || dados.qr_code || ""),
-      };
-      break;
-
-    case "PIX_MANUAL":
-      payload.details = {
-        bankCode: String(dados.banco || dados.bankCode || ""),
-        branchCode: String(dados.agencia || dados.branchCode || ""),
-        accountNumber: String(dados.conta || dados.accountNumber || ""),
-        accountType: String(dados.tipo_conta || dados.accountType || "CHECKING"),
-        holderTaxId: String(dados.documento || dados.holderTaxId || ""),
-        holderName: String(dados.nome || dados.holderName || ""),
-      };
-      break;
-
-    case "TED":
-      payload.details = {
-        bankCode: String(dados.banco || dados.bankCode || ""),
-        branchCode: String(dados.agencia || dados.branchCode || ""),
-        accountNumber: String(dados.conta || dados.accountNumber || ""),
-        accountType: String(dados.tipo_conta || dados.accountType || "CHECKING"),
-        holderTaxId: String(dados.documento || dados.holderTaxId || ""),
-        holderName: String(dados.nome || dados.holderName || ""),
-      };
-      break;
-
-    case "BANKSLIP":
-      // Docs BTG: BANKSLIP exige digitableLine (linha digitável de cobrança).
-      // Aceita 47 direto ou monta a partir do código de barras de 44.
-      payload.details = {
-        digitableLine: paraLinhaDigitavel(dados.linha_digitavel || dados.digitableLine || dados.codigo_barras || dados.barcode || ""),
-      };
-      break;
-
-    case "UTILITIES": {
-      // Arrecadação (inicia em 8): digitableLine (48) ou barcode (44)
-      const cod = paraLinhaDigitavel(dados.linha_digitavel || dados.digitableLine || dados.codigo_barras || dados.barcode || "");
-      payload.details = cod.length === 44 ? { barcode: cod } : { digitableLine: cod };
-      break;
-    }
-
-    case "DARF":
-      payload.details = {
-        revenueCode: String(dados.codigo_receita || dados.revenueCode || ""),
-        taxId: String(dados.cnpj || dados.taxId || ""),
-        referenceDate: String(dados.data_referencia || dados.referenceDate || ""),
-        dueDate: String(dados.data_vencimento || dados.dueDate || ""),
-        description: String(dados.descricao || dados.description || ""),
-      };
-      break;
-
-    default:
-      payload.details = dados;
-  }
-
-  return payload;
-}
+// A montagem do item (detail por tipo, campos obrigatórios, sanitização) vive
+// em _shared/btgPayment.ts, compartilhada com o envio de borderô em
+// financeiro-lancamentos. Ver os comentários de contrato naquele módulo.
 
 // ─── ACTION: criar ───────────────────────────────────────────
 async function handleCriar(body: Record<string, unknown>, userId: string) {
@@ -189,9 +139,8 @@ async function handleCriar(body: Record<string, unknown>, userId: string) {
     return json({ error: "cod_empresa, tipo e valor são obrigatórios" }, 400);
   }
 
-  const tiposValidos = ["PIX_KEY", "PIX_QR_CODE", "PIX_MANUAL", "TED", "BANKSLIP", "UTILITIES", "DARF", "PIX_REVERSAL"];
-  if (!tiposValidos.includes(String(tipo))) {
-    return json({ error: `Tipo inválido. Válidos: ${tiposValidos.join(", ")}` }, 400);
+  if (!TIPOS_BTG.includes(String(tipo) as typeof TIPOS_BTG[number])) {
+    return json({ error: `Tipo inválido. Válidos: ${TIPOS_BTG.join(", ")}` }, 400);
   }
 
   const db = getServiceClient();
@@ -314,10 +263,37 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
 
   const accessToken = await getBtgToken(pagamento.cod_empresa);
   const cnpj = await getCnpj(pagamento.cod_empresa);
+  const debitParty = await getDebitParty(pagamento.cod_empresa);
 
-  // Build proper BTG payload with structured details
-  const btgPayload = buildBtgPayload(pagamento);
-  console.log("[btg-pagamentos] BTG payload:", JSON.stringify(btgPayload).substring(0, 500));
+  const dados = (pagamento.dados_pagamento || {}) as Record<string, unknown>;
+
+  // `paymentDate` é obrigatório (yyyy-MM-dd). Sem agendamento explícito, hoje.
+  const paymentDate = String(dados.paymentDate || dados.scheduledDate || "") || hojeBrt();
+
+  let item: Record<string, unknown>;
+  try {
+    item = montarItem({
+      tipo: String(pagamento.tipo),
+      valor: Number(pagamento.valor),
+      dados,
+      debitParty,
+      paymentDate,
+      // Sem batchId: pagamento avulso, exige agreementId INDIVIDUAL_APPROVE
+      // (aplicado dentro de montarItem).
+      externalId: String(pagamento.id),
+      descricao: (dados.description as string) || pagamento.beneficiario as string,
+      descricaoInterna: `pagamento ${String(pagamento.id).slice(0, 8)}`,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return json({ error: `Dados do pagamento inválidos: ${msg}` }, 400);
+  }
+
+  // Idempotência (24 h): determinística por pagamento, para que um duplo-clique
+  // não gere duas iniciações.
+  const idempotencyKey = await chaveIdempotencia("pagamento", String(pagamento.id));
+
+  console.log("[btg-pagamentos] BTG payload:", JSON.stringify(montarCorpo(item)).substring(0, 500));
 
   const btgRes = await fetch(
     `${apiBase}/${cnpj}/banking/payments`,
@@ -326,8 +302,9 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
+        "x-idempotency-key": idempotencyKey,
       },
-      body: JSON.stringify(btgPayload),
+      body: JSON.stringify(montarCorpo(item)),
     }
   );
 
@@ -339,16 +316,28 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
     console.error("[btg-pagamentos] BTG API error:", btgRes.status, btgBody);
     await db.from("btg_pagamentos").update({
       status: "REJEITADO",
-      dados_pagamento: { ...(pagamento.dados_pagamento as Record<string, unknown>), btg_error: btgData },
+      dados_pagamento: { ...dados, btg_error: btgData },
     }).eq("id", String(id));
-    return json({ error: "BTG rejeitou o pagamento", btg_status: btgRes.status, details: btgData }, 502);
+    return json({
+      error: `BTG rejeitou o pagamento: ${descreverErroBtg(btgData)}`,
+      btg_status: btgRes.status,
+      details: btgData,
+    }, 502);
   }
 
+  // O 201 devolve { batchId, contractGuid, operationNeedsApproval } — não um
+  // paymentId. Ele chega depois, pelo webhook, casando por tags.externalId.
   const btgPaymentId = (btgData.paymentId || btgData.id || btgData.payment_id || "") as string;
   await db.from("btg_pagamentos").update({
     status: "ENVIADO_BTG",
     btg_payment_id: btgPaymentId || null,
-    dados_pagamento: { ...(pagamento.dados_pagamento as Record<string, unknown>), btg_response: btgData },
+    dados_pagamento: {
+      ...dados,
+      btg_external_id: String(pagamento.id),
+      btg_idempotency_key: idempotencyKey,
+      btg_contract_guid: btgData.contractGuid ?? null,
+      btg_response: btgData,
+    },
   }).eq("id", String(id));
 
   return json({ success: true, status: "ENVIADO_BTG", btg_payment_id: btgPaymentId });

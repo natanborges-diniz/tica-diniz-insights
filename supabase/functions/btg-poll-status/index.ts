@@ -72,8 +72,24 @@ async function getCnpj(codEmpresa: number): Promise<string | null> {
 }
 
 // ─── Vocabulário de status BTG (tolerante — pendência #1 da spec) ──
-const FAILED_WORDS = ["REJECTED", "REFUSED", "FAILED", "CANCELLED", "CANCELED", "ERROR", "RETURNED"];
-const PAID_WORDS = ["PAID", "COMPLETED", "EXECUTED", "SETTLED", "PROCESSED", "LIQUIDATED", "DONE"];
+// Máquina de estados oficial (reference/pagamentos-1):
+//   CREATED · SCHEDULED · ADJOURNED · CONFIRMED · PROCESSED · REVERTED ·
+//   FAILED · CANCELED  (+ VALIDATED / INVALIDATED / RETAINED nos webhooks)
+// Notas que mudam o comportamento:
+//   - CONFIRMED = houve débito na conta (pode ser estornado depois → REVERTED,
+//     que o polling seguinte trata como falha). Conta como pago.
+//   - ADJOURNED = retentativa automática do sistema, NÃO é falha → pendente.
+//   - RETAINED = retido na camada de fraude, exige ação no app → pendente.
+//   - VALIDATED fica fora de PAID_WORDS de propósito: "INVALIDATED" contém
+//     "VALIDATED" e casaria por engano.
+const FAILED_WORDS = [
+  "REJECTED", "REFUSED", "FAILED", "CANCELLED", "CANCELED",
+  "ERROR", "RETURNED", "REVERTED", "INVALIDATED",
+];
+const PAID_WORDS = [
+  "PAID", "COMPLETED", "EXECUTED", "SETTLED", "PROCESSED",
+  "LIQUIDATED", "DONE", "CONFIRMED",
+];
 
 type NormStatus = "PAGO" | "FALHA" | "PENDENTE";
 
@@ -157,14 +173,20 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
         continue;
       }
 
-      // Mapa payment_id → payment vindo do BTG (ou simulação em sandbox)
+      // Dois índices: por paymentId (quando já conhecemos) e por
+      // tags.externalId (= id do lançamento). O externalId é a âncora
+      // primária: o 201 da iniciação devolve batchId/contractGuid, nunca um
+      // paymentId, então é por ele que o pagamento volta a ser reconhecido.
       const paymentsById = new Map<string, Record<string, unknown>>();
+      const paymentsByExternalId = new Map<string, Record<string, unknown>>();
       let batchStatus: NormStatus = "PENDENTE";
 
       if (isSandbox) {
         for (const l of lancs) {
+          const simulado = { status: "PROCESSED", amount: l.valor, executedAt: hoje };
           const pid = ((l.dados_extras || {}) as Record<string, unknown>).btg_payment_id;
-          if (pid) paymentsById.set(String(pid), { status: "PAID", amount: l.valor, executedAt: hoje });
+          if (pid) paymentsById.set(String(pid), simulado);
+          paymentsByExternalId.set(String(l.id), simulado);
         }
         batchStatus = "PAGO";
       } else {
@@ -174,7 +196,16 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
           resultado.erros.push(`bordero ${bordero.id}: token/cnpj indisponível (empresa ${bordero.cod_empresa})`);
           continue;
         }
-        const res = await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${bordero.btg_batch_id}`, {
+        // GET /{companyId}/banking/payments?batchId=... — a consulta de lote
+        // por /batch-payments/{id} não consta na referência de banking; a
+        // listagem de pagamentos filtra por batchId e devolve tags.externalId.
+        // pageSize e pageNumber são obrigatórios.
+        const qs = new URLSearchParams({
+          pageSize: "200",
+          pageNumber: "1",
+          batchId: String(bordero.btg_batch_id),
+        });
+        const res = await fetch(`${apiBase}/${cnpj}/banking/payments?${qs}`, {
           headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         });
         if (!res.ok) {
@@ -182,23 +213,43 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
           continue;
         }
         const data = await res.json();
-        const inner = (data?.data ?? data) as Record<string, unknown>;
-        batchStatus = normStatus(inner.status);
-        const list = [inner.payments, inner.items, Array.isArray(inner) ? inner : null].find(Array.isArray) as Array<Record<string, unknown>> | undefined;
-        for (const p of (list || [])) {
+        const list = (Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data) ? data : []) as Array<Record<string, unknown>>;
+
+        for (const p of list) {
           const pid = p.paymentId || p.id || p.transactionId;
           if (pid) paymentsById.set(String(pid), p);
+          const ext = ((p.tags || {}) as Record<string, unknown>)?.externalId;
+          if (ext) paymentsByExternalId.set(String(ext), p);
         }
+
+        // Sem status agregado de lote: o borderô só é terminal-pago quando
+        // todos os itens retornados são terminais-pagos.
+        batchStatus = list.length > 0 && list.every((p) => normStatus(p.status) === "PAGO")
+          ? "PAGO"
+          : "PENDENTE";
       }
 
       let rejeitadosBordero = 0;
       let pendentesBordero = 0;
 
       for (const lanc of lancs) {
-        const pid = ((lanc.dados_extras || {}) as Record<string, unknown>).btg_payment_id;
-        const pay = pid ? paymentsById.get(String(pid)) : undefined;
-        // Legado sem payment_id: só baixa se o batch inteiro é terminal-pago
+        const extras = (lanc.dados_extras || {}) as Record<string, unknown>;
+        const pid = extras.btg_payment_id;
+        // externalId primeiro (é o que enviamos e sempre volta); paymentId como
+        // fallback para lançamentos anteriores a 03/08/2026.
+        const pay = paymentsByExternalId.get(String(lanc.id))
+          ?? (pid ? paymentsById.get(String(pid)) : undefined);
+        // Legado sem correlação: só baixa se o lote inteiro é terminal-pago
         const st = pay ? normStatus(pay.status) : batchStatus;
+
+        // Primeira vez que vemos o paymentId real: guarda para recibo/estorno.
+        if (pay && !pid && (pay.paymentId || pay.id)) {
+          await db.from("lancamentos_financeiros").update({
+            dados_extras: { ...extras, btg_payment_id: String(pay.paymentId ?? pay.id) },
+          }).eq("id", lanc.id);
+        }
 
         if (st === "PAGO") {
           const valorPago = (pay && extractAmount(pay)) || Number(lanc.valor);
