@@ -141,7 +141,13 @@ async function requireAdmin(userId: string) {
 async function listar(body: Record<string, unknown>) {
   const { cod_empresa, tipo, status, natureza, origem, data_inicio, data_fim, campo_data, requer_validacao, limit: lim } = body;
 
-  const dateColumn = campo_data === "EMISSAO" ? "data_emissao" : "data_vencimento";
+  // PAGAMENTO existe para a aba de pagos: quem procura comprovante pensa em
+  // "quando saiu da conta", não em quando o título vencia.
+  const dateColumn = campo_data === "EMISSAO"
+    ? "data_emissao"
+    : campo_data === "PAGAMENTO"
+      ? "data_pagamento"
+      : "data_vencimento";
 
   let query = supabase
     .from("lancamentos_financeiros")

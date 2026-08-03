@@ -162,6 +162,30 @@ export default function FinanceiroHubPage() {
     },
   });
 
+  // Pagos tem consulta própria, pelo eixo da DATA DE PAGAMENTO.
+  //
+  // A listagem principal filtra por vencimento, e isso escondia o pagamento
+  // feito hoje de um boleto que vence semana que vem — exatamente o caso do
+  // borderô de R$ 15,96 (pago 03/08, vencimento 07/08). Quem procura
+  // comprovante pensa em quando saiu da conta.
+  const { data: pagos = [] } = useQuery<Lancamento[]>({
+    queryKey: ["lancamentos-pagos", codEmpresa, filtroDataInicio, filtroDataFim],
+    queryFn: async () => {
+      const params: Record<string, unknown> = {
+        cod_empresa: codEmpresa,
+        tipo: "PAGAR",
+        status: "BAIXADO",
+        campo_data: "PAGAMENTO",
+        limit: 500,
+      };
+      if (filtroDataInicio) params.data_inicio = filtroDataInicio;
+      if (filtroDataFim) params.data_fim = filtroDataFim;
+      const r = await invokeAction("listar", params) as Lancamento[];
+      return [...r].sort((a, b) =>
+        String(b.data_pagamento ?? "").localeCompare(String(a.data_pagamento ?? "")));
+    },
+  });
+
   const { data: planoContas = [] } = useQuery<{ id: string; conta_numero: string; conta_descricao: string; grupo_dre: string; categoria: string; ativo: boolean }[]>({
     queryKey: ["dre-plano-contas-ativas"],
     queryFn: async () => {
@@ -477,11 +501,6 @@ export default function FinanceiroHubPage() {
   const selectablePagar = lancamentos.filter(l => l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status));
   const previstosPagar = selectablePagar; // alias for backward compat
 
-  // Pagos: o que já saiu da conta. Ordenado pela baixa mais recente, que é como
-  // se procura comprovante — do último pagamento para trás.
-  const pagos = lancamentos
-    .filter(l => l.tipo === "PAGAR" && l.status === "BAIXADO")
-    .sort((a, b) => String(b.data_pagamento ?? "").localeCompare(String(a.data_pagamento ?? "")));
   const totalPago = pagos.reduce((s, l) => s + Number(l.valor_pago ?? l.valor), 0);
   const toggleSelect = (id: string) => {
     const next = new Set(selectedIds);
@@ -1214,7 +1233,8 @@ export default function FinanceiroHubPage() {
                 <div>
                   <CardTitle className="text-base">Pagamentos realizados</CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Baixados com retorno do banco. O comprovante é buscado no BTG na hora — nada fica armazenado aqui.
+                    Filtrado por <strong>data de pagamento</strong>{filtroDataInicio || filtroDataFim ? " (o período escolhido acima)" : " — todos os períodos"},
+                    não por vencimento. O comprovante é buscado no BTG na hora; nada fica armazenado aqui.
                   </p>
                 </div>
                 <div className="text-right">
@@ -1238,8 +1258,14 @@ export default function FinanceiroHubPage() {
                   <TableBody>
                     {pagos.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                          Nenhum pagamento baixado no período filtrado.
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-sm">
+                          Nenhum pagamento com baixa {filtroDataInicio || filtroDataFim ? "no período selecionado" : "registrado"}.
+                          {(filtroDataInicio || filtroDataFim) && (
+                            <button className="ml-1 text-primary hover:underline"
+                              onClick={() => { setFiltroDataInicio(""); setFiltroDataFim(""); }}>
+                              Ver todos os períodos
+                            </button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ) : pagos.map(l => {
