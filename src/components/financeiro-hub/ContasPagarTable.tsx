@@ -107,6 +107,33 @@ const getDdaBadge = (l: Lancamento) => {
   return null;
 };
 
+/**
+ * Selo de reprogramação — a data foi movida à mão.
+ *
+ * Sem isto, na semana seguinte ninguém sabe por que aquele vencimento difere da
+ * rubrica ou do ERP, e o número perde credibilidade. O motivo fica no tooltip.
+ */
+const getReprogramadoBadge = (l: Lancamento) => {
+  const d = (l.dados_extras || {}) as Record<string, unknown>;
+  const original = d.data_vencimento_original as string | undefined;
+  if (!original || original === l.data_vencimento) return null;
+
+  const fmtData = (s: string) => {
+    try { return format(parseISO(s), "dd/MM/yy"); } catch { return s; }
+  };
+  const motivo = (d.motivo_reprogramacao as string) || "sem motivo registrado";
+
+  return (
+    <Badge
+      variant="outline"
+      className="text-[10px] bg-blue-50 text-blue-700 border-blue-200 cursor-help"
+      title={`Reprogramado de ${fmtData(original)} para ${fmtData(l.data_vencimento)}\nMotivo: ${motivo}`}
+    >
+      Reprogramado
+    </Badge>
+  );
+};
+
 const formatMonthTitle = (monthKey: string) => {
   try {
     const d = parseISO(`${monthKey}-01`);
@@ -226,7 +253,10 @@ function LancamentoRow({
         {l.requer_validacao && <Badge variant="outline" className="ml-2 text-[10px]">VALIDAR</Badge>}
       </TableCell>
       <TableCell className="text-sm">{l.pessoa_nome?.toUpperCase() || "—"}</TableCell>
-      <TableCell className="text-sm">{format(new Date(l.data_vencimento + "T12:00:00"), "dd/MM/yy")}</TableCell>
+      <TableCell className="text-sm whitespace-nowrap">
+        {format(new Date(l.data_vencimento + "T12:00:00"), "dd/MM/yy")}
+        {getReprogramadoBadge(l) && <div className="mt-0.5">{getReprogramadoBadge(l)}</div>}
+      </TableCell>
       <TableCell className="text-sm text-right font-medium">{fmtCurrency(l.valor)}</TableCell>
       <TableCell className="text-xs">
         {contaNome ? (

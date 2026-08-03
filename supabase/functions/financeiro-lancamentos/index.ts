@@ -224,11 +224,39 @@ async function editar(body: Record<string, unknown>, _userId: string) {
 
   const { data: existing } = await supabase
     .from("lancamentos_financeiros")
-    .select("status, valor, valor_original, lancamento_pai_id")
+    .select("status, valor, valor_original, lancamento_pai_id, data_vencimento, dados_extras, rubrica_id, origem")
     .eq("id", id)
     .single();
 
   if (!existing) throw new Error("Lançamento não encontrado");
+
+  // Reprogramação: mudar o vencimento é legítimo e não conflita com as rotinas
+  // automáticas — a provisão de rubricas casa por (empresa, rubrica,
+  // competência) e o import do ERP por origem_id, nenhuma das duas olha a data.
+  //
+  // O que faltava era o rastro. Sem ele, na semana seguinte ninguém sabe por
+  // que aquela data difere da rubrica, e o número perde credibilidade.
+  const motivo = fields.motivo_reprogramacao ? String(fields.motivo_reprogramacao).trim() : "";
+  delete fields.motivo_reprogramacao;
+
+  if (
+    fields.data_vencimento !== undefined &&
+    String(fields.data_vencimento) !== String(existing.data_vencimento)
+  ) {
+    const extras = (existing.dados_extras || {}) as Record<string, unknown>;
+    const jaMesclado = (fields.dados_extras as Record<string, unknown>) ?? extras;
+
+    fields.dados_extras = {
+      ...jaMesclado,
+      // Só na primeira vez: guardamos de onde partiu, não o passo anterior.
+      data_vencimento_original: extras.data_vencimento_original ?? existing.data_vencimento,
+      reprogramado_de: existing.data_vencimento,
+      reprogramado_para: String(fields.data_vencimento),
+      reprogramado_por: _userId,
+      reprogramado_em: new Date().toISOString(),
+      motivo_reprogramacao: motivo || extras.motivo_reprogramacao || null,
+    };
+  }
 
   // Trilha da edição de valor: guardamos o número que veio da origem na
   // primeira alteração. É ele que permite à governança distinguir "veio do

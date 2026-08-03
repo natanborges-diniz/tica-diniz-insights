@@ -52,6 +52,8 @@ interface Lancamento {
   requer_validacao: boolean;
   bordero_id: string | null;
   btg_dda_id: string | null;
+  /** Lastro de rubrica: a competência é campo próprio, independente do vencimento. */
+  rubrica_id?: string | null;
   dados_extras: Record<string, unknown> | null;
   created_at: string;
 }
@@ -134,6 +136,7 @@ export default function FinanceiroHubPage() {
   const [editNatureza, setEditNatureza] = useState("");
   const [editValor, setEditValor] = useState("");
   const [editVencimento, setEditVencimento] = useState("");
+  const [editMotivoReprog, setEditMotivoReprog] = useState("");
   const [editCategoria, setEditCategoria] = useState("");
   const [editSubcategoria, setEditSubcategoria] = useState("");
 
@@ -465,6 +468,8 @@ export default function FinanceiroHubPage() {
     setEditSubcategoria(l.subcategoria || "");
     setEditValor(String(l.valor));
     setEditVencimento(l.data_vencimento || "");
+    setEditMotivoReprog("");
+    setEditMotivoReprog("");
   };
 
   const openBaixaManual = (l: Lancamento) => {
@@ -855,6 +860,7 @@ export default function FinanceiroHubPage() {
                   ...(podeEditarValor(editLanc) ? {
                     valor: Number(editValor.replace(",", ".")),
                     data_vencimento: editVencimento || editLanc.data_vencimento,
+                    motivo_reprogramacao: editMotivoReprog || undefined,
                   } : {}),
                 })}
                 disabled={editNaturezaMutation.isPending || !editSubcategoria}
@@ -885,6 +891,24 @@ export default function FinanceiroHubPage() {
                     <p className="col-span-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
                       {avisoEdicaoValor(editLanc, editValor)}
                     </p>
+                  )}
+
+                  {/* Reprogramação: o motivo só aparece quando a data muda, para
+                      não virar campo obrigatório em toda edição. */}
+                  {editVencimento && editVencimento !== editLanc.data_vencimento && (
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Por que está mudando a data?</Label>
+                      <Input
+                        value={editMotivoReprog}
+                        onChange={e => setEditMotivoReprog(e.target.value)}
+                        placeholder="Ex: fechamento ainda não chegou — reprogramado para a próxima semana"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        De {format(new Date(editLanc.data_vencimento + "T12:00:00"), "dd/MM/yyyy")} para{" "}
+                        {format(new Date(editVencimento + "T12:00:00"), "dd/MM/yyyy")}.
+                        {editLanc.rubrica_id && " A competência da rubrica não muda — o DRE continua no mês de origem."}
+                      </p>
+                    </div>
                   )}
                 </div>
               ) : (
