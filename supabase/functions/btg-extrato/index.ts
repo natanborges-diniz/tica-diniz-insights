@@ -510,7 +510,6 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
       { date: "2026-03-05", description: "DEBITO AUTOMATICO - TELECOM", amount: 299.90, type: "debit", balance_after: 139591.00 },
     ];
   } else {
-    const accessToken = await getBtgToken(cod_empresa);
     const cnpj = await getCnpj(cod_empresa);
     const accountId = await getAccountId(cod_empresa);
     const params = new URLSearchParams();
@@ -518,15 +517,19 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     if (data_fim) params.set("endDate", data_fim);
 
     const qs = params.toString() ? `?${params}` : "";
-    const res = await fetch(
+    const res = await btgGet(
+      cod_empresa,
       `${apiBase}/${cnpj}/banking/accounts/${accountId}/statements${qs}`,
-      { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
     );
 
     if (!res.ok) {
       const resBody = await res.text();
-      return json({ error: "Erro ao consultar extrato BTG", details: resBody }, 502);
+      const msg = res.status === 401
+        ? `Autorização BTG da empresa ${cod_empresa} inválida — reautorize a loja em /admin/btg-validacao.`
+        : "Erro ao consultar extrato BTG";
+      return json({ error: msg, status: res.status, details: resBody }, res.status === 401 ? 401 : 502);
     }
+
 
     const data = await res.json();
     console.log("[btg-extrato] Raw statements keys:", Object.keys(data || {}));
