@@ -25,6 +25,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { WorkflowStepper } from "@/components/financeiro-hub/WorkflowStepper";
 import { PrepararPagamentoSheet } from "@/components/financeiro-hub/PrepararPagamentoSheet";
 import { BorderoGuidedActions } from "@/components/financeiro-hub/BorderoGuidedActions";
+import { BorderoBloqueioDialog, type BorderoBloqueioPayload } from "@/components/financeiro-hub/BorderoBloqueioDialog";
+
 import { ContasPagarTable } from "@/components/financeiro-hub/ContasPagarTable";
 import { NovoLancamentoDialog } from "@/components/financeiro-hub/NovoLancamentoDialog";
 
@@ -112,6 +114,8 @@ export default function FinanceiroHubPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [borderoDialogOpen, setBorderoDialogOpen] = useState(false);
   const [borderoDetalheId, setBorderoDetalheId] = useState<string | null>(null);
+  const [borderoBloqueio, setBorderoBloqueio] = useState<BorderoBloqueioPayload | null>(null);
+
   const [activeTab, setActiveTab] = useState("contas-pagar");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [prepPaymentLanc, setPrepPaymentLanc] = useState<Lancamento | null>(null);
@@ -293,7 +297,21 @@ export default function FinanceiroHubPage() {
 
   const enviarBorderoMutation = useMutation({
     mutationFn: (id: string) => invokeAction("enviar_bordero_btg", { bordero_id: id }),
-    onSuccess: (data: { sandbox?: boolean; ok?: boolean; error?: string }) => {
+    onSuccess: (data: { sandbox?: boolean; ok?: boolean; error?: string; code?: string } & Partial<BorderoBloqueioPayload>) => {
+      // Bloqueio de governança: em vez de um toast genérico, abrimos o painel com
+      // item, motivo e ação — e o atalho que leva à Mesa já filtrada nesse borderô.
+      if (data?.code === "MESA_REQUIRED" && data.bordero_id) {
+        setBorderoBloqueio({
+          bordero_id: data.bordero_id,
+          cod_empresa: data.cod_empresa ?? null,
+          bloqueios: data.bloqueios ?? [],
+          qtd_total: data.qtd_total,
+          qtd_bloqueados: data.qtd_bloqueados,
+          valor_bloqueado: data.valor_bloqueado,
+        });
+        invalidateAll();
+        return;
+      }
       if (data?.ok === false) {
         toast.error(data.error || "O BTG não aceitou o pagamento. Confira o extrato antes de tentar novamente.", {
           duration: 12000,
@@ -301,6 +319,7 @@ export default function FinanceiroHubPage() {
         invalidateAll();
         return;
       }
+
       toast.success(data?.sandbox ? "Enviado ao BTG (sandbox)" : "Enviado ao BTG — aguarde processamento");
       invalidateAll();
     },
@@ -830,7 +849,13 @@ export default function FinanceiroHubPage() {
           </div>
         </BaseDialog>
 
+        <BorderoBloqueioDialog
+          payload={borderoBloqueio}
+          onOpenChange={(open) => { if (!open) setBorderoBloqueio(null); }}
+        />
+
         {/* Detalhe borderô */}
+
         <BaseDialog
           open={!!borderoDetalheId}
           onOpenChange={(open) => { if (!open) setBorderoDetalheId(null); }}
@@ -1300,7 +1325,7 @@ export default function FinanceiroHubPage() {
                                 isAdmin={!!authIsAdmin}
                                 enviadoEm={b.updated_at}
                                 dataPagamento={b.data_pagamento}
-                                onAprovar={() => { window.location.href = "/financeiro/mesa"; }}
+                                onAprovar={() => { window.location.href = `/financeiro/mesa?bordero=${b.id}&empresa=${codEmpresa}`; }}
                                 onEnviar={() => enviarBorderoMutation.mutate(b.id)}
                                 onConfirmar={() => confirmarProcessamentoMutation.mutate(b.id)}
                                 onCancelar={() => cancelarBorderoMutation.mutate(b.id)}

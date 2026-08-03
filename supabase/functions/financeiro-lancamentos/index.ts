@@ -843,17 +843,45 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     }
     if ((lancsAvaliar || []).length === 0) throw new Error("Borderô vazio — adicione lançamentos antes de enviar");
     const hojeAv = new Date().toISOString().slice(0, 10);
-    const naoAutoAprovaveis: string[] = [];
+    // Bloqueio estruturado: o operador precisa saber EXATAMENTE qual item travou,
+    // por quê e qual ação resolve — e ir direto para ele na Mesa (sem varrer a
+    // tela inteira). Por isso devolvemos ok:false com a lista, não um throw solto.
+    const bloqueios: Array<Record<string, unknown>> = [];
+    const ACAO_POR_SELO: Record<string, string> = {
+      SEM_LASTRO: "Vincule o título do ERP/NF, aponte uma rubrica autorizada ou registre exceção com justificativa",
+      AMARELO: "Aprove na Mesa (valor fora da faixa da rubrica) ou ajuste o valor para dentro da faixa",
+      VERMELHO: "Exceção emergencial: precisa da aprovação individual do admin na Mesa",
+    };
     for (const l of (lancsAvaliar || [])) {
       const rubrica = l.rubrica_id ? (rubMap.get(String(l.rubrica_id)) as never) ?? null : null;
       const av = avaliarLancamento(l as never, rubrica, hojeAv);
       if (av.selo !== "VERDE" && av.selo !== "AZUL") {
-        naoAutoAprovaveis.push(`"${l.descricao ?? l.id}": ${av.motivo}`);
+        bloqueios.push({
+          id: l.id,
+          descricao: l.descricao ?? null,
+          valor: Number(l.valor ?? 0),
+          data_vencimento: l.data_vencimento ?? null,
+          selo: av.selo,
+          motivo: av.motivo,
+          acao: ACAO_POR_SELO[av.selo] ?? "Resolver na Mesa de Aprovação",
+        });
       }
     }
-    if (naoAutoAprovaveis.length > 0) {
-      throw new Error(`Borderô tem itens que exigem aprovação na Mesa antes do envio:\n${naoAutoAprovaveis.join("\n")}`);
+    if (bloqueios.length > 0) {
+      const total = bloqueios.reduce((s, b) => s + Number(b.valor ?? 0), 0);
+      return json({
+        ok: false,
+        code: "MESA_REQUIRED",
+        bordero_id,
+        cod_empresa: bordero.cod_empresa,
+        bloqueios,
+        qtd_total: (lancsAvaliar || []).length,
+        qtd_bloqueados: bloqueios.length,
+        valor_bloqueado: total,
+        error: `${bloqueios.length} de ${(lancsAvaliar || []).length} itens exigem decisão na Mesa antes do envio`,
+      });
     }
+
     if ((lancsAvaliar || []).length === 0) throw new Error("Borderô vazio");
 
     // Auto-aprovação: 100% verde/azul — lastro validado na origem (nota no ERP

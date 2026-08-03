@@ -77,8 +77,18 @@ export default function MesaAprovacaoPage() {
   const { codEmpresa: codEmpresaDefault, isAdmin } = useDefaultEmpresa();
   const queryClient = useQueryClient();
 
-  const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
+  // Foco por borderô: quem chega do Contas a Pagar ("Resolver na Mesa") não deve
+  // cair na Mesa inteira — entra já filtrado no borderô que travou.
+  const params = new URLSearchParams(window.location.search);
+  const borderoFocoParam = params.get("bordero");
+  const empresaParam = params.get("empresa");
+
+  const [codEmpresa, setCodEmpresa] = useState<number>(
+    empresaParam ? Number(empresaParam) : (codEmpresaDefault || 1),
+  );
   const [filtroSelo, setFiltroSelo] = useState<string>("todos");
+  const [borderoFoco, setBorderoFoco] = useState<string | null>(borderoFocoParam);
+
 
   const invokeAction = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -116,8 +126,30 @@ export default function MesaAprovacaoPage() {
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-  const lancamentos = (mesa?.lancamentos ?? []).filter((l) => filtroSelo === "todos" || l.selo === filtroSelo);
-  const excecoesPendentes = (mesa?.lancamentos ?? []).filter((l) => l.selo === "VERMELHO" && l.status !== "AUTORIZADO");
+  const noFoco = (l: LancMesa) => !borderoFoco || l.bordero_id === borderoFoco;
+  const escopoLancs = (mesa?.lancamentos ?? []).filter(noFoco);
+  // Com foco no borderô os contadores precisam refletir o escopo — o resumo
+  // global do backend passaria a informação errada.
+  const contagemSelo: Record<string, number> = borderoFoco
+    ? escopoLancs.reduce((acc: Record<string, number>, l) => {
+        acc[l.selo] = (acc[l.selo] ?? 0) + 1;
+        return acc;
+      }, {})
+    : (mesa?.resumo_selos ?? {});
+  const lancamentos = escopoLancs
+    .filter((l) => filtroSelo === "todos" || l.selo === filtroSelo);
+
+  const excecoesPendentes = (mesa?.lancamentos ?? [])
+    .filter(noFoco)
+    .filter((l) => l.selo === "VERMELHO" && l.status !== "AUTORIZADO");
+  const borderosVisiveis = (mesa?.borderos ?? []).filter((b) => !borderoFoco || b.id === borderoFoco);
+  const borderoFocoNome = borderoFoco
+    ? (mesa?.borderos ?? []).find((b) => b.id === borderoFoco)?.descricao || `BORDERÔ ${borderoFoco.slice(0, 8).toUpperCase()}`
+    : null;
+  const pendentesFoco = (mesa?.lancamentos ?? [])
+    .filter(noFoco)
+    .filter((l) => ["SEM_LASTRO", "AMARELO", "VERMELHO"].includes(l.selo));
+
 
   const seloBadge = (l: LancMesa) => {
     const cfg = SELO_CFG[l.selo] ?? SELO_CFG.SEM_LASTRO;
@@ -136,6 +168,20 @@ export default function MesaAprovacaoPage() {
         icon={<ShieldCheck className="h-5 w-5" />}
       />
 
+      {borderoFoco && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/40 bg-primary/5 px-4 py-3">
+          <Badge variant="outline" className="text-primary border-primary/40">FOCO</Badge>
+          <p className="text-sm">
+            Mostrando apenas <span className="font-medium uppercase">{borderoFocoNome}</span>
+            {" — "}{pendentesFoco.length} item(ns) aguardando sua decisão
+          </p>
+          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setBorderoFoco(null)}>
+            Ver toda a Mesa
+          </Button>
+        </div>
+      )}
+
+
       {/* Filtros */}
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
@@ -153,13 +199,14 @@ export default function MesaAprovacaoPage() {
         </div>
         <div className="flex items-end gap-1.5 flex-wrap">
           <Button variant={filtroSelo === "todos" ? "default" : "outline"} size="sm" onClick={() => setFiltroSelo("todos")}>
-            Todos {mesa ? `(${mesa.lancamentos.length})` : ""}
+            Todos {mesa ? `(${escopoLancs.length})` : ""}
           </Button>
           {ORDEM_SELOS.map((s) => (
             <Button key={s} variant={filtroSelo === s ? "default" : "outline"} size="sm" onClick={() => setFiltroSelo(s)}>
-              {SELO_CFG[s].label} ({mesa?.resumo_selos?.[s] ?? 0})
+              {SELO_CFG[s].label} ({contagemSelo[s] ?? 0})
             </Button>
           ))}
+
         </div>
       </div>
 
@@ -203,9 +250,10 @@ export default function MesaAprovacaoPage() {
       )}
 
       {/* Borderôs prontos para aprovar */}
-      {(mesa?.borderos ?? []).length > 0 && (
+      {borderosVisiveis.length > 0 && (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {mesa!.borderos.map((b) => {
+          {borderosVisiveis.map((b) => {
+
             const problema = (b.selos.SEM_LASTRO ?? 0) + (b.selos.VERMELHO ?? 0);
             const amarelos = b.selos.AMARELO ?? 0;
             return (
