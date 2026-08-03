@@ -918,12 +918,25 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   // Production: BTG Batch Payments API
   const { data: tokenData } = await supabase
     .from("btg_tokens")
-    .select("access_token, expires_at")
+    .select("access_token, expires_at, scopes")
     .eq("cod_empresa", bordero.cod_empresa)
     .single();
 
   if (!tokenData) throw new Error("Token BTG não encontrado para esta empresa");
   if (new Date(tokenData.expires_at) < new Date()) throw new Error("Token BTG expirado");
+
+  // O envio de lote exige escopo de ESCRITA de pagamentos. Tokens autorizados
+  // antes da inclusão desse escopo falham com 403 "Insufficient scope" no BTG.
+  const scopes: string[] = Array.isArray(tokenData.scopes) ? tokenData.scopes : [];
+  const temPayments = scopes.includes("brn:btg:empresas:banking:payments") ||
+    scopes.includes("empresas.btgpactual.com/payments");
+  if (scopes.length > 0 && !temPayments) {
+    throw new Error(
+      `A autorização BTG da empresa ${bordero.cod_empresa} não inclui o escopo de pagamentos. ` +
+      `Reautorize esta loja em /admin/btg-validacao (botão Autorizar) e envie o borderô novamente.`,
+    );
+  }
+
 
   const { data: conta } = await supabase
     .from("btg_contas_bancarias")
