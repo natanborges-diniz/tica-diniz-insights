@@ -68,6 +68,10 @@ export default function BankingDdaDashboard() {
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [filtroConciliado, setFiltroConciliado] = useState<string>("todos");
+  const [busca, setBusca] = useState<string>("");
+  const [vencDe, setVencDe] = useState<string>("");
+  const [vencAte, setVencAte] = useState<string>("");
+  const [faixaValor, setFaixaValor] = useState<string>("todos");
 
   // Auto-import on mount / empresa change
   const [autoImported, setAutoImported] = useState(false);
