@@ -9,6 +9,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { flattenStatements, normalizeMovement, assignDedupeKeys } from "../_shared/btgExtrato.ts";
 import { reprocessarEventosPendentes } from "../_shared/btgEventos.ts";
+import { ratearValorPago } from "../_shared/rateio.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -126,6 +127,31 @@ async function baixarLancamento(db: any, lanc: Record<string, unknown>, valorPag
     baixado_em: new Date().toISOString(),
     dados_extras: { ...dados, btg_payment_status: statusBtg, baixa_automatica: "btg-poll-status" },
   }).eq("id", lanc.id);
+
+  // Pagamento unificado: os componentes são baixados junto, rateando o valor
+  // efetivamente pago. Sem isso eles ficariam pendurados para sempre e o DRE
+  // por rubrica não fecharia com o caixa.
+  const { data: filhos } = await db
+    .from("lancamentos_financeiros")
+    .select("id, valor")
+    .eq("lancamento_pai_id", lanc.id)
+    .neq("status", "BAIXADO");
+
+  if (filhos && filhos.length > 0) {
+    const rateado = ratearValorPago(
+      filhos.map((f: Record<string, unknown>) => ({ id: String(f.id), valor: Number(f.valor) })),
+      valorPago,
+    );
+    for (const parte of rateado) {
+      await db.from("lancamentos_financeiros").update({
+        status: "BAIXADO",
+        valor_pago: parte.valor,
+        data_pagamento: dataPagamento,
+        data_baixa: dataPagamento,
+        baixado_em: new Date().toISOString(),
+      }).eq("id", parte.id);
+    }
+  }
 }
 
 // deno-lint-ignore no-explicit-any

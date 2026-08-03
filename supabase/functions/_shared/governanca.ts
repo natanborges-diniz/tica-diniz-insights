@@ -22,6 +22,66 @@ export interface LancParaAvaliar {
   pessoa_documento?: string | null;
   data_vencimento?: string | null;
   criado_por?: string | null;
+  /** Valor como veio da origem, quando alguém editou depois. */
+  valor_original?: number | null;
+  /** Tipo BTG configurado (BANKSLIP, UTILITIES, PIX_KEY, TED...). */
+  btg_payment_type?: string | null;
+}
+
+// ─── Edição manual de valor ──────────────────────────────────
+
+/** Desvio até aqui é acerto de rotina (juros, multa, arredondamento). */
+export const TOLERANCIA_EDICAO_PCT = 5;
+/** Piso absoluto: em valores baixos, 5% seria centavos. */
+export const TOLERANCIA_EDICAO_ABS = 50;
+
+/** Boleto tem valor definido pelo título registrado — não se digita. */
+function ehBoleto(l: LancParaAvaliar): boolean {
+  const t = String(l.btg_payment_type ?? "").toUpperCase();
+  return t === "BANKSLIP" || t === "UTILITIES" || !!l.btg_dda_id;
+}
+
+/**
+ * O selo olha a ORIGEM do lançamento, não o número. Sem esta checagem, um valor
+ * digitado à mão herdaria o "veio do ERP" e sairia direto para o banco — a
+ * trava contra erro de digitação deixaria de existir.
+ *
+ * Regra da casa:
+ *   - boleto: o valor é o do título registrado. Qualquer edição vai à Mesa.
+ *   - demais: desvio pequeno (≤5% ou ≤R$ 50) é acerto de rotina e segue direto.
+ */
+export function edicaoDeValorExigeMesa(l: LancParaAvaliar): { exige: boolean; motivo?: string } {
+  const original = l.valor_original;
+  if (original == null) return { exige: false };
+
+  const delta = Number(l.valor) - Number(original);
+  if (Math.abs(delta) < 0.01) return { exige: false };
+
+  const fmt = (v: number) => `R$ ${Number(v).toFixed(2)}`;
+
+  if (ehBoleto(l)) {
+    return {
+      exige: true,
+      motivo:
+        `Valor de boleto alterado à mão (${fmt(original)} → ${fmt(l.valor)}). ` +
+        `Em boleto quem manda é o título registrado — confira antes de aprovar.`,
+    };
+  }
+
+  const desvioPct = Number(original) > 0
+    ? Math.abs(delta / Number(original)) * 100
+    : Infinity;
+
+  if (desvioPct > TOLERANCIA_EDICAO_PCT && Math.abs(delta) > TOLERANCIA_EDICAO_ABS) {
+    return {
+      exige: true,
+      motivo:
+        `Valor alterado à mão em ${delta > 0 ? "+" : "−"}${fmt(Math.abs(delta))} ` +
+        `(${desvioPct.toFixed(1)}% vs origem ${fmt(original)})`,
+    };
+  }
+
+  return { exige: false };
 }
 
 export interface RubricaAvaliavel {
@@ -74,18 +134,31 @@ export function avaliarRubrica(l: LancParaAvaliar, r: RubricaAvaliavel, hoje: st
 }
 
 export function avaliarLancamento(l: LancParaAvaliar, rubrica: RubricaAvaliavel | null, hoje: string): Avaliacao {
+  // Valor mexido à mão rebaixa o lastro para AMARELO: continua entrando no
+  // borderô, mas sinalizado, e o borderô deixa de enviar direto (o envio só é
+  // automático com 100% VERDE/AZUL).
+  const edicao = edicaoDeValorExigeMesa(l);
+
   // Lastro A — dívida documentada
   if (l.erp_parcela_id != null || l.lastro === "ERP") {
+    if (edicao.exige) return { selo: "AMARELO", podeBordero: true, motivo: edicao.motivo! };
     return { selo: "VERDE", podeBordero: true, motivo: "Título do ERP (chave dura)" };
   }
   if (l.nf_entrada_id != null || l.lastro === "NF") {
+    if (edicao.exige) return { selo: "AMARELO", podeBordero: true, motivo: edicao.motivo! };
     return { selo: "VERDE", podeBordero: true, motivo: "NF de entrada amarrada a pedido" };
   }
 
   // Lastro B — rubrica
   if (l.rubrica_id) {
     if (!rubrica) return { selo: "SEM_LASTRO", podeBordero: false, motivo: "Rubrica vinculada não encontrada" };
-    return avaliarRubrica(l, rubrica, hoje);
+    const av = avaliarRubrica(l, rubrica, hoje);
+    // A faixa da rubrica já compara com o valor esperado; a edição só rebaixa
+    // o que passaria direto.
+    if (edicao.exige && av.selo === "AZUL") {
+      return { selo: "AMARELO", podeBordero: true, motivo: edicao.motivo! };
+    }
+    return av;
   }
 
   // Lastro C — exceção (nunca via borderô)

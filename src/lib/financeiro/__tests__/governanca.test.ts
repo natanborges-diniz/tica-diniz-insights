@@ -113,3 +113,45 @@ describe('separação de funções', () => {
     expect(validarJustificativa(null)).toBe(false);
   });
 });
+
+// Edição manual de valor — o selo olha a ORIGEM, não o número. Sem esta
+// checagem, um valor digitado à mão herdaria o "veio do ERP" e sairia direto
+// para o banco, sem ninguém conferir.
+describe('valor editado à mão', () => {
+  const erp = (over: Record<string, unknown> = {}) => ({
+    id: 'l1', erp_parcela_id: 123, valor: 1000, ...over,
+  } as never);
+
+  it('sem edição, título do ERP segue VERDE', () => {
+    expect(avaliarLancamento(erp(), null, '2026-08-03').selo).toBe('VERDE');
+  });
+
+  it('acerto pequeno (juros/arredondamento) não rebaixa', () => {
+    const av = avaliarLancamento(erp({ valor: 1030, valor_original: 1000 }), null, '2026-08-03');
+    expect(av.selo).toBe('VERDE');
+  });
+
+  it('alteração grande rebaixa para AMARELO e explica o desvio', () => {
+    const av = avaliarLancamento(erp({ valor: 10000, valor_original: 1000 }), null, '2026-08-03');
+    expect(av.selo).toBe('AMARELO');
+    expect(av.podeBordero).toBe(true); // entra no borderô, mas sinalizado
+    expect(av.motivo).toMatch(/alterado à mão/);
+  });
+
+  it('em boleto, qualquer alteração vai para a Mesa', () => {
+    const av = avaliarLancamento(
+      erp({ valor: 213.08, valor_original: 213.06, btg_payment_type: 'BANKSLIP' }),
+      null, '2026-08-03',
+    );
+    expect(av.selo).toBe('AMARELO');
+    expect(av.motivo).toMatch(/título registrado/);
+  });
+
+  it('DDA vinculado também conta como boleto', () => {
+    const av = avaliarLancamento(
+      erp({ valor: 1001, valor_original: 1000, btg_dda_id: 'dda-1' }),
+      null, '2026-08-03',
+    );
+    expect(av.selo).toBe('AMARELO');
+  });
+});

@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import {
   Landmark, Plus, CheckCircle2, XCircle,
   ArrowDownCircle, ArrowUpCircle, AlertTriangle,
-  Package, FileCheck, Download, Eye,
+  Package, FileCheck, Download, Eye, Layers,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -123,10 +123,17 @@ export default function FinanceiroHubPage() {
   const [formBorderoDataPg, setFormBorderoDataPg] = useState<string>(proximaSegundaStr);
   // Prática da casa é pagar tudo na segunda — por isso DATA_UNICA é o default.
   const [formBorderoModoData, setFormBorderoModoData] = useState<"DATA_UNICA" | "VENCIMENTO">("DATA_UNICA");
+  const [unificarDialogOpen, setUnificarDialogOpen] = useState(false);
+  const [formUnificarDesc, setFormUnificarDesc] = useState("");
+  // Quando o boleto já existe como lançamento (veio do DDA), ele é o pagador e
+  // os demais viram componentes. Vazio = criamos um pagador a partir da soma.
+  const [formUnificarPagador, setFormUnificarPagador] = useState<string>("");
   const [classificarLoteOpen, setClassificarLoteOpen] = useState(false);
 
   // Edit classification state
   const [editNatureza, setEditNatureza] = useState("");
+  const [editValor, setEditValor] = useState("");
+  const [editVencimento, setEditVencimento] = useState("");
   const [editCategoria, setEditCategoria] = useState("");
   const [editSubcategoria, setEditSubcategoria] = useState("");
 
@@ -219,6 +226,23 @@ export default function FinanceiroHubPage() {
     onError: () => toast.error("Erro ao cancelar"),
   });
 
+  const unificarMutation = useMutation({
+    mutationFn: () => invokeAction("agrupar_lancamentos", {
+      lancamento_ids: Array.from(selectedIds),
+      pagador_id: formUnificarPagador || null,
+      descricao: formUnificarDesc || null,
+    }),
+    onSuccess: (r: { componentes?: number }) => {
+      toast.success(`Pagamento unificado criado com ${r?.componentes ?? 0} componentes`);
+      setUnificarDialogOpen(false);
+      setFormUnificarDesc("");
+      setFormUnificarPagador("");
+      setSelectedIds(new Set());
+      invalidateAll();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const criarBorderoMutation = useMutation({
     mutationFn: () => invokeAction("criar_bordero", {
       cod_empresa: codEmpresa,
@@ -289,11 +313,16 @@ export default function FinanceiroHubPage() {
   });
 
   const editNaturezaMutation = useMutation({
-    mutationFn: async ({ id, natureza, categoria, subcategoria }: { id: string; natureza: string; categoria: string; subcategoria: string }) => {
-      return invokeAction("editar", { id, natureza, categoria, subcategoria });
+    mutationFn: async (
+      { id, ...campos }: {
+        id: string; natureza: string; categoria: string; subcategoria: string;
+        valor?: number; data_vencimento?: string;
+      },
+    ) => {
+      return invokeAction("editar", { id, ...campos });
     },
-    onSuccess: () => { toast.success("Classificação atualizada"); invalidateAll(); setEditLanc(null); },
-    onError: (e: Error) => toast.error(e.message || "Erro ao classificar"),
+    onSuccess: () => { toast.success("Lançamento atualizado"); invalidateAll(); setEditLanc(null); },
+    onError: (e: Error) => toast.error(e.message || "Erro ao salvar"),
   });
 
   const classificarLoteMutation = useMutation({
@@ -331,6 +360,8 @@ export default function FinanceiroHubPage() {
     setEditNatureza(l.natureza || "");
     setEditCategoria(l.categoria || "");
     setEditSubcategoria(l.subcategoria || "");
+    setEditValor(String(l.valor));
+    setEditVencimento(l.data_vencimento || "");
   };
 
   const openBaixaManual = (l: Lancamento) => {
@@ -341,6 +372,30 @@ export default function FinanceiroHubPage() {
 
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+
+  // Valor e vencimento só mudam enquanto o lançamento não foi ao banco.
+  const podeEditarValor = (l: Lancamento) =>
+    ["PREVISTO", "CLASSIFICADO", "AGRUPADO"].includes(l.status);
+
+  /**
+   * Avisa antes de salvar o que a governança vai fazer com a alteração — em vez
+   * de o usuário descobrir só quando o borderô for parar na Mesa.
+   */
+  const avisoEdicaoValor = (l: Lancamento, novoValorStr: string): string | null => {
+    const novo = Number(String(novoValorStr).replace(",", "."));
+    if (!Number.isFinite(novo) || Math.abs(novo - l.valor) < 0.01) return null;
+
+    const tipo = String((l.dados_extras || {}).btg_payment_type ?? "").toUpperCase();
+    if (l.btg_dda_id || tipo === "BANKSLIP" || tipo === "UTILITIES") {
+      return "Em boleto quem manda é o valor do título registrado. Alterar aqui não muda o que o banco cobra, e o lançamento passará pela Mesa antes do envio.";
+    }
+    const delta = Math.abs(novo - l.valor);
+    const pct = l.valor > 0 ? (delta / l.valor) * 100 : Infinity;
+    if (pct > 5 && delta > 50) {
+      return `Alteração de ${fmtCurrency(delta)} (${pct.toFixed(1)}%) — acima da tolerância, este lançamento passará pela Mesa antes do envio.`;
+    }
+    return null;
+  };
 
   // Selection — can select PREVISTO and CLASSIFICADO
   const selectablePagar = lancamentos.filter(l => l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status));
@@ -529,6 +584,65 @@ export default function FinanceiroHubPage() {
           </div>
         </BaseDialog>
 
+        {/* Unificar pagamento (rateio) */}
+        <BaseDialog
+          open={unificarDialogOpen}
+          onOpenChange={setUnificarDialogOpen}
+          title="Unificar pagamento"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setUnificarDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={() => unificarMutation.mutate()} disabled={unificarMutation.isPending}>
+                <Layers className="h-4 w-4 mr-1" /> Unificar
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-3 py-2">
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex items-start gap-2">
+              <Layers className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p className="text-sm font-medium text-primary">
+                  {selectedIds.size} lançamentos — {fmtCurrency(selectedTotal)}
+                </p>
+                <p>
+                  Um pagamento só vai ao banco. Cada lançamento continua registrado
+                  com sua conta do DRE, e a baixa é distribuída entre eles.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Qual deles é o boleto a pagar?</Label>
+              <select
+                className="w-full h-9 rounded-md border bg-background px-3 text-sm"
+                value={formUnificarPagador}
+                onChange={e => setFormUnificarPagador(e.target.value)}
+              >
+                <option value="">Nenhum — criar um título novo com a soma</option>
+                {previstosPagar.filter(l => selectedIds.has(l.id)).map(l => (
+                  <option key={l.id} value={l.id}>
+                    {l.descricao} — {fmtCurrency(l.valor)}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Se o boleto já está na lista (veio do DDA), escolha-o aqui: os outros viram
+                a composição dele e a soma precisa fechar com o valor cobrado.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Descrição (opcional)</Label>
+              <Input
+                value={formUnificarDesc}
+                onChange={e => setFormUnificarDesc(e.target.value)}
+                placeholder="Ex: Ocupação — aluguel, IPTU e condomínio"
+              />
+            </div>
+          </div>
+        </BaseDialog>
+
         {/* Detalhe borderô */}
         <BaseDialog
           open={!!borderoDetalheId}
@@ -616,15 +730,24 @@ export default function FinanceiroHubPage() {
         <BaseDialog
           open={!!editLanc}
           onOpenChange={(open) => { if (!open) setEditLanc(null); }}
-          title="Classificar Lançamento"
+          title="Editar Lançamento"
           footer={
             <>
               <Button variant="outline" onClick={() => setEditLanc(null)}>Cancelar</Button>
               <Button
-                onClick={() => editLanc && editNaturezaMutation.mutate({ id: editLanc.id, natureza: editNatureza, categoria: editCategoria, subcategoria: editSubcategoria })}
+                onClick={() => editLanc && editNaturezaMutation.mutate({
+                  id: editLanc.id,
+                  natureza: editNatureza,
+                  categoria: editCategoria,
+                  subcategoria: editSubcategoria,
+                  ...(podeEditarValor(editLanc) ? {
+                    valor: Number(editValor.replace(",", ".")),
+                    data_vencimento: editVencimento || editLanc.data_vencimento,
+                  } : {}),
+                })}
                 disabled={editNaturezaMutation.isPending || !editSubcategoria}
               >
-                Salvar Classificação
+                Salvar
               </Button>
             </>
           }
@@ -633,8 +756,31 @@ export default function FinanceiroHubPage() {
             <div className="space-y-4 py-2">
               <div className="bg-muted/50 rounded-lg p-3">
                 <p className="text-sm font-medium">{editLanc.descricao.toUpperCase()}</p>
-                <p className="text-xs text-muted-foreground">{editLanc.pessoa_nome?.toUpperCase() || "—"} — {fmtCurrency(editLanc.valor)}</p>
+                <p className="text-xs text-muted-foreground">{editLanc.pessoa_nome?.toUpperCase() || "—"}</p>
               </div>
+
+              {podeEditarValor(editLanc) ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Valor</Label>
+                    <Input value={editValor} onChange={e => setEditValor(e.target.value)} inputMode="decimal" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Vencimento</Label>
+                    <Input type="date" value={editVencimento} onChange={e => setEditVencimento(e.target.value)} />
+                  </div>
+                  {avisoEdicaoValor(editLanc, editValor) && (
+                    <p className="col-span-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
+                      {avisoEdicaoValor(editLanc, editValor)}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Valor: <strong>{fmtCurrency(editLanc.valor)}</strong> — em {editLanc.status}, só a
+                  classificação pode mudar.
+                </p>
+              )}
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
                 <p className="text-xs text-muted-foreground">
                   Selecione a <strong>conta</strong> do plano de contas. Natureza e categoria serão preenchidas automaticamente.
@@ -999,6 +1145,12 @@ export default function FinanceiroHubPage() {
               <Button size="sm" variant="outline" onClick={() => setBorderoDialogOpen(true)}>
                 <Package className="h-4 w-4 mr-1" /> Criar Borderô
               </Button>
+              {selectedIds.size >= 2 && (
+                <Button size="sm" variant="outline" onClick={() => setUnificarDialogOpen(true)}
+                  title="Um pagamento só, mantendo o registro de cada despesa que o compõe">
+                  <Layers className="h-4 w-4 mr-1" /> Unificar pagamento
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"

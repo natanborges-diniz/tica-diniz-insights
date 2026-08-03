@@ -45,6 +45,10 @@ interface Lancamento {
   btg_dda_id: string | null;
   dados_extras: Record<string, unknown> | null;
   created_at: string;
+  /** Pagamento unificado: aponta para o título pagador. */
+  lancamento_pai_id?: string | null;
+  /** Valor como veio da origem, quando alguém editou depois. */
+  valor_original?: number | null;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -56,6 +60,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   BAIXADO: { label: "Baixado", variant: "default" },
   CANCELADO: { label: "Cancelado", variant: "destructive" },
   CONCILIADO_CARTAO: { label: "Conciliado", variant: "default" },
+  AGRUPADO: { label: "Em pagamento unificado", variant: "outline" },
 };
 
 interface ContasPagarTableProps {

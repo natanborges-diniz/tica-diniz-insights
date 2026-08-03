@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, authGuard } from "../_shared/authGuard.ts";
 import { avaliarLancamento, validarJustificativa, criadorAprovadorDistintos } from "../_shared/governanca.ts";
+import { validarAgrupamento, descricaoPagador, ratearValorPago } from "../_shared/rateio.ts";
 import {
   hojeBrt,
   proximaSegunda,
@@ -40,6 +41,10 @@ Deno.serve(async (req) => {
         return await editar(body, auth.userId);
       case "excluir":
         return await excluir(body);
+      case "agrupar_lancamentos":
+        return await agruparLancamentos(body, auth.userId);
+      case "desagrupar_lancamento":
+        return await desagruparLancamento(body);
       case "autorizar":
         return await autorizar(body, auth.userId);
       case "baixar":
@@ -210,18 +215,39 @@ async function editar(body: Record<string, unknown>, _userId: string) {
 
   const { data: existing } = await supabase
     .from("lancamentos_financeiros")
-    .select("status")
+    .select("status, valor, valor_original, lancamento_pai_id")
     .eq("id", id)
     .single();
 
   if (!existing) throw new Error("Lançamento não encontrado");
+
+  // Trilha da edição de valor: guardamos o número que veio da origem na
+  // primeira alteração. É ele que permite à governança distinguir "veio do
+  // ERP" de "alguém digitou" — sem isso o selo verde seria herdado por um
+  // valor manual e o pagamento sairia sem passar pela Mesa.
+  if (fields.valor !== undefined && Number(fields.valor) !== Number(existing.valor)) {
+    if (!(Number(fields.valor) > 0)) throw new Error("Valor precisa ser maior que zero");
+    if (existing.valor_original == null) fields.valor_original = Number(existing.valor);
+    fields.valor_editado_por = _userId;
+    fields.valor_editado_em = new Date().toISOString();
+  }
 
   // Allow editing natureza/categoria/observacao on any non-CANCELADO status
   // Full edit only on PREVISTO
   const allowedFieldsAnyStatus = ["natureza", "categoria", "subcategoria", "observacao", "dados_extras"];
   delete fields.action;
 
-  if (existing.status !== "PREVISTO") {
+  // Componente de pagamento unificado: pode editar, mas o pagador tem que
+  // acompanhar — senão a soma das partes deixa de fechar com o que vai ao banco.
+  const paiParaRecalcular = existing.lancamento_pai_id && fields.valor !== undefined
+    ? String(existing.lancamento_pai_id)
+    : null;
+
+  // Edição completa enquanto o lançamento não entrou em borderô. AGRUPADO é
+  // componente de pagamento unificado — ainda não foi ao banco, então continua
+  // editável.
+  const statusEditaveis = ["PREVISTO", "CLASSIFICADO", "AGRUPADO"];
+  if (!statusEditaveis.includes(existing.status)) {
     const editKeys = Object.keys(fields);
     const disallowed = editKeys.filter(k => !allowedFieldsAnyStatus.includes(k));
     if (disallowed.length > 0) {
@@ -237,7 +263,197 @@ async function editar(body: Record<string, unknown>, _userId: string) {
     .single();
 
   if (error) throw new Error(error.message);
+
+  if (paiParaRecalcular) await recalcularPagador(paiParaRecalcular);
+
   return json(data);
+}
+
+/**
+ * Reajusta o valor do pagador para a soma dos seus componentes.
+ *
+ * O pagador é o que vai ao banco; se a soma das partes deixar de fechar com
+ * ele, o DRE por rubrica e o caixa passam a contar histórias diferentes.
+ */
+async function recalcularPagador(paiId: string) {
+  const { data: filhos } = await supabase
+    .from("lancamentos_financeiros")
+    .select("valor")
+    .eq("lancamento_pai_id", paiId);
+
+  const soma = (filhos || []).reduce((s, f) => s + Number(f.valor), 0);
+  await supabase
+    .from("lancamentos_financeiros")
+    .update({ valor: Math.round(soma * 100) / 100 })
+    .eq("id", paiId);
+}
+
+// ═══════════════════════════════════════════════════════════
+// PAGAMENTO UNIFICADO (rateio)
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Une vários lançamentos num pagamento só, preservando a memória de cada um.
+ *
+ * Caso típico: boleto de ocupação que embute aluguel, IPTU e condomínio. O
+ * pagador vai ao banco; os componentes ficam pendurados nele com suas rubricas
+ * e continuam alimentando o DRE.
+ *
+ * `pagador_id` opcional: quando o boleto já existe como lançamento (veio do
+ * DDA), ele vira o pagador e a soma dos componentes tem que fechar com o valor
+ * cobrado. Sem ele, criamos um pagador a partir da soma.
+ */
+async function agruparLancamentos(body: Record<string, unknown>, userId: string) {
+  const ids = (body.lancamento_ids as string[]) || [];
+  const pagadorId = body.pagador_id ? String(body.pagador_id) : null;
+  const descricao = body.descricao ? String(body.descricao) : null;
+
+  if (ids.length < 2) throw new Error("Selecione ao menos dois lançamentos para unificar");
+
+  const { data: lancs, error: qErr } = await supabase
+    .from("lancamentos_financeiros")
+    .select("*")
+    .in("id", ids);
+  if (qErr) throw new Error(qErr.message);
+  if (!lancs || lancs.length !== ids.length) throw new Error("Algum lançamento não foi encontrado");
+
+  const componentes = lancs.filter((l) => l.id !== pagadorId);
+  let pagador = pagadorId ? lancs.find((l) => l.id === pagadorId) : null;
+
+  if (pagadorId && !pagador) {
+    const { data } = await supabase.from("lancamentos_financeiros").select("*").eq("id", pagadorId).single();
+    pagador = data;
+    if (!pagador) throw new Error("Título pagador não encontrado");
+  }
+
+  const validacao = validarAgrupamento(
+    componentes as never,
+    pagador ? Number(pagador.valor) : null,
+  );
+  if (!validacao.ok) throw new Error(validacao.motivo);
+
+  // Sem pagador preexistente: cria um a partir dos componentes, herdando
+  // favorecido e vencimento do primeiro (é o que a operação espera ver).
+  if (!pagador) {
+    const ref = componentes[0];
+    const { data: novo, error: insErr } = await supabase
+      .from("lancamentos_financeiros")
+      .insert({
+        cod_empresa: ref.cod_empresa,
+        tipo: "PAGAR",
+        descricao: descricao || descricaoPagador(componentes as never, ref.pessoa_nome),
+        valor: validacao.soma,
+        data_vencimento: componentes
+          .map((c) => String(c.data_vencimento))
+          .sort()[0], // o mais cedo manda, para não pagar juros
+        pessoa_nome: ref.pessoa_nome,
+        pessoa_documento: ref.pessoa_documento,
+        natureza: ref.natureza,
+        categoria: ref.categoria,
+        origem: "AGRUPAMENTO",
+        status: "PREVISTO",
+        criado_por: userId,
+        requer_validacao: true, // falta configurar a forma de pagamento
+        dados_extras: { agrupamento: true, componentes: componentes.length },
+      })
+      .select()
+      .single();
+    if (insErr) throw new Error(insErr.message);
+    pagador = novo;
+  }
+
+  const { error: updErr } = await supabase
+    .from("lancamentos_financeiros")
+    .update({ lancamento_pai_id: pagador.id, status: "AGRUPADO" })
+    .in("id", componentes.map((c) => c.id));
+  if (updErr) throw new Error(updErr.message);
+
+  return json({
+    ok: true,
+    pagador_id: pagador.id,
+    componentes: componentes.length,
+    total: validacao.soma,
+  });
+}
+
+/**
+ * Baixa os componentes de um pagador liquidado, rateando o valor efetivamente
+ * pago proporcionalmente a cada um.
+ *
+ * O rateio importa porque o valor pago raramente é idêntico ao previsto —
+ * juros, multa, desconto, ou o ajuste para o valor do boleto registrado. Sem
+ * distribuir, a diferença ficaria só no pagador e o DRE por rubrica sairia
+ * errado. Idempotente: só mexe em componente que ainda não foi baixado.
+ */
+async function baixarComponentes(
+  pagadorId: string,
+  valorPagoTotal: number,
+  dataPagamento: string,
+  userId: string | null,
+): Promise<number> {
+  const { data: filhos } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id, valor")
+    .eq("lancamento_pai_id", pagadorId)
+    .neq("status", "BAIXADO");
+
+  if (!filhos || filhos.length === 0) return 0;
+
+  const rateado = ratearValorPago(
+    filhos.map((f) => ({ id: String(f.id), valor: Number(f.valor) })),
+    valorPagoTotal,
+  );
+
+  const agora = new Date().toISOString();
+  let n = 0;
+  for (const parte of rateado) {
+    const { error } = await supabase
+      .from("lancamentos_financeiros")
+      .update({
+        status: "BAIXADO",
+        valor_pago: parte.valor,
+        data_pagamento: dataPagamento,
+        data_baixa: dataPagamento,
+        baixado_por: userId,
+        baixado_em: agora,
+      })
+      .eq("id", parte.id);
+    if (!error) n++;
+  }
+  return n;
+}
+
+/** Desfaz a unificação: os componentes voltam a ser lançamentos avulsos. */
+async function desagruparLancamento(body: Record<string, unknown>) {
+  const { pagador_id } = body;
+  if (!pagador_id) throw new Error("pagador_id obrigatório");
+
+  const { data: pagador } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id, status, origem")
+    .eq("id", pagador_id)
+    .single();
+  if (!pagador) throw new Error("Pagamento unificado não encontrado");
+  if (!["PREVISTO", "CLASSIFICADO"].includes(pagador.status)) {
+    throw new Error(`Pagamento em ${pagador.status} — só dá para desfazer antes de entrar em borderô`);
+  }
+
+  const { data: filhos } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id")
+    .eq("lancamento_pai_id", pagador_id);
+
+  await supabase
+    .from("lancamentos_financeiros")
+    .update({ lancamento_pai_id: null, status: "PREVISTO" })
+    .eq("lancamento_pai_id", pagador_id);
+
+  // Pagador sintético não tem razão de existir sem componentes.
+  if (pagador.origem === "AGRUPAMENTO") {
+    await supabase.from("lancamentos_financeiros").delete().eq("id", pagador_id);
+  }
+
+  return json({ ok: true, componentes: (filhos || []).length });
 }
 
 async function excluir(body: Record<string, unknown>) {
@@ -1333,7 +1549,10 @@ async function confirmarProcessamento(body: Record<string, unknown>, userId: str
       })
       .eq("id", l.id);
 
-    if (!uErr) baixados++;
+    if (!uErr) {
+      baixados++;
+      baixados += await baixarComponentes(l.id, Number(l.valor), hoje, userId);
+    }
   }
 
   // Update borderô status
