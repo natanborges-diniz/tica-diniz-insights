@@ -225,7 +225,7 @@ function LancamentoRow({
       );
     }
 
-    if (isClassificado && hasPay && l.status === "PREVISTO") {
+    if (isClassificado && hasPay && ["PREVISTO", "CLASSIFICADO"].includes(l.status)) {
       return (
         <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
           ✓ PRONTO P/ BORDERÔ
@@ -590,7 +590,7 @@ export function ContasPagarTable({
         </Collapsible>
       )}
 
-      {/* Section: Contas Validadas — grouped by month */}
+      {/* Section: Em Borderô / Autorizados — grouped by month */}
       {validados.length > 0 && (
         <Collapsible open={validadosOpen} onOpenChange={setValidadosOpen}>
           <Card className="border-primary/20">
@@ -600,7 +600,7 @@ export function ContasPagarTable({
                   <CardTitle className="text-base flex items-center gap-2">
                     {validadosOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     <CheckCircle2 className="h-4 w-4 text-primary" />
-                    Contas Validadas
+                    Em Borderô / Autorizados
                     <Badge variant="secondary" className="text-[10px]">{validados.length}</Badge>
                   </CardTitle>
                   <span className="text-sm font-semibold text-primary">{fmtCurrency(totalValidados)}</span>
