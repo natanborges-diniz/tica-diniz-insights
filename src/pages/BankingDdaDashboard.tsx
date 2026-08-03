@@ -79,10 +79,25 @@ export default function BankingDdaDashboard() {
         const { data: importResult } = await supabase.functions.invoke("btg-dda", {
           body: { action: "importar", cod_empresa: codEmpresa },
         });
-        if (importResult?.importados > 0) {
-          toast.success(`${importResult.importados} novos títulos DDA importados`);
+        // Além dos títulos novos, a importação reavalia os órfãos — títulos que
+        // chegaram antes da parcela do ERP. É esse número que diz se o boleto
+        // encostou no lançamento.
+        const novos = Number(importResult?.importados ?? 0);
+        const vinculados = Number(importResult?.reconciliados ?? 0);
+        const semMatch = Number(importResult?.sem_match ?? 0);
+
+        if (novos > 0 || vinculados > 0) {
+          const partes = [];
+          if (novos > 0) partes.push(`${novos} novo(s) título(s)`);
+          if (vinculados > 0) partes.push(`${vinculados} vinculado(s) a lançamentos`);
+          toast.success(`DDA: ${partes.join(" · ")}`);
           queryClient.invalidateQueries({ queryKey: ["btg-dda"] });
           queryClient.invalidateQueries({ queryKey: ["btg-dda-indicadores"] });
+        }
+        if (semMatch > 0) {
+          toast.warning(
+            `${semMatch} boleto(s) sem lançamento correspondente — confira se a parcela já foi importada do ERP`,
+          );
         }
       } catch (e) {
         console.warn("Auto-import DDA failed:", e);
@@ -124,7 +139,11 @@ export default function BankingDdaDashboard() {
       return data;
     },
     onSuccess: (data) => {
-      toast.success(`${data.importados} títulos importados (${data.duplicados} duplicados)`);
+      toast.success(
+        `${data.importados} importados · ${data.duplicados} já existiam · ` +
+        `${data.reconciliados ?? 0} vinculados a lançamentos` +
+        (data.sem_match ? ` · ${data.sem_match} sem correspondência` : ""),
+      );
       queryClient.invalidateQueries({ queryKey: ["btg-dda"] });
       queryClient.invalidateQueries({ queryKey: ["btg-dda-indicadores"] });
     },
