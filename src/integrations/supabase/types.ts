@@ -109,6 +109,7 @@ export type Database = {
           data_pagamento: string | null
           descricao: string | null
           id: string
+          modo_data: string
           qtd_lancamentos: number
           status: string
           total_valor: number
@@ -124,6 +125,7 @@ export type Database = {
           data_pagamento?: string | null
           descricao?: string | null
           id?: string
+          modo_data?: string
           qtd_lancamentos?: number
           status?: string
           total_valor?: number
@@ -139,6 +141,7 @@ export type Database = {
           data_pagamento?: string | null
           descricao?: string | null
           id?: string
+          modo_data?: string
           qtd_lancamentos?: number
           status?: string
           total_valor?: number
