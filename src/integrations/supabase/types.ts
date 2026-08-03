@@ -108,10 +108,12 @@ export type Database = {
           criado_por: string | null
           data_pagamento: string | null
           descricao: string | null
+          folha_competencia_id: string | null
           id: string
           modo_data: string
           qtd_lancamentos: number
           status: string
+          tipo: string
           total_valor: number
           updated_at: string
         }
@@ -124,10 +126,12 @@ export type Database = {
           criado_por?: string | null
           data_pagamento?: string | null
           descricao?: string | null
+          folha_competencia_id?: string | null
           id?: string
           modo_data?: string
           qtd_lancamentos?: number
           status?: string
+          tipo?: string
           total_valor?: number
           updated_at?: string
         }
@@ -140,14 +144,24 @@ export type Database = {
           criado_por?: string | null
           data_pagamento?: string | null
           descricao?: string | null
+          folha_competencia_id?: string | null
           id?: string
           modo_data?: string
           qtd_lancamentos?: number
           status?: string
+          tipo?: string
           total_valor?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "borderos_folha_competencia_id_fkey"
+            columns: ["folha_competencia_id"]
+            isOneToOne: false
+            referencedRelation: "folha_competencias"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bridge_health_logs: {
         Row: {
@@ -1185,6 +1199,206 @@ export type Database = {
             columns: ["fechamento_id"]
             isOneToOne: false
             referencedRelation: "fechamentos_comissao"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      folha_competencias: {
+        Row: {
+          btg_payment_id: string | null
+          btg_request_id: string | null
+          btg_status: string | null
+          cod_empresa: number
+          competencia: string
+          created_at: string
+          criado_por: string | null
+          data_pagamento: string
+          descricao: string | null
+          evento: string
+          fechado_em: string | null
+          fechado_por: string | null
+          id: string
+          qtd_colaboradores: number
+          rubrica_id: string | null
+          status: string
+          total_bruto: number
+          total_descontos: number
+          total_liquido: number
+          updated_at: string
+        }
+        Insert: {
+          btg_payment_id?: string | null
+          btg_request_id?: string | null
+          btg_status?: string | null
+          cod_empresa: number
+          competencia: string
+          created_at?: string
+          criado_por?: string | null
+          data_pagamento: string
+          descricao?: string | null
+          evento: string
+          fechado_em?: string | null
+          fechado_por?: string | null
+          id?: string
+          qtd_colaboradores?: number
+          rubrica_id?: string | null
+          status?: string
+          total_bruto?: number
+          total_descontos?: number
+          total_liquido?: number
+          updated_at?: string
+        }
+        Update: {
+          btg_payment_id?: string | null
+          btg_request_id?: string | null
+          btg_status?: string | null
+          cod_empresa?: number
+          competencia?: string
+          created_at?: string
+          criado_por?: string | null
+          data_pagamento?: string
+          descricao?: string | null
+          evento?: string
+          fechado_em?: string | null
+          fechado_por?: string | null
+          id?: string
+          qtd_colaboradores?: number
+          rubrica_id?: string | null
+          status?: string
+          total_bruto?: number
+          total_descontos?: number
+          total_liquido?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folha_competencias_rubrica_id_fkey"
+            columns: ["rubrica_id"]
+            isOneToOne: false
+            referencedRelation: "rubricas_autorizadas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      folha_encargos: {
+        Row: {
+          competencia_id: string
+          conta_numero: string | null
+          created_at: string
+          data_vencimento: string
+          descricao: string | null
+          id: string
+          lancamento_id: string | null
+          tipo: string
+          valor: number
+        }
+        Insert: {
+          competencia_id: string
+          conta_numero?: string | null
+          created_at?: string
+          data_vencimento: string
+          descricao?: string | null
+          id?: string
+          lancamento_id?: string | null
+          tipo: string
+          valor: number
+        }
+        Update: {
+          competencia_id?: string
+          conta_numero?: string | null
+          created_at?: string
+          data_vencimento?: string
+          descricao?: string | null
+          id?: string
+          lancamento_id?: string | null
+          tipo?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folha_encargos_competencia_id_fkey"
+            columns: ["competencia_id"]
+            isOneToOne: false
+            referencedRelation: "folha_competencias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folha_encargos_lancamento_id_fkey"
+            columns: ["lancamento_id"]
+            isOneToOne: false
+            referencedRelation: "lancamentos_financeiros"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      folha_itens: {
+        Row: {
+          agencia: string | null
+          banco: string | null
+          chave_pix: string | null
+          competencia_id: string
+          conta: string | null
+          cpf: string
+          created_at: string
+          descontos: number
+          id: string
+          lancamento_id: string | null
+          matricula: string | null
+          nome: string
+          observacao: string | null
+          tipo_conta: string | null
+          valor_bruto: number
+          valor_liquido: number
+        }
+        Insert: {
+          agencia?: string | null
+          banco?: string | null
+          chave_pix?: string | null
+          competencia_id: string
+          conta?: string | null
+          cpf: string
+          created_at?: string
+          descontos?: number
+          id?: string
+          lancamento_id?: string | null
+          matricula?: string | null
+          nome: string
+          observacao?: string | null
+          tipo_conta?: string | null
+          valor_bruto?: number
+          valor_liquido: number
+        }
+        Update: {
+          agencia?: string | null
+          banco?: string | null
+          chave_pix?: string | null
+          competencia_id?: string
+          conta?: string | null
+          cpf?: string
+          created_at?: string
+          descontos?: number
+          id?: string
+          lancamento_id?: string | null
+          matricula?: string | null
+          nome?: string
+          observacao?: string | null
+          tipo_conta?: string | null
+          valor_bruto?: number
+          valor_liquido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folha_itens_competencia_id_fkey"
+            columns: ["competencia_id"]
+            isOneToOne: false
+            referencedRelation: "folha_competencias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folha_itens_lancamento_id_fkey"
+            columns: ["lancamento_id"]
+            isOneToOne: false
+            referencedRelation: "lancamentos_financeiros"
             referencedColumns: ["id"]
           },
         ]
@@ -3070,6 +3284,7 @@ export type Database = {
           favorecido_chave: string | null
           favorecido_documento: string | null
           favorecido_nome: string
+          folha_evento: string | null
           id: string
           periodicidade: string
           provisionar: boolean
@@ -3093,6 +3308,7 @@ export type Database = {
           favorecido_chave?: string | null
           favorecido_documento?: string | null
           favorecido_nome: string
+          folha_evento?: string | null
           id?: string
           periodicidade?: string
           provisionar?: boolean
@@ -3116,6 +3332,7 @@ export type Database = {
           favorecido_chave?: string | null
           favorecido_documento?: string | null
           favorecido_nome?: string
+          folha_evento?: string | null
           id?: string
           periodicidade?: string
           provisionar?: boolean
