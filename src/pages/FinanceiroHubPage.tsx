@@ -68,6 +68,8 @@ interface Bordero {
   aprovado_em: string | null;
   btg_batch_id: string | null;
   created_at: string;
+  updated_at: string | null;
+  data_pagamento: string | null;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -908,6 +910,8 @@ export default function FinanceiroHubPage() {
                               <BorderoGuidedActions
                                 status={b.status}
                                 isAdmin={!!authIsAdmin}
+                                enviadoEm={b.updated_at}
+                                dataPagamento={b.data_pagamento}
                                 onAprovar={() => { window.location.href = "/financeiro/mesa"; }}
                                 onEnviar={() => enviarBorderoMutation.mutate(b.id)}
                                 onConfirmar={() => confirmarProcessamentoMutation.mutate(b.id)}
