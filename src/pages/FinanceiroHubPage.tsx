@@ -849,7 +849,13 @@ export default function FinanceiroHubPage() {
           </div>
         </BaseDialog>
 
+        <BorderoBloqueioDialog
+          payload={borderoBloqueio}
+          onOpenChange={(open) => { if (!open) setBorderoBloqueio(null); }}
+        />
+
         {/* Detalhe borderô */}
+
         <BaseDialog
           open={!!borderoDetalheId}
           onOpenChange={(open) => { if (!open) setBorderoDetalheId(null); }}
