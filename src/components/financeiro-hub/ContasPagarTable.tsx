@@ -4,7 +4,7 @@ import { ptBR } from "date-fns/locale";
 import {
   Pencil, CreditCard, XCircle, ArrowDown, RotateCcw,
   MoreHorizontal, Unlink, ChevronDown, ChevronRight, CheckCircle2,
-  ArrowUp, ArrowUpDown, Filter,
+  ArrowUp, ArrowUpDown, Filter, Receipt,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
@@ -74,6 +74,7 @@ interface ContasPagarTableProps {
   onClassificar: (l: Lancamento) => void;
   onPrepararPagamento: (l: Lancamento) => void;
   onBaixaManual: (l: Lancamento) => void;
+  onComprovante?: (l: Lancamento) => void;
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
   onRemoverDoBordero?: (lancamento: Lancamento) => void;
@@ -118,7 +119,7 @@ const formatMonthTitle = (monthKey: string) => {
 // Shared row renderer
 function LancamentoRow({
   l, selectedIds, onToggleSelect, onClassificar, onPrepararPagamento,
-  onBaixaManual, onCancelar, onReabrir, onRemoverDoBordero,
+  onBaixaManual, onComprovante, onCancelar, onReabrir, onRemoverDoBordero,
   isCancelando, isReabrindo, isRemovendoDoBordero, isAdmin,
 }: {
   l: Lancamento;
@@ -128,6 +129,7 @@ function LancamentoRow({
   onClassificar: (l: Lancamento) => void;
   onPrepararPagamento: (l: Lancamento) => void;
   onBaixaManual: (l: Lancamento) => void;
+  onComprovante?: (l: Lancamento) => void;
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
   onRemoverDoBordero?: (l: Lancamento) => void;
@@ -192,6 +194,12 @@ function LancamentoRow({
   }
   if (l.status === "PREVISTO") {
     secondaryActions.push({ label: "Cancelar", icon: XCircle, onClick: () => onCancelar(l.id), destructive: true });
+  }
+  // Comprovante: buscado no BTG na hora, não guardado aqui. O PDF é gerado pelo
+  // banco e replicá-lo só engordaria a base — o que precisamos reter é o
+  // identificador do pagamento, que já fica em dados_extras.
+  if (l.status === "BAIXADO" && (l.dados_extras || {}).btg_payment_id && onComprovante) {
+    secondaryActions.push({ label: "Comprovante", icon: Receipt, onClick: () => onComprovante(l) });
   }
   if (l.status === "BAIXADO" && isAdmin) {
     secondaryActions.push({ label: "Reabrir", icon: RotateCcw, onClick: () => onReabrir(l.id) });
@@ -360,7 +368,7 @@ const makeTableHeaders = (ctrl: HeaderCtrl) => {
 export function ContasPagarTable({
   lancamentos: rawLancamentos, isLoading, selectedIds, isAdmin, stepFilter,
   onToggleSelect, onToggleSelectAll,
-  onClassificar, onPrepararPagamento, onBaixaManual,
+  onClassificar, onPrepararPagamento, onBaixaManual, onComprovante,
   onCancelar, onReabrir, onRemoverDoBordero, isCancelando, isReabrindo, isRemovendoDoBordero,
 }: ContasPagarTableProps) {
   const [pendentesOpen, setPendentesOpen] = useState(true);
@@ -444,7 +452,7 @@ export function ContasPagarTable({
 
   const sharedProps = {
     selectedIds, onToggleSelect, onClassificar, onPrepararPagamento,
-    onBaixaManual, onCancelar, onReabrir, onRemoverDoBordero,
+    onBaixaManual, onComprovante, onCancelar, onReabrir, onRemoverDoBordero,
     isCancelando, isReabrindo, isRemovendoDoBordero, isAdmin,
   };
 

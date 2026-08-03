@@ -336,6 +336,36 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao classificar em lote"),
   });
 
+  /**
+   * Comprovante: buscado no BTG na hora e aberto numa aba. Nada é gravado —
+   * nem no banco de dados, nem em storage. O PDF é do banco; o que guardamos é
+   * só o identificador do pagamento, que já vive em dados_extras.
+   */
+  const comprovanteMutation = useMutation({
+    mutationFn: async (l: Lancamento) => {
+      const { data, error } = await supabase.functions.invoke("btg-pagamentos", {
+        body: {
+          action: "comprovante",
+          cod_empresa: l.cod_empresa,
+          payment_id: (l.dados_extras || {}).btg_payment_id,
+        },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      return data as { pdf_base64: string };
+    },
+    onSuccess: (data) => {
+      const bin = atob(data.pdf_base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      window.open(url, "_blank");
+      // Libera a memória assim que a aba assume o arquivo.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro ao obter comprovante"),
+  });
+
   const reverterCancelamentoMutation = useMutation({
     mutationFn: async (ids: string[]) => invokeAction("reverter_cancelamento", { ids }),
     onSuccess: (data: { revertidos?: number }) => {
@@ -1041,6 +1071,7 @@ export default function FinanceiroHubPage() {
               onClassificar={openEditNatureza}
               onPrepararPagamento={(l) => setPrepPaymentLanc(l)}
               onBaixaManual={openBaixaManual}
+              onComprovante={(l) => comprovanteMutation.mutate(l)}
               onCancelar={(id) => cancelarMutation.mutate(id)}
               onReabrir={(id) => reabrirMutation.mutate(id)}
               onRemoverDoBordero={(l) => {

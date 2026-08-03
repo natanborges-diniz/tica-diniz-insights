@@ -343,6 +343,47 @@ async function handleEnviarBtg(body: Record<string, unknown>, userId: string) {
   return json({ success: true, status: "ENVIADO_BTG", btg_payment_id: btgPaymentId });
 }
 
+// ─── ACTION: comprovante ─────────────────────────────────────
+// BTG: GET /{companyId}/banking/payments/{paymentId}/receipt (Accept: application/pdf)
+//
+// O comprovante é a prova do pagamento — sem ele, "baixado" no sistema é só
+// uma afirmação nossa. Buscamos sob demanda em vez de guardar: o PDF é gerado
+// pelo banco e não faz sentido replicar o arquivo aqui.
+async function handleComprovante(body: Record<string, unknown> | null, url: URL) {
+  const paymentId = getParam(body, url, "payment_id");
+  const codEmpresa = getParam(body, url, "cod_empresa");
+  if (!paymentId) return json({ error: "payment_id obrigatório" }, 400);
+  if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
+
+  const { apiBase, isSandbox } = await getBtgUrls();
+  if (isSandbox) return json({ error: "Comprovante indisponível em sandbox" }, 400);
+
+  const accessToken = await getBtgToken(Number(codEmpresa));
+  const cnpj = await getCnpj(Number(codEmpresa));
+
+  const res = await fetch(`${apiBase}/${cnpj}/banking/payments/${paymentId}/receipt`, {
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/pdf" },
+  });
+
+  if (!res.ok) {
+    const detalhe = await res.text();
+    console.error("[btg-pagamentos] recibo indisponível:", res.status, detalhe.slice(0, 300));
+    return json({
+      error: res.status === 404
+        ? "Comprovante ainda não disponível no banco — costuma sair após a liquidação"
+        : `Não foi possível obter o comprovante (${res.status})`,
+    }, res.status === 404 ? 404 : 502);
+  }
+
+  // Devolvemos base64 para o front abrir numa aba sem precisar de storage.
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 8192) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  }
+  return json({ success: true, payment_id: paymentId, pdf_base64: btoa(bin) });
+}
+
 // ─── ACTION: cancelar ────────────────────────────────────────
 // BTG: DELETE /{companyId}/banking/payments/{paymentId}
 async function handleCancelar(body: Record<string, unknown>, userId: string) {
@@ -412,11 +453,13 @@ Deno.serve(async (req) => {
         return await handleAprovarInterno(body || {}, userId);
       case "enviar_btg":
         return await handleEnviarBtg(body || {}, userId);
+      case "comprovante":
+        return await handleComprovante(body, url);
       case "cancelar":
         return await handleCancelar(body || {}, userId);
       default:
         return json(
-          { error: `Ação desconhecida: '${action}'. Use: criar, listar, detalhe, aprovar_interno, enviar_btg, cancelar` },
+          { error: `Ação desconhecida: '${action}'. Use: criar, listar, detalhe, aprovar_interno, enviar_btg, comprovante, cancelar` },
           400
         );
     }

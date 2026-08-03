@@ -205,6 +205,8 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
       // paymentId, então é por ele que o pagamento volta a ser reconhecido.
       const paymentsById = new Map<string, Record<string, unknown>>();
       const paymentsByExternalId = new Map<string, Record<string, unknown>>();
+      /** valor → pagamento, ou null quando o valor se repete no lote. */
+      const paymentsByAmount = new Map<string, Record<string, unknown> | null>();
       let batchStatus: NormStatus = "PENDENTE";
 
       if (isSandbox) {
@@ -248,6 +250,15 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
           if (pid) paymentsById.set(String(pid), p);
           const ext = ((p.tags || {}) as Record<string, unknown>)?.externalId;
           if (ext) paymentsByExternalId.set(String(ext), p);
+
+          // Terceira via: valor dentro do lote. Necessária para borderôs
+          // enviados antes de passarmos a mandar `tags.externalId` — o dinheiro
+          // sai, o banco confirma, e sem âncora o lançamento ficaria eternamente
+          // em PROCESSANDO. Dentro de um mesmo lote o valor identifica bem;
+          // valor repetido não casa (fica para o par acima resolver).
+          const chaveValor = Number(p.amount ?? 0).toFixed(2);
+          if (paymentsByAmount.has(chaveValor)) paymentsByAmount.set(chaveValor, null);
+          else paymentsByAmount.set(chaveValor, p);
         }
 
         // Sem status agregado de lote: o borderô só é terminal-pago quando
@@ -266,7 +277,8 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
         // externalId primeiro (é o que enviamos e sempre volta); paymentId como
         // fallback para lançamentos anteriores a 03/08/2026.
         const pay = paymentsByExternalId.get(String(lanc.id))
-          ?? (pid ? paymentsById.get(String(pid)) : undefined);
+          ?? (pid ? paymentsById.get(String(pid)) : undefined)
+          ?? (paymentsByAmount.get(Number(lanc.valor).toFixed(2)) ?? undefined);
         // Legado sem correlação: só baixa se o lote inteiro é terminal-pago
         const st = pay ? normStatus(pay.status) : batchStatus;
 
