@@ -86,13 +86,80 @@ describe('CNPJ do emissor como sinal forte', () => {
     expect(r.motivo).toMatch(/conferir manualmente/);
   });
 
-  it('CNPJ conhecido e nenhum candidato do fornecedor: não força por valor', () => {
+  it('todos os candidatos têm CNPJ e nenhum bate: é outro fornecedor', () => {
     const r = casarTitulo(
       { valor: 165, data_vencimento: '2026-08-04', documento_emissor: CNPJ_HOYA },
       [cand({ id: 'outro', valor: 165, pessoa_documento: '11.111.111/0001-11' })],
     );
     expect(r.candidato).toBeNull();
-    expect(r.motivo).toMatch(/mesmo fornecedor/);
+    expect(r.motivo).toMatch(/outro fornecedor/);
+  });
+});
+
+// A regressão mais cara do dia: o import do ERP nunca gravava pessoa_documento,
+// e a regra anterior lia ausência de CNPJ como divergência — recusava tudo.
+describe('lançamento sem CNPJ (import antigo do ERP)', () => {
+  it('casa mesmo assim, por valor e vencimento', () => {
+    const r = casarTitulo(
+      { valor: 165, data_vencimento: '2026-08-04', documento_emissor: CNPJ_HOYA },
+      [cand({ id: 'sem-cnpj', valor: 165, data_vencimento: '2026-08-06', pessoa_documento: null })],
+    );
+    expect(r.candidato?.id).toBe('sem-cnpj');
+    expect(r.criterio).toBe('VALOR_DATA');
+  });
+
+  it('prefere o que tem CNPJ batendo, quando existe', () => {
+    const r = casarTitulo(
+      { valor: 165, data_vencimento: '2026-08-04', documento_emissor: CNPJ_HOYA },
+      [
+        cand({ id: 'sem-cnpj', valor: 165, pessoa_documento: null }),
+        cand({ id: 'com-cnpj', valor: 165, pessoa_documento: CNPJ_HOYA }),
+      ],
+    );
+    expect(r.candidato?.id).toBe('com-cnpj');
+    expect(r.criterio).toBe('CNPJ');
+  });
+
+  it('CNPJ de outro fornecedor não bloqueia o candidato sem CNPJ', () => {
+    const r = casarTitulo(
+      { valor: 165, data_vencimento: '2026-08-04', documento_emissor: CNPJ_HOYA },
+      [
+        cand({ id: 'outro-forn', valor: 165, pessoa_documento: '11.111.111/0001-11' }),
+        cand({ id: 'sem-cnpj', valor: 165, pessoa_documento: null }),
+      ],
+    );
+    expect(r.candidato?.id).toBe('sem-cnpj');
+  });
+});
+
+describe('número do documento — a chave mais forte', () => {
+  it('decide mesmo com CNPJ ausente dos dois lados', () => {
+    const r = casarTitulo(
+      { valor: 2914.25, data_vencimento: '2026-08-02', numero_documento: '106544' },
+      [
+        cand({ id: 'errado', valor: 2914.25, documento: '999999', pessoa_documento: null }),
+        cand({ id: 'certo', valor: 2914.25, documento: '106544/2', pessoa_documento: null }),
+      ],
+    );
+    expect(r.candidato?.id).toBe('certo');
+    expect(r.criterio).toBe('DOCUMENTO');
+  });
+
+  it('ignora zeros à esquerda e pontuação do ERP', () => {
+    const r = casarTitulo(
+      { valor: 100, data_vencimento: '2026-08-02', numero_documento: '0010655-44' },
+      [cand({ id: 'x', valor: 100, documento: '1065544', pessoa_documento: null })],
+    );
+    expect(r.candidato?.id).toBe('x');
+  });
+
+  it('documento curto demais não decide sozinho', () => {
+    const r = casarTitulo(
+      { valor: 100, data_vencimento: '2026-08-02', numero_documento: '7' },
+      [cand({ id: 'x', valor: 100, documento: '7', data_vencimento: '2026-08-02', pessoa_documento: null })],
+    );
+    // cai para valor+data, que resolve — mas não pelo documento
+    expect(r.criterio).toBe('VALOR_DATA');
   });
 });
 
@@ -105,11 +172,22 @@ describe('sem CNPJ dos dois lados', () => {
     expect(r.candidato?.id).toBe('unico');
   });
 
-  it('dois plausíveis não casam', () => {
+  it('havendo um claramente mais próximo do vencimento, ele vence', () => {
     const r = casarTitulo(
       { valor: 500, data_vencimento: '2026-08-10', documento_emissor: null },
       [
-        cand({ id: 'a', valor: 500, data_vencimento: '2026-08-10', pessoa_documento: null }),
+        cand({ id: 'exato', valor: 500, data_vencimento: '2026-08-10', pessoa_documento: null }),
+        cand({ id: 'um-dia', valor: 500, data_vencimento: '2026-08-11', pessoa_documento: null }),
+      ],
+    );
+    expect(r.candidato?.id).toBe('exato');
+  });
+
+  it('equidistantes não casam — aí é conferência humana', () => {
+    const r = casarTitulo(
+      { valor: 500, data_vencimento: '2026-08-10', documento_emissor: null },
+      [
+        cand({ id: 'a', valor: 500, data_vencimento: '2026-08-09', pessoa_documento: null }),
         cand({ id: 'b', valor: 500, data_vencimento: '2026-08-11', pessoa_documento: null }),
       ],
     );

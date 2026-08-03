@@ -182,11 +182,16 @@ async function handleImportarTodas() {
 async function reconciliarEmpresa(ce: number): Promise<{ vinculados: number; sem_match: number }> {
   const db = getServiceClient();
 
+  // Sem filtro por status. "CONCILIADO" nesta tabela significa que o título
+  // casou com uma PARCELA do ERP no Firebird — não que exista lançamento
+  // vinculado. Filtrar por PENDENTE deixava esses títulos invisíveis para
+  // sempre, e o Hub seguia mostrando "sem boleto". A pergunta certa é só uma:
+  // este título já tem lançamento apontando para ele?
   const { data: titulos } = await db
     .from("btg_dda_titulos")
-    .select("id, valor, data_vencimento, documento_emissor, emissor, linha_digitavel")
+    .select("id, valor, data_vencimento, documento_emissor, numero_documento, emissor, linha_digitavel")
     .eq("cod_empresa", ce)
-    .eq("status", "PENDENTE");
+    .not("status", "in", "(PAGO,IGNORADO,CANCELADO)");
 
   if (!titulos || titulos.length === 0) return { vinculados: 0, sem_match: 0 };
 
@@ -220,12 +225,18 @@ async function reconciliarEmpresa(ce: number): Promise<{ vinculados: number; sem
       .lte("valor", Number(t.valor) + TOLERANCIA_VALOR);
 
     const r = casarTitulo(
-      { valor: Number(t.valor), data_vencimento: venc, documento_emissor: t.documento_emissor },
+      {
+        valor: Number(t.valor),
+        data_vencimento: venc,
+        documento_emissor: t.documento_emissor,
+        numero_documento: t.numero_documento,
+      },
       (candidatos || []).map((c) => ({
         id: String(c.id),
         valor: Number(c.valor),
         data_vencimento: String(c.data_vencimento),
         pessoa_documento: c.pessoa_documento,
+        documento: ((c.dados_extras || {}) as Record<string, unknown>).documento as string | null,
       })),
     );
 

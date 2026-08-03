@@ -1412,6 +1412,9 @@ async function importarErpAuto(body: Record<string, unknown>, userId: string) {
       data_vencimento: p.data_vencimento,
       data_emissao: p.data_emissao || null,
       pessoa_nome: p.pessoa_nome || null,
+      // CNPJ do fornecedor: sem ele a conciliação com o DDA fica cega — era a
+      // causa de boleto legítimo não encontrar o lançamento.
+      pessoa_documento: (p.fornecedor_cnpj || p.pessoa_identificador || p.pessoa_documento || null) as string | null,
       forma_pagamento: p.forma_pagamento_tipo || null,
       natureza: classification.natureza,
       categoria: classification.categoria,
@@ -1423,6 +1426,8 @@ async function importarErpAuto(body: Record<string, unknown>, userId: string) {
       dados_extras: {
         conta_numero: p.conta_numero || null,
         conta_descricao: p.conta_descricao || null,
+        // Número da nota: é a chave mais forte do match com o boleto do DDA.
+        documento: p.documento || null,
       },
     };
 
@@ -1438,12 +1443,18 @@ async function importarErpAuto(body: Record<string, unknown>, userId: string) {
       // procurando o que casa com ESTA parcela.
       const matchedDda = disponiveis.find((d) => {
         const r = casarTitulo(
-          { valor: Number(d.valor), data_vencimento: String(d.data_vencimento), documento_emissor: d.documento_emissor },
+          {
+            valor: Number(d.valor),
+            data_vencimento: String(d.data_vencimento),
+            documento_emissor: d.documento_emissor,
+            numero_documento: d.numero_documento,
+          },
           [{
             id: String(p.parcela_id ?? p.id ?? ""),
             valor: Number(p.valor),
             data_vencimento: String(p.data_vencimento),
-            pessoa_documento: (p.pessoa_documento ?? p.fornecedor_cnpj) as string | null,
+            pessoa_documento: (p.fornecedor_cnpj ?? p.pessoa_identificador ?? p.pessoa_documento) as string | null,
+            documento: p.documento as string | null,
           }],
         );
         return r.candidato !== null;
