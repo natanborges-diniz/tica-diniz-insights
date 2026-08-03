@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import {
   Landmark, Plus, CheckCircle2, XCircle,
   ArrowDownCircle, ArrowUpCircle, AlertTriangle,
-  Package, FileCheck, Download, Eye, Layers, Trash2,
+  Package, FileCheck, Download, Eye, Layers, Trash2, Receipt, RefreshCw,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -366,6 +366,34 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao obter comprovante"),
   });
 
+  /**
+   * Força a consulta de retorno do banco, sem esperar o cron de 30 minutos.
+   *
+   * Serve para quando o pagamento acabou de ser aprovado no app e você quer ver
+   * a baixa entrar agora. É idempotente: só transiciona o que o BTG confirmar,
+   * então rodar duas vezes não repete efeito.
+   */
+  const atualizarRetornoMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("btg-poll-status", {
+        body: { action: "executar" },
+      });
+      if (error) throw error;
+      return data as { borderos?: { baixados?: number; processados?: number; rejeitados?: number } };
+    },
+    onSuccess: (data) => {
+      const b = data?.borderos || {};
+      const baixados = Number(b.baixados ?? 0);
+      toast.success(
+        baixados > 0
+          ? `${baixados} lançamento(s) baixado(s) pelo retorno do banco`
+          : "Consulta feita — o banco ainda não confirmou nada novo",
+      );
+      invalidateAll();
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro ao consultar o banco"),
+  });
+
   const reverterCancelamentoMutation = useMutation({
     mutationFn: async (ids: string[]) => invokeAction("reverter_cancelamento", { ids }),
     onSuccess: (data: { revertidos?: number }) => {
@@ -448,6 +476,13 @@ export default function FinanceiroHubPage() {
   // Selection — can select PREVISTO and CLASSIFICADO
   const selectablePagar = lancamentos.filter(l => l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status));
   const previstosPagar = selectablePagar; // alias for backward compat
+
+  // Pagos: o que já saiu da conta. Ordenado pela baixa mais recente, que é como
+  // se procura comprovante — do último pagamento para trás.
+  const pagos = lancamentos
+    .filter(l => l.tipo === "PAGAR" && l.status === "BAIXADO")
+    .sort((a, b) => String(b.data_pagamento ?? "").localeCompare(String(a.data_pagamento ?? "")));
+  const totalPago = pagos.reduce((s, l) => s + Number(l.valor_pago ?? l.valor), 0);
   const toggleSelect = (id: string) => {
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -529,6 +564,13 @@ export default function FinanceiroHubPage() {
                   <Package className="h-4 w-4 mr-1" /> Criar Borderô ({selectedIds.size})
                 </Button>
               )}
+              <Button size="sm" variant="outline"
+                onClick={() => atualizarRetornoMutation.mutate()}
+                disabled={atualizarRetornoMutation.isPending}
+                title="Consulta o BTG agora, sem esperar a rotina de 30 minutos. Use logo depois de aprovar um pagamento no app.">
+                <RefreshCw className={`h-4 w-4 mr-1 ${atualizarRetornoMutation.isPending ? "animate-spin" : ""}`} />
+                {atualizarRetornoMutation.isPending ? "Consultando..." : "Atualizar retorno"}
+              </Button>
               <Button size="sm" onClick={() => setDialogOpen(true)}>
                 <Plus className="h-4 w-4 mr-1" /> Novo Lançamento
               </Button>
@@ -1054,6 +1096,9 @@ export default function FinanceiroHubPage() {
               Borderôs
               {borderosAbertos > 0 && <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5">{borderosAbertos}</Badge>}
             </TabsTrigger>
+            <TabsTrigger value="pagos">
+              Pagos {pagos.length > 0 && <Badge variant="secondary" className="ml-1.5">{pagos.length}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="contas-receber" disabled>
               Contas a Receber <span className="ml-1 text-[10px] text-muted-foreground">(em breve)</span>
             </TabsTrigger>
@@ -1159,6 +1204,98 @@ export default function FinanceiroHubPage() {
             </Card>
           </TabsContent>
 
+
+          {/* Pagos — o que já saiu da conta, com o comprovante à mão.
+              Separado das contas a pagar de propósito: aqui não há ação de
+              cobrança, é consulta e prova de pagamento. */}
+          <TabsContent value="pagos">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <div>
+                  <CardTitle className="text-base">Pagamentos realizados</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Baixados com retorno do banco. O comprovante é buscado no BTG na hora — nada fica armazenado aqui.
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold">{fmtCurrency(totalPago)}</p>
+                  <p className="text-xs text-muted-foreground">{pagos.length} pagamento(s)</p>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Pago em</TableHead>
+                      <TableHead>Fornecedor</TableHead>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Conta</TableHead>
+                      <TableHead className="text-right">Previsto</TableHead>
+                      <TableHead className="text-right">Pago</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagos.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          Nenhum pagamento baixado no período filtrado.
+                        </TableCell>
+                      </TableRow>
+                    ) : pagos.map(l => {
+                      const pago = Number(l.valor_pago ?? l.valor);
+                      const dif = Number((pago - l.valor).toFixed(2));
+                      const temComprovante = !!(l.dados_extras || {}).btg_payment_id;
+                      return (
+                        <TableRow key={l.id}>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {l.data_pagamento
+                              ? format(new Date(l.data_pagamento + "T12:00:00"), "dd/MM/yy")
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="text-sm">{l.pessoa_nome || "—"}</TableCell>
+                          <TableCell className="text-sm max-w-[280px] truncate" title={l.descricao}>
+                            {l.descricao}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {l.subcategoria || "—"}
+                          </TableCell>
+                          <TableCell className="text-right text-sm text-muted-foreground">
+                            {fmtCurrency(l.valor)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-medium">
+                            {fmtCurrency(pago)}
+                            {Math.abs(dif) >= 0.01 && (
+                              <span
+                                className={`block text-[10px] ${dif > 0 ? "text-destructive" : "text-green-600"}`}
+                                title={dif > 0 ? "Pago acima do previsto (juros/multa)" : "Pago abaixo do previsto (desconto)"}
+                              >
+                                {dif > 0 ? "+" : "−"}{fmtCurrency(Math.abs(dif))}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {temComprovante ? (
+                              <Button size="sm" variant="outline" className="h-7 text-xs"
+                                onClick={() => comprovanteMutation.mutate(l)}
+                                disabled={comprovanteMutation.isPending}>
+                                <Receipt className="h-3.5 w-3.5 mr-1" /> Comprovante
+                              </Button>
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground"
+                                title="Baixa manual ou pagamento anterior à integração — o banco não tem recibo vinculado">
+                                sem recibo no banco
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="contas-receber">
             <div className="text-center py-12 text-muted-foreground">
