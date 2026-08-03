@@ -159,6 +159,20 @@ export default function MesaAprovacaoPage() {
         icon={<ShieldCheck className="h-5 w-5" />}
       />
 
+      {borderoFoco && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/40 bg-primary/5 px-4 py-3">
+          <Badge variant="outline" className="text-primary border-primary/40">FOCO</Badge>
+          <p className="text-sm">
+            Mostrando apenas <span className="font-medium uppercase">{borderoFocoNome}</span>
+            {" — "}{pendentesFoco.length} item(ns) aguardando sua decisão
+          </p>
+          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => setBorderoFoco(null)}>
+            Ver toda a Mesa
+          </Button>
+        </div>
+      )}
+
+
       {/* Filtros */}
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
