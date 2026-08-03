@@ -131,6 +131,8 @@ async function handleImportarTodas() {
     empresas: 0,
     importados: 0,
     duplicados: 0,
+    reconciliados: 0,
+    sem_match: 0,
     lancamentos_gerados: 0,
     ignoradas: [] as Array<{ cod_empresa: number; motivo: string }>,
     erros: [] as Array<{ cod_empresa: number; erro: string }>,
@@ -154,6 +156,8 @@ async function handleImportarTodas() {
       resultado.empresas++;
       resultado.importados += Number(data.importados || 0);
       resultado.duplicados += Number(data.duplicados || 0);
+      resultado.reconciliados += Number(data.reconciliados || 0);
+      resultado.sem_match += Number(data.sem_match || 0);
       resultado.lancamentos_gerados += Number(data.lancamentos_gerados || 0);
     } catch (e) {
       resultado.erros.push({ cod_empresa: ce, erro: e instanceof Error ? e.message : String(e) });
@@ -162,6 +166,103 @@ async function handleImportarTodas() {
 
   console.log("[btg-dda] importar_todas:", JSON.stringify(resultado));
   return json({ success: true, ...resultado });
+}
+
+/**
+ * Reavalia o vínculo dos títulos de DDA que ainda não acharam lançamento.
+ *
+ * Existe porque a conciliação só rodava no instante da inserção do título:
+ * título que chegou antes da parcela do ERP (ou que não casou pela regra antiga
+ * de data/valor exatos) ficava órfão para sempre — reimportar não ajudava,
+ * porque ele entrava como duplicado e pulava a checagem.
+ *
+ * Roda ao fim de toda importação, então o sistema se conserta sozinho na
+ * passada seguinte, sem ninguém precisar apertar nada.
+ */
+async function reconciliarEmpresa(ce: number): Promise<{ vinculados: number; sem_match: number }> {
+  const db = getServiceClient();
+
+  const { data: titulos } = await db
+    .from("btg_dda_titulos")
+    .select("id, valor, data_vencimento, documento_emissor, emissor, linha_digitavel")
+    .eq("cod_empresa", ce)
+    .eq("status", "PENDENTE");
+
+  if (!titulos || titulos.length === 0) return { vinculados: 0, sem_match: 0 };
+
+  const { data: jaVinculados } = await db
+    .from("lancamentos_financeiros")
+    .select("btg_dda_id")
+    .eq("cod_empresa", ce)
+    .not("btg_dda_id", "is", null);
+  const vinculadosSet = new Set((jaVinculados || []).map((l) => String(l.btg_dda_id)));
+
+  let vinculados = 0;
+  let semMatch = 0;
+
+  for (const t of titulos) {
+    if (vinculadosSet.has(String(t.id))) continue;
+
+    const venc = String(t.data_vencimento).slice(0, 10);
+    const emDias = (d: number) =>
+      new Date(Date.parse(`${venc}T12:00:00Z`) + d * 86_400_000).toISOString().slice(0, 10);
+
+    const { data: candidatos } = await db
+      .from("lancamentos_financeiros")
+      .select("id, valor, data_vencimento, pessoa_documento, dados_extras")
+      .eq("cod_empresa", ce)
+      .eq("tipo", "PAGAR")
+      .in("status", ["PREVISTO", "CLASSIFICADO"])
+      .is("btg_dda_id", null)
+      .gte("data_vencimento", emDias(-JANELA_DIAS))
+      .lte("data_vencimento", emDias(JANELA_DIAS))
+      .gte("valor", Number(t.valor) - TOLERANCIA_VALOR)
+      .lte("valor", Number(t.valor) + TOLERANCIA_VALOR);
+
+    const r = casarTitulo(
+      { valor: Number(t.valor), data_vencimento: venc, documento_emissor: t.documento_emissor },
+      (candidatos || []).map((c) => ({
+        id: String(c.id),
+        valor: Number(c.valor),
+        data_vencimento: String(c.data_vencimento),
+        pessoa_documento: c.pessoa_documento,
+      })),
+    );
+
+    if (!r.candidato) {
+      semMatch++;
+      console.log(`[btg-dda] reconciliar: título ${t.id} sem vínculo — ${r.motivo}`);
+      continue;
+    }
+
+    const alvo = (candidatos || []).find((c) => String(c.id) === r.candidato!.id)!;
+    const extras = (alvo.dados_extras || {}) as Record<string, unknown>;
+    await db.from("lancamentos_financeiros").update({
+      btg_dda_id: t.id,
+      forma_pagamento: "BOLETO",
+      dados_extras: {
+        ...extras,
+        linha_digitavel: t.linha_digitavel || extras.linha_digitavel,
+        dda_emissor: t.emissor,
+        btg_payment_type: "BANKSLIP",
+      },
+    }).eq("id", alvo.id);
+    await db.from("btg_dda_titulos").update({ conciliado: true }).eq("id", t.id);
+
+    vinculadosSet.add(String(t.id));
+    vinculados++;
+  }
+
+  return { vinculados, sem_match: semMatch };
+}
+
+/** ACTION: reconciliar — reavalia vínculos de uma loja, sob demanda. */
+async function handleReconciliar(body: Record<string, unknown>, userId: string) {
+  await requireAdminRole(userId);
+  const { cod_empresa } = body;
+  if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
+  const r = await reconciliarEmpresa(Number(cod_empresa));
+  return json({ success: true, ...r });
 }
 
 async function importarEmpresa(ce: number): Promise<Response> {
@@ -376,11 +477,18 @@ async function importarEmpresa(ce: number): Promise<Response> {
 
   const sampleItem = btgData.length > 0 ? btgData[0] : null;
 
+  // Segunda passada: títulos que já estavam na base e continuavam órfãos —
+  // tipicamente porque chegaram antes da parcela do ERP. Sem isto, reimportar
+  // não conciliava nada (eles entram como duplicados e pulam a checagem).
+  const recon = await reconciliarEmpresa(ce);
+
   return json({
     success: true,
     importados: inseridos,
     duplicados,
-    lancamentos_gerados: lancamentosGerados,
+    reconciliados: recon.vinculados,
+    sem_match: recon.sem_match,
+    lancamentos_gerados: lancamentosGerados + recon.vinculados,
     registros_limpos: deletedOld ?? 0,
     total_btg: btgData.length,
     sandbox: isSandbox,
@@ -638,6 +746,8 @@ Deno.serve(async (req) => {
         return await handleImportar(body || {}, userId);
       case "listar":
         return await handleListar(body, url, userId);
+      case "reconciliar":
+        return await handleReconciliar(body || {}, userId);
       case "conciliar_auto":
         return await handleConciliarAuto(body || {}, userId);
       case "conciliar_manual":
@@ -647,7 +757,7 @@ Deno.serve(async (req) => {
       case "indicadores":
         return await handleIndicadores(body, url);
       default:
-        return json({ error: `Ação desconhecida: '${action}'. Use: importar, importar_todas, listar, conciliar_auto, conciliar_manual, ignorar, indicadores` }, 400);
+        return json({ error: `Ação desconhecida: '${action}'. Use: importar, importar_todas, reconciliar, listar, conciliar_auto, conciliar_manual, ignorar, indicadores` }, 400);
     }
   } catch (e) {
     if (e instanceof Response) return e;
