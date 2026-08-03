@@ -289,7 +289,46 @@ export default function BankingDdaDashboard() {
             </SelectContent>
           </Select>
         </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Vencimento de</label>
+          <Input type="date" value={vencDe} onChange={(e) => setVencDe(e.target.value)} className="w-[150px]" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">até</label>
+          <Input type="date" value={vencAte} onChange={(e) => setVencAte(e.target.value)} className="w-[150px]" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Faixa de valor</label>
+          <Select value={faixaValor} onValueChange={setFaixaValor}>
+            <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="0-100">Até R$ 100</SelectItem>
+              <SelectItem value="100-1000">R$ 100 a 1.000</SelectItem>
+              <SelectItem value="1000-10000">R$ 1.000 a 10.000</SelectItem>
+              <SelectItem value="10000-0">Acima de R$ 10.000</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1 flex-1 min-w-[240px]">
+          <label className="text-xs text-muted-foreground">Buscar</label>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Emissor, banco, CNPJ, linha digitável ou valor"
+              className="pl-8"
+            />
+          </div>
+        </div>
+        {filtrosAtivos && (
+          <Button size="sm" variant="ghost" onClick={limparFiltros}>
+            <FilterX className="h-4 w-4 mr-1" /> Limpar
+          </Button>
+        )}
       </div>
+
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
