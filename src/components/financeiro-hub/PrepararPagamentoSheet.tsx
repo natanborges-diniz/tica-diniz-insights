@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { valorDoCodigoBarras } from "../../../supabase/functions/_shared/boleto";
+import { tipoPorLinhaDigitavel } from "../../../supabase/functions/_shared/btgPayment";
 
 interface Lancamento {
   id: string;
@@ -91,6 +92,9 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
       dadosExtras.btg_details = { pixKey };
     } else if (payType === "BANKSLIP") {
       dadosExtras.linha_digitavel = barcode;
+      // Arrecadação (linha iniciada em 8) exige o tipo UTILITIES no BTG. Quem
+      // decide é o código, não o operador — gravamos já corrigido.
+      dadosExtras.btg_payment_type = tipoPorLinhaDigitavel(barcode) ?? "BANKSLIP";
       dadosExtras.btg_details = { barcode };
     } else if (payType === "TED") {
       dadosExtras.btg_details = {
@@ -111,6 +115,8 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
   // divergir, ainda que em centavos, dispara `amount-doesnt-match` no BTG. O
   // próprio código de barras carrega o valor, então dá para conferir aqui.
   const valorBoleto = payType === "BANKSLIP" ? valorDoCodigoBarras(barcode) : null;
+  // Aviso na tela: o operador escolhe "Boleto" e a linha revela arrecadação.
+  const ehArrecadacao = payType === "BANKSLIP" && tipoPorLinhaDigitavel(barcode) === "UTILITIES";
   const ajusteValor =
     lancamento && valorBoleto !== null && Math.abs(valorBoleto - lancamento.valor) >= 0.01
       ? Number((valorBoleto - lancamento.valor).toFixed(2))
@@ -244,6 +250,12 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
                     placeholder={payType === "DARF" ? "Código de barras do tributo" : "Cole a linha digitável do boleto"}
                     className="font-mono text-sm"
                   />
+                  {ehArrecadacao && (
+                    <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md p-2">
+                      Conta de concessionária (água, luz, gás ou tributo) — reconhecida pela linha
+                      iniciada em 8. Será enviada ao banco como arrecadação, não como boleto comum.
+                    </p>
+                  )}
                   {lancamento.btg_dda_id && barcode && (
                     <p className="text-xs text-green-600">✓ Código preenchido automaticamente via DDA</p>
                   )}

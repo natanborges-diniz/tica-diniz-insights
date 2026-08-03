@@ -19,6 +19,7 @@ import {
   chaveIdempotencia,
   descreverErroBtg,
   normalizarChavePix,
+  tipoPorLinhaDigitavel,
 } from '../../../../supabase/functions/_shared/btgPayment';
 
 const DEBIT = { branchCode: '50', number: '000000050' };
@@ -277,5 +278,45 @@ describe('normalizarChavePix', () => {
   it('e aplicada ao montar o item de PIX_KEY', () => {
     const detail = montarDetail('PIX_KEY', { chave_pix: CELULAR }) as { key: { value: string } };
     expect(detail.key.value).toBe(`+55${CELULAR}`);
+  });
+});
+
+// Barueri, 04/08: conta da SABESP de R$ 122,60 estava marcada como BANKSLIP e
+// derrubou o lote inteiro ("Linha iniciada em 8 e arrecadacao"). A correcao de
+// tipo existia, mas so rodava para lancamento com vinculo de DDA — esse tinha a
+// linha salva a mao, sem vinculo, e passou direto ate o banco.
+describe('boleto x arrecadacao decidido pela linha', () => {
+  const ARRECADACAO_48 = '8'.repeat(48);
+
+  it('linha iniciada em 8 e arrecadacao; as demais sao boleto', () => {
+    expect(tipoPorLinhaDigitavel(ARRECADACAO_48)).toBe('UTILITIES');
+    expect(tipoPorLinhaDigitavel(LINHA_LUXOTTICA)).toBe('BANKSLIP');
+  });
+
+  it('ignora tamanho invalido em vez de chutar', () => {
+    expect(tipoPorLinhaDigitavel('123')).toBeNull();
+    expect(tipoPorLinhaDigitavel(null)).toBeNull();
+  });
+
+  it('montarItem corrige BANKSLIP para UTILITIES sozinho', () => {
+    const item = montarItem(base({
+      tipo: 'BANKSLIP',
+      dados: { linha_digitavel: ARRECADACAO_48 },
+    }));
+    expect(item.type).toBe('UTILITIES');
+    expect(item.detail).toEqual({ digitableLine: ARRECADACAO_48 });
+  });
+
+  it('corrige tambem no sentido inverso', () => {
+    const item = montarItem(base({
+      tipo: 'UTILITIES',
+      dados: { linha_digitavel: LINHA_LUXOTTICA },
+    }));
+    expect(item.type).toBe('BANKSLIP');
+  });
+
+  it('nao mexe em tipo que nao seja boleto/arrecadacao', () => {
+    const item = montarItem(base({ tipo: 'PIX_KEY', dados: { chave_pix: CNPJ } }));
+    expect(item.type).toBe('PIX_KEY');
   });
 });

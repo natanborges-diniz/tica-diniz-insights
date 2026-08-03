@@ -4,6 +4,7 @@ import { avaliarLancamento, validarJustificativa, criadorAprovadorDistintos } fr
 import { validarAgrupamento, descricaoPagador, ratearValorPago } from "../_shared/rateio.ts";
 import { casarTitulo, JANELA_DIAS } from "../_shared/ddaMatch.ts";
 import { montarLoteFolha } from "../_shared/folha.ts";
+import { tipoPorLinhaDigitavel } from "../_shared/btgPayment.ts";
 import {
   hojeBrt,
   proximaSegunda,
@@ -1354,10 +1355,18 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
 
     // Linha digitável: a do registro no DDA tem precedência sobre a copiada
     // para o lançamento, pelo mesmo motivo do valor.
-    const linhaDigitavel = dda?.linha_digitavel || dados.linha_digitavel;
-    if (lanc.btg_dda_id && linhaDigitavel) {
-      const linha = String(linhaDigitavel).replace(/\D/g, "");
-      paymentType = linha[0] === "8" ? "UTILITIES" : "BANKSLIP";
+    const linhaDigitavel = dda?.linha_digitavel
+      || dados.linha_digitavel
+      || (dados.btg_details as Record<string, unknown> | undefined)?.barcode;
+
+    // O tipo vem da LINHA, com ou sem vínculo de DDA.
+    //
+    // Antes esta correção só rodava para lançamento com título do DDA. A conta
+    // da SABESP de Barueri tinha a linha salva à mão, sem vínculo, ficou como
+    // BANKSLIP e derrubou o lote inteiro por um item.
+    if (linhaDigitavel) {
+      const correto = tipoPorLinhaDigitavel(linhaDigitavel);
+      if (correto) paymentType = correto;
       dadosItem = { ...dadosItem, linha_digitavel: linhaDigitavel };
     }
 

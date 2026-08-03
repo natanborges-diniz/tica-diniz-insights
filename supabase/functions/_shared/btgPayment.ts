@@ -307,6 +307,24 @@ export function montarDetail(tipo: string, dados: Record<string, unknown>): Reco
   }
 }
 
+/**
+ * Decide entre BANKSLIP e UTILITIES pela própria linha digitável.
+ *
+ * Linha iniciada em 8 é arrecadação (água, luz, gás, tributos) e o BTG exige o
+ * tipo UTILITIES; boleto de cobrança comum é BANKSLIP. Não é escolha do
+ * operador — é o que o código diz.
+ *
+ * Caso real (Barueri, 04/08): conta da SABESP de R$ 122,60 ficou marcada como
+ * BANKSLIP e derrubou o lote inteiro. A correção existia, mas só rodava para
+ * lançamento com vínculo de DDA; esse tinha a linha digitável salva à mão, sem
+ * vínculo, e passou direto.
+ */
+export function tipoPorLinhaDigitavel(linha: unknown): "BANKSLIP" | "UTILITIES" | null {
+  const d = somenteDigitos(linha);
+  if (d.length !== 44 && d.length !== 47 && d.length !== 48) return null;
+  return d[0] === "8" ? "UTILITIES" : "BANKSLIP";
+}
+
 // ─── item completo ───────────────────────────────────────────
 
 /**
@@ -316,7 +334,20 @@ export function montarDetail(tipo: string, dados: Record<string, unknown>): Reco
  * `agreementId: "INDIVIDUAL_APPROVE"`; com `batchId` ele entra no lote aberto.
  */
 export function montarItem(args: MontarItemArgs): Record<string, unknown> {
-  const { tipo, valor, dados, debitParty, paymentDate, batchId, externalId } = args;
+  const { valor, dados, debitParty, paymentDate, batchId, externalId } = args;
+
+  // Boleto × arrecadação: corrigimos aqui, no último ponto antes do banco.
+  //
+  // A regra é objetiva — linha iniciada em 8 é arrecadação — e depender de o
+  // operador (ou de um vínculo de DDA) acertar isso derrubava o lote inteiro
+  // por um item. Corrigir em silêncio é melhor que recusar: não há decisão a
+  // tomar, só um fato a respeitar.
+  let tipo = args.tipo;
+  if (tipo === "BANKSLIP" || tipo === "UTILITIES") {
+    const linha = primeiro(dados, "linha_digitavel", "digitableLine", "codigo_barras", "barcode");
+    const correto = tipoPorLinhaDigitavel(linha);
+    if (correto && correto !== tipo) tipo = correto;
+  }
 
   if (!TIPOS_BTG.includes(tipo as BtgPaymentType)) {
     throw new Error(`Tipo de pagamento "${tipo}" não suportado — válidos: ${TIPOS_BTG.join(", ")}`);
