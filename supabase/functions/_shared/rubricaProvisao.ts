@@ -61,6 +61,71 @@ export function gerarCompetencias(r: RubricaProvisionavel, hoje: string, horizon
   return out;
 }
 
+// ─── Valor esperado por média móvel ──────────────────────────
+
+export interface PagamentoHistorico {
+  data: string;   // yyyy-MM-dd (data do pagamento)
+  valor: number;  // valor efetivamente pago
+}
+
+export interface MediaCalculada {
+  media: number;
+  amostras: number;
+  de: string;
+  ate: string;
+}
+
+/**
+ * Média dos últimos N pagamentos efetivos de uma rubrica.
+ *
+ * O `valor_esperado` fixo envelhece: aluguel reajusta, energia oscila com a
+ * estação, e a faixa de tolerância vai ficando mentirosa até tudo cair na Mesa
+ * como desvio. Com a média móvel, a faixa acompanha a realidade sozinha.
+ *
+ * Usa o valor PAGO, não o previsto — o previsto é justamente o número que
+ * queremos corrigir, e realimentá-lo congelaria o erro.
+ *
+ * `minimo` existe porque média de uma amostra só não é média: com histórico
+ * curto, é melhor manter o valor cadastrado do que perseguir um único mês.
+ */
+export function mediaUltimosPagamentos(
+  historico: PagamentoHistorico[],
+  janela = 6,
+  minimo = 3,
+): MediaCalculada | null {
+  const validos = historico
+    .filter((h) => Number(h.valor) > 0 && /^\d{4}-\d{2}-\d{2}/.test(String(h.data)))
+    .sort((a, b) => String(b.data).localeCompare(String(a.data)))
+    .slice(0, janela);
+
+  if (validos.length < minimo) return null;
+
+  const soma = validos.reduce((s, h) => s + Number(h.valor), 0);
+  return {
+    media: Math.round((soma / validos.length) * 100) / 100,
+    amostras: validos.length,
+    de: String(validos[validos.length - 1].data).slice(0, 10),
+    ate: String(validos[0].data).slice(0, 10),
+  };
+}
+
+/**
+ * Decide se vale atualizar o valor esperado da rubrica.
+ *
+ * Ignora diferença irrelevante para não reescrever a rubrica todo mês por
+ * centavos — o histórico de alterações perderia sentido, e cada gravação
+ * dispara reavaliação de selo dos lançamentos futuros.
+ */
+export function deveAtualizarEsperado(
+  atual: number | null | undefined,
+  media: number,
+  minimoPct = 1,
+): boolean {
+  const a = Number(atual ?? 0);
+  if (!(a > 0)) return true; // sem valor cadastrado, qualquer média é ganho
+  return Math.abs((media - a) / a) * 100 >= minimoPct;
+}
+
 /** Record pronto para inserir no ledger (status PREVISTO, lastro RUBRICA). */
 export function montarProvisao(r: RubricaProvisionavel, c: CompetenciaGerada, codEmpresa: number): Record<string, unknown> {
   return {

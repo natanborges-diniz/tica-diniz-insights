@@ -15,7 +15,13 @@ import {
   type ParcelaCacheRow,
   type PlanoMap,
 } from "../_shared/ledgerSync.ts";
-import { gerarCompetencias, montarProvisao, type RubricaProvisionavel } from "../_shared/rubricaProvisao.ts";
+import {
+  gerarCompetencias,
+  montarProvisao,
+  mediaUltimosPagamentos,
+  deveAtualizarEsperado,
+  type RubricaProvisionavel,
+} from "../_shared/rubricaProvisao.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -326,8 +332,58 @@ Deno.serve(async (req) => {
         .eq("status", "ATIVA")
         .eq("provisionar", true);
 
-      const resultado = { rubricas: (rubricas || []).length, provisionados: 0, erros: [] as string[] };
+      const resultado = {
+        rubricas: (rubricas || []).length,
+        provisionados: 0,
+        esperados_atualizados: 0,
+        erros: [] as string[],
+      };
       const inserts: Record<string, unknown>[] = [];
+
+      // ── Média móvel dos últimos 6 pagamentos ──
+      //
+      // Roda ANTES de provisionar, de propósito: o valor esperado corrigido
+      // precisa valer para as competências que vão nascer agora. Na ordem
+      // inversa, o mês novo já nasceria com o número velho.
+      //
+      // O valor esperado fixo envelhece — aluguel reajusta, energia oscila com
+      // a estação — e a faixa de tolerância vai ficando mentirosa até tudo cair
+      // na Mesa como desvio. Com a média, a faixa acompanha a realidade.
+      for (const raw of (rubricas || [])) {
+        const r = raw as unknown as RubricaProvisionavel;
+        const { data: pagos } = await db
+          .from("lancamentos_financeiros")
+          .select("data_pagamento, valor_pago, valor")
+          .eq("rubrica_id", r.id)
+          .eq("status", "BAIXADO")
+          .not("data_pagamento", "is", null)
+          .order("data_pagamento", { ascending: false })
+          .limit(12);
+
+        const media = mediaUltimosPagamentos(
+          (pagos || []).map((p) => ({
+            data: String(p.data_pagamento),
+            // O valor PAGO, não o previsto: realimentar o previsto congelaria
+            // o erro que estamos justamente tentando corrigir.
+            valor: Number(p.valor_pago ?? p.valor),
+          })),
+          6,
+        );
+
+        if (media && deveAtualizarEsperado(r.valor_esperado, media.media)) {
+          await db.from("rubricas_autorizadas").update({
+            valor_esperado: media.media,
+            dados_media: {
+              calculado_em: hoje,
+              amostras: media.amostras,
+              periodo: `${media.de} a ${media.ate}`,
+              anterior: r.valor_esperado ?? null,
+            },
+          }).eq("id", r.id);
+          r.valor_esperado = media.media; // a provisão abaixo já usa o novo
+          resultado.esperados_atualizados++;
+        }
+      }
 
       for (const raw of (rubricas || [])) {
         const r = raw as unknown as RubricaProvisionavel;
