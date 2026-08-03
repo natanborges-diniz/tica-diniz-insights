@@ -94,6 +94,28 @@ export function paraCodigoBarras(entrada: unknown): string {
  *   barras), retorna os 44 (a API aceita `barcode` nesse caso);
  * - outro tamanho → erro.
  */
+/**
+ * Valor do título, lido do próprio código. Retorna null quando não dá para
+ * afirmar (código inválido, ou arrecadação — que tem layout de valor distinto).
+ *
+ * Serve para confrontar o valor vindo do ERP com o do boleto antes do envio:
+ * divergir, ainda que em centavos, dispara `amount-doesnt-match` no BTG.
+ *
+ * No código de barras de cobrança (44), o valor ocupa as posições 9–18.
+ */
+export function valorDoCodigoBarras(entrada: unknown): number | null {
+  let barras: string;
+  try {
+    barras = paraCodigoBarras(entrada);
+  } catch {
+    return null;
+  }
+  if (barras[0] === "8") return null; // arrecadação: outro layout
+  const centavos = Number(barras.slice(9, 19));
+  if (!Number.isFinite(centavos) || centavos <= 0) return null;
+  return centavos / 100;
+}
+
 export function paraLinhaDigitavel(entrada: unknown): string {
   const d = somenteDigitos(entrada);
 

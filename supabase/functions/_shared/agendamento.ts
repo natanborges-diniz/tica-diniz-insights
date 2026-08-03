@@ -46,3 +46,58 @@ export function dataAgendamento(
     : venc;
   return alvo && alvo > hoje ? alvo : null;
 }
+
+// ─── Modo de agendamento do borderô ──────────────────────────
+
+export type ModoDataBordero = "DATA_UNICA" | "VENCIMENTO";
+
+export interface DataPagamentoArgs {
+  /** Modo do borderô. Default DATA_UNICA (prática da casa). */
+  modo?: ModoDataBordero | null;
+  /** Data escolhida item a item — vence sobre o modo. */
+  override?: string | null;
+  /**
+   * Vencimento do título. Deve vir do DDA quando houver: o registro na CIP é o
+   * que vale para o fornecedor, não o vencimento importado do ERP.
+   */
+  vencimento?: string | null;
+  /** `borderos.data_pagamento` — a data única planejada. */
+  dataPagamentoBordero?: string | null;
+  /** Hoje em BRT (yyyy-MM-dd). */
+  hoje: string;
+}
+
+/**
+ * Data de pagamento de UM item do borderô, cobrindo os três cenários:
+ *
+ *   1. tudo numa data única        → modo DATA_UNICA + data_pagamento
+ *   2. cada um no seu vencimento   → modo VENCIMENTO
+ *   3. alguns diferentes           → override no próprio lançamento
+ *
+ * Diferente de `dataAgendamento`, nunca devolve null: a API do BTG exige
+ * `paymentDate` em todo item. Data no passado vira hoje — o banco recusa
+ * `past-payment-date`, e um título vencido deve ser pago assim que possível.
+ */
+export function dataPagamentoItem(args: DataPagamentoArgs): string {
+  const { override, vencimento, dataPagamentoBordero, hoje } = args;
+  const modo: ModoDataBordero = args.modo === "VENCIMENTO" ? "VENCIMENTO" : "DATA_UNICA";
+
+  let alvo: string | null;
+
+  if (override) {
+    alvo = override;
+  } else if (modo === "VENCIMENTO") {
+    // Cada título no seu vencimento; sem vencimento conhecido, cai na data do
+    // borderô (e, na falta dela, em hoje).
+    alvo = vencimento || dataPagamentoBordero || hoje;
+  } else {
+    // Data única: paga na data do borderô, exceto se o título vence antes —
+    // aí antecipa para o vencimento, para não pagar juros.
+    alvo = dataPagamentoBordero
+      ? (vencimento && vencimento < dataPagamentoBordero ? vencimento : dataPagamentoBordero)
+      : (vencimento || hoje);
+  }
+
+  // Vencido ou hoje → paga hoje.
+  return alvo && alvo > hoje ? alvo : hoje;
+}

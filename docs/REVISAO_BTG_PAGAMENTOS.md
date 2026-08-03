@@ -152,6 +152,41 @@ O schema oferece `tags.externalId`, e ele volta em todos os webhooks. É o melho
 
 ---
 
+## Adendo (03/08) — valor e vencimento vêm do DDA, não do ERP
+
+Caso real: Johnson & Johnson, ERP com R$ 213,08, boleto registrado com R$ 213,06.
+
+O DDA é a nossa janela para o registro do título na CIP (hoje Nuclea), e é esse
+registro que vale para o fornecedor. Duas consequências para o envio:
+
+- **Valor** — o `amount` tem que ser o do título. Divergir, ainda que em
+  centavos, dispara `amount-doesnt-match` ("O valor do pagamento não corresponde
+  ao valor informado"). O envio passa a usar `btg_dda_titulos.valor` e grava
+  `valor_erp` / `valor_enviado` / `ajuste_valor` em `dados_extras` para a baixa
+  lançar a diferença como desconto/acréscimo.
+- **Vencimento** — o emissor pode prorrogar ou antecipar depois de imprimir o
+  boleto, então o fator do código de barras pode divergir do registro (visto na
+  HOYA: barras 06/08, registro 04/08). O agendamento usa
+  `btg_dda_titulos.data_vencimento`.
+
+`valorDoCodigoBarras()` em `_shared/boleto.ts` lê o valor do próprio código para
+a conferência na tela, antes do envio.
+
+### Modo de agendamento
+
+`borderos.modo_data` cobre os três cenários da operação:
+
+| Modo | Comportamento |
+|---|---|
+| `DATA_UNICA` (default) | Tudo na `data_pagamento` do borderô; vencimento anterior é antecipado, para não pagar juros |
+| `VENCIMENTO` | Cada título no próprio vencimento (do DDA quando houver) |
+| override por item | `dados_extras.data_pagamento_item` vence sobre o modo |
+
+Em qualquer caso a data nunca vai para o passado — a API recusa
+`past-payment-date`, e título vencido deve ser pago assim que possível.
+
+---
+
 ## Correção sugerida — `enviarBordero`
 
 ```ts

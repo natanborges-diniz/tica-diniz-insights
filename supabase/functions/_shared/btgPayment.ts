@@ -179,7 +179,7 @@ function creditPartyConta(dados: Record<string, unknown>): Record<string, unknow
   const doc = primeiro(dados, "documento", "cpf_cnpj", "taxId", "holderTaxId");
   const bankCode = primeiro(dados, "banco", "bankCode", "codigo_banco");
   const branch = primeiro(dados, "agencia", "branch", "branchCode");
-  const number = primeiro(dados, "conta", "number", "accountNumber", "numero_conta");
+  const number = primeiro(dados, "conta", "number", "account", "accountNumber", "numero_conta");
 
   if (!nome) throw new Error("Nome do beneficiário é obrigatório (creditParty.name)");
   if (!bankCode) throw new Error("Código do banco é obrigatório (creditParty.account.bankCode)");

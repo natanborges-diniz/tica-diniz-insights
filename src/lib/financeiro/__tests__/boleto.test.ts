@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import {
   paraCodigoBarras,
   paraLinhaDigitavel,
+  valorDoCodigoBarras,
   somenteDigitos,
   mod10,
 } from '../../../../supabase/functions/_shared/boleto';
@@ -91,5 +92,33 @@ describe('paraLinhaDigitavel (formato que o BTG exige no digitableLine)', () => 
     const corrompida = LINHA_LUXOTTICA.slice(0, 4) + '0' + LINHA_LUXOTTICA.slice(5);
     expect(() => paraLinhaDigitavel(corrompida)).toThrow(/DV do campo/);
     expect(() => paraLinhaDigitavel('123')).toThrow(/3 dígitos/);
+  });
+});
+
+// Caso real (Johnson & Johnson, 02/08/2026): o ERP trazia R$ 213,08 e o boleto
+// registrado vale R$ 213,06. Enviar o valor do ERP dispara `amount-doesnt-match`
+// no BTG, então o valor precisa ser lido do próprio título.
+describe('valorDoCodigoBarras', () => {
+  const LINHA_JJ = '03399652613490000045534488401042115260000021306';
+
+  it('lê o valor da linha digitável de cobrança (47)', () => {
+    expect(valorDoCodigoBarras(LINHA_JJ)).toBe(213.06);
+  });
+
+  it('lê o valor do código de barras (44)', () => {
+    expect(valorDoCodigoBarras(BARRAS_LUXOTTICA)).toBe(15.96);
+  });
+
+  it('lê o mesmo valor a partir da linha ou das barras', () => {
+    expect(valorDoCodigoBarras(LINHA_LUXOTTICA)).toBe(valorDoCodigoBarras(BARRAS_LUXOTTICA));
+  });
+
+  it('devolve null para arrecadação (layout de valor distinto)', () => {
+    expect(valorDoCodigoBarras('8'.repeat(44))).toBeNull();
+  });
+
+  it('devolve null em vez de lançar quando o código é inválido', () => {
+    expect(valorDoCodigoBarras('123')).toBeNull();
+    expect(valorDoCodigoBarras(null)).toBeNull();
   });
 });

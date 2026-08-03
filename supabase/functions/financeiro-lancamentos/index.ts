@@ -1,7 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, authGuard } from "../_shared/authGuard.ts";
 import { avaliarLancamento, validarJustificativa, criadorAprovadorDistintos } from "../_shared/governanca.ts";
-import { hojeBrt, proximaSegunda, descricaoBordero, dataAgendamento } from "../_shared/agendamento.ts";
+import {
+  hojeBrt,
+  proximaSegunda,
+  descricaoBordero,
+  dataAgendamento,
+  dataPagamentoItem,
+} from "../_shared/agendamento.ts";
 import {
   montarItem,
   montarCorpo,
@@ -366,8 +372,12 @@ async function listarBorderos(body: Record<string, unknown>) {
 }
 
 async function criarBordero(body: Record<string, unknown>, userId: string) {
-  const { cod_empresa, descricao, lancamento_ids, data_pagamento } = body;
+  const { cod_empresa, descricao, lancamento_ids, data_pagamento, modo_data } = body;
   if (!cod_empresa) throw new Error("cod_empresa obrigatório");
+
+  // DATA_UNICA (default): tudo na data do borderô, antecipando o que vence
+  // antes. VENCIMENTO: cada título no próprio vencimento (do DDA quando houver).
+  const modoData = modo_data === "VENCIMENTO" ? "VENCIMENTO" : "DATA_UNICA";
 
   const ids = (lancamento_ids as string[]) || [];
 
@@ -391,6 +401,7 @@ async function criarBordero(body: Record<string, unknown>, userId: string) {
       cod_empresa: Number(cod_empresa),
       descricao: descFinal,
       data_pagamento: dataPg,
+      modo_data: modoData,
       criado_por: userId,
       status: "MONTAGEM",
       qtd_lancamentos: ids.length,
@@ -691,38 +702,77 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   // O 201 devolve { batchId, contractGuid, operationNeedsApproval } — não um
   // paymentId. A correlação para baixa automática vem de `tags.externalId`
   // (= id do lançamento), que volta em todos os webhooks (SPEC P1 §5.5).
+  // Títulos do DDA vinculados aos lançamentos deste borderô.
+  //
+  // O DDA é a nossa janela para o registro do boleto na CIP (hoje Nuclea), e é
+  // ele que vale para o fornecedor — não o que veio do ERP. Duas consequências:
+  //   - o `amount` enviado tem que ser o valor registrado. Divergir, ainda que
+  //     em centavos, dispara `amount-doesnt-match` no BTG;
+  //   - o vencimento usado no agendamento é o do registro, que pode ter sido
+  //     prorrogado/antecipado pelo emissor depois de o boleto ser impresso.
+  const ddaIds = [...new Set(
+    (lancamentos || []).map((l) => l.btg_dda_id).filter(Boolean),
+  )] as string[];
+  const ddaPorId = new Map<string, { valor: number; data_vencimento: string; linha_digitavel: string | null }>();
+  if (ddaIds.length > 0) {
+    const { data: titulos } = await supabase
+      .from("btg_dda_titulos")
+      .select("id, valor, data_vencimento, linha_digitavel")
+      .in("id", ddaIds);
+    for (const t of (titulos || [])) {
+      ddaPorId.set(String(t.id), {
+        valor: Number(t.valor),
+        data_vencimento: String(t.data_vencimento),
+        linha_digitavel: t.linha_digitavel ?? null,
+      });
+    }
+  }
+
   let aceitos = 0;
   let falhas = 0;
   const motivos: string[] = [];
 
   for (const lanc of (lancamentos || [])) {
     const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
+    const dda = lanc.btg_dda_id ? ddaPorId.get(String(lanc.btg_dda_id)) : undefined;
 
     // Tipo: boleto vindo do DDA tem linha digitável → BANKSLIP, ou UTILITIES
     // quando inicia em 8 (arrecadação: água/luz/tributos). Caso contrário usa
     // o tipo configurado no lançamento.
     let paymentType = String(dados.btg_payment_type || "PIX_KEY");
-    let dadosItem: Record<string, unknown> = (dados.btg_details as Record<string, unknown>) || dados;
+    // Nome e documento do beneficiário vêm do lançamento — a tela de preparação
+    // não os coleta, e TED/PIX exigem `creditParty`.
+    let dadosItem: Record<string, unknown> = {
+      nome: lanc.pessoa_nome ?? undefined,
+      documento: lanc.pessoa_documento ?? undefined,
+      ...((dados.btg_details as Record<string, unknown>) || dados),
+    };
 
-    if (lanc.btg_dda_id && dados.linha_digitavel) {
-      const linha = String(dados.linha_digitavel).replace(/\D/g, "");
+    // Linha digitável: a do registro no DDA tem precedência sobre a copiada
+    // para o lançamento, pelo mesmo motivo do valor.
+    const linhaDigitavel = dda?.linha_digitavel || dados.linha_digitavel;
+    if (lanc.btg_dda_id && linhaDigitavel) {
+      const linha = String(linhaDigitavel).replace(/\D/g, "");
       paymentType = linha[0] === "8" ? "UTILITIES" : "BANKSLIP";
-      dadosItem = { ...dadosItem, linha_digitavel: dados.linha_digitavel };
+      dadosItem = { ...dadosItem, linha_digitavel: linhaDigitavel };
     }
 
-    // Agendamento: data_pagamento do borderô (prática da casa: segunda-feira);
-    // vencimento antes dela → agenda no vencimento (sem juros); sem data no
-    // borderô → fallback pelo vencimento. Data passada/hoje → paga hoje.
-    //
-    // `paymentDate` é obrigatório: quando não há agendamento futuro, mandamos
-    // a data de hoje (o campo `scheduledDate` que usávamos não existe na
-    // entrada da API — só nos webhooks de saída).
+    // Valor: o do boleto registrado manda. A diferença fica registrada para a
+    // baixa lançar como desconto/acréscimo e o DRE fechar.
+    const valorErp = Number(lanc.valor);
+    const valorEnviado = dda ? dda.valor : valorErp;
+    const ajusteValor = Number((valorEnviado - valorErp).toFixed(2));
+
+    // Data: modo do borderô + override por item. O vencimento de referência é
+    // o do DDA quando houver.
     const hoje = hojeBrt();
-    const paymentDate = dataAgendamento(
-      lanc.data_vencimento ? String(lanc.data_vencimento) : null,
-      bordero.data_pagamento ? String(bordero.data_pagamento) : null,
+    const paymentDate = dataPagamentoItem({
+      modo: bordero.modo_data,
+      override: (dados.data_pagamento_item ?? dados.scheduledDate) as string | null,
+      vencimento: dda?.data_vencimento ?? (lanc.data_vencimento ? String(lanc.data_vencimento) : null),
+      dataPagamentoBordero: bordero.data_pagamento ? String(bordero.data_pagamento) : null,
       hoje,
-    ) || hoje;
+    });
 
     // Montagem e validação locais: melhor barrar aqui, com mensagem legível,
     // do que receber um `unmapped-error` opaco do banco.
@@ -731,7 +781,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     try {
       item = montarItem({
         tipo: paymentType,
-        valor: Number(lanc.valor),
+        valor: valorEnviado,
         dados: dadosItem,
         debitParty,
         paymentDate,
@@ -783,6 +833,11 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
           btg_external_id: lanc.id,
           btg_payment_id: btgPaymentId != null ? String(btgPaymentId) : null,
           btg_idempotency_key: idempotencyKey,
+          btg_payment_date: paymentDate,
+          // Trilha do ajuste ERP → boleto registrado, para a baixa e o DRE.
+          valor_erp: valorErp,
+          valor_enviado: valorEnviado,
+          ajuste_valor: ajusteValor || null,
           btg_payment_response: payData,
         },
       }).eq("id", lanc.id);

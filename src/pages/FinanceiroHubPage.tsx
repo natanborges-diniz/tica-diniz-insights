@@ -121,6 +121,8 @@ export default function FinanceiroHubPage() {
     return format(d, "yyyy-MM-dd");
   };
   const [formBorderoDataPg, setFormBorderoDataPg] = useState<string>(proximaSegundaStr);
+  // Prática da casa é pagar tudo na segunda — por isso DATA_UNICA é o default.
+  const [formBorderoModoData, setFormBorderoModoData] = useState<"DATA_UNICA" | "VENCIMENTO">("DATA_UNICA");
   const [classificarLoteOpen, setClassificarLoteOpen] = useState(false);
 
   // Edit classification state
@@ -222,6 +224,7 @@ export default function FinanceiroHubPage() {
       cod_empresa: codEmpresa,
       descricao: formBorderoDesc || null,
       data_pagamento: formBorderoDataPg || null,
+      modo_data: formBorderoModoData,
       lancamento_ids: Array.from(selectedIds),
     }),
     onSuccess: () => {
@@ -478,12 +481,41 @@ export default function FinanceiroHubPage() {
               </div>
             </div>
             <div className="space-y-1">
-              <Label>Data de pagamento</Label>
-              <Input type="date" value={formBorderoDataPg} onChange={e => setFormBorderoDataPg(e.target.value)} />
-              <p className="text-xs text-muted-foreground">
-                Todos os itens serão agendados para esta data; vencimento anterior a ela é pago no vencimento (sem juros).
-              </p>
+              <Label>Quando pagar</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={formBorderoModoData === "DATA_UNICA" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFormBorderoModoData("DATA_UNICA")}
+                >
+                  Data única
+                </Button>
+                <Button
+                  type="button"
+                  variant={formBorderoModoData === "VENCIMENTO" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setFormBorderoModoData("VENCIMENTO")}
+                >
+                  No vencimento
+                </Button>
+              </div>
             </div>
+
+            {formBorderoModoData === "DATA_UNICA" ? (
+              <div className="space-y-1">
+                <Label>Data de pagamento</Label>
+                <Input type="date" value={formBorderoDataPg} onChange={e => setFormBorderoDataPg(e.target.value)} />
+                <p className="text-xs text-muted-foreground">
+                  Todos os itens serão agendados para esta data; vencimento anterior a ela é pago no vencimento (sem juros).
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Cada título é agendado no próprio vencimento — o do boleto no DDA, quando houver.
+                Títulos já vencidos são pagos hoje.
+              </p>
+            )}
             <div className="space-y-1">
               <Label>Descrição do lote (opcional)</Label>
               <Input

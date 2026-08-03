@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { valorDoCodigoBarras } from "../../../supabase/functions/_shared/boleto";
 
 interface Lancamento {
   id: string;
@@ -87,6 +88,15 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
   // marcava como vencido boleto que vence HOJE (off-by-one de fuso).
   const isVencido = lancamento && String(lancamento.data_vencimento) < format(new Date(), "yyyy-MM-dd");
 
+  // O valor que o banco vai cobrar é o do título, não o que veio do ERP —
+  // divergir, ainda que em centavos, dispara `amount-doesnt-match` no BTG. O
+  // próprio código de barras carrega o valor, então dá para conferir aqui.
+  const valorBoleto = payType === "BANKSLIP" ? valorDoCodigoBarras(barcode) : null;
+  const ajusteValor =
+    lancamento && valorBoleto !== null && Math.abs(valorBoleto - lancamento.valor) >= 0.01
+      ? Number((valorBoleto - lancamento.valor).toFixed(2))
+      : null;
+
   return (
     <Sheet open={!!lancamento} onOpenChange={open => { if (!open) onClose(); }}>
       <SheetContent className="sm:max-w-lg">
@@ -121,7 +131,24 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
                     <p className="text-xs text-muted-foreground">Beneficiário: {lancamento.pessoa_nome}</p>
                   )}
                 </div>
-                <p className="text-lg font-bold">{fmtCurrency(lancamento.valor)}</p>
+                <div className="text-right">
+                  <p className="text-lg font-bold">{fmtCurrency(valorBoleto ?? lancamento.valor)}</p>
+                  {ajusteValor !== null && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] mt-0.5 bg-amber-50 text-amber-700 border-amber-200 cursor-help"
+                      title={
+                        `Valor ajustado para o do boleto registrado.\n` +
+                        `ERP: ${fmtCurrency(lancamento.valor)}\n` +
+                        `Boleto: ${fmtCurrency(valorBoleto as number)}\n` +
+                        `Diferença: ${ajusteValor > 0 ? "+" : ""}${fmtCurrency(ajusteValor)}\n\n` +
+                        `O banco recusa o pagamento se o valor enviado não bater com o do título.`
+                      }
+                    >
+                      ⚠ ajustado {ajusteValor > 0 ? "+" : "−"}{fmtCurrency(Math.abs(ajusteValor))}
+                    </Badge>
+                  )}
+                </div>
               </div>
               <div className="flex gap-2 items-center">
                 <p className={cn("text-xs", isVencido ? "text-destructive font-medium" : "text-muted-foreground")}>
