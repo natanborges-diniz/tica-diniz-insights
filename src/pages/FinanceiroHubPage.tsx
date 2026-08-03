@@ -373,15 +373,31 @@ export default function FinanceiroHubPage() {
 
   const cancelarBorderoMutation = useMutation({
     mutationFn: (id: string) => invokeAction("cancelar_bordero", { bordero_id: id }),
-    onSuccess: () => { toast.success("Borderô cancelado"); invalidateAll(); },
+    onSuccess: (data: { devolvidos?: number }) => {
+      const n = data?.devolvidos ?? 0;
+      toast.success(
+        n > 0
+          ? `Borderô cancelado — ${n} título${n > 1 ? "s" : ""} voltou para "Em Preparo" (classificação e dados de pagamento mantidos)`
+          : "Borderô cancelado"
+      );
+      invalidateAll();
+      setActiveTab("pagar");
+    },
     onError: (e: Error) => toast.error(e.message || "Erro ao cancelar"),
   });
 
   const removerDoBorderoMutation = useMutation({
     mutationFn: ({ bordero_id, lancamento_ids }: { bordero_id: string; lancamento_ids: string[] }) =>
       invokeAction("remover_do_bordero", { bordero_id, lancamento_ids }),
-    onSuccess: () => { toast.success("Lançamento removido do borderô"); invalidateAll(); },
-    onError: (e: Error) => toast.error(e.message || "Erro ao remover do borderô"),
+    onSuccess: (data: { reaprovar?: boolean }) => {
+      toast.success(
+        data?.reaprovar
+          ? 'Título desautorizado e devolvido a "Em Preparo" — o borderô voltou para montagem e precisa ser aprovado de novo'
+          : 'Título desautorizado e devolvido a "Em Preparo"'
+      );
+      invalidateAll();
+    },
+    onError: (e: Error) => toast.error(e.message || "Erro ao desautorizar título"),
   });
 
   const prepararPagamentoMutation = useMutation({
