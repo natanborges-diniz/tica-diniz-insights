@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { agoraSP } from "@/lib/datetime";
 
 // Espelha _shared/folha.ts. Os códigos numéricos do BTG ficam no backend —
 // aqui só o vocabulário da casa.
@@ -138,7 +139,7 @@ export default function FolhaPagamentoPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [detalheId, setDetalheId] = useState<string | null>(null);
 
-  const hoje = new Date();
+  const hoje = agoraSP();
   const [evento, setEvento] = useState("SALARIO");
   const [competencia, setCompetencia] = useState(format(hoje, "yyyy-MM"));
   const [dataPagamento, setDataPagamento] = useState(format(hoje, "yyyy-MM-dd"));

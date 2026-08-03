@@ -377,7 +377,7 @@ export function VendasDashboardLayout({
             {ultimaAtualizacao && (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">
                 <Clock className="h-3 w-3" />
-                Sync: {new Date(ultimaAtualizacao).toLocaleDateString('pt-BR')} {new Date(ultimaAtualizacao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                Sync: {new Date(ultimaAtualizacao).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} {new Date(ultimaAtualizacao).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
           </div>

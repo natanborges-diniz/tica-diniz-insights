@@ -387,7 +387,7 @@ export default function PaymentLinksPage() {
                         <Badge variant="outline" className="text-[10px]">{link.origem}</Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground font-mono">
-                        {new Date(link.created_at).toLocaleDateString("pt-BR")}
+                        {new Date(link.created_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">

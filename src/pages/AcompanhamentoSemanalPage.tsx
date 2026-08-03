@@ -263,7 +263,7 @@ export default function AcompanhamentoSemanalPage() {
           <p className="text-sm text-muted-foreground">
             Meta × recebido da semana comercial
             {ultimoSync &&
-              ` · dados de ${new Date(ultimoSync).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`}
+              ` · dados de ${new Date(ultimoSync).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`}
           </p>
         </div>
         <Select value={semanaSel} onValueChange={setSemanaSel}>

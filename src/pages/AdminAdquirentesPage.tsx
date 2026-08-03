@@ -96,7 +96,7 @@ function ActivationGVBlock({
     : null;
 
   const fmt = (iso?: string | null) =>
-    iso ? new Date(iso).toLocaleString("pt-BR") : "—";
+    iso ? new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—";
 
   const Step = ({ done, label, hint }: { done: boolean; label: string; hint?: string }) => (
     <div className="flex items-start gap-2">

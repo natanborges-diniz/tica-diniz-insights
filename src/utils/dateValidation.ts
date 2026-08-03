@@ -1,3 +1,4 @@
+import { agoraSP } from "@/lib/datetime";
 // src/utils/dateValidation.ts
 
 /**
@@ -60,7 +61,7 @@ export function limitarPeriodo(
  * - Se hoje está entre dia 21 e último dia: período = 21 do mês atual até 20 do próximo mês
  */
 export function getDefaultPeriodoMesAtual(): { dataIni: string; dataFim: string } {
-  const hoje = new Date();
+  const hoje = agoraSP();
   const dia = hoje.getDate();
   const ano = hoje.getFullYear();
   const mes = hoje.getMonth(); // 0-indexed
@@ -84,7 +85,7 @@ export function getDefaultPeriodoMesAtual(): { dataIni: string; dataFim: string 
  * Esta é a ÚNICA fonte de verdade para período comercial.
  */
 export async function getPeriodoComercial(): Promise<{ dataIni: string; dataFim: string }> {
-  const hoje = new Date();
+  const hoje = agoraSP();
   const anoAtual = hoje.getFullYear();
   const mesAtual = hoje.getMonth() + 1; // 1-indexed
 

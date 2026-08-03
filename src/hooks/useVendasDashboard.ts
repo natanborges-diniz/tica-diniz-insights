@@ -17,6 +17,7 @@ import { codLojaLogico, nomeLojaLogico } from "@/lib/metas/lojas";
 import { getPeriodoComercial, formatLocalDate, diffInDays } from "@/utils/dateValidation";
 import { supabase } from "@/integrations/supabase/client";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
+import { agoraSP } from "@/lib/datetime";
 
 // Tipo para progresso (mantido para compatibilidade com UI)
 export interface ProgressoPaginacao {
@@ -477,8 +478,8 @@ export function useVendasDashboard() {
   const { defaultEmpresa } = useDefaultEmpresa();
   
   const [filters, setFilters] = useState<VendasFiltersState>({
-    dataInicio: formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
-    dataFim: formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)),
+    dataInicio: formatLocalDate(new Date(agoraSP().getFullYear(), agoraSP().getMonth(), 1)),
+    dataFim: formatLocalDate(new Date(agoraSP().getFullYear(), agoraSP().getMonth() + 1, 0)),
     viewMode: "loja",
     empresa: '', // Será preenchido pelo useEffect abaixo
   });
@@ -786,7 +787,7 @@ export function useVendasDashboard() {
 
   // Calcular projeção
   const projecao = useMemo((): ProjecaoFechamento => {
-    const hoje = new Date();
+    const hoje = agoraSP();
     const dataFimDate = new Date(filters.dataFim + 'T23:59:59');
     const dataInicioDate = new Date(filters.dataInicio + 'T00:00:00');
     

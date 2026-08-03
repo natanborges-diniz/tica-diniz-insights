@@ -3,6 +3,7 @@ import { ComprasNota } from "@/services/comprasService";
 import { ShoppingCart } from "lucide-react";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { formatters } from "@/utils/exportData";
+import { hojeSP } from "@/lib/datetime";
 
 interface Props {
   notas: ComprasNota[];
@@ -38,7 +39,7 @@ const exportColumns = [
 ];
 
 export function ComprasPivotTable({ notas, onViewChange }: Props) {
-  const hoje = new Date().toISOString().split("T")[0];
+  const hoje = hojeSP();
 
   return (
     <div className="space-y-3">

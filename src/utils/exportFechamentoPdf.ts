@@ -1,3 +1,4 @@
+import { geradoEmSP } from "@/lib/datetime";
 // src/utils/exportFechamentoPdf.ts
 // PDFs do Fechamento Mensal de Comissões (RH) — dois níveis (Natan):
 //   * RESUMIDO: os totais dos "botões" (extrato), seccionado por loja com
@@ -51,7 +52,7 @@ function cabecalho(doc: jsPDF, params: FechamentoPdfParams, subtitulo: string) {
   doc.setFontSize(8);
   doc.setTextColor(120);
   doc.text(
-    `Gerado em ${(params.geradoEm ?? new Date()).toLocaleString("pt-BR")} — fechamentos congelados são o documento probatório do pagamento (reabertura só ADM)`,
+    `Gerado em ${geradoEmSP(params.geradoEm ?? new Date())} — fechamentos congelados são o documento probatório do pagamento (reabertura só ADM)`,
     14,
     25
   );

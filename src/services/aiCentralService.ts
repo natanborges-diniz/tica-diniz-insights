@@ -7,6 +7,7 @@ import { getResumoFormasPagamento, getAnaliseSku } from "./vendasService";
 import { getVendasAgregado } from "./agregadosService";
 import { isVendaValida } from "@/lib/vendas/formaPagamento";
 import { getAnaliseFamiliaVendedor } from "./vendasService";
+import { agoraSP } from "@/lib/datetime";
 
 // ============================================
 // INTERFACES
@@ -339,7 +340,7 @@ async function coletarDadosEstoque(
 ): Promise<DadosEstoqueConsolidado | null> {
   try {
     // Usa getAnaliseSku (endpoint /vendas/analise-sku) — fonte unificada de estoque+vendas
-    const hoje = new Date();
+    const hoje = agoraSP();
     const dataFim = hoje.toISOString().split('T')[0];
     const dataInicio = new Date(hoje.getTime() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     

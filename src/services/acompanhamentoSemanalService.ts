@@ -16,6 +16,7 @@ import {
 } from './metasSemanaisService';
 import { getRecebimentosAgregado } from './recebimentosService';
 import { lojasEquivalentes } from '@/lib/metas/lojas';
+import { hojeSP } from "@/lib/datetime";
 
 export type StatusRitmo = 'ATINGIDA' | 'NO_RITMO' | 'ATENCAO' | 'CRITICO';
 
@@ -116,7 +117,7 @@ export async function getAcompanhamentoSemanal(
 
   // cortes manuais podem ter semanas ≠ 7 dias — usar o fim gravado na meta
   const semanaFim = metasLoja[0].semanaFim || addDaysISO(semanaInicio, 6);
-  const hoje = new Date().toISOString().split('T')[0];
+  const hoje = hojeSP();
 
   const recebimentos = await getRecebimentosAgregado({
     empresa: codEmpresas?.length ? codEmpresas.join(',') : 'ALL',

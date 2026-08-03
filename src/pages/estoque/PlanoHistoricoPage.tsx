@@ -351,7 +351,7 @@ export default function PlanoHistoricoPage() {
                 {rows.map(row => {
                   const delta = (row.total_final ?? 0) - (row.total_sugerido ?? 0);
                   const qtdMarcas = row.plano_final?.length ?? 0;
-                  const dataFormatada = new Date(row.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+                  const dataFormatada = new Date(row.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' });
                   const nomeEmpresa = empresas.find(e => e.codEmpresa === row.cod_empresa)?.nome ?? `Loja ${row.cod_empresa}`;
 
                   return (
@@ -437,7 +437,7 @@ export default function PlanoHistoricoPage() {
           <BaseDialog
             open={verOpen}
             onOpenChange={setVerOpen}
-            title={`Plano — ${new Date(selectedRow.created_at).toLocaleDateString('pt-BR')}`}
+            title={`Plano — ${new Date(selectedRow.created_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`}
             size="md"
             footer={<Button variant="outline" onClick={() => setVerOpen(false)}>Fechar</Button>}
           >

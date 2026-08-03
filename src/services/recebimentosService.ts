@@ -25,6 +25,7 @@ export {
   inicioSemanaComercial,
   fimSemanaComercial,
 } from '@/lib/recebimentos/semanaComercial';
+import { agoraSP } from "@/lib/datetime";
 
 export interface GetRecebimentosParams {
   empresa: EmpresaParam;
@@ -123,7 +124,7 @@ export async function getRecebimentosPorSemana(
 export async function getVendedoresConhecidos(
   codEmpresa: number
 ): Promise<{ codVendedor: number; nome: string | null }[]> {
-  const desde = new Date();
+  const desde = agoraSP();
   desde.setDate(desde.getDate() - 120);
   const { data, error } = await (supabase as any)
     .from('recebimentos_agregado_diario')

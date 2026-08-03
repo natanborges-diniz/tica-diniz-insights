@@ -28,7 +28,7 @@ export const BridgeStatusBanner: React.FC<BridgeStatusBannerProps> = ({
   const isDown = health === "down" || health === "timeout";
   const isDegraded = health === "degraded";
   const formattedTime = lastCheckedAt
-    ? new Date(lastCheckedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    ? new Date(lastCheckedAt).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })
     : null;
 
   return (

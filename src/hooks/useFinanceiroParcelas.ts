@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { getFinanceiroParcelasFromCache, getFinanceiroParcelas, FinanceiroParcela } from "../services/financeiroService";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
+import { agoraSP } from "@/lib/datetime";
 
 export type TipoFilter = "TODOS" | "PAGAR" | "RECEBER";
 export type SituacaoFilter = "TODOS" | "EM ABERTO" | "EM ATRASO" | "PAGA";
@@ -41,7 +42,7 @@ function formatLocalDate(date: Date): string {
 }
 
 function getDefaultFilters(defaultEmpresa: EmpresaParam): FinanceiroFilters {
-  const hoje = new Date();
+  const hoje = agoraSP();
   const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 

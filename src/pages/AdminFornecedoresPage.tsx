@@ -1308,7 +1308,7 @@ export default function AdminFornecedoresPage() {
                       {cfg.ambiente === "production" ? "🟢 Produção Ativa" : "🟡 Homologação Ativa"}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      Última atualização: {new Date(cfg.updated_at).toLocaleString("pt-BR")}
+                      Última atualização: {new Date(cfg.updated_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                     </span>
                   </div>
 

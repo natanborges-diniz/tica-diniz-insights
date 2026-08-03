@@ -34,6 +34,7 @@ import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
 import { useEffect } from "react";
 import { registerAction, unregisterAction } from "@/lib/actionCatalog";
 import { useNavigate } from "react-router-dom";
+import { hojeSP, formatDataSP } from "@/lib/datetime";
 
 // KPI Cards Component
 type FiltroSubcategoria = 'TODAS' | 'AR_RX' | 'AR_SOLAR';
@@ -340,14 +341,14 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
       toolbar={
         <DataTableToolbar
           exportOptions={{
-            filename: `estoque_${new Date().toISOString().split("T")[0]}`,
+            filename: `estoque_${hojeSP()}`,
             title: "Detalhamento de Estoque",
             columns: exportColumns,
             data: itens,
           }}
         >
           <span className="text-sm text-muted-foreground">
-            {itens.length.toLocaleString("pt-BR")} itens • Posição: {new Date().toLocaleDateString("pt-BR")} (tempo real)
+            {itens.length.toLocaleString("pt-BR")} itens • Posição: {formatDataSP(new Date())} (tempo real)
           </span>
         </DataTableToolbar>
       }

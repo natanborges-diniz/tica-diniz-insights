@@ -1,6 +1,7 @@
 import { FileCheck, Send, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { hojeSP } from "@/lib/datetime";
 
 interface BorderoActionsProps {
   status: string;
@@ -61,7 +62,7 @@ function liberaBaixaManual(enviadoEm?: string | null, dataPagamento?: string | n
   const agora = Date.now();
 
   if (dataPagamento) {
-    const hoje = new Date(agora - 3 * 3600 * 1000).toISOString().slice(0, 10); // BRT
+    const hoje = hojeSP(); // BRT
     if (hoje < dataPagamento) return false; // ainda agendado, aguardando normalmente
   }
 

@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { EmpresaParam, aplicarFiltroEmpresaSupabase } from '@/services/firebirdBridge';
 import { isVendaValida, calcularTicketMedio } from '@/lib/vendas/formaPagamento';
 import { codLojaLogico, nomeLojaLogico, lojasEquivalentes } from '@/lib/metas/lojas';
+import { agoraSP } from "@/lib/datetime";
 
 // ============================================
 // TIPOS
@@ -130,7 +131,7 @@ export function useComparativoAnual(): ComparativoResult {
   const [error, setError] = useState<string | null>(null);
 
   const anosDisponiveis = useMemo(() => {
-    const anoAtual = new Date().getFullYear();
+    const anoAtual = agoraSP().getFullYear();
     return [anoAtual, anoAtual - 1, anoAtual - 2, anoAtual - 3];
   }, []);
 

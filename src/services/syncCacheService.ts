@@ -3,6 +3,7 @@
 // Removido: fetch() manual, VITE_SUPABASE_PUBLISHABLE_KEY, whitelist duplicada
 
 import { supabase } from "@/integrations/supabase/client";
+import { agoraSP } from "@/lib/datetime";
 
 export interface SyncStatus {
   sincronizando: boolean;
@@ -28,7 +29,7 @@ export interface SyncResult {
  * Retorna a data de ontem (D-1) no formato YYYY-MM-DD
  */
 export function getDataOntem(): string {
-  const ontem = new Date();
+  const ontem = agoraSP();
   ontem.setDate(ontem.getDate() - 1);
   return ontem.toISOString().split('T')[0];
 }
@@ -133,7 +134,7 @@ export async function sincronizarCache(
       proximoDia.setDate(proximoDia.getDate() + 1);
       dataInicio = proximoDia.toISOString().split('T')[0];
     } else {
-      const trintaDiasAtras = new Date();
+      const trintaDiasAtras = agoraSP();
       trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
       dataInicio = trintaDiasAtras.toISOString().split('T')[0];
     }
