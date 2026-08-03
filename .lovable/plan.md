@@ -1,26 +1,25 @@
-# Último erro UTILITIES do BTG
+# Deploy das functions e checagem das migrations
 
-## O que aconteceu
+## O que será feito
 
-Última tentativa: **03/08/2026 19:25 (SP)** — borderô de Barueri (empresa 16).
+1. Verificar no banco se as duas migrations pendentes já estão aplicadas:
+   - `20260804140000_btg_dda_id_uuid_com_fk.sql` (coluna `btg_dda_id` como UUID + chave estrangeira para os títulos DDA)
+   - `20260804160000_rubrica_pagamento_e_liberacoes.sql` (campos de forma de pagamento e liberações restantes nas rubricas)
+   Se algum objeto estiver faltando, aplicar a migration correspondente. Se já estiver tudo presente, não aplicar nada (evita erro de duplicidade).
 
-- Mensagem do lote: "O BTG recusou a inclusão dos pagamentos no lote (1 falha)... validação local: **Linha iniciada em 8 é arrecadação — use o tipo UTILITIES**"
-- Item que travou: `SABESP COMPANHIA DE AGUA E ESGOTO - ÁGUA 2026-6/12` — R$ 122,60, vencimento 01/08/2026.
-- Linha digitável começa com **8** (conta de concessionária), mas o lançamento está marcado como boleto comum (`BANKSLIP`).
-- Nada foi debitado; o item voltou para preparo (status PREVISTO).
+2. Fazer o deploy das Edge Functions, nesta ordem:
+   - `financeiro-lancamentos` (inclui a correção de tipo UTILITIES pela linha digitável iniciada em 8)
+   - `conciliar-extrato`
+   - `btg-dda`
+   - `sync-ledger`
+   - `btg-poll-status`
+   - `btg-pagamentos`
 
-## Causa confirmada
+3. Validar após o deploy:
+   - Conferir logs da última execução de `financeiro-lancamentos` para garantir que subiu sem erro de import.
+   - Confirmar que a conta da SABESP (R$ 122,60, empresa 16) agora é classificada como pagamento de concessionária em vez de boleto.
 
-O código só troca `BANKSLIP` por `UTILITIES` quando o lançamento tem vínculo com um título do DDA. Esse lançamento tem a linha digitável salva, mas **não tem vínculo com DDA**, então o tipo permaneceu `BANKSLIP` e a validação local barrou o envio.
+## Detalhes técnicos
 
-## Correção proposta
-
-1. Passar a decidir o tipo pela **própria linha digitável**, independente de haver título DDA: linha com 48 dígitos ou iniciando em 8 → `UTILITIES`; caso contrário → `BANKSLIP`.
-2. Aplicar a mesma regra nos pontos onde o lançamento é criado/classificado com boleto, para o registro já nascer com o tipo certo.
-3. Melhorar a mensagem de bloqueio: em vez de texto técnico, indicar "conta de concessionária — será enviada como arrecadação" e permitir reenviar direto.
-
-### Detalhes técnicos
-
-- `supabase/functions/financeiro-lancamentos/index.ts`: remover a dependência de `lanc.btg_dda_id` na definição de `paymentType` (linhas ~1355-1362), usando `dda?.linha_digitavel || dados.linha_digitavel`.
-- Revisar os pontos que gravam `btg_payment_type: "BANKSLIP"` fixo (linhas ~527, ~2144, ~2198) para derivar do primeiro dígito da linha.
-- Sem migration; apenas deploy de `financeiro-lancamentos`.
+- A tipagem por linha digitável já está no código (`tipoPorLinhaDigitavel` em `_shared/btgPayment.ts`, usado em `financeiro-lancamentos/index.ts`), então o deploy é o que falta para o comportamento entrar em produção.
+- Nenhuma alteração de código nova é necessária nesta entrega; é execução de migrations pendentes (se houver) + deploy.
