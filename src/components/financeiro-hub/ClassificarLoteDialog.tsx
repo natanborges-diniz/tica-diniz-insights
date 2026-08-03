@@ -70,8 +70,8 @@ export function ClassificarLoteDialog({
         </div>
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
           <p className="text-xs text-amber-800">
-            A validação move os lançamentos de <strong>PREVISTO</strong> para <strong>VALIDADO</strong>,
-            oficializando-os na agenda de contas a pagar.
+            A classificação define a conta do DRE e mantém os títulos <strong>em preparo</strong>.
+            Quando também houver dados de pagamento, a linha recebe o selo <strong>PRONTO P/ BORDERÔ</strong>.
           </p>
         </div>
         <div className="space-y-1">
