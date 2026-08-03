@@ -1462,7 +1462,14 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       try {
         detalhe = descreverErroBtg(JSON.parse(errText)).slice(0, 300);
       } catch { /* corpo não-JSON */ }
-      motivos.push(`${payRes.status}: ${detalhe}`);
+      // 403 role-policy-validation-error não é problema do payload: o login BTG
+      // que autorizou o app não tem alçada/procuração de pagamento nesta conta.
+      const semAlcada = payRes.status === 403 && /role-policy-validation-error|access denied/i.test(errText);
+      if (semAlcada) {
+        detalhe = `o login BTG que autorizou a empresa ${bordero.cod_empresa} (CNPJ ${cnpj}, ag ${debitParty.branchCode} / cc ${debitParty.number}) não tem alçada de pagamento nesta conta. ` +
+          `No app/internet banking BTG, dê ao usuário poderes de "Pagamentos" (procuração/alçada) para esta conta e reautorize a loja em /admin/btg-validacao antes de reenviar.`;
+      }
+      motivos.push(semAlcada ? detalhe : `${payRes.status}: ${detalhe}`);
       await supabase.from("lancamentos_financeiros").update({
         requer_validacao: true,
         observacao: `Falha ao incluir no lote BTG (${payRes.status}): ${detalhe.slice(0, 250)}`,
@@ -1470,6 +1477,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       falhas++;
     }
   }
+
 
   if (aceitos === 0) {
     // Lote vazio não deve ficar pendurado até o `expiresAt` — abandona.
@@ -1479,12 +1487,16 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     }).catch((e) => console.warn("[financeiro-lancamentos] Falha ao abandonar lote:", e));
 
     const motivo = motivos.join(" | ") || "sem detalhe";
+    const alcada = /alçada de pagamento/.test(motivo);
     // Neste passo o BTG apenas VALIDA a iniciação — nada é executado nem
-    // debitado (dinheiro só se move após confirmação no app). O texto do banco
-    // ("execução do pagamento"/"cheque seu extrato") é genérico da API deles.
-    const mensagem = `O BTG recusou a inclusão dos pagamentos no lote (${falhas} falha${falhas > 1 ? "s" : ""}). ` +
-      `Nada foi executado nem debitado — o borderô segue APROVADO, é só reenviar. ` +
-      `Resposta do banco (texto genérico deles): ${motivo}`;
+    // debitado (dinheiro só se move após confirmação no app).
+    const mensagem = alcada
+      ? `O BTG recusou o borderô por falta de permissão (403): ${motivo} ` +
+        `Nada foi executado nem debitado — o borderô segue APROVADO. Reenviar sem ajustar a permissão vai falhar de novo.`
+      : `O BTG recusou a inclusão dos pagamentos no lote (${falhas} falha${falhas > 1 ? "s" : ""}). ` +
+        `Nada foi executado nem debitado — o borderô segue APROVADO, é só reenviar. ` +
+        `Resposta do banco (texto genérico deles): ${motivo}`;
+
     console.warn(`[financeiro-lancamentos] ${mensagem}`);
 
     // Rejeição do provedor é um resultado operacional recuperável, não uma falha
