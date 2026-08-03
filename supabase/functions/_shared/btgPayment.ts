@@ -189,14 +189,14 @@ export async function chaveIdempotencia(...partes: string[]): Promise<string> {
 // ─── detail por tipo ─────────────────────────────────────────
 
 function creditPartyPix(dados: Record<string, unknown>): Record<string, unknown> | null {
-  const nome = primeiro(dados, "nome", "beneficiario", "holderName", "creditPartyName");
+  const nome = primeiro(dados, "nome", "name", "beneficiario", "holderName", "creditPartyName");
   const doc = primeiro(dados, "documento", "cpf_cnpj", "taxId", "holderTaxId");
   if (!nome || !doc) return null;
   return { name: nome, taxId: normalizarTaxId(doc, "creditParty.taxId") };
 }
 
 function creditPartyConta(dados: Record<string, unknown>): Record<string, unknown> {
-  const nome = primeiro(dados, "nome", "beneficiario", "holderName", "creditPartyName");
+  const nome = primeiro(dados, "nome", "name", "beneficiario", "holderName", "creditPartyName");
   const doc = primeiro(dados, "documento", "cpf_cnpj", "taxId", "holderTaxId");
   const bankCode = primeiro(dados, "banco", "bankCode", "codigo_banco");
   const branch = primeiro(dados, "agencia", "branch", "branchCode");

@@ -15,6 +15,7 @@ interface Lancamento {
   valor: number;
   data_vencimento: string;
   pessoa_nome: string | null;
+  pessoa_documento?: string | null;
   btg_dda_id: string | null;
   dados_extras: Record<string, unknown> | null;
 }
@@ -40,6 +41,12 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
   const [banco, setBanco] = useState("");
   const [agencia, setAgencia] = useState("");
   const [conta, setConta] = useState("");
+  // TED exige creditParty completo: a API recusa sem taxId e name do
+  // beneficiário. A tela pedia só banco/agência/conta, então todo TED falhava
+  // no envio com "creditParty.taxId inválido".
+  const [favNome, setFavNome] = useState("");
+  const [favDoc, setFavDoc] = useState("");
+  const [tipoConta, setTipoConta] = useState("CC");
 
   useEffect(() => {
     if (!lancamento) return;
@@ -51,7 +58,13 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
     setBanco(String(details.bankCode || ""));
     setAgencia(String(details.branch || ""));
     setConta(String(details.account || ""));
+    setTipoConta(String(details.accountType || details.tipo_conta || "CC"));
+    // Herda do cadastro do lançamento quando o pagamento ainda não foi preparado.
+    setFavNome(String(details.name || lancamento.pessoa_nome || ""));
+    setFavDoc(String(details.taxId || lancamento.pessoa_documento || ""));
   }, [lancamento]);
+
+  const soDigitos = (v: string) => v.replace(/\D/g, "");
 
   const fmtCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -61,7 +74,10 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
   const isValid = () => {
     if (payType === "PIX_KEY") return pixKey.length > 3;
     if (payType === "BANKSLIP" || payType === "DARF") return barcode.length > 10;
-    if (payType === "TED") return banco && agencia && conta;
+    if (payType === "TED") {
+      const doc = soDigitos(favDoc);
+      return !!(banco && agencia && conta && favNome.trim() && (doc.length === 11 || doc.length === 14));
+    }
     return false;
   };
 
@@ -77,7 +93,10 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
       dadosExtras.linha_digitavel = barcode;
       dadosExtras.btg_details = { barcode };
     } else if (payType === "TED") {
-      dadosExtras.btg_details = { bankCode: banco, branch: agencia, account: conta };
+      dadosExtras.btg_details = {
+        bankCode: banco, branch: agencia, account: conta,
+        accountType: tipoConta, name: favNome.trim(), taxId: soDigitos(favDoc),
+      };
     } else if (payType === "DARF") {
       dadosExtras.btg_details = { barcode };
     }
@@ -246,6 +265,32 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
                       <Label>Conta c/ dígito</Label>
                       <Input value={conta} onChange={e => setConta(e.target.value)} placeholder="12345-6" />
                     </div>
+                  </div>
+                  {/* creditParty: a API recusa TED sem nome e documento do
+                      beneficiário. Faltavam na tela, e todo TED falhava. */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1 col-span-2">
+                      <Label>Nome do beneficiário</Label>
+                      <Input value={favNome} onChange={e => setFavNome(e.target.value)}
+                        placeholder="Como consta na conta" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Tipo</Label>
+                      <select className="w-full h-10 rounded-md border bg-background px-3 text-sm"
+                        value={tipoConta} onChange={e => setTipoConta(e.target.value)}>
+                        <option value="CC">Corrente</option>
+                        <option value="PP">Poupança</option>
+                        <option value="PG">Pagamento</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>CNPJ / CPF do beneficiário</Label>
+                    <Input value={favDoc} onChange={e => setFavDoc(e.target.value)}
+                      placeholder="00.000.000/0001-00" />
+                    <p className="text-xs text-muted-foreground">
+                      Obrigatório: o banco valida a titularidade da conta contra este documento.
+                    </p>
                   </div>
                 </>
               )}
