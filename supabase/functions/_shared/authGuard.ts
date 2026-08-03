@@ -57,13 +57,20 @@ export async function authGuard(
   // Decode and validate JWT claims locally
   const claims = decodeJwtPayload(token);
 
-  if (!claims || !claims.sub || claims.aud !== "authenticated") {
+  // `aud` may be a string or an array of strings (RFC 7519)
+  const audClaim = claims?.aud;
+  const audOk = Array.isArray(audClaim)
+    ? audClaim.includes("authenticated")
+    : audClaim === "authenticated";
+
+  if (!claims || !claims.sub || !audOk) {
     console.error("[authGuard] JWT decode failed or invalid audience. sub:", claims?.sub, "aud:", claims?.aud, "token length:", token.length);
     throw new Response(
       JSON.stringify({ error: "Unauthorized — token inválido" }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
+
 
   // Check expiry
   const exp = claims.exp as number | undefined;
