@@ -107,6 +107,8 @@ Deno.serve(async (req) => {
         return await enviarBorderoBtg(body, auth.userId);
       case "cancelar_bordero":
         return await cancelarBordero(body);
+      case "liberar_processando_orfao":
+        return await liberarProcessandoOrfao(body, auth.userId);
       case "detalhe_bordero":
         return await detalheBordero(body);
 
@@ -1503,23 +1505,51 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   });
 
   if (!fecharRes.ok) {
-    // Os itens já entraram no lote; o que falhou foi o fechamento. Não marcamos
-    // ENVIADO para não esconder um lote que ninguém vai conseguir aprovar.
+    // Os itens entraram no lote, mas o lote não fechou — e lote que não fecha
+    // não chega à aprovação do app, ou seja NÃO vai ao banco e nunca vira baixa.
+    //
+    // Aqui estava o bug que deixava títulos presos: eles já tinham sido virados
+    // para PROCESSANDO item a item (linha ~1428) e ficavam assim para sempre.
+    // O reenvio só busca AUTORIZADO, então achava 0 itens e devolvia "o BTG
+    // recusou (0 falha)"; e o cancelamento do borderô pula PROCESSANDO, então
+    // os títulos ficavam órfãos, sem nenhuma ação possível na tela.
+    //
+    // Correção: desfaz o PROCESSANDO (volta a AUTORIZADO, pronto para reenviar)
+    // e abandona o lote no BTG para não deixar remessa fantasma pendurada.
     const errText = await fecharRes.text();
     console.error(`[financeiro-lancamentos] Falha ao fechar lote ${batchId}:`, fecharRes.status, errText);
+
+    await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    }).catch((e) => console.warn("[financeiro-lancamentos] Falha ao abandonar lote não fechado:", e));
+
+    const { data: revertidos } = await supabase
+      .from("lancamentos_financeiros")
+      .update({
+        status: "AUTORIZADO",
+        observacao: `Lote BTG ${String(batchId).slice(0, 8)} não fechou (${fecharRes.status}) — não foi ao banco, reenviar.`,
+      })
+      .eq("bordero_id", bordero_id)
+      .eq("status", "PROCESSANDO")
+      .select("id");
+
     return json({
       ok: false,
       code: "BTG_BATCH_NOT_FINISHED",
       error:
         `Os ${aceitos} pagamento(s) foram aceitos, mas o BTG recusou o fechamento do lote ` +
-        `(${fecharRes.status}). Nada foi executado nem debitado. ` +
+        `(${fecharRes.status}). Nada foi executado nem debitado, e o lote foi abandonado. ` +
+        `Os ${(revertidos || []).length} título(s) voltaram para autorizados — reenvie o borderô. ` +
         `Detalhe do banco: ${descreverErroBtg(errText).slice(0, 300)}`,
       status: "APROVADO",
       btg_batch_id: batchId,
       aceitos,
       falhas,
+      revertidos: (revertidos || []).length,
     });
   }
+
 
   // 4. Consome os créditos de liberação usados nesta remessa.
   //
@@ -1708,23 +1738,37 @@ async function consumirLiberacoes(lancamentos: Array<Record<string, unknown>>) {
  * O filtro de status é largo de propósito: antes só BORDERO/AUTORIZADO eram
  * devolvidos, e itens AGRUPADO/CLASSIFICADO ficavam pendurados na seção
  * "Em Borderô" apontando para um borderô cancelado — a confusão que se via na
- * tela. Só PROCESSANDO e BAIXADO ficam de fora: esses já foram ao banco.
+ * tela.
+ *
+ * PROCESSANDO entra na devolução SÓ quando o borderô não tem `btg_batch_id`:
+ * sem lote fechado nada foi ao banco, então esse PROCESSANDO é resíduo de um
+ * envio que morreu no meio (ver o rollback no fechamento do lote). Com
+ * `btg_batch_id` presente o título fica intocado — aí existe remessa de verdade
+ * esperando aprovação no app do BTG. BAIXADO nunca volta.
  */
 async function cancelarBordero(body: Record<string, unknown>) {
   const { bordero_id } = body;
   if (!bordero_id) throw new Error("bordero_id obrigatório");
 
-  const { data: bordero } = await supabase.from("borderos").select("status").eq("id", bordero_id).single();
+  const { data: bordero } = await supabase
+    .from("borderos")
+    .select("status, btg_batch_id")
+    .eq("id", bordero_id)
+    .single();
   if (!bordero) throw new Error("Borderô não encontrado");
   if (!["MONTAGEM", "APROVADO"].includes(bordero.status)) {
     throw new Error("Borderô já enviado ou processado não pode ser cancelado");
   }
 
+  const statusDevolviveis = ["BORDERO", "AUTORIZADO", "AGRUPADO", "CLASSIFICADO", "PREVISTO"];
+  const semLoteNoBanco = !bordero.btg_batch_id;
+  if (semLoteNoBanco) statusDevolviveis.push("PROCESSANDO");
+
   const { data: devolvidos } = await supabase
     .from("lancamentos_financeiros")
     .update({ bordero_id: null, status: "PREVISTO", autorizado_por: null, autorizado_em: null })
     .eq("bordero_id", bordero_id)
-    .in("status", ["BORDERO", "AUTORIZADO", "AGRUPADO", "CLASSIFICADO", "PREVISTO"])
+    .in("status", statusDevolviveis)
     .select("id");
 
   await supabase.from("borderos").update({ status: "CANCELADO" }).eq("id", bordero_id);
@@ -1735,6 +1779,69 @@ async function cancelarBordero(body: Record<string, unknown>) {
     devolvidos: (devolvidos || []).length,
   });
 }
+
+/**
+ * Escape hatch para títulos presos em PROCESSANDO sem lote no banco.
+ *
+ * Existe para o caso que já aconteceu: envio aceitou os itens, o fechamento do
+ * lote falhou e os títulos ficaram PROCESSANDO num borderô depois cancelado —
+ * invisíveis a qualquer ação da tela. Só libera quando dá para afirmar que o
+ * dinheiro não se moveu: borderô sem `btg_batch_id` e título sem baixa.
+ */
+async function liberarProcessandoOrfao(body: Record<string, unknown>, userId: string) {
+  const ids = (body.lancamento_ids as string[]) || [];
+  if (ids.length === 0) throw new Error("lancamento_ids obrigatório");
+  await requireAdmin(userId);
+
+  const { data: lancs, error } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id, descricao, status, data_baixa, bordero_id, borderos(status, btg_batch_id)")
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+
+  const liberados: string[] = [];
+  const bloqueados: { id: string; descricao: string; motivo: string }[] = [];
+
+  for (const l of (lancs || [])) {
+    const bordero = (l as unknown as { borderos: { status: string; btg_batch_id: string | null } | null }).borderos;
+    const descricao = String(l.descricao ?? l.id);
+    if (l.status !== "PROCESSANDO") {
+      bloqueados.push({ id: l.id, descricao, motivo: `status é ${l.status}, não PROCESSANDO` });
+      continue;
+    }
+    if (l.data_baixa) {
+      bloqueados.push({ id: l.id, descricao, motivo: "já tem baixa registrada" });
+      continue;
+    }
+    if (bordero?.btg_batch_id) {
+      bloqueados.push({
+        id: l.id,
+        descricao,
+        motivo: `há lote no BTG (${String(bordero.btg_batch_id).slice(0, 12)}) — confirme ou cancele a remessa no app do banco`,
+      });
+      continue;
+    }
+    liberados.push(l.id);
+  }
+
+  if (liberados.length > 0) {
+    const { error: uErr } = await supabase
+      .from("lancamentos_financeiros")
+      .update({
+        status: "PREVISTO",
+        bordero_id: null,
+        autorizado_por: null,
+        autorizado_em: null,
+        observacao: "Liberado de PROCESSANDO: lote nunca fechou no BTG, pagamento não foi executado.",
+      })
+      .in("id", liberados);
+    if (uErr) throw new Error(uErr.message);
+    console.log(`[financeiro-lancamentos] ${liberados.length} título(s) liberados de PROCESSANDO órfão por ${userId}`);
+  }
+
+  return json({ ok: true, liberados: liberados.length, bloqueados });
+}
+
 
 async function detalheBordero(body: Record<string, unknown>) {
   const { bordero_id } = body;

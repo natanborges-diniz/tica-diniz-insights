@@ -115,6 +115,8 @@ interface ContasPagarTableProps {
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
   onRemoverDoBordero?: (lancamento: Lancamento) => void;
+  /** Destrava título parado em PROCESSANDO cujo lote nunca fechou no banco. */
+  onLiberarProcessando?: (lancamento: Lancamento) => void;
   isCancelando: boolean;
   isReabrindo: boolean;
   isRemovendoDoBordero?: boolean;
@@ -184,6 +186,7 @@ const formatMonthTitle = (monthKey: string) => {
 function LancamentoRow({
   l, selectedIds, onToggleSelect, onClassificar, onPrepararPagamento,
   onBaixaManual, onComprovante, onVirarRubrica, onCancelar, onReabrir, onRemoverDoBordero,
+  onLiberarProcessando,
   isCancelando, isReabrindo, isRemovendoDoBordero, isAdmin,
 }: {
   l: Lancamento;
@@ -198,6 +201,7 @@ function LancamentoRow({
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
   onRemoverDoBordero?: (l: Lancamento) => void;
+  onLiberarProcessando?: (l: Lancamento) => void;
   isCancelando: boolean;
   isReabrindo: boolean;
   isRemovendoDoBordero?: boolean;
@@ -281,6 +285,12 @@ function LancamentoRow({
   }
   if (!l.bordero_id && l.status === "AUTORIZADO") {
     secondaryActions.push({ label: "Desautorizar (voltar p/ Em Preparo)", icon: RotateCcw, onClick: () => onReabrir(l.id) });
+  }
+  // PROCESSANDO era um beco sem saída na tela: nenhuma ação aparecia. Quando o
+  // lote nunca fechou no BTG o dinheiro não saiu, então dá para destravar — o
+  // backend confere (borderô sem btg_batch_id e título sem baixa) antes de soltar.
+  if (l.status === "PROCESSANDO" && isAdmin && onLiberarProcessando) {
+    secondaryActions.push({ label: "Destravar (lote não foi ao banco)", icon: Unlink, onClick: () => onLiberarProcessando(l), destructive: true });
   }
 
   return (
@@ -449,7 +459,8 @@ export function ContasPagarTable({
   lancamentos: rawLancamentos, isLoading, selectedIds, isAdmin, stepFilter,
   onToggleSelect, onToggleSelectAll,
   onClassificar, onPrepararPagamento, onBaixaManual, onComprovante, onVirarRubrica,
-  onCancelar, onReabrir, onRemoverDoBordero, isCancelando, isReabrindo, isRemovendoDoBordero,
+  onCancelar, onReabrir, onRemoverDoBordero, onLiberarProcessando,
+  isCancelando, isReabrindo, isRemovendoDoBordero,
 }: ContasPagarTableProps) {
   const [pendentesOpen, setPendentesOpen] = useState(true);
   const [validadosOpen, setValidadosOpen] = useState(true);
@@ -540,6 +551,7 @@ export function ContasPagarTable({
   const sharedProps = {
     selectedIds, onToggleSelect, onClassificar, onPrepararPagamento,
     onBaixaManual, onComprovante, onVirarRubrica, onCancelar, onReabrir, onRemoverDoBordero,
+    onLiberarProcessando,
     isCancelando, isReabrindo, isRemovendoDoBordero, isAdmin,
   };
 
