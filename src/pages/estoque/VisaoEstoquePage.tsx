@@ -34,7 +34,7 @@ import { ModuleInsightsPanel } from "@/components/ia/ModuleInsightsPanel";
 import { useEffect } from "react";
 import { registerAction, unregisterAction } from "@/lib/actionCatalog";
 import { useNavigate } from "react-router-dom";
-import { hojeSP } from "@/lib/datetime";
+import { hojeSP, formatDataSP } from "@/lib/datetime";
 
 // KPI Cards Component
 type FiltroSubcategoria = 'TODAS' | 'AR_RX' | 'AR_SOLAR';
