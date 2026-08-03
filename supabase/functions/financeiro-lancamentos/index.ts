@@ -1902,7 +1902,6 @@ async function reverterCancelamento(body: Record<string, unknown>) {
   if (!alvos || alvos.length === 0) return json({ ok: true, revertidos: 0, mensagem: "Nada a reverter" });
 
   // Todos voltam para PREVISTO (preparo). Classificação é atributo, não status.
-  const classificados: string[] = [];
   const previstos = alvos.map((l) => l.id);
 
   if (previstos.length > 0) {
