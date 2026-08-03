@@ -1462,7 +1462,14 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       try {
         detalhe = descreverErroBtg(JSON.parse(errText)).slice(0, 300);
       } catch { /* corpo não-JSON */ }
-      motivos.push(`${payRes.status}: ${detalhe}`);
+      // 403 role-policy-validation-error não é problema do payload: o login BTG
+      // que autorizou o app não tem alçada/procuração de pagamento nesta conta.
+      const semAlcada = payRes.status === 403 && /role-policy-validation-error|access denied/i.test(errText);
+      if (semAlcada) {
+        detalhe = `o login BTG que autorizou a empresa ${bordero.cod_empresa} (CNPJ ${cnpj}, ag ${debitParty.branchCode} / cc ${debitParty.number}) não tem alçada de pagamento nesta conta. ` +
+          `No app/internet banking BTG, dê ao usuário poderes de "Pagamentos" (procuração/alçada) para esta conta e reautorize a loja em /admin/btg-validacao antes de reenviar.`;
+      }
+      motivos.push(semAlcada ? detalhe : `${payRes.status}: ${detalhe}`);
       await supabase.from("lancamentos_financeiros").update({
         requer_validacao: true,
         observacao: `Falha ao incluir no lote BTG (${payRes.status}): ${detalhe.slice(0, 250)}`,
@@ -1470,6 +1477,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       falhas++;
     }
   }
+
 
   if (aceitos === 0) {
     // Lote vazio não deve ficar pendurado até o `expiresAt` — abandona.
