@@ -111,19 +111,58 @@ export default function BankingDdaDashboard() {
     })();
   }, [codEmpresa, autoImported, queryClient]);
 
-  const { data: titulos = [], isLoading } = useQuery<DdaTitulo[]>({
-    queryKey: ["btg-dda", codEmpresa, filtroStatus, filtroConciliado],
+  const { data: titulosRaw = [], isLoading } = useQuery<DdaTitulo[]>({
+    queryKey: ["btg-dda", codEmpresa],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("btg-dda", {
         body: { action: "listar", cod_empresa: codEmpresa },
       });
       if (error) throw error;
-      let items = Array.isArray(data) ? data : [];
-      if (filtroStatus !== "todos") items = items.filter((i: DdaTitulo) => i.status === filtroStatus);
-      if (filtroConciliado !== "todos") items = items.filter((i: DdaTitulo) => String(i.conciliado) === filtroConciliado);
-      return items;
+      return Array.isArray(data) ? data : [];
     },
   });
+
+  const onlyDigits = (v: string) => v.replace(/\D/g, "");
+
+  const titulos = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    const termoDigits = onlyDigits(busca);
+    return titulosRaw.filter((t) => {
+      if (filtroStatus !== "todos" && t.status !== filtroStatus) return false;
+      if (filtroConciliado !== "todos" && String(t.conciliado) !== filtroConciliado) return false;
+      if (vencDe && t.data_vencimento < vencDe) return false;
+      if (vencAte && t.data_vencimento > vencAte) return false;
+      if (faixaValor !== "todos") {
+        const [min, max] = faixaValor.split("-").map(Number);
+        if (t.valor < min) return false;
+        if (max && t.valor > max) return false;
+      }
+      if (termo) {
+        const alvoTexto = [t.emissor, t.banco_emissor].filter(Boolean).join(" ").toLowerCase();
+        const alvoDigits = [t.documento_emissor, t.linha_digitavel]
+          .filter(Boolean).map((v) => onlyDigits(String(v))).join(" ");
+        const valorTexto = String(t.valor).replace(".", ",");
+        const casaTexto = alvoTexto.includes(termo);
+        const casaDigits = termoDigits.length >= 3 && alvoDigits.includes(termoDigits);
+        const casaValor = valorTexto.includes(termo.replace(".", ","));
+        if (!casaTexto && !casaDigits && !casaValor) return false;
+      }
+      return true;
+    });
+  }, [titulosRaw, filtroStatus, filtroConciliado, busca, vencDe, vencAte, faixaValor]);
+
+  const filtrosAtivos =
+    filtroStatus !== "todos" || filtroConciliado !== "todos" ||
+    !!busca || !!vencDe || !!vencAte || faixaValor !== "todos";
+
+  const limparFiltros = () => {
+    setFiltroStatus("todos");
+    setFiltroConciliado("todos");
+    setBusca("");
+    setVencDe("");
+    setVencAte("");
+    setFaixaValor("todos");
+  };
 
   const { data: indicadores } = useQuery<Indicadores>({
     queryKey: ["btg-dda-indicadores", codEmpresa],
