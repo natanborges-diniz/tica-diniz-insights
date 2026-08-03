@@ -737,15 +737,31 @@ export default function FinanceiroHubPage() {
         >
           {comprovante && (
             <div className="py-2">
-              <iframe
-                src={comprovante.url}
-                title="Comprovante"
-                className="w-full rounded-md border"
-                style={{ height: "65vh" }}
-              />
+              {/* <object> em vez de <iframe>: bloqueadores de anúncio tratam
+                  iframe de blob: como conteúdo de terceiro e barram. Quando nem
+                  assim renderizar, o conteúdo interno aparece — por isso ele
+                  repete a ação de baixar, em vez de ser um aviso morto. */}
+              <object
+                data={comprovante.url}
+                type="application/pdf"
+                className="w-full rounded-md border bg-muted/30"
+                style={{ height: "60vh" }}
+              >
+                <div className="h-full flex flex-col items-center justify-center gap-3 p-6 text-center">
+                  <p className="text-sm text-muted-foreground max-w-sm">
+                    Seu navegador ou uma extensão está bloqueando a visualização do PDF aqui dentro.
+                    O comprovante foi baixado do BTG normalmente — é só abrir o arquivo.
+                  </p>
+                  <a href={comprovante.url} download={comprovante.nome}>
+                    <Button size="sm">
+                      <Download className="h-4 w-4 mr-1" /> Baixar comprovante
+                    </Button>
+                  </a>
+                </div>
+              </object>
               <p className="text-[11px] text-muted-foreground mt-2">
-                Documento emitido pelo BTG, consultado agora. Não fica armazenado no sistema —
-                use "Baixar PDF" se precisar guardar ou anexar.
+                Documento emitido pelo BTG, consultado agora. Nada é armazenado aqui — guardamos
+                apenas o identificador do pagamento, para poder pedir o comprovante de novo quando precisar.
               </p>
             </div>
           )}
