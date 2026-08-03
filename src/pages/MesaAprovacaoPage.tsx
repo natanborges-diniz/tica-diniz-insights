@@ -127,9 +127,18 @@ export default function MesaAprovacaoPage() {
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
   const noFoco = (l: LancMesa) => !borderoFoco || l.bordero_id === borderoFoco;
-  const lancamentos = (mesa?.lancamentos ?? [])
-    .filter(noFoco)
+  const escopoLancs = (mesa?.lancamentos ?? []).filter(noFoco);
+  // Com foco no borderô os contadores precisam refletir o escopo — o resumo
+  // global do backend passaria a informação errada.
+  const contagemSelo: Record<string, number> = borderoFoco
+    ? escopoLancs.reduce((acc: Record<string, number>, l) => {
+        acc[l.selo] = (acc[l.selo] ?? 0) + 1;
+        return acc;
+      }, {})
+    : (mesa?.resumo_selos ?? {});
+  const lancamentos = escopoLancs
     .filter((l) => filtroSelo === "todos" || l.selo === filtroSelo);
+
   const excecoesPendentes = (mesa?.lancamentos ?? [])
     .filter(noFoco)
     .filter((l) => l.selo === "VERMELHO" && l.status !== "AUTORIZADO");
