@@ -18,6 +18,7 @@ import {
   normalizarTipoConta,
   chaveIdempotencia,
   descreverErroBtg,
+  normalizarChavePix,
 } from '../../../../supabase/functions/_shared/btgPayment';
 
 const DEBIT = { branchCode: '50', number: '000000050' };
@@ -231,5 +232,50 @@ describe('descreverErroBtg', () => {
 
   it('degrada para o corpo cru quando o formato é outro', () => {
     expect(descreverErroBtg('Bad Gateway')).toBe('Bad Gateway');
+  });
+});
+
+// Bug real em producao (03/08/2026): a chave do fornecedor era o celular
+// 11956079224, cadastrado sem DDI. Ia cru no payload, o BTG tentou ler como CPF
+// e devolveu `pix-key-type-not-supported`. Onze digitos sao ambiguos entre CPF e
+// celular — quem desempata sao os digitos verificadores.
+describe('normalizarChavePix', () => {
+  const CPF_VALIDO = '52998224725';
+  const CELULAR = '11956079224'; // 11 digitos, nao e CPF valido
+
+  it('celular de 11 digitos sem DDI vai com +55 (o caso que quebrou)', () => {
+    expect(normalizarChavePix(CELULAR)).toBe(`+55${CELULAR}`);
+  });
+
+  it('CPF de 11 digitos continua indo cru', () => {
+    expect(normalizarChavePix(CPF_VALIDO)).toBe(CPF_VALIDO);
+    expect(normalizarChavePix('529.982.247-25')).toBe(CPF_VALIDO);
+  });
+
+  it('respeita o DDI quando ja informado', () => {
+    expect(normalizarChavePix('+5511956079224')).toBe('+5511956079224');
+    expect(normalizarChavePix(`+${CELULAR}`)).toBe(`+55${CELULAR}`);
+  });
+
+  it('CNPJ, e-mail e chave aleatoria passam sem alteracao', () => {
+    expect(normalizarChavePix('30.306.294/0001-45')).toBe('30306294000145');
+    expect(normalizarChavePix('financeiro@fornecedor.com.br')).toBe('financeiro@fornecedor.com.br');
+    const evp = '123e4567-e89b-12d3-a456-426614174000';
+    expect(normalizarChavePix(evp)).toBe(evp);
+  });
+
+  it('barra 11 digitos que nao sao CPF nem celular, dizendo o que fazer', () => {
+    // DDD 00 nao existe e o nono digito nao e 9
+    expect(() => normalizarChavePix('00123456789')).toThrow(/não reconhecida/);
+  });
+
+  it('recusa chave vazia', () => {
+    expect(() => normalizarChavePix('')).toThrow(/vazia/);
+    expect(() => normalizarChavePix(null)).toThrow(/vazia/);
+  });
+
+  it('e aplicada ao montar o item de PIX_KEY', () => {
+    const detail = montarDetail('PIX_KEY', { chave_pix: CELULAR }) as { key: { value: string } };
+    expect(detail.key.value).toBe(`+55${CELULAR}`);
   });
 });
