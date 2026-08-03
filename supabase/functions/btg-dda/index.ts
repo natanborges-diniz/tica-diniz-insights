@@ -4,6 +4,7 @@
 // Actions: importar, listar, conciliar_auto, conciliar_manual, ignorar, indicadores
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { casarTitulo, JANELA_DIAS, TOLERANCIA_VALOR } from "../_shared/ddaMatch.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -101,12 +102,70 @@ function getParam(body: Record<string, unknown> | null, url: URL, key: string): 
 // ─── ACTION: importar ────────────────────────────────────────
 async function handleImportar(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
-  const db = getServiceClient();
 
   const { cod_empresa } = body;
   if (!cod_empresa) return json({ error: "cod_empresa obrigatório" }, 400);
 
-  const ce = Number(cod_empresa);
+  return await importarEmpresa(Number(cod_empresa));
+}
+
+/**
+ * ACTION: importar_todas — roda o DDA de todas as empresas com token válido.
+ *
+ * Existe porque a importação era manual, uma loja por vez: em 03/08/2026 só
+ * quatro das dez lojas tinham título de DDA, e as demais mostravam "sem boleto"
+ * em tudo. Extrato, retorno de pagamento e token já tinham cron; o DDA não.
+ *
+ * Falha de uma loja não interrompe as outras — token expirado ou DDA não
+ * habilitado no BTG viram item de relatório, não erro geral.
+ */
+async function handleImportarTodas() {
+  const db = getServiceClient();
+
+  const { data: tokens } = await db
+    .from("btg_tokens")
+    .select("cod_empresa, expires_at");
+
+  const agora = new Date();
+  const resultado = {
+    empresas: 0,
+    importados: 0,
+    duplicados: 0,
+    lancamentos_gerados: 0,
+    ignoradas: [] as Array<{ cod_empresa: number; motivo: string }>,
+    erros: [] as Array<{ cod_empresa: number; erro: string }>,
+  };
+
+  for (const t of (tokens || [])) {
+    const ce = Number(t.cod_empresa);
+
+    if (new Date(t.expires_at) < agora) {
+      resultado.ignoradas.push({ cod_empresa: ce, motivo: "token BTG expirado — reautorizar a loja" });
+      continue;
+    }
+
+    try {
+      const res = await importarEmpresa(ce);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.error) {
+        resultado.erros.push({ cod_empresa: ce, erro: String(data?.error ?? `HTTP ${res.status}`) });
+        continue;
+      }
+      resultado.empresas++;
+      resultado.importados += Number(data.importados || 0);
+      resultado.duplicados += Number(data.duplicados || 0);
+      resultado.lancamentos_gerados += Number(data.lancamentos_gerados || 0);
+    } catch (e) {
+      resultado.erros.push({ cod_empresa: ce, erro: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  console.log("[btg-dda] importar_todas:", JSON.stringify(resultado));
+  return json({ success: true, ...resultado });
+}
+
+async function importarEmpresa(ce: number): Promise<Response> {
+  const db = getServiceClient();
   const { apiBase, isSandbox } = await getBtgConfig();
 
   let btgData: Record<string, unknown>[] = [];
@@ -259,28 +318,41 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
           .maybeSingle();
 
         if (!existingLanc && vencVal) {
-          // Match: mesmo vencimento + valor com tolerância de centavos (juros/
-          // arredondamento do emissor) + CNPJ quando ambos os lados têm.
+          // Candidatos numa JANELA de vencimento, não em data exata: o emissor
+          // pode prorrogar ou antecipar o título na CIP depois de imprimir o
+          // boleto (visto na HOYA: ERP 06/08, registro 04/08). A escolha entre
+          // eles fica com _shared/ddaMatch.ts.
+          const emDias = (d: number) =>
+            new Date(Date.parse(`${vencVal}T12:00:00Z`) + d * 86_400_000).toISOString().slice(0, 10);
+
           const { data: candidatos } = await db
             .from("lancamentos_financeiros")
-            .select("id, valor, pessoa_documento, dados_extras")
+            .select("id, valor, data_vencimento, pessoa_documento, dados_extras")
             .eq("cod_empresa", ce)
             .eq("tipo", "PAGAR")
             .in("status", ["PREVISTO", "CLASSIFICADO"])
             .is("btg_dda_id", null)
-            .eq("data_vencimento", vencVal)
-            .gte("valor", Number(valorVal) - 0.10)
-            .lte("valor", Number(valorVal) + 0.10);
+            .gte("data_vencimento", emDias(-JANELA_DIAS))
+            .lte("data_vencimento", emDias(JANELA_DIAS))
+            .gte("valor", Number(valorVal) - TOLERANCIA_VALOR)
+            .lte("valor", Number(valorVal) + TOLERANCIA_VALOR);
 
-          const soDig = (s: unknown) => String(s ?? "").replace(/\D/g, "");
-          let match = (candidatos || []);
-          if (docEmissorVal && match.length > 1) {
-            const porDoc = match.filter((c) => soDig(c.pessoa_documento) === soDig(docEmissorVal));
-            if (porDoc.length >= 1) match = porDoc;
+          const resultado = casarTitulo(
+            { valor: Number(valorVal), data_vencimento: vencVal, documento_emissor: docEmissorVal },
+            (candidatos || []).map((c) => ({
+              id: String(c.id),
+              valor: Number(c.valor),
+              data_vencimento: String(c.data_vencimento),
+              pessoa_documento: c.pessoa_documento,
+            })),
+          );
+
+          if (!resultado.candidato && (candidatos || []).length > 0) {
+            console.log(`[btg-dda] título ${btgDdaId} sem vínculo: ${resultado.motivo}`);
           }
 
-          if (match.length === 1) {
-            const alvo = match[0];
+          if (resultado.candidato) {
+            const alvo = (candidatos || []).find((c) => String(c.id) === resultado.candidato!.id)!;
             const extras = (alvo.dados_extras || {}) as Record<string, unknown>;
             await db.from("lancamentos_financeiros").update({
               btg_dda_id: ddaRow.id,
@@ -552,6 +624,13 @@ Deno.serve(async (req) => {
       } catch { /* no-op */ }
     }
 
+    // Rodada em lote: chamada pelo pg_cron, sem usuário. Mesmo padrão do
+    // btg-poll-status (verify_jwt=false). Só lê do BTG e grava nas nossas
+    // tabelas — não movimenta dinheiro.
+    if (action === "importar_todas") {
+      return await handleImportarTodas();
+    }
+
     const userId = requireAuth(req);
 
     switch (action) {
@@ -568,7 +647,7 @@ Deno.serve(async (req) => {
       case "indicadores":
         return await handleIndicadores(body, url);
       default:
-        return json({ error: `Ação desconhecida: '${action}'. Use: importar, listar, conciliar_auto, conciliar_manual, ignorar, indicadores` }, 400);
+        return json({ error: `Ação desconhecida: '${action}'. Use: importar, importar_todas, listar, conciliar_auto, conciliar_manual, ignorar, indicadores` }, 400);
     }
   } catch (e) {
     if (e instanceof Response) return e;

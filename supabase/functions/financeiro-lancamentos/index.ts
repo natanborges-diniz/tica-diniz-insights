@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, authGuard } from "../_shared/authGuard.ts";
 import { avaliarLancamento, validarJustificativa, criadorAprovadorDistintos } from "../_shared/governanca.ts";
 import { validarAgrupamento, descricaoPagador, ratearValorPago } from "../_shared/rateio.ts";
+import { casarTitulo, JANELA_DIAS } from "../_shared/ddaMatch.ts";
 import {
   hojeBrt,
   proximaSegunda,
@@ -1303,13 +1304,19 @@ async function importarErpAuto(body: Record<string, unknown>, userId: string) {
   }
 
   // 2. Fetch DDA titles for cross-match (only PAGAR parcelas)
+  // Janela alargada em relação ao período importado: o vencimento registrado na
+  // CIP pode estar alguns dias fora do que veio do ERP, e sem a folga o título
+  // nem entraria na lista de candidatos.
+  const folga = (d: string, dias: number) =>
+    new Date(Date.parse(`${d}T12:00:00Z`) + dias * 86_400_000).toISOString().slice(0, 10);
+
   const { data: ddaTitulos } = await supabase
     .from("btg_dda_titulos")
     .select("*")
     .eq("cod_empresa", codEmp)
     .eq("status", "PENDENTE")
-    .gte("data_vencimento", dtIni)
-    .lte("data_vencimento", dtFim);
+    .gte("data_vencimento", folga(dtIni, -JANELA_DIAS))
+    .lte("data_vencimento", folga(dtFim, JANELA_DIAS));
 
   const ddaList = ddaTitulos || [];
   const ddaUsed = new Set<string>();
@@ -1417,20 +1424,27 @@ async function importarErpAuto(body: Record<string, unknown>, userId: string) {
       },
     };
 
-    // Cross-match with DDA (only for PAGAR)
+    // Cross-match com o DDA (só para PAGAR).
+    //
+    // Antes exigia valor idêntico ao centavo E vencimento idêntico — os dois
+    // campos que sabemos que derivam (juros do emissor, prorrogação na CIP).
+    // Agora a regra vale CNPJ do emissor como sinal forte e aceita tolerância
+    // em valor e data; ambiguidade não casa. Ver _shared/ddaMatch.ts.
     if (tipo === "PAGAR" && ddaList.length > 0) {
-      const matchedDda = ddaList.find(d => {
-        if (ddaUsed.has(d.id)) return false;
-        // Match by value + due date (precise enough for most cases)
-        const sameValor = Math.abs(Number(d.valor) - Number(p.valor)) < 0.01;
-        const sameVenc = d.data_vencimento === p.data_vencimento;
-        if (!sameValor || !sameVenc) return false;
-        // Bonus: CNPJ match if available
-        if (d.documento_emissor && p.pessoa_nome) {
-          // documento_emissor is CNPJ of the issuer — loose check
-          return true;
-        }
-        return true;
+      const disponiveis = ddaList.filter((d) => !ddaUsed.has(d.id));
+      // Invertido em relação ao match do DDA: aqui percorremos os títulos
+      // procurando o que casa com ESTA parcela.
+      const matchedDda = disponiveis.find((d) => {
+        const r = casarTitulo(
+          { valor: Number(d.valor), data_vencimento: String(d.data_vencimento), documento_emissor: d.documento_emissor },
+          [{
+            id: String(p.parcela_id ?? p.id ?? ""),
+            valor: Number(p.valor),
+            data_vencimento: String(p.data_vencimento),
+            pessoa_documento: (p.pessoa_documento ?? p.fornecedor_cnpj) as string | null,
+          }],
+        );
+        return r.candidato !== null;
       });
 
       if (matchedDda) {
