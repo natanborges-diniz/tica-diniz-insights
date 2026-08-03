@@ -25,6 +25,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { WorkflowStepper } from "@/components/financeiro-hub/WorkflowStepper";
 import { PrepararPagamentoSheet } from "@/components/financeiro-hub/PrepararPagamentoSheet";
 import { BorderoGuidedActions } from "@/components/financeiro-hub/BorderoGuidedActions";
+import { BorderoBloqueioDialog, type BorderoBloqueioPayload } from "@/components/financeiro-hub/BorderoBloqueioDialog";
+
 import { ContasPagarTable } from "@/components/financeiro-hub/ContasPagarTable";
 import { NovoLancamentoDialog } from "@/components/financeiro-hub/NovoLancamentoDialog";
 
