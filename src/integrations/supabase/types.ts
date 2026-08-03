@@ -109,6 +109,7 @@ export type Database = {
           data_pagamento: string | null
           descricao: string | null
           id: string
+          modo_data: string
           qtd_lancamentos: number
           status: string
           total_valor: number
@@ -124,6 +125,7 @@ export type Database = {
           data_pagamento?: string | null
           descricao?: string | null
           id?: string
+          modo_data?: string
           qtd_lancamentos?: number
           status?: string
           total_valor?: number
@@ -139,6 +141,7 @@ export type Database = {
           data_pagamento?: string | null
           descricao?: string | null
           id?: string
+          modo_data?: string
           qtd_lancamentos?: number
           status?: string
           total_valor?: number
@@ -1520,6 +1523,7 @@ export type Database = {
           forma_pagamento: string | null
           id: string
           justificativa: string | null
+          lancamento_pai_id: string | null
           lastro: string | null
           natureza: string | null
           numero_parcela: number | null
@@ -1539,6 +1543,9 @@ export type Database = {
           total_parcelas: number | null
           updated_at: string
           valor: number
+          valor_editado_em: string | null
+          valor_editado_por: string | null
+          valor_original: number | null
           valor_pago: number | null
         }
         Insert: {
@@ -1569,6 +1576,7 @@ export type Database = {
           forma_pagamento?: string | null
           id?: string
           justificativa?: string | null
+          lancamento_pai_id?: string | null
           lastro?: string | null
           natureza?: string | null
           numero_parcela?: number | null
@@ -1588,6 +1596,9 @@ export type Database = {
           total_parcelas?: number | null
           updated_at?: string
           valor: number
+          valor_editado_em?: string | null
+          valor_editado_por?: string | null
+          valor_original?: number | null
           valor_pago?: number | null
         }
         Update: {
@@ -1618,6 +1629,7 @@ export type Database = {
           forma_pagamento?: string | null
           id?: string
           justificativa?: string | null
+          lancamento_pai_id?: string | null
           lastro?: string | null
           natureza?: string | null
           numero_parcela?: number | null
@@ -1637,6 +1649,9 @@ export type Database = {
           total_parcelas?: number | null
           updated_at?: string
           valor?: number
+          valor_editado_em?: string | null
+          valor_editado_por?: string | null
+          valor_original?: number | null
           valor_pago?: number | null
         }
         Relationships: [
@@ -1652,6 +1667,13 @@ export type Database = {
             columns: ["recebivel_cartao_id"]
             isOneToOne: false
             referencedRelation: "recebiveis_cartao"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lancamentos_financeiros_lancamento_pai_id_fkey"
+            columns: ["lancamento_pai_id"]
+            isOneToOne: false
+            referencedRelation: "lancamentos_financeiros"
             referencedColumns: ["id"]
           },
           {
