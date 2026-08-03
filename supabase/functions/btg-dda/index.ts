@@ -319,28 +319,40 @@ async function importarEmpresa(ce: number): Promise<Response> {
     const accessToken = await getBtgToken(ce);
     const cnpj = await getCnpj(ce);
 
-    const btgRes = await fetch(
-      `${apiBase}/${cnpj}/banking/direct-debit/debits?pageNumber=1&pageSize=100`,
-      { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
-    );
+    // Paginação: buscávamos só a primeira página de 100. Para o DDA ser espelho
+    // do banco, precisa vir tudo — senão os títulos além da página 1 nunca
+    // entram, e a remoção do que saiu apagaria o que simplesmente não veio.
+    const MAX_PAGINAS = 50;
+    for (let pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
+      const btgRes = await fetch(
+        `${apiBase}/${cnpj}/banking/direct-debit/debits?pageNumber=${pagina}&pageSize=100`,
+        { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
+      );
 
-    const btgBody = await btgRes.text();
-    if (!btgRes.ok) {
-      console.error("[btg-dda] BTG API error:", btgRes.status, btgBody);
-      return json({ error: "Erro ao consultar DDA no BTG", btg_status: btgRes.status, details: btgBody }, 502);
-    }
-
-    try {
-      const parsed = JSON.parse(btgBody);
-      console.log("[btg-dda] BTG raw response keys:", JSON.stringify(Object.keys(parsed)));
-      // BTG response: { data: [...], _links: {...} }
-      btgData = Array.isArray(parsed) ? parsed : (parsed.data || []);
-      if (btgData.length > 0) {
-        console.log("[btg-dda] First item sample:", JSON.stringify(btgData[0]));
+      const btgBody = await btgRes.text();
+      if (!btgRes.ok) {
+        console.error("[btg-dda] BTG API error:", btgRes.status, btgBody);
+        if (pagina === 1) {
+          return json({ error: "Erro ao consultar DDA no BTG", btg_status: btgRes.status, details: btgBody }, 502);
+        }
+        break; // páginas seguintes: fica com o que já veio
       }
-    } catch {
-      return json({ error: "Resposta inválida do BTG" }, 502);
+
+      let lote: Record<string, unknown>[];
+      try {
+        const parsed = JSON.parse(btgBody);
+        lote = Array.isArray(parsed) ? parsed : (parsed.data || []);
+      } catch {
+        if (pagina === 1) return json({ error: "Resposta inválida do BTG" }, 502);
+        break;
+      }
+
+      if (lote.length === 0) break;
+      btgData.push(...lote);
+      if (lote.length < 100) break; // última página
     }
+
+    console.log(`[btg-dda] empresa ${ce}: ${btgData.length} títulos vindos do BTG`);
   }
 
   // Delete old records that have null emissor OR null banco_emissor (bad imports) to allow reimport
@@ -357,10 +369,27 @@ async function importarEmpresa(ce: number): Promise<Response> {
   let duplicados = 0;
   let lancamentosGerados = 0;
 
+  // Linhas digitáveis vistas nesta rodada — base da remoção do que saiu do banco.
+  const linhasDoBanco = new Set<string>();
+
   for (const titulo of btgData) {
     const btgDdaId = (titulo.id || titulo.ddaId || "") as string;
+    const linhaBruta = String(titulo.digitableLine ?? "").replace(/\D/g, "");
+    if (linhaBruta) linhasDoBanco.add(linhaBruta);
 
-    if (btgDdaId) {
+    // Deduplicação pela LINHA DIGITÁVEL, que é a chave natural do boleto.
+    // Antes só checávamos por `id` — e quando o BTG não devolvia `id`, cada
+    // importação reinseria tudo. Como a tela importa sozinha ao abrir, a base
+    // multiplicava a cada visita (dez cópias do mesmo título da J&J).
+    if (linhaBruta) {
+      const { data: existePorLinha } = await db
+        .from("btg_dda_titulos")
+        .select("id")
+        .eq("cod_empresa", ce)
+        .eq("linha_digitavel", linhaBruta)
+        .maybeSingle();
+      if (existePorLinha) { duplicados++; continue; }
+    } else if (btgDdaId) {
       const { data: existing } = await db
         .from("btg_dda_titulos")
         .select("id")
@@ -377,7 +406,9 @@ async function importarEmpresa(ce: number): Promise<Response> {
     const bancoVal = (payee.bankName || null) as string | null;
     const valorVal = Number(titulo.amount || 0);
     const vencVal = (titulo.dueDate || new Date().toISOString()).toString().slice(0, 10);
-    const linhaVal = (titulo.digitableLine || null) as string | null;
+    // Guardamos só os dígitos: o BTG às vezes devolve com pontos e espaços, e a
+    // mesma linha em formatos diferentes escapava da deduplicação.
+    const linhaVal = linhaBruta || null;
 
     // Map BTG status to internal status
     const btgStatus = (titulo.status || "CREATED") as string;
@@ -486,6 +517,43 @@ async function importarEmpresa(ce: number): Promise<Response> {
     }
   }
 
+  // ── Espelho: o que não veio do banco não deve continuar aqui ──
+  //
+  // Boleto pago, cancelado ou retirado pelo emissor some da lista do DDA. Sem
+  // esta limpeza a tela vira acumulador e mostra cobrança que não existe mais.
+  //
+  // Só removemos o que é seguro remover: título sem lançamento vinculado. Com
+  // vínculo, o histórico do pagamento importa mais que o espelho — esse fica.
+  let removidos = 0;
+  if (btgData.length > 0 && linhasDoBanco.size > 0) {
+    const { data: locais } = await db
+      .from("btg_dda_titulos")
+      .select("id, linha_digitavel")
+      .eq("cod_empresa", ce);
+
+    const sumiram = (locais || [])
+      .filter((t) => t.linha_digitavel && !linhasDoBanco.has(String(t.linha_digitavel)))
+      .map((t) => String(t.id));
+
+    if (sumiram.length > 0) {
+      const { data: comVinculo } = await db
+        .from("lancamentos_financeiros")
+        .select("btg_dda_id")
+        .in("btg_dda_id", sumiram);
+      const protegidos = new Set((comVinculo || []).map((l) => String(l.btg_dda_id)));
+
+      const apagar = sumiram.filter((id) => !protegidos.has(id));
+      if (apagar.length > 0) {
+        const { count } = await db
+          .from("btg_dda_titulos")
+          .delete({ count: "exact" })
+          .in("id", apagar);
+        removidos = count ?? apagar.length;
+        console.log(`[btg-dda] empresa ${ce}: ${removidos} títulos removidos (não constam mais no banco)`);
+      }
+    }
+  }
+
   const sampleItem = btgData.length > 0 ? btgData[0] : null;
 
   // Segunda passada: títulos que já estavam na base e continuavam órfãos —
@@ -497,6 +565,8 @@ async function importarEmpresa(ce: number): Promise<Response> {
     success: true,
     importados: inseridos,
     duplicados,
+    removidos,
+    total_btg_paginado: btgData.length,
     reconciliados: recon.vinculados,
     sem_match: recon.sem_match,
     lancamentos_gerados: lancamentosGerados + recon.vinculados,
