@@ -551,6 +551,7 @@ export function ContasPagarTable({
   const sharedProps = {
     selectedIds, onToggleSelect, onClassificar, onPrepararPagamento,
     onBaixaManual, onComprovante, onVirarRubrica, onCancelar, onReabrir, onRemoverDoBordero,
+    onLiberarProcessando,
     isCancelando, isReabrindo, isRemovendoDoBordero, isAdmin,
   };
 
