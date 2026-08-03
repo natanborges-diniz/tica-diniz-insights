@@ -116,9 +116,26 @@ export function normalizarTipoConta(raw: unknown): "CC" | "PG" | "PP" {
   throw new Error(`Tipo de conta "${raw}" não suportado — use CC, PG ou PP`);
 }
 
+/** Dígitos verificadores de CPF — usado para desambiguar chave de 11 dígitos. */
+function cpfValido(d: string): boolean {
+  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+  const dv = (base: string, peso: number) => {
+    let soma = 0;
+    for (let i = 0; i < base.length; i++) soma += Number(base[i]) * (peso - i);
+    const r = (soma * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  return dv(d.slice(0, 9), 10) === Number(d[9]) && dv(d.slice(0, 10), 11) === Number(d[10]);
+}
+
 /**
  * Chave pix de celular precisa vir como "+5511911112222" (regra explícita na
  * doc). As demais (CPF/CNPJ, e-mail, EVP) passam como estão.
+ *
+ * `pix-key-type-not-supported` (03/08/2026): celular de 11 dígitos cadastrado
+ * sem DDI ("11956079224") era enviado cru e o BTG tentava lê-lo como CPF.
+ * Desambiguamos pelos dígitos verificadores: 11 dígitos que não formam CPF
+ * válido e casam com celular BR (DDD 11-99 + nono dígito 9) vão como telefone.
  */
 export function normalizarChavePix(raw: unknown): string {
   const v = String(raw ?? "").trim();
@@ -126,16 +143,20 @@ export function normalizarChavePix(raw: unknown): string {
   if (v.includes("@")) return v; // e-mail
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(v)) return v; // EVP (uuid)
   const d = somenteDigitos(v);
-  if (d.length === 11 || d.length === 14) {
-    // Ambíguo: 11 dígitos é CPF ou celular sem DDI. Celular brasileiro tem o
-    // nono dígito 9 logo após o DDD — CPF válido também pode ter, então só
-    // tratamos como telefone quando veio explicitamente com "+".
-    if (v.startsWith("+")) return `+${d}`;
-    return d;
+  if (v.startsWith("+")) return `+${d.length === 11 ? `55${d}` : d}`;
+  if (d.length === 11) {
+    if (cpfValido(d)) return d;
+    if (/^[1-9][1-9]9\d{8}$/.test(d)) return `+55${d}`;
+    throw new Error(
+      `Chave pix "${v}" não reconhecida — 11 dígitos que não são CPF válido nem celular; ` +
+      `cadastre com DDI (+55) se for telefone`,
+    );
   }
+  if (d.length === 14) return d; // CNPJ
   if (d.length === 10 || d.length === 13) return `+${d.length === 13 ? d : `55${d}`}`;
   return v;
 }
+
 
 /**
  * Chave de idempotência determinística (UUID v5-like sobre SHA-256).
