@@ -1884,6 +1884,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "lancamentos_financeiros_btg_dda_id_fkey"
+            columns: ["btg_dda_id"]
+            isOneToOne: false
+            referencedRelation: "btg_dda_titulos"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "lancamentos_financeiros_lancamento_pai_id_fkey"
             columns: ["lancamento_pai_id"]
             isOneToOne: false
