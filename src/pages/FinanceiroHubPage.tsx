@@ -137,6 +137,7 @@ export default function FinanceiroHubPage() {
   const [editValor, setEditValor] = useState("");
   const [editVencimento, setEditVencimento] = useState("");
   const [editMotivoReprog, setEditMotivoReprog] = useState("");
+  const [comprovante, setComprovante] = useState<{ url: string; nome: string } | null>(null);
   const [editCategoria, setEditCategoria] = useState("");
   const [editSubcategoria, setEditSubcategoria] = useState("");
 
@@ -384,14 +385,17 @@ export default function FinanceiroHubPage() {
       if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
       return data as { pdf_base64: string };
     },
-    onSuccess: (data) => {
+    // Abre num diálogo, não em aba nova: `window.open` de URL blob: é bloqueado
+    // por bloqueadores de anúncio (ERR_BLOCKED_BY_CLIENT), e o usuário via uma
+    // tela de erro achando que o comprovante não existia.
+    onSuccess: (data, l) => {
       const bin = atob(data.pdf_base64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
-      window.open(url, "_blank");
-      // Libera a memória assim que a aba assume o arquivo.
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      const nome = `comprovante-${(l.pessoa_nome || "pagamento")
+        .toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}-${l.data_pagamento || ""}.pdf`;
+      setComprovante({ url, nome });
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao obter comprovante"),
   });
@@ -699,6 +703,52 @@ export default function FinanceiroHubPage() {
               />
             </div>
           </div>
+        </BaseDialog>
+
+        {/* Comprovante — visualização no próprio app */}
+        <BaseDialog
+          open={!!comprovante}
+          onOpenChange={(open) => {
+            if (!open && comprovante) {
+              URL.revokeObjectURL(comprovante.url); // não segura memória depois de fechar
+              setComprovante(null);
+            }
+          }}
+          title="Comprovante de pagamento"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => {
+                if (comprovante) URL.revokeObjectURL(comprovante.url);
+                setComprovante(null);
+              }}>
+                Fechar
+              </Button>
+              {comprovante && (
+                // Âncora com `download` em vez de popup: não é barrada por
+                // bloqueador de anúncio, e entrega o arquivo com nome legível.
+                <a href={comprovante.url} download={comprovante.nome}>
+                  <Button>
+                    <Download className="h-4 w-4 mr-1" /> Baixar PDF
+                  </Button>
+                </a>
+              )}
+            </>
+          }
+        >
+          {comprovante && (
+            <div className="py-2">
+              <iframe
+                src={comprovante.url}
+                title="Comprovante"
+                className="w-full rounded-md border"
+                style={{ height: "65vh" }}
+              />
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Documento emitido pelo BTG, consultado agora. Não fica armazenado no sistema —
+                use "Baixar PDF" se precisar guardar ou anexar.
+              </p>
+            </div>
+          )}
         </BaseDialog>
 
         {/* Unificar pagamento (rateio) */}
