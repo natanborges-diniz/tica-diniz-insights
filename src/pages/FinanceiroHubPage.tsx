@@ -54,6 +54,10 @@ interface Lancamento {
   btg_dda_id: string | null;
   /** Lastro de rubrica: a competência é campo próprio, independente do vencimento. */
   rubrica_id?: string | null;
+  /** Selo de governança, calculado na listagem pelo backend. */
+  selo?: string | null;
+  selo_motivo?: string | null;
+  pode_bordero?: boolean;
   dados_extras: Record<string, unknown> | null;
   created_at: string;
 }

@@ -49,7 +49,42 @@ interface Lancamento {
   lancamento_pai_id?: string | null;
   /** Valor como veio da origem, quando alguém editou depois. */
   valor_original?: number | null;
+  /** Lastro avaliado pela governança, calculado na listagem. */
+  selo?: string | null;
+  selo_motivo?: string | null;
+  pode_bordero?: boolean;
 }
+
+/**
+ * Selo de lastro — de onde vem a autorização para pagar isto.
+ *
+ * Estava só na Mesa de Aprovação, então o operador montava o borderô e só
+ * descobria o problema ao clicar em enviar. Trazido para a listagem para a
+ * decisão acontecer antes, não depois. O motivo fica no tooltip: "amarelo" sem
+ * explicação não ajuda ninguém.
+ */
+const SELO_CONFIG: Record<string, { label: string; classe: string }> = {
+  VERDE: { label: "ERP", classe: "bg-green-50 text-green-700 border-green-200" },
+  AZUL: { label: "Rubrica", classe: "bg-blue-50 text-blue-700 border-blue-200" },
+  AMARELO: { label: "Fora da faixa", classe: "bg-amber-50 text-amber-700 border-amber-200" },
+  VERMELHO: { label: "Exceção", classe: "bg-red-50 text-red-700 border-red-200" },
+  SEM_LASTRO: { label: "Sem lastro", classe: "bg-red-50 text-red-700 border-red-200" },
+};
+
+const getSeloBadge = (l: Lancamento) => {
+  if (!l.selo) return null;
+  const cfg = SELO_CONFIG[l.selo];
+  if (!cfg) return null;
+  return (
+    <Badge
+      variant="outline"
+      className={`text-[10px] cursor-help ${cfg.classe}`}
+      title={`${l.selo_motivo ?? ""}${l.pode_bordero === false ? "\n\nNão entra em borderô enquanto estiver assim." : ""}`}
+    >
+      {cfg.label}
+    </Badge>
+  );
+};
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   PREVISTO: { label: "Pendente", variant: "secondary" },
@@ -272,7 +307,12 @@ function LancamentoRow({
           <span className="text-muted-foreground italic">Não classificado</span>
         )}
       </TableCell>
-      <TableCell><Badge variant={sc.variant}>{sc.label}</Badge></TableCell>
+      <TableCell>
+        <div className="flex flex-col gap-1 items-start">
+          <Badge variant={sc.variant}>{sc.label}</Badge>
+          {getSeloBadge(l)}
+        </div>
+      </TableCell>
       <TableCell>{getDdaBadge(l)}</TableCell>
       <TableCell className="text-right">
         <div className="flex justify-end items-center gap-1">

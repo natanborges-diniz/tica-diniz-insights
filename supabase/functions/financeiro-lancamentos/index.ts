@@ -167,6 +167,34 @@ async function listar(body: Record<string, unknown>) {
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
+
+  // Selo de lastro junto da listagem.
+  //
+  // Antes ele só existia na Mesa de Aprovação: o operador montava o borderô,
+  // clicava em enviar e só então descobria que um item exigia aprovação. A
+  // governança precisa estar visível ONDE o trabalho acontece, não depois.
+  const pendentes = (data || []).filter(
+    (l) => l.tipo === "PAGAR" && !["BAIXADO", "CANCELADO"].includes(l.status),
+  );
+
+  if (pendentes.length > 0) {
+    const rubIds = [...new Set(pendentes.map((l) => l.rubrica_id).filter(Boolean))] as string[];
+    const rubMap = new Map<string, Record<string, unknown>>();
+    if (rubIds.length > 0) {
+      const { data: rubs } = await supabase.from("rubricas_autorizadas").select("*").in("id", rubIds);
+      for (const r of (rubs || [])) rubMap.set(String(r.id), r);
+    }
+
+    const hoje = hojeBrt();
+    for (const l of pendentes) {
+      const rubrica = l.rubrica_id ? (rubMap.get(String(l.rubrica_id)) as never) ?? null : null;
+      const av = avaliarLancamento(l as never, rubrica, hoje);
+      (l as Record<string, unknown>).selo = av.selo;
+      (l as Record<string, unknown>).selo_motivo = av.motivo;
+      (l as Record<string, unknown>).pode_bordero = av.podeBordero;
+    }
+  }
+
   return json(data);
 }
 
