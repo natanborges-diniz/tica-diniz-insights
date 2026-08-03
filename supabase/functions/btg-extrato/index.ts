@@ -89,9 +89,83 @@ async function getBtgToken(codEmpresa: number): Promise<string> {
   const db = getServiceClient();
   const { data } = await db.from("btg_tokens").select("access_token, expires_at").eq("cod_empresa", codEmpresa).single();
   if (!data) throw json({ error: `Empresa ${codEmpresa} não autenticada no BTG.` }, 400);
-  if (new Date(data.expires_at) < new Date()) throw json({ error: `Token BTG expirado para empresa ${codEmpresa}.` }, 401);
+  if (new Date(data.expires_at) < new Date()) {
+    const renovado = await refreshBtgToken(codEmpresa);
+    if (!renovado) throw json({ error: `Token BTG expirado para empresa ${codEmpresa}. Reautorize em /admin/btg-validacao.` }, 401);
+    return renovado;
+  }
   return data.access_token;
 }
+
+// Renova o access_token via refresh_token. Retorna o novo token ou null.
+async function refreshBtgToken(codEmpresa: number): Promise<string | null> {
+  const db = getServiceClient();
+  const { data: row } = await db
+    .from("btg_tokens")
+    .select("refresh_token, scopes")
+    .eq("cod_empresa", codEmpresa)
+    .single();
+  if (!row?.refresh_token) return null;
+
+  const { data: cfg } = await db
+    .from("fornecedor_configuracao")
+    .select("ambiente, api_key, api_key_staging, api_key_production, base_url_staging, base_url_production")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+
+  const isSandbox = cfg?.ambiente !== "production";
+  const clientId = cfg?.api_key || Deno.env.get("BTG_CLIENT_ID")!;
+  const clientSecret = (isSandbox ? cfg?.api_key_staging : cfg?.api_key_production) ||
+    Deno.env.get("BTG_CLIENT_SECRET")!;
+  const authBase = isSandbox
+    ? (cfg?.base_url_staging || "https://id.sandbox.btgpactual.com")
+    : (cfg?.base_url_production || "https://id.btgpactual.com");
+
+  const res = await fetch(`${authBase}/oauth2/token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+    },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: row.refresh_token }),
+  });
+
+  if (!res.ok) {
+    console.error("[btg-extrato] refresh falhou:", res.status, await res.text());
+    return null;
+  }
+
+  const tk = await res.json();
+  await db.from("btg_tokens").update({
+    access_token: tk.access_token,
+    refresh_token: tk.refresh_token || row.refresh_token,
+    expires_at: new Date(Date.now() + (tk.expires_in || 86400) * 1000).toISOString(),
+    scopes: tk.scope ? tk.scope.split(" ") : row.scopes,
+    updated_at: new Date().toISOString(),
+  }).eq("cod_empresa", codEmpresa);
+
+  return tk.access_token as string;
+}
+
+// GET na API BTG com auto-refresh: se o banco devolver 401 (token revogado antes
+// do expires_at gravado), renova via refresh_token e repete a chamada uma vez.
+async function btgGet(codEmpresa: number, url: string): Promise<Response> {
+  let token = await getBtgToken(codEmpresa);
+  const call = (t: string) =>
+    fetch(url, { headers: { Authorization: `Bearer ${t}`, Accept: "application/json" } });
+
+  let res = await call(token);
+  if (res.status === 401) {
+    const novo = await refreshBtgToken(codEmpresa);
+    if (novo) {
+      token = novo;
+      res = await call(token);
+    }
+  }
+  return res;
+}
+
 
 // ─── CNPJ helper (companyId for BTG API = CNPJ sem pontuação) ──
 async function getCnpj(codEmpresa: number): Promise<string> {
@@ -318,20 +392,23 @@ async function handleSaldo(body: Record<string, unknown> | null, url: URL) {
     });
   }
 
-  const accessToken = await getBtgToken(codEmpresa);
   const cnpj = await getCnpj(codEmpresa);
   const accountId = await getAccountId(codEmpresa);
 
-  const res = await fetch(
+  const res = await btgGet(
+    codEmpresa,
     `${apiBase}/${cnpj}/banking/accounts/${accountId}/balances`,
-    { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
   );
 
   if (!res.ok) {
     const resBody = await res.text();
     console.error("[btg-extrato] Saldo error:", res.status, resBody);
-    return json({ error: "Erro ao consultar saldo", status: res.status, details: resBody }, 502);
+    const msg = res.status === 401
+      ? `Autorização BTG da empresa ${codEmpresa} inválida — reautorize a loja em /admin/btg-validacao.`
+      : "Erro ao consultar saldo";
+    return json({ error: msg, status: res.status, details: resBody }, res.status === 401 ? 401 : 502);
   }
+
 
   // BTG returns: { accountId, available: { amount, currency }, blocked: { amount, currency, blockedDate } }
   const data = await res.json();
@@ -368,7 +445,6 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
     return json({ cod_empresa: codEmpresa, lancamentos: mockEntries, sandbox: true });
   }
 
-  const accessToken = await getBtgToken(codEmpresa);
   const cnpj = await getCnpj(codEmpresa);
   const accountId = await getAccountId(codEmpresa);
 
@@ -377,16 +453,20 @@ async function handleExtrato(body: Record<string, unknown> | null, url: URL) {
   if (dataFim) params.set("endDate", dataFim);
 
   const qs = params.toString() ? `?${params}` : "";
-  const res = await fetch(
+  const res = await btgGet(
+    codEmpresa,
     `${apiBase}/${cnpj}/banking/accounts/${accountId}/statements${qs}`,
-    { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
   );
 
   if (!res.ok) {
     const resBody = await res.text();
     console.error("[btg-extrato] Extrato error:", res.status, resBody);
-    return json({ error: "Erro ao consultar extrato", status: res.status, details: resBody }, 502);
+    const msg = res.status === 401
+      ? `Autorização BTG da empresa ${codEmpresa} inválida — reautorize a loja em /admin/btg-validacao.`
+      : "Erro ao consultar extrato";
+    return json({ error: msg, status: res.status, details: resBody }, res.status === 401 ? 401 : 502);
   }
+
 
   const data = await res.json();
   console.log("[btg-extrato] handleExtrato raw keys:", Object.keys(data || {}));
@@ -430,7 +510,6 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
       { date: "2026-03-05", description: "DEBITO AUTOMATICO - TELECOM", amount: 299.90, type: "debit", balance_after: 139591.00 },
     ];
   } else {
-    const accessToken = await getBtgToken(cod_empresa);
     const cnpj = await getCnpj(cod_empresa);
     const accountId = await getAccountId(cod_empresa);
     const params = new URLSearchParams();
@@ -438,15 +517,19 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     if (data_fim) params.set("endDate", data_fim);
 
     const qs = params.toString() ? `?${params}` : "";
-    const res = await fetch(
+    const res = await btgGet(
+      cod_empresa,
       `${apiBase}/${cnpj}/banking/accounts/${accountId}/statements${qs}`,
-      { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
     );
 
     if (!res.ok) {
       const resBody = await res.text();
-      return json({ error: "Erro ao consultar extrato BTG", details: resBody }, 502);
+      const msg = res.status === 401
+        ? `Autorização BTG da empresa ${cod_empresa} inválida — reautorize a loja em /admin/btg-validacao.`
+        : "Erro ao consultar extrato BTG";
+      return json({ error: msg, status: res.status, details: resBody }, res.status === 401 ? 401 : 502);
     }
+
 
     const data = await res.json();
     console.log("[btg-extrato] Raw statements keys:", Object.keys(data || {}));
