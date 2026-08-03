@@ -416,6 +416,26 @@ async function importarEmpresa(ce: number): Promise<Response> {
   // Linhas digitáveis vistas nesta rodada — base da remoção do que saiu do banco.
   const linhasDoBanco = new Set<string>();
 
+  // Deduplicação em UMA consulta, não uma por título.
+  //
+  // Antes cada título fazia 3 idas ao banco (existe por linha, existe por id,
+  // reler o id inserido). Com ~1.100 títulos por rodada e 10 lojas no
+  // `importar_todas`, isso estourava o limite de 150s da edge function
+  // (IDLE_TIMEOUT). Carregamos o índice da empresa uma vez e comparamos em
+  // memória.
+  const { data: jaExistem } = await db
+    .from("btg_dda_titulos")
+    .select("linha_digitavel, btg_dda_id")
+    .eq("cod_empresa", ce);
+
+  const linhasExistentes = new Set<string>();
+  const idsExistentes = new Set<string>();
+  for (const r of (jaExistem || [])) {
+    const l = String(r.linha_digitavel ?? "").replace(/\D/g, "");
+    if (l) linhasExistentes.add(l);
+    if (r.btg_dda_id) idsExistentes.add(String(r.btg_dda_id));
+  }
+
   for (const titulo of btgData) {
     const btgDdaId = (titulo.id || titulo.ddaId || "") as string;
     const linhaBruta = String(titulo.digitableLine ?? "").replace(/\D/g, "");
@@ -426,22 +446,13 @@ async function importarEmpresa(ce: number): Promise<Response> {
     // importação reinseria tudo. Como a tela importa sozinha ao abrir, a base
     // multiplicava a cada visita (dez cópias do mesmo título da J&J).
     if (linhaBruta) {
-      const { data: existePorLinha } = await db
-        .from("btg_dda_titulos")
-        .select("id")
-        .eq("cod_empresa", ce)
-        .eq("linha_digitavel", linhaBruta)
-        .maybeSingle();
-      if (existePorLinha) { duplicados++; continue; }
+      if (linhasExistentes.has(linhaBruta)) { duplicados++; continue; }
+      linhasExistentes.add(linhaBruta);
     } else if (btgDdaId) {
-      const { data: existing } = await db
-        .from("btg_dda_titulos")
-        .select("id")
-        .eq("btg_dda_id", btgDdaId)
-        .eq("cod_empresa", ce)
-        .maybeSingle();
-      if (existing) { duplicados++; continue; }
+      if (idsExistentes.has(btgDdaId)) { duplicados++; continue; }
+      idsExistentes.add(btgDdaId);
     }
+
 
     // Map BTG API fields — production uses taxId, sandbox/docs use document
     const payee = (titulo.payee || {}) as Record<string, unknown>;
