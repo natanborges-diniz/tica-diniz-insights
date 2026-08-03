@@ -384,7 +384,12 @@ export default function BankingDdaDashboard() {
       {/* Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Títulos DDA</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            Títulos DDA
+            <Badge variant="secondary" className="text-[10px]">
+              {titulos.length}{filtrosAtivos ? ` de ${titulosRaw.length}` : ""}
+            </Badge>
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
