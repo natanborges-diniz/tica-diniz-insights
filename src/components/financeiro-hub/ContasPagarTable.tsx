@@ -4,7 +4,7 @@ import { ptBR } from "date-fns/locale";
 import {
   Pencil, CreditCard, XCircle, ArrowDown, RotateCcw,
   MoreHorizontal, Unlink, ChevronDown, ChevronRight, CheckCircle2,
-  ArrowUp, ArrowUpDown, Filter, Receipt,
+  ArrowUp, ArrowUpDown, Filter, Receipt, Repeat,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
@@ -53,6 +53,7 @@ interface Lancamento {
   selo?: string | null;
   selo_motivo?: string | null;
   pode_bordero?: boolean;
+  rubrica_id?: string | null;
 }
 
 /**
@@ -110,6 +111,7 @@ interface ContasPagarTableProps {
   onPrepararPagamento: (l: Lancamento) => void;
   onBaixaManual: (l: Lancamento) => void;
   onComprovante?: (l: Lancamento) => void;
+  onVirarRubrica?: (l: Lancamento) => void;
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
   onRemoverDoBordero?: (lancamento: Lancamento) => void;
@@ -181,7 +183,7 @@ const formatMonthTitle = (monthKey: string) => {
 // Shared row renderer
 function LancamentoRow({
   l, selectedIds, onToggleSelect, onClassificar, onPrepararPagamento,
-  onBaixaManual, onComprovante, onCancelar, onReabrir, onRemoverDoBordero,
+  onBaixaManual, onComprovante, onVirarRubrica, onCancelar, onReabrir, onRemoverDoBordero,
   isCancelando, isReabrindo, isRemovendoDoBordero, isAdmin,
 }: {
   l: Lancamento;
@@ -192,6 +194,7 @@ function LancamentoRow({
   onPrepararPagamento: (l: Lancamento) => void;
   onBaixaManual: (l: Lancamento) => void;
   onComprovante?: (l: Lancamento) => void;
+  onVirarRubrica?: (l: Lancamento) => void;
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
   onRemoverDoBordero?: (l: Lancamento) => void;
@@ -253,6 +256,11 @@ function LancamentoRow({
   }
   if (["PREVISTO", "AUTORIZADO"].includes(l.status) && isAdmin && !l.bordero_id) {
     secondaryActions.push({ label: "Baixa Manual", icon: ArrowDown, onClick: () => onBaixaManual(l) });
+  }
+  // Ponte lançamento → rubrica: o operador acabou de informar como se paga este
+  // fornecedor, e isso valia só para o mês. Vira cadastro permanente.
+  if (isAdmin && onVirarRubrica && hasPay && l.tipo === "PAGAR" && l.pessoa_nome && !l.rubrica_id) {
+    secondaryActions.push({ label: "Virar rubrica", icon: Repeat, onClick: () => onVirarRubrica(l) });
   }
   if (l.status === "PREVISTO") {
     secondaryActions.push({ label: "Cancelar", icon: XCircle, onClick: () => onCancelar(l.id), destructive: true });
@@ -438,7 +446,7 @@ const makeTableHeaders = (ctrl: HeaderCtrl) => {
 export function ContasPagarTable({
   lancamentos: rawLancamentos, isLoading, selectedIds, isAdmin, stepFilter,
   onToggleSelect, onToggleSelectAll,
-  onClassificar, onPrepararPagamento, onBaixaManual, onComprovante,
+  onClassificar, onPrepararPagamento, onBaixaManual, onComprovante, onVirarRubrica,
   onCancelar, onReabrir, onRemoverDoBordero, isCancelando, isReabrindo, isRemovendoDoBordero,
 }: ContasPagarTableProps) {
   const [pendentesOpen, setPendentesOpen] = useState(true);
@@ -529,7 +537,7 @@ export function ContasPagarTable({
 
   const sharedProps = {
     selectedIds, onToggleSelect, onClassificar, onPrepararPagamento,
-    onBaixaManual, onComprovante, onCancelar, onReabrir, onRemoverDoBordero,
+    onBaixaManual, onComprovante, onVirarRubrica, onCancelar, onReabrir, onRemoverDoBordero,
     isCancelando, isReabrindo, isRemovendoDoBordero, isAdmin,
   };
 

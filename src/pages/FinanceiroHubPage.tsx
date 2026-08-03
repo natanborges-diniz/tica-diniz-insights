@@ -488,6 +488,26 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message || "Erro ao consultar o banco"),
   });
 
+  /**
+   * Transforma um pagamento já preparado em rubrica recorrente.
+   *
+   * Nasce em rascunho e NÃO vincula o lançamento atual: ele já tem lastro do
+   * ERP, e apontar para uma rubrica não aprovada o rebaixaria para "sem lastro",
+   * travando um borderô que estava bom.
+   */
+  const virarRubricaMutation = useMutation({
+    mutationFn: (l: Lancamento) => invokeAction("criar_rubrica_de_lancamento", { lancamento_id: l.id }),
+    onSuccess: (r: { herdou_forma_pagamento?: boolean }) => {
+      toast.success(
+        r?.herdou_forma_pagamento
+          ? "Rubrica criada em rascunho, já com a forma de pagamento — outro admin precisa aprovar"
+          : "Rubrica criada em rascunho — outro admin precisa aprovar",
+      );
+      invalidateAll();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const reverterCancelamentoMutation = useMutation({
     mutationFn: async (ids: string[]) => invokeAction("reverter_cancelamento", { ids }),
     onSuccess: (data: { revertidos?: number }) => {
@@ -1403,6 +1423,7 @@ export default function FinanceiroHubPage() {
               onPrepararPagamento={(l) => setPrepPaymentLanc(l)}
               onBaixaManual={openBaixaManual}
               onComprovante={(l) => comprovanteMutation.mutate(l)}
+              onVirarRubrica={(l) => virarRubricaMutation.mutate(l)}
               onCancelar={(id) => cancelarMutation.mutate(id)}
               onReabrir={(id) => reabrirMutation.mutate(id)}
               onRemoverDoBordero={(l) => {

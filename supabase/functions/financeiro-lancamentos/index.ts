@@ -91,6 +91,8 @@ Deno.serve(async (req) => {
         return await adicionarAoBordero(body);
       case "remover_do_bordero":
         return await removerDoBordero(body);
+      case "criar_rubrica_de_lancamento":
+        return await criarRubricaDeLancamento(body, auth.userId);
       case "sugerir_rubricas":
         return await sugerirRubricas(body, auth.userId);
       case "mesa_aprovacao":
@@ -2426,10 +2428,106 @@ async function aprovarExcecao(body: Record<string, unknown>, userId: string) {
 // com valor esperado (mediana), dia de vencimento (moda) e a MESMA conta
 // contábil do ERP — pré-requisito da substituição automática de provisões.
 // ═══════════════════════════════════════════════════════════
+/**
+ * Cria uma rubrica a partir de um lançamento já preparado.
+ *
+ * O operador informa chave PIX ou dados de TED em "Preparar pagamento", e isso
+ * grava no lançamento DAQUELE mês. No mês seguinte alguém preenche tudo de novo,
+ * do zero. A ponte do lançamento para a rubrica não existia — só o caminho em
+ * massa (sugerir_rubricas), que exige histórico de vários meses.
+ *
+ * Nasce em RASCUNHO, como qualquer rubrica: outro admin aprova. E NÃO vinculamos
+ * o lançamento atual — ele já tem o lastro do ERP, e apontar para uma rubrica em
+ * rascunho o rebaixaria para "sem lastro", travando um borderô que estava bom.
+ */
+async function criarRubricaDeLancamento(body: Record<string, unknown>, userId: string) {
+  await requireAdmin(userId);
+  const { lancamento_id } = body;
+  if (!lancamento_id) throw new Error("lancamento_id obrigatório");
+
+  const { data: l } = await supabase
+    .from("lancamentos_financeiros")
+    .select("*")
+    .eq("id", String(lancamento_id))
+    .single();
+  if (!l) throw new Error("Lançamento não encontrado");
+  if (!l.pessoa_nome) throw new Error("Lançamento sem favorecido — não dá para criar rubrica");
+
+  const extras = (l.dados_extras || {}) as Record<string, unknown>;
+  const conta = String(extras.conta_numero ?? "");
+  if (!conta) throw new Error("Lançamento sem conta do plano — classifique antes de criar a rubrica");
+
+  const nome = String(l.pessoa_nome).trim().toUpperCase();
+  const escopoGlobal = body.escopo === "GLOBAL";
+
+  const { data: jaExiste } = await supabase
+    .from("rubricas_autorizadas")
+    .select("id, status")
+    .eq("favorecido_nome", nome)
+    .eq("conta_numero", conta)
+    .maybeSingle();
+  if (jaExiste) {
+    throw new Error(`Já existe rubrica para ${nome} nesta conta (${jaExiste.status})`);
+  }
+
+  // Forma de pagamento herdada do que o operador acabou de preparar.
+  const det = (extras.btg_details || {}) as Record<string, unknown>;
+  const tipo = String(extras.btg_payment_type ?? "");
+  const pagamento: Record<string, unknown> = {};
+  if (tipo === "PIX_KEY" && det.pixKey) {
+    pagamento.forma_pagamento = "PIX_KEY";
+    pagamento.favorecido_chave = String(det.pixKey);
+  } else if (tipo === "TED" && det.bankCode) {
+    pagamento.forma_pagamento = "TED";
+    pagamento.favorecido_banco = String(det.bankCode);
+    pagamento.favorecido_agencia = String(det.branch ?? "");
+    pagamento.favorecido_conta = String(det.account ?? "");
+    pagamento.favorecido_tipo_conta = String(det.accountType ?? "CC");
+  }
+
+  const valor = Number(l.valor);
+  const esperado = Number(body.valor_esperado ?? valor);
+  // Teto conservador quando não informado: o dobro do esperado. Serve de
+  // proteção contra erro grosseiro, e o admin ajusta na aprovação.
+  const teto = Number(body.valor_teto ?? esperado * 2);
+
+  const { data: nova, error } = await supabase.from("rubricas_autorizadas").insert({
+    cod_empresa: escopoGlobal ? null : l.cod_empresa,
+    descricao: String(body.descricao ?? `${nome} — ${l.subcategoria ?? conta}`),
+    favorecido_nome: nome,
+    favorecido_documento: l.pessoa_documento ?? (det.taxId ? String(det.taxId) : null),
+    conta_numero: conta,
+    periodicidade: String(body.periodicidade ?? "MENSAL"),
+    valor_esperado: Math.round(esperado * 100) / 100,
+    tolerancia_pct: Number(body.tolerancia_pct ?? 15),
+    valor_teto: Math.round(teto * 100) / 100,
+    dia_vencimento: Math.min(28, Math.max(1, Number(
+      body.dia_vencimento ?? String(l.data_vencimento).slice(8, 10),
+    ) || 10)),
+    status: "RASCUNHO",
+    criado_por: userId,
+    ...pagamento,
+  }).select("id").single();
+
+  if (error) throw new Error(error.message);
+
+  return json({
+    ok: true,
+    rubrica_id: nova.id,
+    herdou_forma_pagamento: Object.keys(pagamento).length > 0,
+    mensagem: "Rubrica criada em rascunho — outro admin precisa aprovar antes de ela servir de lastro",
+  });
+}
+
 async function sugerirRubricas(body: Record<string, unknown>, userId: string) {
   await requireAdmin(userId);
   const codEmpresa = body.cod_empresa ? Number(body.cod_empresa) : null;
-  const mesesMin = 4; // recorrente = apareceu em >= 4 meses distintos no último ano
+  // Quantos meses distintos caracterizam "recorrente".
+  //
+  // Era fixo em 4, o que devolvia zero para quem acabou de começar a importar o
+  // ERP — e sem explicação, parecia que a função não funcionava. Configurável, e
+  // o retorno agora diz quantos grupos ficaram de fora por qual motivo.
+  const mesesMin = Math.max(2, Math.min(12, Number(body.meses_min ?? 3)));
 
   const desde = new Date();
   desde.setMonth(desde.getMonth() - 12);
@@ -2447,14 +2545,44 @@ async function sugerirRubricas(body: Record<string, unknown>, userId: string) {
   if (error) throw new Error(error.message);
 
   // Agrupa por empresa + favorecido + conta contábil
-  interface Grupo { emp: number; nome: string; doc: string | null; conta: string; valores: number[]; dias: number[]; meses: Set<string>; }
+  interface Grupo {
+    emp: number; nome: string; doc: string | null; conta: string;
+    valores: number[]; dias: number[]; meses: Set<string>;
+    // Forma de pagamento do lançamento mais recente do grupo: a rubrica nasce
+    // sabendo COMO se paga, e a provisão mensal não precisa de redigitação.
+    ultimaData: string; pagamento: Record<string, unknown>;
+  }
   const grupos = new Map<string, Grupo>();
   for (const l of (lancs || [])) {
     const conta = String((l.dados_extras as Record<string, unknown>)?.conta_numero ?? "");
     if (!conta || !l.pessoa_nome || !l.data_vencimento) continue;
     const nome = String(l.pessoa_nome).trim().toUpperCase();
     const k = `${l.cod_empresa}|${nome}|${conta}`;
-    const g = grupos.get(k) ?? { emp: l.cod_empresa, nome, doc: l.pessoa_documento ?? null, conta, valores: [], dias: [], meses: new Set<string>() };
+    const g = grupos.get(k) ?? {
+      emp: l.cod_empresa, nome, doc: l.pessoa_documento ?? null, conta,
+      valores: [], dias: [], meses: new Set<string>(),
+      ultimaData: "", pagamento: {},
+    };
+
+    const extras = (l.dados_extras || {}) as Record<string, unknown>;
+    const dataStr = String(l.data_vencimento);
+    if (extras.btg_payment_type && dataStr > g.ultimaData) {
+      g.ultimaData = dataStr;
+      const det = (extras.btg_details || {}) as Record<string, unknown>;
+      const tipo = String(extras.btg_payment_type);
+      if (tipo === "PIX_KEY" && det.pixKey) {
+        g.pagamento = { forma_pagamento: "PIX_KEY", favorecido_chave: String(det.pixKey) };
+      } else if (tipo === "TED" && det.bankCode) {
+        g.pagamento = {
+          forma_pagamento: "TED",
+          favorecido_banco: String(det.bankCode),
+          favorecido_agencia: String(det.branch ?? ""),
+          favorecido_conta: String(det.account ?? ""),
+          favorecido_tipo_conta: String(det.accountType ?? "CC"),
+        };
+      }
+      // Boleto fica de fora: a linha digitável muda a cada competência.
+    }
     g.valores.push(Number(l.valor));
     g.dias.push(Number(String(l.data_vencimento).slice(8, 10)));
     g.meses.add(String(l.data_vencimento).slice(0, 7));
@@ -2477,9 +2605,12 @@ async function sugerirRubricas(body: Record<string, unknown>, userId: string) {
   };
 
   const sugestoes: Record<string, unknown>[] = [];
+  let poucoHistorico = 0;
+  let jaCadastradas = 0;
+
   for (const g of grupos.values()) {
-    if (g.meses.size < mesesMin) continue;
-    if (jaTem.has(`${g.emp}|${g.nome}|${g.conta}`) || jaTem.has(`G|${g.nome}|${g.conta}`)) continue;
+    if (g.meses.size < mesesMin) { poucoHistorico++; continue; }
+    if (jaTem.has(`${g.emp}|${g.nome}|${g.conta}`) || jaTem.has(`G|${g.nome}|${g.conta}`)) { jaCadastradas++; continue; }
     const esperado = mediana(g.valores);
     sugestoes.push({
       cod_empresa: g.emp,
@@ -2494,6 +2625,7 @@ async function sugerirRubricas(body: Record<string, unknown>, userId: string) {
       dia_vencimento: Math.min(28, moda(g.dias)),
       status: "RASCUNHO",
       criado_por: userId,
+      ...g.pagamento,
     });
   }
 
@@ -2502,5 +2634,15 @@ async function sugerirRubricas(body: Record<string, unknown>, userId: string) {
     if (insErr) throw new Error(insErr.message);
   }
 
-  return json({ ok: true, grupos_analisados: grupos.size, sugeridas: sugestoes.length });
+  return json({
+    ok: true,
+    grupos_analisados: grupos.size,
+    sugeridas: sugestoes.length,
+    meses_min: mesesMin,
+    // Diagnóstico: sem isto, "0 sugeridas" não distingue "não há recorrentes"
+    // de "o critério está apertado demais para o histórico que existe".
+    ignorados_pouco_historico: poucoHistorico,
+    ignorados_ja_cadastrados: jaCadastradas,
+    com_forma_pagamento: sugestoes.filter((s) => s.forma_pagamento).length,
+  });
 }
