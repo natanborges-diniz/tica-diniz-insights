@@ -501,10 +501,17 @@ export function ContasPagarTable({
     });
   }, [stepFiltered, filtroFornecedor, filtroConta, sortKey, sortDir]);
 
-  // Split into sections
-  const pendentes = useMemo(() => lancamentos.filter(l => l.status === "PREVISTO"), [lancamentos]);
-  const validados = useMemo(() => lancamentos.filter(l => ["CLASSIFICADO", "BORDERO", "AUTORIZADO", "PROCESSANDO"].includes(l.status)), [lancamentos]);
+  // Split into sections.
+  // "Em Preparo" = tudo que ainda não entrou em borderô (PREVISTO), classificado
+  // ou não. A prontidão aparece como selo na linha, não como seção separada.
+  const pendentes = useMemo(() => lancamentos.filter(l => ["PREVISTO", "CLASSIFICADO"].includes(l.status)), [lancamentos]);
+  const validados = useMemo(() => lancamentos.filter(l => ["AGRUPADO", "BORDERO", "AUTORIZADO", "PROCESSANDO"].includes(l.status)), [lancamentos]);
   const finalizados = useMemo(() => lancamentos.filter(l => ["BAIXADO", "CANCELADO"].includes(l.status)), [lancamentos]);
+
+  const prontos = useMemo(
+    () => pendentes.filter(l => (l.subcategoria || l.dados_extras?.conta_descricao) && hasPaymentData(l)).length,
+    [pendentes]
+  );
 
   // Group validados by month
   const validadosByMonth = useMemo(() => {
@@ -553,8 +560,13 @@ export function ContasPagarTable({
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">
                     {pendentesOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    <span className="text-amber-800">Pendentes de Validação</span>
+                    <span className="text-amber-800">Em Preparo</span>
                     <Badge variant="secondary" className="text-[10px]">{pendentes.length}</Badge>
+                    {prontos > 0 && (
+                      <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
+                        ✓ {prontos} PRONTO{prontos > 1 ? "S" : ""} P/ BORDERÔ
+                      </Badge>
+                    )}
                   </CardTitle>
                   <span className="text-sm font-semibold text-amber-700">{fmtCurrency(totalPendentes)}</span>
                 </div>
