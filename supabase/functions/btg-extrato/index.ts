@@ -5,6 +5,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { flattenStatements, normalizeMovement, assignDedupeKeys } from "../_shared/btgExtrato.ts";
+import { conciliarAgora } from "../_shared/conciliacaoAuto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -486,7 +487,19 @@ async function handleImportar(body: Record<string, unknown>, userId: string) {
     console.warn("[btg-extrato] aplicarRegrasEmPendentes falhou:", (e as Error)?.message);
   }
 
-  return json({ success: true, importados, duplicados: rows.length - importados, auto_classificados });
+  // Importar é o gatilho da conciliação, não o relógio.
+  //
+  // Quem clica "Importar extrato" na tela quer ver o resultado conciliado ali,
+  // não no cron do dia seguinte. E o que mais casa nessa hora é justamente o
+  // borderô que acabou de sair do banco: o motor já sabe herdar a classificação
+  // do lançamento, então o movimento nasce classificado em vez de entrar na
+  // fila pedindo conta de novo.
+  let conciliacao = null;
+  if (importados > 0) {
+    conciliacao = await conciliarAgora([cod_empresa]);
+  }
+
+  return json({ success: true, importados, duplicados: rows.length - importados, auto_classificados, conciliacao });
 }
 
 // ─── ACTION: listar ──────────────────────────────────────────

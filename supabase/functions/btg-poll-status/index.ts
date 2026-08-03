@@ -10,6 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { flattenStatements, normalizeMovement, assignDedupeKeys } from "../_shared/btgExtrato.ts";
 import { reprocessarEventosPendentes } from "../_shared/btgEventos.ts";
 import { ratearValorPago } from "../_shared/rateio.ts";
+import { conciliarAgora } from "../_shared/conciliacaoAuto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -191,7 +192,10 @@ async function rejeitarLancamento(db: any, lanc: Record<string, unknown>, status
 // deno-lint-ignore no-explicit-any
 async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
   const hoje = new Date().toISOString().slice(0, 10);
-  const resultado = { verificados: 0, baixados: 0, rejeitados: 0, processados: 0, parciais: 0, erros: [] as string[] };
+  // Empresas que tiveram baixa nesta rodada: o extrato correspondente pode já
+  // estar no banco esperando candidato, então vale reconciliar na sequência.
+  const comBaixa = new Set<number>();
+  const resultado = { verificados: 0, baixados: 0, rejeitados: 0, processados: 0, parciais: 0, empresas_com_baixa: [] as number[], erros: [] as string[] };
 
   const { data: borderos } = await db
     .from("borderos")
@@ -317,6 +321,7 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
           const valorPago = (pay && extractAmount(pay)) || Number(lanc.valor);
           const dataPag = pay ? extractDate(pay, hoje) : hoje;
           await baixarLancamento(db, lanc, valorPago, dataPag, String(pay?.status ?? "BATCH_PAGO"), pay);
+          comBaixa.add(Number(bordero.cod_empresa));
           resultado.baixados++;
         } else if (st === "FALHA") {
           await rejeitarLancamento(db, lanc, String(pay?.status ?? "BATCH_FALHA"));
@@ -338,6 +343,7 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
     }
   }
 
+  resultado.empresas_com_baixa = [...comBaixa];
   return resultado;
 }
 
@@ -472,7 +478,8 @@ async function pollCobrancas(db: any, apiBase: string, isSandbox: boolean) {
 // ─── 4. Import diário de extrato (janela D-3..D, dedup por dedupe_key) ──
 // deno-lint-ignore no-explicit-any
 async function importarExtratos(db: any, apiBase: string, isSandbox: boolean) {
-  const resultado = { empresas: 0, importados: 0, duplicados: 0, erros: [] as string[], sandbox_skip: isSandbox };
+  const comNovidade = new Set<number>();
+  const resultado = { empresas: 0, importados: 0, duplicados: 0, empresas_com_novidade: [] as number[], erros: [] as string[], sandbox_skip: isSandbox };
   if (isSandbox) return resultado; // sandbox: import manual via btg-extrato cobre testes
 
   const hoje = new Date();
@@ -519,6 +526,7 @@ async function importarExtratos(db: any, apiBase: string, isSandbox: boolean) {
         resultado.erros.push(`empresa ${conta.cod_empresa}: ${error.message}`);
         continue;
       }
+      if ((inserted?.length ?? 0) > 0) comNovidade.add(Number(conta.cod_empresa));
       resultado.importados += inserted?.length ?? 0;
       resultado.duplicados += rows.length - (inserted?.length ?? 0);
     } catch (e) {
@@ -526,6 +534,7 @@ async function importarExtratos(db: any, apiBase: string, isSandbox: boolean) {
     }
   }
 
+  resultado.empresas_com_novidade = [...comNovidade];
   return resultado;
 }
 
@@ -588,8 +597,12 @@ Deno.serve(async (req) => {
 
     if (action === "importar_extratos") {
       const extratos = await importarExtratos(db, apiBase, isSandbox);
-      console.log("[btg-poll-status] importar_extratos:", JSON.stringify(extratos));
-      return json({ success: true, extratos });
+      // Linha nova no extrato é o gatilho da conciliação. Esperar o cron das
+      // 09:10 deixava o movimento "sem classificação" na tela por horas, mesmo
+      // com o borderô já tendo definido a conta de cada despesa.
+      const conciliacao = await conciliarAgora(extratos.empresas_com_novidade);
+      console.log("[btg-poll-status] importar_extratos:", JSON.stringify({ extratos, conciliacao }));
+      return json({ success: true, extratos, conciliacao });
     }
 
     if (action === "executar") {
@@ -599,8 +612,11 @@ Deno.serve(async (req) => {
       const pix = await pollPixCharges(db);
       // E5 — cron de segurança: reprocessa eventos de webhook parados >10 min (spec §5.2)
       const eventos = await reprocessarEventosPendentes(db, 10);
-      console.log("[btg-poll-status] executar:", JSON.stringify({ borderos, pagamentos, cobrancas, pix, eventos }));
-      return json({ success: true, borderos, pagamentos, cobrancas, pix, eventos });
+      // A baixa é o outro gatilho: quando o extrato chegou primeiro, a linha
+      // ficou PENDENTE sem candidato até o lançamento sair de PROCESSANDO.
+      const conciliacao = await conciliarAgora(borderos.empresas_com_baixa);
+      console.log("[btg-poll-status] executar:", JSON.stringify({ borderos, pagamentos, cobrancas, pix, eventos, conciliacao }));
+      return json({ success: true, borderos, pagamentos, cobrancas, pix, eventos, conciliacao });
     }
 
     return json({ error: `Ação desconhecida: '${action}'. Use: executar, importar_extratos` }, 400);
