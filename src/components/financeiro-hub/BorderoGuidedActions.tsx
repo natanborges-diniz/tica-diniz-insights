@@ -1,6 +1,7 @@
 import { FileCheck, Send, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { hojeSP } from "@/lib/datetime";
 
 interface BorderoActionsProps {
   status: string;

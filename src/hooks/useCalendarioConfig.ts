@@ -17,11 +17,12 @@ import {
 } from "@/services/calendarioService";
 import { getEmpresas, Empresa } from "@/services/empresaService";
 import { toast } from "sonner";
+import { agoraSP } from "@/lib/datetime";
 
 // Empresas inativas agora são filtradas no empresaService.ts
 
 export function useCalendarioConfig() {
-  const anoAtual = new Date().getFullYear();
+  const anoAtual = agoraSP().getFullYear();
 
   const [ano, setAno] = useState(anoAtual);
   const [periodos, setPeriodos] = useState<MetaPeriodo[]>([]);

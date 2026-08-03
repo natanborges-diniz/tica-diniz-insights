@@ -16,6 +16,7 @@ import {
 } from './metasSemanaisService';
 import { getRecebimentosAgregado } from './recebimentosService';
 import { lojasEquivalentes } from '@/lib/metas/lojas';
+import { hojeSP } from "@/lib/datetime";
 
 export type StatusRitmo = 'ATINGIDA' | 'NO_RITMO' | 'ATENCAO' | 'CRITICO';
 

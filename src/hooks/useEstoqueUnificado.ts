@@ -25,6 +25,7 @@ import { distribuirLacuna, type MotivoQtd as MotivoQtdType, type SkuParaPool } f
 import { calcularCapacidadePorCategoria, type CapacidadeConfig } from "@/lib/estoque/capacidade";
 import { calcularParticipacaoMarca, type ParticipacaoMarca } from "@/lib/estoque/participacao-marca";
 import { calcularMixIdealV2, type MixMarcaV2, type MarcaConfigV2 } from "@/lib/estoque/mix-ideal-v2";
+import { agoraSP } from "@/lib/datetime";
 
 // Re-export para compatibilidade com imports existentes
 export type { EstoqueFilters };
@@ -274,7 +275,7 @@ export function useEstoqueUnificado() {
   const { defaultEmpresa } = useDefaultEmpresa();
   
   // Período fixo: últimos 180 dias (não exposto para o usuário)
-  const hoje = new Date();
+  const hoje = agoraSP();
   const dataFim = hoje.toISOString().split('T')[0];
   const dataInicio = new Date(hoje.getTime() - DIAS_PERIODO * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   

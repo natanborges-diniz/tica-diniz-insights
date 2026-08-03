@@ -11,6 +11,7 @@ import { DataTable, DataTableColumn, QueryState } from "@/components/ui/data-tab
 import { formatters, ExportColumn } from "@/utils/exportData";
 import { Search, X } from "lucide-react";
 import { EmptyState } from "@/components/system/states";
+import { hojeSP } from "@/lib/datetime";
 
 interface FinanceiroParcelasTableProps {
   data: FinanceiroParcela[];

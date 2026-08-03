@@ -12,6 +12,7 @@ import {
 } from "@/services/aiCentralService";
 import { getPeriodoComercial, formatLocalDate } from "@/utils/dateValidation";
 import { toast } from "@/hooks/use-toast";
+import { agoraSP } from "@/lib/datetime";
 
 export interface CentralIAFilters {
   empresa: EmpresaParam;
@@ -33,7 +34,7 @@ export function useCentralIA() {
   const { empresas, isLoading: loadingEmpresas } = useUserEmpresas();
   const { defaultEmpresa } = useDefaultEmpresa();
   
-  const hoje = new Date();
+  const hoje = agoraSP();
   const [filters, setFilters] = useState<CentralIAFilters>({
     empresa: '', // Será preenchido pelo useEffect abaixo
     dataInicio: formatLocalDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1)),

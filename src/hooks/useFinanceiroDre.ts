@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { getFinanceiroDre, DreLinha, calcularResumoDre, DreResumo } from "../services/financeiroDreService";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
+import { agoraSP } from "@/lib/datetime";
 
 export interface DreFilters {
   empresa: EmpresaParam;
@@ -20,7 +21,7 @@ function formatLocalDate(date: Date): string {
 }
 
 function getDefaultFilters(defaultEmpresa: EmpresaParam): DreFilters {
-  const hoje = new Date();
+  const hoje = agoraSP();
   const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 

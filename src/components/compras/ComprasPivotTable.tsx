@@ -3,6 +3,7 @@ import { ComprasNota } from "@/services/comprasService";
 import { ShoppingCart } from "lucide-react";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { formatters } from "@/utils/exportData";
+import { hojeSP } from "@/lib/datetime";
 
 interface Props {
   notas: ComprasNota[];

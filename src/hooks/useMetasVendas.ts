@@ -8,6 +8,7 @@ import {
 import { getEmpresas, Empresa } from "@/services/empresaService";
 import { getResumoEmpresaVendedor, ResumoEmpresaVendedor } from "@/services/vendasService";
 import { toast } from "sonner";
+import { agoraSP } from "@/lib/datetime";
 
 export interface MetasFilters {
   ano: number;
@@ -25,8 +26,8 @@ export interface VendedorOption {
 }
 
 export function useMetasVendas() {
-  const anoAtual = new Date().getFullYear();
-  const mesAtual = new Date().getMonth() + 1;
+  const anoAtual = agoraSP().getFullYear();
+  const mesAtual = agoraSP().getMonth() + 1;
 
   const [filters, setFilters] = useState<MetasFilters>({
     ano: anoAtual,
@@ -60,8 +61,8 @@ export function useMetasVendas() {
   const fetchVendedores = useCallback(async (empresa: number | 'ALL') => {
     setLoadingVendedores(true);
     try {
-      const dataFim = new Date();
-      const dataIni = new Date();
+      const dataFim = agoraSP();
+      const dataIni = agoraSP();
       // F8: 1 mês é suficiente para popular o dropdown de vendedores ativos
       // (antes eram 3 meses de TODAS as lojas só para montar a lista).
       dataIni.setMonth(dataIni.getMonth() - 1);

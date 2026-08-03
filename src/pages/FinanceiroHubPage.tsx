@@ -31,6 +31,7 @@ import { ContasPagarTable } from "@/components/financeiro-hub/ContasPagarTable";
 import { NovoLancamentoDialog } from "@/components/financeiro-hub/NovoLancamentoDialog";
 
 import { ClassificarLoteDialog } from "@/components/financeiro-hub/ClassificarLoteDialog";
+import { agoraSP } from "@/lib/datetime";
 
 interface Lancamento {
   id: string;
@@ -126,7 +127,7 @@ export default function FinanceiroHubPage() {
   const [formBorderoDesc, setFormBorderoDesc] = useState("");
   // Prática da casa: pagamentos executados na segunda → default = próxima segunda
   const proximaSegundaStr = () => {
-    const d = new Date();
+    const d = agoraSP();
     d.setDate(d.getDate() + ((8 - d.getDay()) % 7));
     return format(d, "yyyy-MM-dd");
   };
@@ -1365,15 +1366,15 @@ export default function FinanceiroHubPage() {
             setFiltroCampoData("VENCIMENTO"); setFiltroDataInicio(format(new Date(), "yyyy-MM-dd")); setFiltroDataFim(format(new Date(), "yyyy-MM-dd"));
           }}>Hoje</Button>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
-            const today = new Date(); const next = new Date(today); next.setDate(next.getDate() + 7);
+            const today = agoraSP(); const next = new Date(today); next.setDate(next.getDate() + 7);
             setFiltroCampoData("VENCIMENTO"); setFiltroDataInicio(format(today, "yyyy-MM-dd")); setFiltroDataFim(format(next, "yyyy-MM-dd"));
           }}>Próximos 7 dias</Button>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
-            const now = new Date();
+            const now = agoraSP();
             setFiltroCampoData("VENCIMENTO"); setFiltroDataInicio(format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd")); setFiltroDataFim(format(new Date(now.getFullYear(), now.getMonth() + 1, 0), "yyyy-MM-dd"));
           }}>Mês atual</Button>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
-            setFiltroCampoData("VENCIMENTO"); setFiltroDataInicio(""); setFiltroDataFim(format(new Date(new Date().setDate(new Date().getDate() - 1)), "yyyy-MM-dd")); setFiltroStatus("PREVISTO");
+            setFiltroCampoData("VENCIMENTO"); setFiltroDataInicio(""); setFiltroDataFim(format(new Date(new Date().setDate(agoraSP().getDate() - 1)), "yyyy-MM-dd")); setFiltroStatus("PREVISTO");
           }}>Vencidos</Button>
         </div>
 

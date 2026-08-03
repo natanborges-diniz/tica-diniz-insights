@@ -23,6 +23,7 @@ import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
 import { getVendasAgregado, AgregadoFormaPagamento } from "@/services/agregadosService";
 import { sincronizarCache } from "@/services/syncCacheService";
+import { agoraSP } from "@/lib/datetime";
 
 // ========================
 // Interfaces
@@ -104,9 +105,9 @@ interface DadoProcessado {
 // ========================
 
 export function useInteligenciaVendas() {
-  const anoAtual = new Date().getFullYear();
-  const mesAtual = new Date().getMonth() + 1;
-  const hoje = new Date();
+  const anoAtual = agoraSP().getFullYear();
+  const mesAtual = agoraSP().getMonth() + 1;
+  const hoje = agoraSP();
   const { defaultEmpresa } = useDefaultEmpresa();
 
   // Default = empresa do profile (evita ALL que causa timeout)
@@ -382,7 +383,7 @@ export function useInteligenciaVendas() {
       }
     });
 
-    const hoje = new Date();
+    const hoje = agoraSP();
     const { dataInicio, dataFim } = filters.tipoPeriodo === 'comercial' && periodoConfig
       ? getDatasDoPeriodo(filters.ano, filters.mes, periodoConfig)
       : { dataInicio: new Date(filters.dataInicio), dataFim: new Date(filters.dataFim) };

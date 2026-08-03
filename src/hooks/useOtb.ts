@@ -8,6 +8,7 @@ import { getAnaliseSku, AnaliseSku } from "@/services/vendasService";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { categorizarProduto } from "@/utils/categorizarProduto";
+import { agoraSP } from "@/lib/datetime";
 // ============================================
 // INTERFACES
 // ============================================
@@ -100,7 +101,7 @@ export function useOtb() {
   const { empresas, isLoading: loadingEmpresas } = useUserEmpresas();
   
   // Período padrão: últimos 180 dias (base para projeção)
-  const hoje = new Date();
+  const hoje = agoraSP();
   const dataFim = hoje.toISOString().split('T')[0];
   const dataInicio = new Date(hoje.getTime() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   

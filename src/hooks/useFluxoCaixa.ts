@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { getFluxoCaixa, FluxoCaixaLancamento } from "../services/fluxoCaixaService";
 import { EmpresaParam } from "@/services/firebirdBridge";
 import { useDefaultEmpresa } from "./useDefaultEmpresa";
+import { agoraSP } from "@/lib/datetime";
 
 export type Granularidade = "DIARIO" | "MENSAL";
 
@@ -38,7 +39,7 @@ function formatLocalDate(date: Date): string {
 }
 
 function getDefaultFilters(defaultEmpresa: EmpresaParam): FluxoCaixaFilters {
-  const hoje = new Date();
+  const hoje = agoraSP();
   const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
 
