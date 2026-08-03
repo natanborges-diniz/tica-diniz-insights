@@ -1445,6 +1445,15 @@ export default function FinanceiroHubPage() {
               onRemoverDoBordero={(l) => {
                 if (l.bordero_id) removerDoBorderoMutation.mutate({ bordero_id: l.bordero_id, lancamento_ids: [l.id] });
               }}
+              onLiberarProcessando={(l) => {
+                const ok = window.confirm(
+                  `Destravar "${l.descricao}"?\n\n` +
+                  `Use apenas quando o lote NÃO chegou ao app do BTG. O título volta para "Em Preparo" ` +
+                  `e pode ser enviado num borderô novo.\n\n` +
+                  `Se houver remessa de verdade aguardando aprovação no banco, a operação será recusada.`
+                );
+                if (ok) liberarProcessandoMutation.mutate([l.id]);
+              }}
               isCancelando={cancelarMutation.isPending}
               isReabrindo={reabrirMutation.isPending}
               isRemovendoDoBordero={removerDoBorderoMutation.isPending}
