@@ -190,13 +190,14 @@ export default function MesaAprovacaoPage() {
         </div>
         <div className="flex items-end gap-1.5 flex-wrap">
           <Button variant={filtroSelo === "todos" ? "default" : "outline"} size="sm" onClick={() => setFiltroSelo("todos")}>
-            Todos {mesa ? `(${mesa.lancamentos.length})` : ""}
+            Todos {mesa ? `(${escopoLancs.length})` : ""}
           </Button>
           {ORDEM_SELOS.map((s) => (
             <Button key={s} variant={filtroSelo === s ? "default" : "outline"} size="sm" onClick={() => setFiltroSelo(s)}>
-              {SELO_CFG[s].label} ({mesa?.resumo_selos?.[s] ?? 0})
+              {SELO_CFG[s].label} ({contagemSelo[s] ?? 0})
             </Button>
           ))}
+
         </div>
       </div>
 
