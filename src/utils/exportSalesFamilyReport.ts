@@ -1,3 +1,4 @@
+import { geradoEmSP } from "@/lib/datetime";
 // src/utils/exportSalesFamilyReport.ts
 // Relatório completo em PDF: título, filtros, KPIs, gráfico e tabela.
 // Quebras de página controladas, sem cortes.
@@ -86,7 +87,7 @@ function drawHeader(doc: jsPDF, title: string, subtitle: string | undefined, pag
 }
 
 function drawFooter(doc: jsPDF) {
-  const gerado = `Gerado em ${new Date().toLocaleString('pt-BR')}`;
+  const gerado = `Gerado em ${geradoEmSP()}`;
   doc.setFontSize(8);
   doc.setTextColor(140);
   doc.text(gerado, MARGIN.l, PAGE.h - 6);

@@ -61,7 +61,7 @@ function liberaBaixaManual(enviadoEm?: string | null, dataPagamento?: string | n
   const agora = Date.now();
 
   if (dataPagamento) {
-    const hoje = new Date(agora - 3 * 3600 * 1000).toISOString().slice(0, 10); // BRT
+    const hoje = hojeSP(); // BRT
     if (hoje < dataPagamento) return false; // ainda agendado, aguardando normalmente
   }
 

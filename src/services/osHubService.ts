@@ -462,7 +462,7 @@ export async function fetchOsHubFromFirebird(params: GetOsHubParams): Promise<Os
 export async function fetchSingleOsRecipe(codOs: number, codEmpresa?: number): Promise<OsHubRecord | null> {
   const fallbackStart = new Date();
   fallbackStart.setMonth(fallbackStart.getMonth() - 6); // 6 months window
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeSP();
   const inicio = fallbackStart.toISOString().slice(0, 10);
 
   // 1) Try with specific company first

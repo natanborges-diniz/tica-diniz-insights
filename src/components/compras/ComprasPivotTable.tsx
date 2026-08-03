@@ -38,7 +38,7 @@ const exportColumns = [
 ];
 
 export function ComprasPivotTable({ notas, onViewChange }: Props) {
-  const hoje = new Date().toISOString().split("T")[0];
+  const hoje = hojeSP();
 
   return (
     <div className="space-y-3">

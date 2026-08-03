@@ -140,7 +140,7 @@ export default function PixPage() {
             <p className="text-sm text-muted-foreground">{pixData.descricao}</p>
             {pixData.pago_em && (
               <p className="text-xs text-muted-foreground">
-                {new Date(pixData.pago_em).toLocaleString("pt-BR")}
+                {new Date(pixData.pago_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
               </p>
             )}
             <p className="mt-2 rounded-md bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
@@ -238,7 +238,7 @@ export default function PixPage() {
 
           {pixData.expira_em && (
             <p className="text-[11px] text-muted-foreground">
-              Válido até {new Date(pixData.expira_em).toLocaleString("pt-BR")}
+              Válido até {new Date(pixData.expira_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
             </p>
           )}
         </CardContent>

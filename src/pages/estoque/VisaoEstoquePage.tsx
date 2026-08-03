@@ -340,14 +340,14 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
       toolbar={
         <DataTableToolbar
           exportOptions={{
-            filename: `estoque_${new Date().toISOString().split("T")[0]}`,
+            filename: `estoque_${hojeSP()}`,
             title: "Detalhamento de Estoque",
             columns: exportColumns,
             data: itens,
           }}
         >
           <span className="text-sm text-muted-foreground">
-            {itens.length.toLocaleString("pt-BR")} itens • Posição: {new Date().toLocaleDateString("pt-BR")} (tempo real)
+            {itens.length.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} itens • Posição: {new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} (tempo real)
           </span>
         </DataTableToolbar>
       }

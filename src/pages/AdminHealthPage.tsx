@@ -137,7 +137,7 @@ export default function AdminHealthPage() {
               <p className="text-sm text-muted-foreground">Último Check</p>
               <p className="text-xl font-bold">
                 {latest?.checked_at
-                  ? new Date(latest.checked_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+                  ? new Date(latest.checked_at).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", second: "2-digit" })
                   : '—'}
               </p>
               {latest?.bridge_version && (
@@ -186,7 +186,7 @@ export default function AdminHealthPage() {
                     <span className="text-muted-foreground">{f.error_message || 'Sem detalhes'}</span>
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {new Date(f.checked_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    {new Date(f.checked_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 </div>
               ))}
@@ -241,7 +241,7 @@ export default function AdminHealthPage() {
                         {log.error_message || '—'}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {new Date(log.checked_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        {new Date(log.checked_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                       </TableCell>
                     </TableRow>
                   ))}

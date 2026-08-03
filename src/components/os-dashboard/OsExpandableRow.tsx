@@ -115,7 +115,7 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                         )}
                         {pedidoFornecedor!.created_at && (
                           <p className="text-muted-foreground">
-                            {new Date(pedidoFornecedor!.created_at).toLocaleString("pt-BR")}
+                            {new Date(pedidoFornecedor!.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                           </p>
                         )}
                       </TooltipContent>
@@ -158,7 +158,7 @@ export const OsExpandableRow: React.FC<Props> = ({ os, onOpenRecipe, loadingReci
                         <p className="text-muted-foreground">Pedido cancelado/rejeitado. É possível refazer o pedido.</p>
                         {pedidoFornecedor!.created_at && (
                           <p className="text-muted-foreground">
-                            {new Date(pedidoFornecedor!.created_at).toLocaleString("pt-BR")}
+                            {new Date(pedidoFornecedor!.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                           </p>
                         )}
                       </TooltipContent>

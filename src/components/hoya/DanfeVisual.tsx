@@ -217,7 +217,7 @@ function fmtDate(d: string) {
   if (!d) return "";
   try {
     const dt = new Date(d);
-    return dt.toLocaleDateString("pt-BR") + " " + dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    return dt.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) + " " + dt.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
   } catch {
     return d;
   }

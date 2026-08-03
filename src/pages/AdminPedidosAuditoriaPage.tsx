@@ -115,7 +115,7 @@ export default function AdminPedidosAuditoriaPage() {
                   {pedidos.map(p => (
                     <TableRow key={p.id}>
                       <TableCell className="text-xs font-mono">
-                        {p.requested_at ? new Date(p.requested_at).toLocaleString("pt-BR") : new Date(p.created_at).toLocaleString("pt-BR")}
+                        {p.requested_at ? new Date(p.requested_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : new Date(p.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                       </TableCell>
                       <TableCell className="font-medium">{p.cod_os}</TableCell>
                       <TableCell>{p.cod_empresa}</TableCell>

@@ -213,7 +213,7 @@ export function FinanceiroParcelasTable({ data }: FinanceiroParcelasTableProps) 
           toolbar={
             <DataTableToolbar
               exportOptions={{
-                filename: `financeiro-parcelas-${new Date().toISOString().split("T")[0]}`,
+                filename: `financeiro-parcelas-${hojeSP()}`,
                 title: "Relatório de Parcelas Financeiras",
                 columns: exportColumns,
                 data: filteredData,

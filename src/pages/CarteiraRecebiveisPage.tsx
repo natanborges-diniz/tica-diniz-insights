@@ -32,7 +32,7 @@ export default function CarteiraRecebiveisPage() {
   const { codEmpresa: codEmpresaDefault } = useDefaultEmpresa();
 
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
-  const [dataInicio, setDataInicio] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dataInicio, setDataInicio] = useState(() => hojeSP());
   const [dataFim, setDataFim] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 90);

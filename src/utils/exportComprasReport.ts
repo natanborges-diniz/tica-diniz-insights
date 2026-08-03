@@ -1,3 +1,4 @@
+import { geradoEmSP } from "@/lib/datetime";
 // src/utils/exportComprasReport.ts
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -72,7 +73,7 @@ function drawHeader(doc: jsPDF, title: string, subtitle: string | undefined, pag
 function drawFooter(doc: jsPDF) {
   doc.setFontSize(8);
   doc.setTextColor(140);
-  doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, MARGIN.l, PAGE.h - 6);
+  doc.text(`Gerado em ${geradoEmSP()}`, MARGIN.l, PAGE.h - 6);
 }
 
 function drawFilters(doc: jsPDF, f: ComprasReportFilters, y: number): number {

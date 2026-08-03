@@ -1,3 +1,4 @@
+import { geradoEmSP } from "@/lib/datetime";
 // src/utils/exportData.ts
 // Utilitários de exportação reutilizáveis para todo o projeto
 
@@ -89,7 +90,7 @@ export function exportToPDF(options: ExportOptions): void {
   // Data de geração
   doc.setFontSize(10);
   doc.setTextColor(100);
-  const dataGeracao = new Date().toLocaleString('pt-BR');
+  const dataGeracao = geradoEmSP();
   doc.text(`Gerado em: ${dataGeracao}`, 14, options.title ? 22 : 15);
 
   // Tabela

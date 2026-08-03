@@ -1,3 +1,4 @@
+import { geradoEmSP } from "@/lib/datetime";
 // src/utils/exportVisual.ts
 // Utilitários para exportar elementos visuais como imagem e PDF
 
@@ -66,7 +67,7 @@ export async function exportVisualToPDF(
     // Data de geração
     doc.setFontSize(10);
     doc.setTextColor(100);
-    const dataGeracao = new Date().toLocaleString('pt-BR');
+    const dataGeracao = geradoEmSP();
     doc.text(`Gerado em: ${dataGeracao}`, 20, options.title ? 40 : 20);
 
     // Adicionar imagem

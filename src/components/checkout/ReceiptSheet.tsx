@@ -25,8 +25,8 @@ function parseDateTime(rede: any): { displayDate: string; displayTime: string } 
     try {
       const dt = new Date(rede.dateTime);
       return {
-        displayDate: dt.toLocaleDateString("pt-BR"),
-        displayTime: dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+        displayDate: dt.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+        displayTime: dt.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", second: "2-digit" }),
       };
     } catch { /* fall through */ }
   }

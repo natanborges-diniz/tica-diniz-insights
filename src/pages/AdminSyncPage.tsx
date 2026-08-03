@@ -326,7 +326,7 @@ export default function AdminSyncPage() {
                         {run.duracao_ms ? `${(run.duracao_ms / 1000).toFixed(1)}s` : "—"}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {new Date(run.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        {new Date(run.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                       </TableCell>
                       <TableCell className="text-xs max-w-[200px] truncate" title={run.request_reason || ""}>
                         {run.request_reason || "—"}

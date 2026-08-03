@@ -41,8 +41,8 @@ function parseDateTime(receipt: ReceiptData): { displayDate: string; displayTime
   if (receipt.dateTime) {
     try {
       const dt = new Date(receipt.dateTime);
-      const displayDate = dt.toLocaleDateString("pt-BR");
-      const displayTime = dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      const displayDate = dt.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+      const displayTime = dt.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", second: "2-digit" });
       return { displayDate, displayTime };
     } catch { /* fall through */ }
   }
