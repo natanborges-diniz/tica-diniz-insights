@@ -297,7 +297,21 @@ export default function FinanceiroHubPage() {
 
   const enviarBorderoMutation = useMutation({
     mutationFn: (id: string) => invokeAction("enviar_bordero_btg", { bordero_id: id }),
-    onSuccess: (data: { sandbox?: boolean; ok?: boolean; error?: string }) => {
+    onSuccess: (data: { sandbox?: boolean; ok?: boolean; error?: string; code?: string } & Partial<BorderoBloqueioPayload>) => {
+      // Bloqueio de governança: em vez de um toast genérico, abrimos o painel com
+      // item, motivo e ação — e o atalho que leva à Mesa já filtrada nesse borderô.
+      if (data?.code === "MESA_REQUIRED" && data.bordero_id) {
+        setBorderoBloqueio({
+          bordero_id: data.bordero_id,
+          cod_empresa: data.cod_empresa ?? null,
+          bloqueios: data.bloqueios ?? [],
+          qtd_total: data.qtd_total,
+          qtd_bloqueados: data.qtd_bloqueados,
+          valor_bloqueado: data.valor_bloqueado,
+        });
+        invalidateAll();
+        return;
+      }
       if (data?.ok === false) {
         toast.error(data.error || "O BTG não aceitou o pagamento. Confira o extrato antes de tentar novamente.", {
           duration: 12000,
@@ -305,6 +319,7 @@ export default function FinanceiroHubPage() {
         invalidateAll();
         return;
       }
+
       toast.success(data?.sandbox ? "Enviado ao BTG (sandbox)" : "Enviado ao BTG — aguarde processamento");
       invalidateAll();
     },
