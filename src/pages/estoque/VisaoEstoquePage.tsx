@@ -348,7 +348,7 @@ function EstoqueTable({ itens }: { itens: ItemEstoque[] }) {
           }}
         >
           <span className="text-sm text-muted-foreground">
-            {itens.length.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} itens • Posição: {new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} (tempo real)
+            {itens.length.toLocaleString("pt-BR")} itens • Posição: {formatDataSP(new Date())} (tempo real)
           </span>
         </DataTableToolbar>
       }
