@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   FileSearch, Download, RefreshCw, CheckCircle2, XCircle,
-  Link2, AlertTriangle, PieChart,
+  Link2, AlertTriangle, PieChart, Search, FilterX,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -12,10 +12,12 @@ import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+
 
 interface DdaTitulo {
   id: string;
@@ -66,6 +68,10 @@ export default function BankingDdaDashboard() {
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [filtroConciliado, setFiltroConciliado] = useState<string>("todos");
+  const [busca, setBusca] = useState<string>("");
+  const [vencDe, setVencDe] = useState<string>("");
+  const [vencAte, setVencAte] = useState<string>("");
+  const [faixaValor, setFaixaValor] = useState<string>("todos");
 
   // Auto-import on mount / empresa change
   const [autoImported, setAutoImported] = useState(false);
@@ -105,19 +111,58 @@ export default function BankingDdaDashboard() {
     })();
   }, [codEmpresa, autoImported, queryClient]);
 
-  const { data: titulos = [], isLoading } = useQuery<DdaTitulo[]>({
-    queryKey: ["btg-dda", codEmpresa, filtroStatus, filtroConciliado],
+  const { data: titulosRaw = [], isLoading } = useQuery<DdaTitulo[]>({
+    queryKey: ["btg-dda", codEmpresa],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("btg-dda", {
         body: { action: "listar", cod_empresa: codEmpresa },
       });
       if (error) throw error;
-      let items = Array.isArray(data) ? data : [];
-      if (filtroStatus !== "todos") items = items.filter((i: DdaTitulo) => i.status === filtroStatus);
-      if (filtroConciliado !== "todos") items = items.filter((i: DdaTitulo) => String(i.conciliado) === filtroConciliado);
-      return items;
+      return Array.isArray(data) ? data : [];
     },
   });
+
+  const onlyDigits = (v: string) => v.replace(/\D/g, "");
+
+  const titulos = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    const termoDigits = onlyDigits(busca);
+    return titulosRaw.filter((t) => {
+      if (filtroStatus !== "todos" && t.status !== filtroStatus) return false;
+      if (filtroConciliado !== "todos" && String(t.conciliado) !== filtroConciliado) return false;
+      if (vencDe && t.data_vencimento < vencDe) return false;
+      if (vencAte && t.data_vencimento > vencAte) return false;
+      if (faixaValor !== "todos") {
+        const [min, max] = faixaValor.split("-").map(Number);
+        if (t.valor < min) return false;
+        if (max && t.valor > max) return false;
+      }
+      if (termo) {
+        const alvoTexto = [t.emissor, t.banco_emissor].filter(Boolean).join(" ").toLowerCase();
+        const alvoDigits = [t.documento_emissor, t.linha_digitavel]
+          .filter(Boolean).map((v) => onlyDigits(String(v))).join(" ");
+        const valorTexto = String(t.valor).replace(".", ",");
+        const casaTexto = alvoTexto.includes(termo);
+        const casaDigits = termoDigits.length >= 3 && alvoDigits.includes(termoDigits);
+        const casaValor = valorTexto.includes(termo.replace(".", ","));
+        if (!casaTexto && !casaDigits && !casaValor) return false;
+      }
+      return true;
+    });
+  }, [titulosRaw, filtroStatus, filtroConciliado, busca, vencDe, vencAte, faixaValor]);
+
+  const filtrosAtivos =
+    filtroStatus !== "todos" || filtroConciliado !== "todos" ||
+    !!busca || !!vencDe || !!vencAte || faixaValor !== "todos";
+
+  const limparFiltros = () => {
+    setFiltroStatus("todos");
+    setFiltroConciliado("todos");
+    setBusca("");
+    setVencDe("");
+    setVencAte("");
+    setFaixaValor("todos");
+  };
 
   const { data: indicadores } = useQuery<Indicadores>({
     queryKey: ["btg-dda-indicadores", codEmpresa],
@@ -244,7 +289,46 @@ export default function BankingDdaDashboard() {
             </SelectContent>
           </Select>
         </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Vencimento de</label>
+          <Input type="date" value={vencDe} onChange={(e) => setVencDe(e.target.value)} className="w-[150px]" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">até</label>
+          <Input type="date" value={vencAte} onChange={(e) => setVencAte(e.target.value)} className="w-[150px]" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-muted-foreground">Faixa de valor</label>
+          <Select value={faixaValor} onValueChange={setFaixaValor}>
+            <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="0-100">Até R$ 100</SelectItem>
+              <SelectItem value="100-1000">R$ 100 a 1.000</SelectItem>
+              <SelectItem value="1000-10000">R$ 1.000 a 10.000</SelectItem>
+              <SelectItem value="10000-0">Acima de R$ 10.000</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1 flex-1 min-w-[240px]">
+          <label className="text-xs text-muted-foreground">Buscar</label>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Emissor, banco, CNPJ, linha digitável ou valor"
+              className="pl-8"
+            />
+          </div>
+        </div>
+        {filtrosAtivos && (
+          <Button size="sm" variant="ghost" onClick={limparFiltros}>
+            <FilterX className="h-4 w-4 mr-1" /> Limpar
+          </Button>
+        )}
       </div>
+
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -300,7 +384,12 @@ export default function BankingDdaDashboard() {
       {/* Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Títulos DDA</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            Títulos DDA
+            <Badge variant="secondary" className="text-[10px]">
+              {titulos.length}{filtrosAtivos ? ` de ${titulosRaw.length}` : ""}
+            </Badge>
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
