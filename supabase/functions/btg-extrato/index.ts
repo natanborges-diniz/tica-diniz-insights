@@ -89,9 +89,83 @@ async function getBtgToken(codEmpresa: number): Promise<string> {
   const db = getServiceClient();
   const { data } = await db.from("btg_tokens").select("access_token, expires_at").eq("cod_empresa", codEmpresa).single();
   if (!data) throw json({ error: `Empresa ${codEmpresa} não autenticada no BTG.` }, 400);
-  if (new Date(data.expires_at) < new Date()) throw json({ error: `Token BTG expirado para empresa ${codEmpresa}.` }, 401);
+  if (new Date(data.expires_at) < new Date()) {
+    const renovado = await refreshBtgToken(codEmpresa);
+    if (!renovado) throw json({ error: `Token BTG expirado para empresa ${codEmpresa}. Reautorize em /admin/btg-validacao.` }, 401);
+    return renovado;
+  }
   return data.access_token;
 }
+
+// Renova o access_token via refresh_token. Retorna o novo token ou null.
+async function refreshBtgToken(codEmpresa: number): Promise<string | null> {
+  const db = getServiceClient();
+  const { data: row } = await db
+    .from("btg_tokens")
+    .select("refresh_token, scopes")
+    .eq("cod_empresa", codEmpresa)
+    .single();
+  if (!row?.refresh_token) return null;
+
+  const { data: cfg } = await db
+    .from("fornecedor_configuracao")
+    .select("ambiente, api_key, api_key_staging, api_key_production, base_url_staging, base_url_production")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+
+  const isSandbox = cfg?.ambiente !== "production";
+  const clientId = cfg?.api_key || Deno.env.get("BTG_CLIENT_ID")!;
+  const clientSecret = (isSandbox ? cfg?.api_key_staging : cfg?.api_key_production) ||
+    Deno.env.get("BTG_CLIENT_SECRET")!;
+  const authBase = isSandbox
+    ? (cfg?.base_url_staging || "https://id.sandbox.btgpactual.com")
+    : (cfg?.base_url_production || "https://id.btgpactual.com");
+
+  const res = await fetch(`${authBase}/oauth2/token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+    },
+    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: row.refresh_token }),
+  });
+
+  if (!res.ok) {
+    console.error("[btg-extrato] refresh falhou:", res.status, await res.text());
+    return null;
+  }
+
+  const tk = await res.json();
+  await db.from("btg_tokens").update({
+    access_token: tk.access_token,
+    refresh_token: tk.refresh_token || row.refresh_token,
+    expires_at: new Date(Date.now() + (tk.expires_in || 86400) * 1000).toISOString(),
+    scopes: tk.scope ? tk.scope.split(" ") : row.scopes,
+    updated_at: new Date().toISOString(),
+  }).eq("cod_empresa", codEmpresa);
+
+  return tk.access_token as string;
+}
+
+// GET na API BTG com auto-refresh: se o banco devolver 401 (token revogado antes
+// do expires_at gravado), renova via refresh_token e repete a chamada uma vez.
+async function btgGet(codEmpresa: number, url: string): Promise<Response> {
+  let token = await getBtgToken(codEmpresa);
+  const call = (t: string) =>
+    fetch(url, { headers: { Authorization: `Bearer ${t}`, Accept: "application/json" } });
+
+  let res = await call(token);
+  if (res.status === 401) {
+    const novo = await refreshBtgToken(codEmpresa);
+    if (novo) {
+      token = novo;
+      res = await call(token);
+    }
+  }
+  return res;
+}
+
 
 // ─── CNPJ helper (companyId for BTG API = CNPJ sem pontuação) ──
 async function getCnpj(codEmpresa: number): Promise<string> {
