@@ -3289,11 +3289,20 @@ export type Database = {
           dados_media: Json | null
           descricao: string
           dia_vencimento: number | null
+          favorecido_agencia: string | null
+          favorecido_banco: string | null
           favorecido_chave: string | null
+          favorecido_conta: string | null
           favorecido_documento: string | null
           favorecido_nome: string
+          favorecido_tipo_conta: string | null
           folha_evento: string | null
+          forma_pagamento: string | null
           id: string
+          liberacao_concedida_em: string | null
+          liberacao_concedida_por: string | null
+          liberacao_motivo: string | null
+          liberacoes_restantes: number
           periodicidade: string
           provisionar: boolean
           status: string
@@ -3314,11 +3323,20 @@ export type Database = {
           dados_media?: Json | null
           descricao: string
           dia_vencimento?: number | null
+          favorecido_agencia?: string | null
+          favorecido_banco?: string | null
           favorecido_chave?: string | null
+          favorecido_conta?: string | null
           favorecido_documento?: string | null
           favorecido_nome: string
+          favorecido_tipo_conta?: string | null
           folha_evento?: string | null
+          forma_pagamento?: string | null
           id?: string
+          liberacao_concedida_em?: string | null
+          liberacao_concedida_por?: string | null
+          liberacao_motivo?: string | null
+          liberacoes_restantes?: number
           periodicidade?: string
           provisionar?: boolean
           status?: string
@@ -3339,11 +3357,20 @@ export type Database = {
           dados_media?: Json | null
           descricao?: string
           dia_vencimento?: number | null
+          favorecido_agencia?: string | null
+          favorecido_banco?: string | null
           favorecido_chave?: string | null
+          favorecido_conta?: string | null
           favorecido_documento?: string | null
           favorecido_nome?: string
+          favorecido_tipo_conta?: string | null
           folha_evento?: string | null
+          forma_pagamento?: string | null
           id?: string
+          liberacao_concedida_em?: string | null
+          liberacao_concedida_por?: string | null
+          liberacao_motivo?: string | null
+          liberacoes_restantes?: number
           periodicidade?: string
           provisionar?: boolean
           status?: string
