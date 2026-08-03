@@ -461,7 +461,13 @@ async function handleAuthorize(req: Request) {
     "brn:btg:empresas:receivables:credit-card",
     "empresas.btgpactual.com/accounts.readonly",
     "empresas.btgpactual.com/authorized-direct-debits.readonly",
+    // Folha de pagamento (04/08): /banking/payroll/payments exige escopo próprio.
+    // Importar e fechar a folha funcionam sem ele; ENVIAR ao banco, não.
+    // Tokens existentes precisam ser REAUTORIZADOS por loja após esta inclusão.
+    "brn:btg:empresas:banking:payroll",
+    "empresas.btgpactual.com/payroll",
   ].join(" ");
+
 
   const state = JSON.stringify({ cod_empresa, user_id: userId });
   const stateB64 = btoa(state);
