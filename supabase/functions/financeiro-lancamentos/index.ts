@@ -3,6 +3,7 @@ import { corsHeaders, authGuard } from "../_shared/authGuard.ts";
 import { avaliarLancamento, validarJustificativa, criadorAprovadorDistintos } from "../_shared/governanca.ts";
 import { validarAgrupamento, descricaoPagador, ratearValorPago } from "../_shared/rateio.ts";
 import { casarTitulo, JANELA_DIAS } from "../_shared/ddaMatch.ts";
+import { montarLoteFolha } from "../_shared/folha.ts";
 import {
   hojeBrt,
   proximaSegunda,
@@ -918,6 +919,13 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
 
   const apiBase = "https://api.empresas.btgpactual.com";
 
+  // Borderô de folha vai por outro endpoint, com outro escopo e o tipo de
+  // pagamento no cabeçalho do lote. Um caminho só até aqui (montagem,
+  // governança, aprovação), bifurcando só no envio.
+  if (bordero.tipo === "FOLHA") {
+    return await enviarFolhaBtg(bordero, lancamentos || [], apiBase, tokenData.access_token, cnpj, debitParty);
+  }
+
   // 1. Abrir lote — POST /{companyId}/banking/batch-payments
   //    Body exige `taxId` (CNPJ). A resposta traz batchId, expiresAt e maxSize.
   const batchRes = await fetch(`${apiBase}/${cnpj}/banking/batch-payments`, {
@@ -1179,6 +1187,126 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   }).eq("id", bordero_id);
 
   return json({ ok: true, status: "ENVIADO", btg_batch_id: batchId, aceitos, falhas });
+}
+
+/**
+ * Envia um borderô de folha por POST /{companyId}/banking/payroll/payments.
+ *
+ * Diferenças em relação ao lote de pagamentos que valem registrar:
+ *   - não há "abrir lote" e "fechar lote": é uma submissão só, e o retorno é
+ *     202 com o identificador;
+ *   - o tipo de pagamento (salário, férias, rescisão...) vai no CABEÇALHO,
+ *     por isso um borderô de folha carrega um único evento;
+ *   - X-Idempotency-Key é obrigatório aqui (no outro fluxo era opcional);
+ *   - `reference` de cada item leva o id do lançamento, cumprindo o mesmo papel
+ *     do tags.externalId — é por ele que a baixa volta a encontrar a pessoa.
+ */
+async function enviarFolhaBtg(
+  bordero: Record<string, unknown>,
+  lancamentos: Array<Record<string, unknown>>,
+  apiBase: string,
+  accessToken: string,
+  cnpj: string,
+  debitParty: { branchCode: string; number: string },
+) {
+  const { data: comp } = await supabase
+    .from("folha_competencias")
+    .select("*")
+    .eq("id", bordero.folha_competencia_id)
+    .single();
+  if (!comp) throw new Error("Competência de folha não encontrada");
+
+  const itens = lancamentos.map((l) => {
+    const d = (l.dados_extras || {}) as Record<string, unknown>;
+    return {
+      id: String(l.id),
+      cpf: String(l.pessoa_documento ?? ""),
+      banco: d.banco as string | null,
+      agencia: d.agencia as string | null,
+      conta: d.conta as string | null,
+      valor_liquido: Number(l.valor),
+    };
+  });
+
+  let corpo;
+  try {
+    corpo = montarLoteFolha({
+      evento: comp.evento,
+      descricao: String(bordero.descricao ?? `Folha ${comp.competencia}`),
+      dataPagamento: String(bordero.data_pagamento ?? comp.data_pagamento),
+      cnpj,
+      debitParty,
+      itens,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return json({ ok: false, code: "FOLHA_INVALIDA", error: msg, status: bordero.status });
+  }
+
+  const idempotencyKey = await chaveIdempotencia("folha", String(comp.id), String(bordero.id));
+
+  console.log(
+    `[financeiro-lancamentos] BTG request POST /${cnpj}/banking/payroll/payments (folha ${comp.competencia}):`,
+    JSON.stringify({ ...corpo, companies: [{ ...corpo.companies[0], items: `${itens.length} itens` }] }),
+  );
+
+  const res = await fetch(`${apiBase}/${cnpj}/banking/payroll/payments`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "X-Idempotency-Key": idempotencyKey,
+    },
+    body: JSON.stringify(corpo),
+  });
+
+  const texto = await res.text();
+  if (!res.ok) {
+    console.error("[financeiro-lancamentos] folha rejeitada:", res.status, texto.slice(0, 500));
+    let detalhe = texto.slice(0, 300);
+    try {
+      // A API de folha usa ProblemDetails, com invalidParams por campo.
+      const p = JSON.parse(texto);
+      const invalidos = Array.isArray(p.invalidParams)
+        ? p.invalidParams.map((i: Record<string, unknown>) => `${i.name}: ${i.reason}`).join(" | ")
+        : "";
+      detalhe = [p.detail || p.title, invalidos].filter(Boolean).join(" — ") || detalhe;
+    } catch { /* corpo não-JSON */ }
+
+    return json({
+      ok: false,
+      code: "BTG_FOLHA_REJEITADA",
+      error: `O BTG recusou a folha (${res.status}). Nada foi debitado. Detalhe: ${detalhe}`,
+      status: bordero.status,
+    });
+  }
+
+  const dados = JSON.parse(texto || "{}");
+
+  await supabase.from("lancamentos_financeiros")
+    .update({ status: "PROCESSANDO" })
+    .eq("bordero_id", bordero.id);
+
+  await supabase.from("borderos").update({
+    status: "ENVIADO",
+    btg_batch_id: String(dados.paymentId ?? dados.requestId ?? ""),
+  }).eq("id", bordero.id);
+
+  await supabase.from("folha_competencias").update({
+    status: "ENVIADA",
+    btg_request_id: dados.requestId ?? null,
+    btg_payment_id: dados.paymentId != null ? String(dados.paymentId) : null,
+    btg_status: dados.status ?? null,
+  }).eq("id", comp.id);
+
+  return json({
+    ok: true,
+    status: "ENVIADO",
+    tipo: "FOLHA",
+    btg_payment_id: dados.paymentId ?? null,
+    colaboradores: dados.totalEmployees ?? itens.length,
+    total: dados.totalAmount ?? Number(comp.total_liquido),
+  });
 }
 
 async function cancelarBordero(body: Record<string, unknown>) {

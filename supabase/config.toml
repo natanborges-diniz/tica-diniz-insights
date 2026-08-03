@@ -129,3 +129,6 @@ verify_jwt = false
 
 [functions.pix-charges-v5]
 verify_jwt = false
+
+[functions.folha-pagamento]
+verify_jwt = true
