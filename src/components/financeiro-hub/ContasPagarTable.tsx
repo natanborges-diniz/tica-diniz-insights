@@ -286,6 +286,12 @@ function LancamentoRow({
   if (!l.bordero_id && l.status === "AUTORIZADO") {
     secondaryActions.push({ label: "Desautorizar (voltar p/ Em Preparo)", icon: RotateCcw, onClick: () => onReabrir(l.id) });
   }
+  // PROCESSANDO era um beco sem saída na tela: nenhuma ação aparecia. Quando o
+  // lote nunca fechou no BTG o dinheiro não saiu, então dá para destravar — o
+  // backend confere (borderô sem btg_batch_id e título sem baixa) antes de soltar.
+  if (l.status === "PROCESSANDO" && isAdmin && onLiberarProcessando) {
+    secondaryActions.push({ label: "Destravar (lote não foi ao banco)", icon: Unlink, onClick: () => onLiberarProcessando(l), destructive: true });
+  }
 
   return (
     <TableRow key={l.id} className={isVencido ? "bg-destructive/5" : undefined}>
