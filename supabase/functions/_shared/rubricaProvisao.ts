@@ -17,6 +17,57 @@ export interface RubricaProvisionavel {
   vigencia_fim?: string | null;
   status: string;
   provisionar?: boolean;
+  /**
+   * Forma de pagamento e dados do favorecido.
+   *
+   * Vivem na rubrica para não serem redigitados a cada competência: antes o
+   * banco/agência/conta ficavam só no lançamento do mês, e toda provisão nova
+   * nascia sem forma de pagamento.
+   */
+  forma_pagamento?: string | null;
+  favorecido_chave?: string | null;
+  favorecido_banco?: string | null;
+  favorecido_agencia?: string | null;
+  favorecido_conta?: string | null;
+  favorecido_tipo_conta?: string | null;
+}
+
+/**
+ * Instrumento de pagamento pronto para o lançamento, a partir da rubrica.
+ *
+ * Devolve as chaves que `_shared/btgPayment.ts` já reconhece, para o provisionado
+ * sair pronto para o borderô sem passar pela tela de preparar pagamento.
+ */
+export function pagamentoDaRubrica(r: RubricaProvisionavel): Record<string, unknown> {
+  const forma = String(r.forma_pagamento ?? "").toUpperCase();
+
+  if (forma === "PIX_KEY" && r.favorecido_chave) {
+    return {
+      btg_payment_type: "PIX_KEY",
+      btg_details: {
+        chave_pix: r.favorecido_chave,
+        nome: r.favorecido_nome,
+        documento: r.favorecido_documento ?? null,
+      },
+    };
+  }
+
+  if (forma === "TED" && r.favorecido_banco && r.favorecido_agencia && r.favorecido_conta) {
+    return {
+      btg_payment_type: "TED",
+      btg_details: {
+        bankCode: r.favorecido_banco,
+        branch: r.favorecido_agencia,
+        account: r.favorecido_conta,
+        accountType: r.favorecido_tipo_conta ?? "CC",
+        name: r.favorecido_nome,
+        taxId: r.favorecido_documento ?? null,
+      },
+    };
+  }
+
+  // Boleto não dá para adiantar: a linha digitável muda a cada competência.
+  return {};
 }
 
 export interface CompetenciaGerada {
@@ -143,6 +194,12 @@ export function montarProvisao(r: RubricaProvisionavel, c: CompetenciaGerada, co
     origem: "RUBRICA",
     origem_id: `RUBRICA:${r.id}:${c.competencia}`,
     status: "PREVISTO",
-    dados_extras: { conta_numero: r.conta_numero, provisionado: true },
+    dados_extras: {
+      conta_numero: r.conta_numero,
+      provisionado: true,
+      // Forma de pagamento herdada da rubrica: o provisionado já nasce pronto
+      // para o borderô, sem passar pela tela de preparar pagamento.
+      ...pagamentoDaRubrica(r),
+    },
   };
 }

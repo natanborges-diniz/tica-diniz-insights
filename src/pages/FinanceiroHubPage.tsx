@@ -147,6 +147,9 @@ export default function FinanceiroHubPage() {
   const [editMotivoReprog, setEditMotivoReprog] = useState("");
   const [comprovante, setComprovante] = useState<{ url: string; nome: string } | null>(null);
   const [liberarBorderoId, setLiberarBorderoId] = useState<string | null>(null);
+  // Escopo da liberação por item: a decisão do admin pode virar política em vez
+  // de morrer neste borderô. Default UNICA — o mais conservador.
+  const [escoposLiberacao, setEscoposLiberacao] = useState<Record<string, { escopo: string; quantidade: number }>>({});
   const [editCategoria, setEditCategoria] = useState("");
   const [editSubcategoria, setEditSubcategoria] = useState("");
 
@@ -295,13 +298,19 @@ export default function FinanceiroHubPage() {
   /** Aprova o borderô (assumindo os itens sinalizados) e envia na sequência. */
   const aprovarEEnviarMutation = useMutation({
     mutationFn: async (borderoId: string) => {
-      await invokeAction("aprovar_bordero", { bordero_id: borderoId });
+      await invokeAction("aprovar_bordero", {
+        bordero_id: borderoId,
+        liberacoes: Object.entries(escoposLiberacao)
+          .filter(([, v]) => v.escopo !== "UNICA")
+          .map(([lancamento_id, v]) => ({ lancamento_id, escopo: v.escopo, quantidade: v.quantidade })),
+      });
       return invokeAction("enviar_bordero_btg", { bordero_id: borderoId });
     },
     onSuccess: (r: { ok?: boolean; error?: string }) => {
       if (r?.ok === false) { toast.error(r.error || "O banco recusou o envio"); return; }
       toast.success("Borderô liberado e enviado ao BTG");
       setLiberarBorderoId(null);
+      setEscoposLiberacao({});
       invalidateAll();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -824,6 +833,39 @@ export default function FinanceiroHubPage() {
                   <p className="text-xs text-muted-foreground">{i.motivo}</p>
                   {i.como_resolver && (
                     <p className="text-xs text-primary bg-primary/5 rounded p-2">{i.como_resolver}</p>
+                  )}
+                  {/* Escopo: liberar sempre só desta vez fazia o admin repetir a
+                      conferência todo mês, e repetição vira carimbo. */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-[11px] text-muted-foreground">Vale para:</span>
+                    <select
+                      className="h-7 rounded-md border bg-background px-2 text-xs"
+                      value={escoposLiberacao[i.id]?.escopo ?? "UNICA"}
+                      onChange={e => setEscoposLiberacao(prev => ({
+                        ...prev,
+                        [i.id]: { escopo: e.target.value, quantidade: prev[i.id]?.quantidade ?? 3 },
+                      }))}
+                    >
+                      <option value="UNICA">só esta vez</option>
+                      <option value="QUANTIDADE">os próximos</option>
+                      <option value="PERMANENTE">sempre (vira o novo padrão)</option>
+                    </select>
+                    {escoposLiberacao[i.id]?.escopo === "QUANTIDADE" && (
+                      <Input
+                        type="number" min={1} max={24}
+                        className="h-7 w-16 text-xs"
+                        value={escoposLiberacao[i.id]?.quantidade ?? 3}
+                        onChange={e => setEscoposLiberacao(prev => ({
+                          ...prev,
+                          [i.id]: { escopo: "QUANTIDADE", quantidade: Number(e.target.value) || 1 },
+                        }))}
+                      />
+                    )}
+                  </div>
+                  {escoposLiberacao[i.id]?.escopo === "PERMANENTE" && (
+                    <p className="text-[11px] text-muted-foreground">
+                      O valor atual passa a ser o esperado da rubrica, e a faixa gira em torno dele.
+                    </p>
                   )}
                 </div>
               ))}

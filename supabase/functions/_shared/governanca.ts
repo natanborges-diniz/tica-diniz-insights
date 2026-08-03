@@ -93,6 +93,15 @@ export interface RubricaAvaliavel {
   valor_teto: number;
   vigencia_inicio: string;
   vigencia_fim?: string | null;
+  /**
+   * Crédito de liberações concedido pelo admin. Enquanto houver saldo, o item
+   * fora da faixa entra como se estivesse dentro — e cada envio consome um.
+   *
+   * Existe porque liberar valia só para aquele borderô: com aluguel reajustado,
+   * o admin liberava de novo todo mês, e a repetição transforma a conferência
+   * em carimbo — o oposto do controle que a faixa deveria dar.
+   */
+  liberacoes_restantes?: number | null;
 }
 
 export interface Avaliacao {
@@ -100,6 +109,8 @@ export interface Avaliacao {
   podeBordero: boolean;
   motivo: string;
   desvioPct?: number;               // para AMARELO: desvio vs valor_esperado
+  /** Passou por crédito de liberação — quem envia deve consumir um. */
+  usouLiberacao?: boolean;
 }
 
 const soDigitos = (s: unknown) => String(s ?? "").replace(/\D/g, "");
@@ -122,6 +133,20 @@ export function avaliarRubrica(l: LancParaAvaliar, r: RubricaAvaliavel, hoje: st
   if (r.valor_esperado != null && Number(r.valor_esperado) > 0) {
     const desvioPct = Math.round(((l.valor - Number(r.valor_esperado)) / Number(r.valor_esperado)) * 1000) / 10;
     if (Math.abs(desvioPct) > Number(r.tolerancia_pct)) {
+      // Liberação prévia do admin cobre este desvio: entra como se estivesse
+      // dentro da faixa, e quem envia consome um crédito.
+      const creditos = Number(r.liberacoes_restantes ?? 0);
+      if (creditos > 0) {
+        return {
+          selo: "AZUL",
+          podeBordero: true,
+          motivo:
+            `Fora da faixa (${desvioPct > 0 ? "+" : ""}${desvioPct}%), mas coberto por liberação prévia ` +
+            `— restam ${creditos} antes de voltar a pedir conferência`,
+          desvioPct,
+          usouLiberacao: true,
+        };
+      }
       return {
         selo: "AMARELO",
         podeBordero: true, // entra, mas sinalizado — o admin decide na aprovação

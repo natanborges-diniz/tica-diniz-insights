@@ -868,10 +868,71 @@ async function isAdminUser(userId: string): Promise<boolean> {
   return !!data && data.length > 0;
 }
 
+/**
+ * Concede crédito de liberação à rubrica de um lançamento.
+ *
+ * Liberar valia só para aquele borderô: com aluguel reajustado, o admin liberava
+ * de novo todo mês, e a repetição transforma a conferência em carimbo — o oposto
+ * do controle que a faixa deveria dar.
+ *
+ * Escopos:
+ *   UNICA       — nada persiste; vale só o borderô atual
+ *   QUANTIDADE  — crédito para os próximos N lançamentos daquela rubrica
+ *   PERMANENTE  — adota o valor atual como esperado; a faixa passa a girar em
+ *                 torno dele (e a média móvel mensal mantém isso vivo)
+ */
+async function aplicarLiberacao(
+  lancamentoId: string,
+  escopo: string,
+  quantidade: number,
+  motivo: string,
+  userId: string,
+) {
+  if (escopo === "UNICA") return;
+
+  const { data: lanc } = await supabase
+    .from("lancamentos_financeiros")
+    .select("rubrica_id, valor")
+    .eq("id", lancamentoId)
+    .single();
+  if (!lanc?.rubrica_id) return; // sem rubrica não há o que persistir
+
+  if (escopo === "PERMANENTE") {
+    await supabase.from("rubricas_autorizadas").update({
+      valor_esperado: Number(lanc.valor),
+      liberacao_concedida_por: userId,
+      liberacao_concedida_em: new Date().toISOString(),
+      liberacao_motivo: motivo || "valor adotado como novo padrão",
+    }).eq("id", lanc.rubrica_id);
+    return;
+  }
+
+  if (escopo === "QUANTIDADE") {
+    const n = Math.max(1, Math.min(24, Math.floor(quantidade || 1)));
+    const { data: rub } = await supabase
+      .from("rubricas_autorizadas")
+      .select("liberacoes_restantes")
+      .eq("id", lanc.rubrica_id)
+      .single();
+    await supabase.from("rubricas_autorizadas").update({
+      liberacoes_restantes: Number(rub?.liberacoes_restantes ?? 0) + n,
+      liberacao_concedida_por: userId,
+      liberacao_concedida_em: new Date().toISOString(),
+      liberacao_motivo: motivo || null,
+    }).eq("id", lanc.rubrica_id);
+  }
+}
+
 async function aprovarBordero(body: Record<string, unknown>, userId: string) {
   const { bordero_id } = body;
   if (!bordero_id) throw new Error("bordero_id obrigatório");
   await requireAdmin(userId); // Decisão 30/07: operador cria, ADMIN aprova (sem papel master)
+
+  // Escopo por item: a decisão do admin pode virar política, em vez de morrer
+  // neste borderô. Ver aplicarLiberacao.
+  const liberacoes = (body.liberacoes as Array<{
+    lancamento_id: string; escopo: string; quantidade?: number; motivo?: string;
+  }>) || [];
 
   const { data: bordero } = await supabase.from("borderos").select("*").eq("id", bordero_id).single();
   if (!bordero) throw new Error("Borderô não encontrado");
@@ -881,6 +942,16 @@ async function aprovarBordero(body: Record<string, unknown>, userId: string) {
   // G2 — separação de funções: quem montou o borderô não o aprova
   const distinto = criadorAprovadorDistintos(bordero.criado_por, userId);
   if (!distinto.ok) throw new Error(distinto.motivo!);
+
+  for (const lib of liberacoes) {
+    await aplicarLiberacao(
+      String(lib.lancamento_id),
+      String(lib.escopo || "UNICA"),
+      Number(lib.quantidade ?? 1),
+      String(lib.motivo ?? ""),
+      userId,
+    );
+  }
 
   const { error: bErr } = await supabase
     .from("borderos")
@@ -1342,7 +1413,13 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     });
   }
 
-  // 4. Update local records
+  // 4. Consome os créditos de liberação usados nesta remessa.
+  //
+  // O débito acontece no ENVIO, não na avaliação: a listagem reavalia os selos
+  // o tempo todo, e consumir ali gastaria o crédito só de olhar a tela.
+  await consumirLiberacoes(lancamentos || []);
+
+  // 5. Update local records
   await supabase.from("borderos").update({
     status: "ENVIADO",
     btg_batch_id: batchId,
@@ -1469,6 +1546,47 @@ async function enviarFolhaBtg(
     colaboradores: dados.totalEmployees ?? itens.length,
     total: dados.totalAmount ?? Number(comp.total_liquido),
   });
+}
+
+/**
+ * Debita um crédito de liberação por lançamento que dependeu dele.
+ *
+ * Chamado só depois do envio bem-sucedido: a listagem reavalia os selos a cada
+ * carregamento de tela, e consumir na avaliação gastaria o crédito só de alguém
+ * abrir a página.
+ */
+async function consumirLiberacoes(lancamentos: Array<Record<string, unknown>>) {
+  const rubIds = [...new Set(lancamentos.map((l) => l.rubrica_id).filter(Boolean))] as string[];
+  if (rubIds.length === 0) return;
+
+  const { data: rubs } = await supabase
+    .from("rubricas_autorizadas")
+    .select("*")
+    .in("id", rubIds)
+    .gt("liberacoes_restantes", 0);
+  if (!rubs || rubs.length === 0) return;
+
+  const hoje = hojeBrt();
+  const consumo = new Map<string, number>();
+
+  for (const l of lancamentos) {
+    if (!l.rubrica_id) continue;
+    const rub = rubs.find((r) => String(r.id) === String(l.rubrica_id));
+    if (!rub) continue;
+    const av = avaliarLancamento(l as never, rub as never, hoje);
+    if (av.usouLiberacao) {
+      consumo.set(String(rub.id), (consumo.get(String(rub.id)) ?? 0) + 1);
+    }
+  }
+
+  for (const [rubricaId, usados] of consumo) {
+    const rub = rubs.find((r) => String(r.id) === rubricaId)!;
+    const restante = Math.max(0, Number(rub.liberacoes_restantes ?? 0) - usados);
+    await supabase.from("rubricas_autorizadas")
+      .update({ liberacoes_restantes: restante })
+      .eq("id", rubricaId);
+    console.log(`[financeiro-lancamentos] rubrica ${rubricaId}: ${usados} liberação(ões) consumida(s), restam ${restante}`);
+  }
 }
 
 async function cancelarBordero(body: Record<string, unknown>) {

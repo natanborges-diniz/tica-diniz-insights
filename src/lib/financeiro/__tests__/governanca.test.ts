@@ -155,3 +155,44 @@ describe('valor editado à mão', () => {
     expect(av.selo).toBe('AMARELO');
   });
 });
+
+// Liberar valia so para aquele bordero: com aluguel reajustado, o admin
+// liberava de novo todo mes, e a repeticao transforma a conferencia em carimbo.
+describe('credito de liberacao da rubrica', () => {
+  const rubrica = (over: Record<string, unknown> = {}) => ({
+    id: 'r1', status: 'ATIVA', tolerancia_pct: 10, valor_teto: 20000,
+    valor_esperado: 1000, vigencia_inicio: '2026-01-01', ...over,
+  } as never);
+
+  const lanc = (valor: number) => ({ id: 'l1', rubrica_id: 'r1', valor } as never);
+
+  it('sem credito, valor fora da faixa fica AMARELO', () => {
+    const av = avaliarLancamento(lanc(1300), rubrica(), '2026-08-04');
+    expect(av.selo).toBe('AMARELO');
+    expect(av.usouLiberacao).toBeUndefined();
+  });
+
+  it('com credito, passa como AZUL e sinaliza o consumo', () => {
+    const av = avaliarLancamento(lanc(1300), rubrica({ liberacoes_restantes: 3 }), '2026-08-04');
+    expect(av.selo).toBe('AZUL');
+    expect(av.usouLiberacao).toBe(true);
+    expect(av.motivo).toMatch(/restam 3/);
+  });
+
+  it('credito nao mascara valor acima do teto — isso continua barrado', () => {
+    const av = avaliarLancamento(lanc(25000), rubrica({ liberacoes_restantes: 5 }), '2026-08-04');
+    expect(av.selo).toBe('SEM_LASTRO');
+    expect(av.podeBordero).toBe(false);
+  });
+
+  it('dentro da faixa nao consome credito', () => {
+    const av = avaliarLancamento(lanc(1050), rubrica({ liberacoes_restantes: 3 }), '2026-08-04');
+    expect(av.selo).toBe('AZUL');
+    expect(av.usouLiberacao).toBeUndefined();
+  });
+
+  it('credito zerado volta a pedir conferencia', () => {
+    const av = avaliarLancamento(lanc(1300), rubrica({ liberacoes_restantes: 0 }), '2026-08-04');
+    expect(av.selo).toBe('AMARELO');
+  });
+});
