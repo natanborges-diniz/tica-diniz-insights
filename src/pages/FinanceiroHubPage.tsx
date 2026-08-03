@@ -1374,7 +1374,8 @@ export default function FinanceiroHubPage() {
             setFiltroCampoData("VENCIMENTO"); setFiltroDataInicio(format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd")); setFiltroDataFim(format(new Date(now.getFullYear(), now.getMonth() + 1, 0), "yyyy-MM-dd"));
           }}>Mês atual</Button>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
-            setFiltroCampoData("VENCIMENTO"); setFiltroDataInicio(""); setFiltroDataFim(format(new Date(new Date().setDate(agoraSP().getDate() - 1)), "yyyy-MM-dd")); setFiltroStatus("PREVISTO");
+            const ontem = agoraSP(); ontem.setDate(ontem.getDate() - 1);
+            setFiltroCampoData("VENCIMENTO"); setFiltroDataInicio(""); setFiltroDataFim(format(ontem, "yyyy-MM-dd")); setFiltroStatus("PREVISTO");
           }}>Vencidos</Button>
         </div>
 
