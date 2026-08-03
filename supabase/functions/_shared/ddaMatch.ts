@@ -39,6 +39,15 @@ export interface CandidatoErp {
   pessoa_documento?: string | null;
   /** Número do documento da parcela no ERP. */
   documento?: string | null;
+  /**
+   * Tolerância de valor própria deste candidato, em reais.
+   *
+   * Existe para lançamento provisionado por rubrica: aluguel e condomínio SEMPRE
+   * vêm com boleto reajustado, e o provisionado carrega o valor esperado, não o
+   * cobrado. Com a tolerância fixa de R$ 0,10 o boleto legítimo nunca casaria —
+   * a faixa da rubrica é justamente a medida de quanto o desvio é aceitável.
+   */
+  tolerancia_valor?: number | null;
 }
 
 export interface ResultadoMatch {
@@ -122,9 +131,14 @@ function desempatarPorData(lista: CandidatoErp[], venc: string): CandidatoErp | 
 export function casarTitulo(titulo: TituloDda, candidatos: CandidatoErp[]): ResultadoMatch {
   const venc = String(titulo.data_vencimento).slice(0, 10);
 
-  const naTolerancia = candidatos.filter(
-    (c) => Math.abs(Number(c.valor) - Number(titulo.valor)) <= TOLERANCIA_VALOR,
-  );
+  // Tolerância por candidato quando ele declara uma (rubrica com faixa própria);
+  // senão, a fixa de centavos.
+  const naTolerancia = candidatos.filter((c) => {
+    const limite = Number(c.tolerancia_valor ?? 0) > 0
+      ? Number(c.tolerancia_valor)
+      : TOLERANCIA_VALOR;
+    return Math.abs(Number(c.valor) - Number(titulo.valor)) <= limite;
+  });
   if (naTolerancia.length === 0) {
     return { candidato: null, motivo: "Nenhum lançamento com valor compatível", empatados: 0 };
   }

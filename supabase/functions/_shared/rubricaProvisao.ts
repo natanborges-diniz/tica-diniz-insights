@@ -66,7 +66,14 @@ export function pagamentoDaRubrica(r: RubricaProvisionavel): Record<string, unkn
     };
   }
 
-  // Boleto não dá para adiantar: a linha digitável muda a cada competência.
+  // Boleto: a linha digitável muda a cada competência, então não há o que
+  // adiantar — mas registramos a EXPECTATIVA. Aluguel e condomínio sempre vêm
+  // por boleto reajustado, e o lançamento precisa dizer "aguardo o DDA" em vez
+  // de "sem boleto", que soa como pendência de cadastro.
+  if (forma === "BANKSLIP") {
+    return { btg_payment_type: "BANKSLIP", aguarda_boleto_dda: true };
+  }
+
   return {};
 }
 

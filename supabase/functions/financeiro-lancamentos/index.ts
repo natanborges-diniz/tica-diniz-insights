@@ -438,12 +438,98 @@ async function agruparLancamentos(body: Record<string, unknown>, userId: string)
     .in("id", componentes.map((c) => c.id));
   if (updErr) throw new Error(updErr.message);
 
+  // Procura o boleto do DDA para o pagador recém-criado.
+  //
+  // Caso real (Barueri, 04/08): o ERP lançou o título dividido em amortização e
+  // juros, mas o boleto é um só, com a soma. Unificar resolvia o pagamento e
+  // deixava o boleto para trás — nenhum componente batia com o valor do DDA
+  // sozinho, e o pagador nascia depois da conciliação já ter rodado.
+  //
+  // Só faz sentido para pagador sintético: quando o pagador é o próprio título
+  // do DDA, o vínculo já existe.
+  let boletoVinculado = false;
+  if (!pagadorId) {
+    boletoVinculado = await vincularBoletoAoPagador(pagador, validacao.soma);
+  }
+
   return json({
     ok: true,
     pagador_id: pagador.id,
     componentes: componentes.length,
     total: validacao.soma,
+    boleto_vinculado: boletoVinculado,
   });
+}
+
+/**
+ * Tenta anexar um título do DDA ao pagador criado pela unificação.
+ *
+ * A conciliação normal roda na importação do DDA e no import do ERP — nenhuma
+ * das duas passa por aqui, porque o pagador nasce depois, de uma ação manual.
+ * Sem esta busca, boleto legítimo ficava órfão justamente nos casos em que a
+ * unificação era necessária.
+ */
+async function vincularBoletoAoPagador(
+  pagador: Record<string, unknown>,
+  total: number,
+): Promise<boolean> {
+  const venc = String(pagador.data_vencimento).slice(0, 10);
+  const emDias = (d: number) =>
+    new Date(Date.parse(`${venc}T12:00:00Z`) + d * 86_400_000).toISOString().slice(0, 10);
+
+  const { data: titulos } = await supabase
+    .from("btg_dda_titulos")
+    .select("id, valor, data_vencimento, documento_emissor, numero_documento, emissor, linha_digitavel")
+    .eq("cod_empresa", pagador.cod_empresa)
+    .not("status", "in", "(PAGO,IGNORADO,CANCELADO,ARQUIVADO)")
+    .gte("data_vencimento", emDias(-JANELA_DIAS))
+    .lte("data_vencimento", emDias(JANELA_DIAS));
+
+  if (!titulos || titulos.length === 0) return false;
+
+  // Só títulos ainda sem lançamento vinculado.
+  const { data: jaVinculados } = await supabase
+    .from("lancamentos_financeiros")
+    .select("btg_dda_id")
+    .in("btg_dda_id", titulos.map((t) => t.id));
+  const ocupados = new Set((jaVinculados || []).map((l) => String(l.btg_dda_id)));
+
+  const candidato = {
+    id: String(pagador.id),
+    valor: total,
+    data_vencimento: venc,
+    pessoa_documento: (pagador.pessoa_documento ?? null) as string | null,
+  };
+
+  for (const t of titulos) {
+    if (ocupados.has(String(t.id))) continue;
+    const r = casarTitulo(
+      {
+        valor: Number(t.valor),
+        data_vencimento: String(t.data_vencimento),
+        documento_emissor: t.documento_emissor,
+        numero_documento: t.numero_documento,
+      },
+      [candidato],
+    );
+    if (!r.candidato) continue;
+
+    const extras = (pagador.dados_extras || {}) as Record<string, unknown>;
+    await supabase.from("lancamentos_financeiros").update({
+      btg_dda_id: t.id,
+      forma_pagamento: "BOLETO",
+      dados_extras: {
+        ...extras,
+        linha_digitavel: t.linha_digitavel,
+        dda_emissor: t.emissor,
+        btg_payment_type: "BANKSLIP",
+      },
+    }).eq("id", pagador.id);
+    await supabase.from("btg_dda_titulos").update({ conciliado: true }).eq("id", t.id);
+    console.log(`[financeiro-lancamentos] unificação: boleto ${t.id} anexado ao pagador ${pagador.id}`);
+    return true;
+  }
+  return false;
 }
 
 /**

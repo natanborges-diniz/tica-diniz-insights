@@ -227,3 +227,35 @@ describe('limites das tolerâncias', () => {
     expect(r.empatados).toBe(0);
   });
 });
+
+// Aluguel e condominio SEMPRE vem com boleto reajustado. O lancamento
+// provisionado carrega o valor ESPERADO da rubrica, nao o cobrado — com a
+// tolerancia fixa de R$ 0,10 o boleto legitimo nunca casaria.
+describe('tolerancia propria do candidato (rubrica com faixa)', () => {
+  const boleto = { valor: 8437.20, data_vencimento: '2026-09-10', documento_emissor: null };
+
+  it('provisionado por rubrica casa dentro da faixa dela', () => {
+    const r = casarTitulo(boleto, [{
+      id: 'aluguel',
+      valor: 8000,                 // valor esperado da rubrica
+      data_vencimento: '2026-09-10',
+      tolerancia_valor: 800,       // faixa de 10%
+    }]);
+    expect(r.candidato?.id).toBe('aluguel');
+  });
+
+  it('sem faixa propria, a tolerancia fixa de centavos recusa', () => {
+    const r = casarTitulo(boleto, [{
+      id: 'aluguel', valor: 8000, data_vencimento: '2026-09-10',
+    }]);
+    expect(r.candidato).toBeNull();
+    expect(r.motivo).toMatch(/valor compatível/);
+  });
+
+  it('desvio acima da faixa continua recusado — a faixa e o limite, nao um passe livre', () => {
+    const r = casarTitulo({ ...boleto, valor: 12000 }, [{
+      id: 'aluguel', valor: 8000, data_vencimento: '2026-09-10', tolerancia_valor: 800,
+    }]);
+    expect(r.candidato).toBeNull();
+  });
+});

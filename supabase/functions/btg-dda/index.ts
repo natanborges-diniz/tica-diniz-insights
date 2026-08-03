@@ -258,6 +258,20 @@ async function reconciliarEmpresa(ce: number): Promise<{ vinculados: number; sem
     .not("btg_dda_id", "is", null);
   const vinculadosSet = new Set((jaVinculados || []).map((l) => String(l.btg_dda_id)));
 
+  // Faixa de tolerância por rubrica, em reais — carregada uma vez.
+  const faixaPorRubrica = new Map<string, number>();
+  const { data: rubs } = await db
+    .from("rubricas_autorizadas")
+    .select("id, valor_esperado, tolerancia_pct")
+    .eq("status", "ATIVA");
+  for (const r of (rubs || [])) {
+    const esperado = Number(r.valor_esperado ?? 0);
+    const pct = Number(r.tolerancia_pct ?? 0);
+    if (esperado > 0 && pct > 0) {
+      faixaPorRubrica.set(String(r.id), Math.round(esperado * (pct / 100) * 100) / 100);
+    }
+  }
+
   let vinculados = 0;
   let semMatch = 0;
 
@@ -270,15 +284,18 @@ async function reconciliarEmpresa(ce: number): Promise<{ vinculados: number; sem
 
     const { data: candidatos } = await db
       .from("lancamentos_financeiros")
-      .select("id, valor, data_vencimento, pessoa_documento, dados_extras")
+      .select("id, valor, data_vencimento, pessoa_documento, dados_extras, rubrica_id")
       .eq("cod_empresa", ce)
       .eq("tipo", "PAGAR")
       .in("status", ["PREVISTO", "CLASSIFICADO"])
       .is("btg_dda_id", null)
       .gte("data_vencimento", emDias(-JANELA_DIAS))
       .lte("data_vencimento", emDias(JANELA_DIAS))
-      .gte("valor", Number(t.valor) - TOLERANCIA_VALOR)
-      .lte("valor", Number(t.valor) + TOLERANCIA_VALOR);
+      // Janela de valor alargada na consulta para caber o provisionado por
+      // rubrica; quem decide de fato é casarTitulo, com a tolerância de cada
+      // candidato. Aluguel e condomínio SEMPRE vêm com boleto reajustado.
+      .gte("valor", Number(t.valor) * 0.5)
+      .lte("valor", Number(t.valor) * 1.5);
 
     const r = casarTitulo(
       {
@@ -293,6 +310,11 @@ async function reconciliarEmpresa(ce: number): Promise<{ vinculados: number; sem
         data_vencimento: String(c.data_vencimento),
         pessoa_documento: c.pessoa_documento,
         documento: ((c.dados_extras || {}) as Record<string, unknown>).documento as string | null,
+        // Provisionado por rubrica carrega o valor ESPERADO, não o cobrado.
+        // A faixa da rubrica é a medida de quanto o desvio é aceitável.
+        tolerancia_valor: c.rubrica_id
+          ? (faixaPorRubrica.get(String(c.rubrica_id)) ?? null)
+          : null,
       })),
     );
 
