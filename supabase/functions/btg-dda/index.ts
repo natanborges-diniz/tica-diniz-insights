@@ -478,7 +478,7 @@ async function importarEmpresa(ce: number): Promise<Response> {
     const internalStatus = statusMap[btgStatus] || "PENDENTE";
     const isConciliado = btgStatus === "PAYMENT_CONFIRMED";
 
-    const { error } = await db.from("btg_dda_titulos").insert({
+    const { data: ddaRow, error } = await db.from("btg_dda_titulos").insert({
       cod_empresa: ce,
       btg_dda_id: btgDdaId || null,
       emissor: emissorVal,
@@ -489,18 +489,11 @@ async function importarEmpresa(ce: number): Promise<Response> {
       linha_digitavel: linhaVal,
       status: internalStatus,
       conciliado: isConciliado,
-    });
+    }).select("id").maybeSingle();
 
     if (!error) {
       inseridos++;
 
-      // Auto-create lancamento_financeiro for this DDA title
-      const { data: ddaRow } = await db
-        .from("btg_dda_titulos")
-        .select("id")
-        .eq("btg_dda_id", btgDdaId)
-        .eq("cod_empresa", ce)
-        .maybeSingle();
 
       if (ddaRow) {
         // Governança (31/07): DDA é COBRANÇA, não dívida — nunca mais criamos
