@@ -97,6 +97,8 @@ Deno.serve(async (req) => {
         return await mesaAprovacao(body);
       case "aprovar_excecao":
         return await aprovarExcecao(body, auth.userId);
+      case "diagnostico_bordero":
+        return await diagnosticoBordero(body, auth.userId);
       case "aprovar_bordero":
         return await aprovarBordero(body, auth.userId);
       case "enviar_bordero_btg":
@@ -773,6 +775,97 @@ async function removerDoBordero(body: Record<string, unknown>) {
   if (error) throw new Error(error.message);
   await recalcBordero(String(bordero_id));
   return json({ ok: true });
+}
+
+/**
+ * Diz, num lugar só, por que o borderô não sai e o que fazer.
+ *
+ * Antes: o envio falhava com uma lista de motivos crus e um botão que jogava o
+ * admin na Mesa de Aprovação — onde ele via todos os lançamentos da empresa e
+ * tinha que descobrir sozinho quais eram os do borderô e o que significavam.
+ *
+ * Aqui devolvemos o diagnóstico pronto: quem trava, por quê, o que resolve, e
+ * se ESTE usuário pode liberar. A separação de funções (quem monta não aprova)
+ * é a causa mais comum de trava em equipe pequena, e nunca era dita em voz alta.
+ */
+async function diagnosticoBordero(body: Record<string, unknown>, userId: string) {
+  const { bordero_id } = body;
+  if (!bordero_id) throw new Error("bordero_id obrigatório");
+
+  const { data: bordero } = await supabase.from("borderos").select("*").eq("id", bordero_id).single();
+  if (!bordero) throw new Error("Borderô não encontrado");
+
+  const { data: lancs } = await supabase
+    .from("lancamentos_financeiros")
+    .select("*")
+    .eq("bordero_id", bordero_id);
+
+  const rubIds = [...new Set((lancs || []).map((l) => l.rubrica_id).filter(Boolean))] as string[];
+  const rubMap = new Map<string, Record<string, unknown>>();
+  if (rubIds.length > 0) {
+    const { data: rubs } = await supabase.from("rubricas_autorizadas").select("*").in("id", rubIds);
+    for (const r of (rubs || [])) rubMap.set(String(r.id), r);
+  }
+
+  const hoje = hojeBrt();
+  const itens = (lancs || []).map((l) => {
+    const rubrica = l.rubrica_id ? (rubMap.get(String(l.rubrica_id)) as never) ?? null : null;
+    const av = avaliarLancamento(l as never, rubrica, hoje);
+    return {
+      id: l.id,
+      descricao: l.descricao,
+      pessoa_nome: l.pessoa_nome,
+      valor: Number(l.valor),
+      selo: av.selo,
+      motivo: av.motivo,
+      trava: av.selo !== "VERDE" && av.selo !== "AZUL",
+      // O que resolve, em linguagem de quem opera — não de quem programou.
+      como_resolver: comoResolver(av.selo, l),
+    };
+  });
+
+  const travados = itens.filter((i) => i.trava);
+  const admin = await isAdminUser(userId);
+  const distinto = criadorAprovadorDistintos(bordero.criado_por, userId);
+
+  let impedimento: string | null = null;
+  if (!admin) impedimento = "Só um administrador pode liberar um borderô com itens sinalizados.";
+  else if (!distinto.ok) impedimento = `${distinto.motivo} — peça a outro administrador.`;
+  else if (bordero.status !== "MONTAGEM") impedimento = `O borderô está em ${bordero.status}.`;
+
+  return json({
+    ok: true,
+    bordero: { id: bordero.id, descricao: bordero.descricao, status: bordero.status, total: Number(bordero.total_valor) },
+    total_itens: itens.length,
+    travados: travados.length,
+    valor_travado: Math.round(travados.reduce((s, i) => s + i.valor, 0) * 100) / 100,
+    itens,
+    pode_liberar: travados.length > 0 && !impedimento,
+    envia_direto: travados.length === 0,
+    impedimento,
+  });
+}
+
+/** Tradução do selo em ação concreta para quem está olhando a tela. */
+function comoResolver(selo: string, l: Record<string, unknown>): string | null {
+  switch (selo) {
+    case "VERDE":
+    case "AZUL":
+      return null;
+    case "AMARELO":
+      return "O valor saiu da faixa da rubrica. Confira se está certo — se estiver, é só liberar; se não, corrija o valor no lançamento.";
+    case "VERMELHO":
+      return "Exceção emergencial não entra em borderô. Remova daqui e pague individualmente.";
+    default:
+      return l.btg_dda_id
+        ? "Boleto veio do banco sem título correspondente no ERP. Confirme que a dívida existe e vincule ao título, ou cadastre uma rubrica para este fornecedor."
+        : "Sem origem que comprove a dívida. Vincule a um título do ERP, cadastre uma rubrica, ou remova do borderô.";
+  }
+}
+
+async function isAdminUser(userId: string): Promise<boolean> {
+  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin");
+  return !!data && data.length > 0;
 }
 
 async function aprovarBordero(body: Record<string, unknown>, userId: string) {

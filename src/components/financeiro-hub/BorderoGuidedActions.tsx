@@ -98,12 +98,15 @@ export function BorderoGuidedActions({
             title="Borderô 100% com lastro na faixa envia direto; o admin confirma no app BTG">
             <Send className="h-3.5 w-3.5 mr-1" /> Enviar BTG
           </Button>
-          {isAdmin && (
-            <Button size="sm" variant="outline" onClick={onAprovar} disabled={isPendingAprovar}
-              title="Para borderôs com itens fora da faixa — aprovação na Mesa com os selos à vista">
-              <FileCheck className="h-3.5 w-3.5 mr-1" /> Mesa
-            </Button>
-          )}
+          {/* "Verificar" em vez de "Mesa": abre o diagnóstico do próprio
+              borderô — o que trava, por quê e o que resolve — com a liberação
+              ali mesmo. Mandar o admin para a Mesa o obrigava a achar sozinho,
+              no meio de todos os lançamentos da empresa, quais eram os deste
+              borderô e o que cada selo significava. */}
+          <Button size="sm" variant="outline" onClick={onAprovar} disabled={isPendingAprovar}
+            title="Mostra o que impede o envio deste borderô e permite liberar">
+            <FileCheck className="h-3.5 w-3.5 mr-1" /> Verificar
+          </Button>
         </>
       )}
       {status === "APROVADO" && (

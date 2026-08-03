@@ -146,6 +146,7 @@ export default function FinanceiroHubPage() {
   const [editVencimento, setEditVencimento] = useState("");
   const [editMotivoReprog, setEditMotivoReprog] = useState("");
   const [comprovante, setComprovante] = useState<{ url: string; nome: string } | null>(null);
+  const [liberarBorderoId, setLiberarBorderoId] = useState<string | null>(null);
   const [editCategoria, setEditCategoria] = useState("");
   const [editSubcategoria, setEditSubcategoria] = useState("");
 
@@ -216,6 +217,18 @@ export default function FinanceiroHubPage() {
     queryFn: () => invokeAction("listar_borderos", { cod_empresa: codEmpresa }),
   });
 
+  // Diagnóstico da trava: por que não sai, o que resolve, e se ESTE usuário
+  // pode liberar. Carregado só quando o diálogo abre.
+  const { data: diagnostico } = useQuery<{
+    total_itens: number; travados: number; valor_travado: number;
+    pode_liberar: boolean; impedimento: string | null;
+    itens: Array<{ id: string; descricao: string; pessoa_nome: string | null; valor: number; selo: string; motivo: string; trava: boolean; como_resolver: string | null }>;
+  }>({
+    queryKey: ["bordero-diagnostico", liberarBorderoId],
+    queryFn: () => invokeAction("diagnostico_bordero", { bordero_id: liberarBorderoId }),
+    enabled: !!liberarBorderoId,
+  });
+
   const { data: borderoDetalhe } = useQuery({
     queryKey: ["bordero-detalhe", borderoDetalheId],
     queryFn: () => invokeAction("detalhe_bordero", { bordero_id: borderoDetalheId }),
@@ -274,6 +287,21 @@ export default function FinanceiroHubPage() {
       setFormUnificarDesc("");
       setFormUnificarPagador("");
       setSelectedIds(new Set());
+      invalidateAll();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  /** Aprova o borderô (assumindo os itens sinalizados) e envia na sequência. */
+  const aprovarEEnviarMutation = useMutation({
+    mutationFn: async (borderoId: string) => {
+      await invokeAction("aprovar_bordero", { bordero_id: borderoId });
+      return invokeAction("enviar_bordero_btg", { bordero_id: borderoId });
+    },
+    onSuccess: (r: { ok?: boolean; error?: string }) => {
+      if (r?.ok === false) { toast.error(r.error || "O banco recusou o envio"); return; }
+      toast.success("Borderô liberado e enviado ao BTG");
+      setLiberarBorderoId(null);
       invalidateAll();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -726,6 +754,72 @@ export default function FinanceiroHubPage() {
               />
             </div>
           </div>
+        </BaseDialog>
+
+        {/* Liberação do borderô — diagnóstico e ação no mesmo lugar.
+            Antes o envio falhava com uma lista de motivos crus e um botão que
+            jogava o admin na Mesa, onde ele via todos os lançamentos da empresa
+            e tinha que descobrir sozinho quais eram os deste borderô. */}
+        <BaseDialog
+          open={!!liberarBorderoId}
+          onOpenChange={(o) => { if (!o) setLiberarBorderoId(null); }}
+          title="Liberar borderô"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setLiberarBorderoId(null)}>Fechar</Button>
+              {diagnostico?.pode_liberar && (
+                <Button
+                  onClick={() => aprovarEEnviarMutation.mutate(liberarBorderoId!)}
+                  disabled={aprovarEEnviarMutation.isPending}
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                  {aprovarEEnviarMutation.isPending ? "Liberando..." : "Liberar e enviar ao BTG"}
+                </Button>
+              )}
+            </>
+          }
+        >
+          {!diagnostico ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Analisando...</p>
+          ) : (
+            <div className="space-y-3 py-2">
+              {diagnostico.travados === 0 ? (
+                <p className="text-sm bg-green-50 border border-green-200 text-green-800 rounded-md p-3">
+                  Nada trava este borderô — todos os {diagnostico.total_itens} itens têm origem comprovada.
+                  Ele pode ser enviado direto.
+                </p>
+              ) : (
+                <div className="text-sm bg-amber-50 border border-amber-200 rounded-md p-3">
+                  <p className="font-medium text-amber-900">
+                    {diagnostico.travados} de {diagnostico.total_itens} itens precisam da sua liberação
+                    {" "}({fmtCurrency(diagnostico.valor_travado)})
+                  </p>
+                  <p className="text-xs text-amber-800 mt-1">
+                    Os demais seguem normalmente. Liberar significa: você confere e assume que a despesa procede.
+                  </p>
+                </div>
+              )}
+
+              {diagnostico.impedimento && (
+                <p className="text-sm bg-destructive/5 border border-destructive/20 text-destructive rounded-md p-3">
+                  {diagnostico.impedimento}
+                </p>
+              )}
+
+              {diagnostico.itens.filter(i => i.trava).map(i => (
+                <div key={i.id} className="border rounded-md p-3 space-y-1">
+                  <div className="flex justify-between items-start gap-3">
+                    <p className="text-sm font-medium">{i.pessoa_nome || i.descricao}</p>
+                    <p className="text-sm font-medium whitespace-nowrap">{fmtCurrency(i.valor)}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{i.motivo}</p>
+                  {i.como_resolver && (
+                    <p className="text-xs text-primary bg-primary/5 rounded p-2">{i.como_resolver}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </BaseDialog>
 
         {/* Comprovante — visualização no próprio app */}
@@ -1325,7 +1419,7 @@ export default function FinanceiroHubPage() {
                                 isAdmin={!!authIsAdmin}
                                 enviadoEm={b.updated_at}
                                 dataPagamento={b.data_pagamento}
-                                onAprovar={() => { window.location.href = `/financeiro/mesa?bordero=${b.id}&empresa=${codEmpresa}`; }}
+                                onAprovar={() => setLiberarBorderoId(b.id)}
                                 onEnviar={() => enviarBorderoMutation.mutate(b.id)}
                                 onConfirmar={() => confirmarProcessamentoMutation.mutate(b.id)}
                                 onCancelar={() => cancelarBorderoMutation.mutate(b.id)}
