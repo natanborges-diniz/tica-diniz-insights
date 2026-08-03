@@ -107,6 +107,8 @@ Deno.serve(async (req) => {
         return await enviarBorderoBtg(body, auth.userId);
       case "cancelar_bordero":
         return await cancelarBordero(body);
+      case "liberar_processando_orfao":
+        return await liberarProcessandoOrfao(body, auth.userId);
       case "detalhe_bordero":
         return await detalheBordero(body);
 
