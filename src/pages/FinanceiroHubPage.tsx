@@ -32,6 +32,7 @@ import { NovoLancamentoDialog } from "@/components/financeiro-hub/NovoLancamento
 
 import { ClassificarLoteDialog } from "@/components/financeiro-hub/ClassificarLoteDialog";
 import { agoraSP } from "@/lib/datetime";
+import { estadoBordero, resumirComposicao, type ComposicaoBordero } from "../../supabase/functions/_shared/borderoEstado";
 
 interface Lancamento {
   id: string;
@@ -79,6 +80,8 @@ interface Bordero {
   created_at: string;
   updated_at: string | null;
   data_pagamento: string | null;
+  /** Contagem de pagos/recusados/pendentes vinda do listar_borderos. */
+  composicao?: ComposicaoBordero | null;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -92,6 +95,9 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   CONCILIADO_CARTAO: { label: "Conciliado", variant: "default" },
 };
 
+// Mantido só para o detalhe do borderô, onde o status gravado ainda é a
+// referência. Na lista quem manda é estadoBordero(), que lê a composição dos
+// itens — "ENVIADO" cobria situações opostas demais para virar um badge.
 const BORDERO_STATUS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   MONTAGEM: { label: "Em Montagem", variant: "secondary" },
   APROVADO: { label: "Aprovado", variant: "default" },
@@ -1063,17 +1069,30 @@ export default function FinanceiroHubPage() {
           title={`Borderô ${borderoDetalhe?.bordero?.descricao || borderoDetalheId?.slice(0, 8) || ""}`}
         >
           <div className="space-y-3 py-2">
-            {borderoDetalhe?.bordero && (
-              <div className="flex gap-2 items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Badge variant={BORDERO_STATUS[borderoDetalhe.bordero.status]?.variant || "outline"}>
-                    {BORDERO_STATUS[borderoDetalhe.bordero.status]?.label || borderoDetalhe.bordero.status}
-                  </Badge>
-                  <span className="text-sm font-medium">{fmtCurrency(borderoDetalhe.bordero.total_valor)}</span>
-                  <span className="text-xs text-muted-foreground">({borderoDetalhe.bordero.qtd_lancamentos} lançamentos)</span>
+            {borderoDetalhe?.bordero && (() => {
+              // Mesma regra da lista, calculada aqui a partir dos próprios itens
+              // do detalhe: o badge não pode discordar de uma tela para a outra.
+              const comp = resumirComposicao(
+                (borderoDetalhe.lancamentos || []).map((l: Lancamento) => ({
+                  status: l.status,
+                  requer_validacao: (l as unknown as { requer_validacao?: boolean }).requer_validacao,
+                  data_prevista:
+                    ((l.dados_extras || {}) as Record<string, unknown>).btg_payment_date as string
+                    ?? l.data_vencimento,
+                })),
+              );
+              const est = estadoBordero(borderoDetalhe.bordero.status, comp, format(agoraSP(), "yyyy-MM-dd"));
+              return (
+                <div className="flex gap-2 items-center justify-between flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={est.variant}>{est.label}</Badge>
+                    <span className="text-sm font-medium">{fmtCurrency(borderoDetalhe.bordero.total_valor)}</span>
+                    <span className="text-xs text-muted-foreground">({borderoDetalhe.bordero.qtd_lancamentos} lançamentos)</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{est.titulo}</p>
                 </div>
-              </div>
-            )}
+              );
+            })()}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1516,7 +1535,7 @@ export default function FinanceiroHubPage() {
                       ) : borderos.length === 0 ? (
                         <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum borderô. Selecione lançamentos na aba "Contas a Pagar" e clique em "Criar Borderô".</TableCell></TableRow>
                       ) : borderos.map(b => {
-                        const bs = BORDERO_STATUS[b.status] || { label: b.status, variant: "outline" as const };
+                        const bs = estadoBordero(b.status, b.composicao, format(agoraSP(), "yyyy-MM-dd"));
                         return (
                           <TableRow key={b.id}>
                             <TableCell className="text-sm">
@@ -1526,7 +1545,11 @@ export default function FinanceiroHubPage() {
                             </TableCell>
                             <TableCell className="text-center text-sm">{b.qtd_lancamentos}</TableCell>
                             <TableCell className="text-right text-sm font-medium">{fmtCurrency(b.total_valor)}</TableCell>
-                            <TableCell><Badge variant={bs.variant}>{bs.label}</Badge></TableCell>
+                            <TableCell>
+                              <Badge variant={bs.variant} title={bs.titulo} className="cursor-help">
+                                {bs.label}
+                              </Badge>
+                            </TableCell>
                             <TableCell className="text-sm text-muted-foreground">{format(new Date(b.created_at), "dd/MM/yy")}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">
                               {b.aprovado_em ? format(new Date(b.aprovado_em), "dd/MM/yy HH:mm") : "—"}

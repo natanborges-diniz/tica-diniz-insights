@@ -5,6 +5,7 @@ import { validarAgrupamento, descricaoPagador, ratearValorPago } from "../_share
 import { casarTitulo, JANELA_DIAS } from "../_shared/ddaMatch.ts";
 import { montarLoteFolha } from "../_shared/folha.ts";
 import { tipoPorLinhaDigitavel } from "../_shared/btgPayment.ts";
+import { resumirComposicao, type ItemBordero } from "../_shared/borderoEstado.ts";
 import {
   hojeBrt,
   proximaSegunda,
@@ -743,7 +744,42 @@ async function listarBorderos(body: Record<string, unknown>) {
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return json(data);
+
+  // Composição dos itens junto da lista.
+  //
+  // O status gravado no borderô não distingue "nove pagos e dois recusados" de
+  // "tudo agendado para semana que vem" — os dois ficavam "ENVIADO". Sem a
+  // contagem, o operador abria borderô por borderô só para descobrir quais
+  // exigiam alguma coisa. Uma consulta a mais aqui evita N aberturas na tela.
+  const borderos = (data || []) as Array<Record<string, unknown>>;
+  const ids = borderos.map((b) => String(b.id));
+
+  if (ids.length > 0) {
+    const { data: itens } = await supabase
+      .from("lancamentos_financeiros")
+      .select("bordero_id, status, requer_validacao, data_vencimento, dados_extras")
+      .in("bordero_id", ids);
+
+    const porBordero = new Map<string, ItemBordero[]>();
+    for (const it of (itens || [])) {
+      const bid = String(it.bordero_id);
+      const extras = (it.dados_extras || {}) as Record<string, unknown>;
+      const lista = porBordero.get(bid) ?? [];
+      lista.push({
+        status: String(it.status),
+        requer_validacao: Boolean(it.requer_validacao),
+        // A data que vale é a combinada com o banco; o vencimento é o fallback.
+        data_prevista: (extras.btg_payment_date as string) ?? it.data_vencimento ?? null,
+      });
+      porBordero.set(bid, lista);
+    }
+
+    for (const b of borderos) {
+      b.composicao = resumirComposicao(porBordero.get(String(b.id)) ?? []);
+    }
+  }
+
+  return json(borderos);
 }
 
 async function criarBordero(body: Record<string, unknown>, userId: string) {
