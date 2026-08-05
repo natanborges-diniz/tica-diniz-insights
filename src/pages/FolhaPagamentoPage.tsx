@@ -263,7 +263,13 @@ export default function FolhaPagamentoPage() {
         IRRF: Number(irrf.replace(",", ".")) || 0,
       },
     }),
-    onSuccess: (r: { ok?: boolean; linhas_invalidas?: typeof linhasInvalidas; qtd_colaboradores?: number; substituiu?: boolean }) => {
+    onSuccess: (r: {
+      ok?: boolean;
+      linhas_invalidas?: typeof linhasInvalidas;
+      qtd_colaboradores?: number;
+      substituiu?: boolean;
+      sem_dados_bancarios?: Array<{ nome: string; cpf: string }>;
+    }) => {
       if (r?.ok === false && r.linhas_invalidas) {
         setLinhasInvalidas(r.linhas_invalidas);
         toast.error(`${r.linhas_invalidas.length} linha(s) precisam de correção`);
@@ -273,6 +279,12 @@ export default function FolhaPagamentoPage() {
       toast.success(
         `${r?.qtd_colaboradores ?? 0} colaborador(es) importado(s)${r?.substituiu ? " — versão anterior substituída" : ""}`,
       );
+      if (r?.sem_dados_bancarios?.length) {
+        toast.warning(
+          `${r.sem_dados_bancarios.length} colaborador(es) ainda sem banco/conta — ` +
+          `importe a planilha de contas antes de fechar a folha.`,
+        );
+      }
       setImportOpen(false);
       setPlanilha("");
       queryClient.invalidateQueries({ queryKey: ["folha"] });
