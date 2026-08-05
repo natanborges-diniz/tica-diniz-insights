@@ -255,12 +255,14 @@ async function detalhe(body: Record<string, unknown>) {
  * são pagos por guia/DARF.
  */
 async function fechar(body: Record<string, unknown>, userId: string) {
-  await requireAdmin(userId);
   const id = String(body.competencia_id || "");
   if (!id) throw new Error("competencia_id obrigatório");
 
   const { data: comp } = await supabase.from("folha_competencias").select("*").eq("id", id).single();
   if (!comp) throw new Error("Folha não encontrada");
+  // Operador com edição no Financeiro da loja fecha a folha; a autorização do
+  // dinheiro continua sendo do admin (mesa/borderô).
+  await requireFinanceEdit(userId, Number(comp.cod_empresa));
   if (comp.status !== "RASCUNHO") throw new Error(`Folha já está ${comp.status}`);
 
   const { data: itens } = await supabase.from("folha_itens").select("*").eq("competencia_id", id);
@@ -460,12 +462,13 @@ async function cancelar(body: Record<string, unknown>, userId: string) {
  * este endpoint que fura a segregação.
  */
 async function criarRubricas(body: Record<string, unknown>, userId: string) {
-  await requireAdmin(userId);
   const id = String(body.competencia_id || "");
   if (!id) throw new Error("competencia_id obrigatório");
 
   const { data: comp } = await supabase.from("folha_competencias").select("*").eq("id", id).single();
   if (!comp) throw new Error("Folha não encontrada");
+  // Rubricas nascem em RASCUNHO — a aprovação segue exclusiva do admin.
+  await requireFinanceEdit(userId, Number(comp.cod_empresa));
 
   const { data: itens } = await supabase.from("folha_itens").select("*").eq("competencia_id", id);
   if (!itens || itens.length === 0) throw new Error("Folha sem colaboradores");
@@ -552,7 +555,6 @@ async function criarRubricas(body: Record<string, unknown>, userId: string) {
  * passa por quatro olhos.
  */
 async function atualizarDadosBancarios(body: Record<string, unknown>, userId: string) {
-  await requireAdmin(userId);
   const itemId = String(body.item_id || "");
   if (!itemId) throw new Error("item_id obrigatório");
 
@@ -563,6 +565,7 @@ async function atualizarDadosBancarios(body: Record<string, unknown>, userId: st
 
   const comp = (item as Record<string, unknown>).folha_competencias as
     { id: string; status: string; cod_empresa: number };
+  await requireFinanceEdit(userId, Number(comp.cod_empresa));
   if (comp.status !== "RASCUNHO") {
     throw new Error(
       `A folha está ${comp.status} — os lançamentos já foram gerados. ` +
