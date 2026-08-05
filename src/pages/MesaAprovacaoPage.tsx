@@ -21,6 +21,7 @@ import { toast } from "sonner";
 
 interface LancMesa {
   id: string;
+  pode_bordero?: boolean;
   cod_empresa: number;
   descricao: string | null;
   pessoa_nome: string | null;
@@ -119,7 +120,7 @@ export default function MesaAprovacaoPage() {
 
   const aprovarExcecaoMutation = useMutation({
     mutationFn: (id: string) => invokeAction("aprovar_excecao", { id }),
-    onSuccess: () => { toast.success("Exceção aprovada — executar como pagamento avulso BTG"); invalidate(); },
+    onSuccess: () => { toast.success("Exceção aprovada — voltou ao Contas a Pagar liberada para entrar em borderô"); invalidate(); },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -139,16 +140,17 @@ export default function MesaAprovacaoPage() {
   const lancamentos = escopoLancs
     .filter((l) => filtroSelo === "todos" || l.selo === filtroSelo);
 
+  // Exceção aprovada tem selo VERMELHO com pode_bordero=true — já saiu da fila.
   const excecoesPendentes = (mesa?.lancamentos ?? [])
     .filter(noFoco)
-    .filter((l) => l.selo === "VERMELHO" && l.status !== "AUTORIZADO");
+    .filter((l) => l.selo === "VERMELHO" && !l.pode_bordero && l.status !== "AUTORIZADO");
   const borderosVisiveis = (mesa?.borderos ?? []).filter((b) => !borderoFoco || b.id === borderoFoco);
   const borderoFocoNome = borderoFoco
     ? (mesa?.borderos ?? []).find((b) => b.id === borderoFoco)?.descricao || `BORDERÔ ${borderoFoco.slice(0, 8).toUpperCase()}`
     : null;
   const pendentesFoco = (mesa?.lancamentos ?? [])
     .filter(noFoco)
-    .filter((l) => ["SEM_LASTRO", "AMARELO", "VERMELHO"].includes(l.selo));
+    .filter((l) => ["SEM_LASTRO", "AMARELO"].includes(l.selo) || (l.selo === "VERMELHO" && !l.pode_bordero));
 
 
   const seloBadge = (l: LancMesa) => {

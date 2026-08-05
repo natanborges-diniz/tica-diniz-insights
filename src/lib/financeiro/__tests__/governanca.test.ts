@@ -44,10 +44,24 @@ describe('avaliarLancamento — selos por lastro', () => {
     expect(a.motivo).toMatch(/DDA/);
   });
 
-  it('exceção com justificativa → VERMELHO e NUNCA entra em borderô', () => {
+  it('exceção pendente → VERMELHO, fora do borderô até o admin aprovar', () => {
     const a = avaliarLancamento(lanc({ lastro: 'EXCECAO', justificativa: 'Conserto emergencial do ar-condicionado da loja Centro' }), null, HOJE);
     expect(a.selo).toBe('VERMELHO');
     expect(a.podeBordero).toBe(false);
+  });
+
+  it('exceção APROVADA individualmente → VERMELHO liberado para borderô', () => {
+    const a = avaliarLancamento(
+      lanc({ lastro: 'EXCECAO', justificativa: 'Conserto emergencial do ar-condicionado da loja Centro', excecao_aprovada: true }),
+      null,
+      HOJE,
+    );
+    expect(a.selo).toBe('VERMELHO');
+    expect(a.podeBordero).toBe(true);
+  });
+
+  it('exceção aprovada mas sem justificativa válida continua SEM_LASTRO', () => {
+    expect(avaliarLancamento(lanc({ lastro: 'EXCECAO', justificativa: 'urgente', excecao_aprovada: true }), null, HOJE).selo).toBe('SEM_LASTRO');
   });
 
   it('exceção sem justificativa válida → SEM_LASTRO', () => {

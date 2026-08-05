@@ -86,10 +86,10 @@ Tela única de aprovação para o master. Cada lançamento pendente com **selo d
 | 🟡 amarelo | Rubrica **fora da faixa** (mostra o desvio: "Energia +38% vs esperado") | olhar e decidir |
 | 🔴 vermelho | Exceção emergencial (justificativa do analista à vista) | aprovar individual |
 
-Regras de montagem: **borderô só aceita 🟢/🔵/🟡-aprovado**; 🔴 nunca entra em
-borderô (fluxo próprio §5); lançamento sem lastro nenhum não é aprovável — aparece
-numa lista "sem lastro" para o analista resolver (vincular título, criar rubrica ou
-justificar exceção).
+Regras de montagem: **borderô só aceita 🟢/🔵/🟡-aprovado e 🔴-aprovado**; 🔴
+pendente não entra em borderô (aguarda aprovação individual do admin, §5);
+lançamento sem lastro nenhum não é aprovável — aparece numa lista "sem lastro"
+para o analista resolver (vincular título, criar rubrica ou justificar exceção).
 
 Fluxo completo: analista monta → master aprova na mesa (lote pros verdes/azuis) →
 sistema envia à API BTG (segundos) → master confirma no app BTG (≈2 min no total) →
@@ -99,10 +99,15 @@ espera relevante entre aprovação interna e chegada ao banco.
 ## 5. Exceção emergencial (lastro C)
 
 1. Analista cria com `lastro='EXCECAO'` + justificativa obrigatória (mín. 20 chars)
-   + favorecido completo. Não entra em borderô.
-2. Master vê na mesa (🔴), aprova **individualmente** → vira pagamento avulso BTG
-   (único uso remanescente desse caminho) → confirmação no app BTG.
-3. Relatório mensal de exceções (quem, quanto, justificativa, frequência por
+   + favorecido completo. Não entra em borderô enquanto pendente.
+2. Admin vê na mesa (🔴), aprova **individualmente** → o lançamento volta ao
+   Contas a Pagar liberado (`dados_extras.excecao_aprovada_por`) e segue o
+   trilho normal: borderô → BTG → confirmação no app. *(Revisado 05/08/2026:
+   o caminho antigo — AUTORIZADO direto para pagamento avulso — criava um limbo
+   invisível no Hub e o operador recadastrava o lançamento.)*
+3. Exceção é one-shot: vale só para aquele lançamento, não fica salva para
+   reuso. Gasto que se repete = rubrica (§3).
+4. Relatório mensal de exceções (quem, quanto, justificativa, frequência por
    favorecido) — exceção recorrente é sinal de rubrica faltando, e o relatório
    sugere a conversão.
 

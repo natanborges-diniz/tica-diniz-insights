@@ -1,6 +1,21 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, authGuard } from "../_shared/authGuard.ts";
-import { avaliarLancamento, validarJustificativa, criadorAprovadorDistintos } from "../_shared/governanca.ts";
+import { avaliarLancamento as avaliarLancamentoPuro, validarJustificativa, criadorAprovadorDistintos } from "../_shared/governanca.ts";
+
+/**
+ * avaliarLancamento com a flag de exceção aprovada derivada de
+ * dados_extras.excecao_aprovada_por (gravada pelo aprovar_excecao). Exceção
+ * aprovada individualmente pelo admin volta ao trilho do borderô.
+ */
+function avaliarLancamento(l: never, rubrica: never, hoje: string) {
+  const rec = l as Record<string, unknown>;
+  const dx = (rec.dados_extras ?? {}) as Record<string, unknown>;
+  return avaliarLancamentoPuro(
+    { ...rec, excecao_aprovada: Boolean(dx.excecao_aprovada_por) } as never,
+    rubrica,
+    hoje,
+  );
+}
 import { validarAgrupamento, descricaoPagador, ratearValorPago } from "../_shared/rateio.ts";
 import { casarTitulo, JANELA_DIAS } from "../_shared/ddaMatch.ts";
 import { montarLoteFolha } from "../_shared/folha.ts";
@@ -852,7 +867,7 @@ async function adicionarAoBordero(body: Record<string, unknown>) {
   // G2 — borderô só aceita lançamento com lastro válido (SPEC_P2_5 §4)
   const { data: lancs } = await supabase
     .from("lancamentos_financeiros")
-    .select("id, descricao, valor, lastro, erp_parcela_id, rubrica_id, btg_dda_id, justificativa, pessoa_documento, data_vencimento")
+    .select("id, descricao, valor, lastro, erp_parcela_id, rubrica_id, btg_dda_id, justificativa, pessoa_documento, data_vencimento, dados_extras")
     .in("id", ids);
   const rubricaIds = [...new Set((lancs || []).map((l) => l.rubrica_id).filter(Boolean))] as string[];
   const rubricasMap = new Map<string, Record<string, unknown>>();
@@ -1143,7 +1158,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   if (bordero.status === "MONTAGEM") {
     const { data: lancsAvaliar, error: errAvaliar } = await supabase
       .from("lancamentos_financeiros")
-      .select("id, descricao, valor, lastro, erp_parcela_id, rubrica_id, btg_dda_id, justificativa, pessoa_documento, data_vencimento")
+      .select("id, descricao, valor, lastro, erp_parcela_id, rubrica_id, btg_dda_id, justificativa, pessoa_documento, data_vencimento, dados_extras")
       .eq("bordero_id", bordero_id);
     if (errAvaliar) throw new Error(`Falha ao ler lançamentos do borderô: ${errAvaliar.message}`);
     const rubIds = [...new Set((lancsAvaliar || []).map((l) => l.rubrica_id).filter(Boolean))] as string[];
@@ -2614,7 +2629,7 @@ async function mesaAprovacao(body: Record<string, unknown>) {
 
   let query = supabase
     .from("lancamentos_financeiros")
-    .select("id, cod_empresa, tipo, descricao, pessoa_nome, pessoa_documento, valor, data_vencimento, status, natureza, categoria, lastro, erp_parcela_id, rubrica_id, btg_dda_id, justificativa, bordero_id, criado_por, forma_pagamento")
+    .select("id, cod_empresa, tipo, descricao, pessoa_nome, pessoa_documento, valor, data_vencimento, status, natureza, categoria, lastro, erp_parcela_id, rubrica_id, btg_dda_id, justificativa, bordero_id, criado_por, forma_pagamento, dados_extras")
     .eq("tipo", "PAGAR")
     .in("status", ["PREVISTO", "CLASSIFICADO", "BORDERO"])
     .order("data_vencimento", { ascending: true })
@@ -2712,17 +2727,19 @@ async function aprovarExcecao(body: Record<string, unknown>, userId: string) {
   if (!distinto.ok) throw new Error(distinto.motivo!);
 
   const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
+  // Aprovada → volta ao Hub como CLASSIFICADO com a flag de aprovação, e segue
+  // o trilho normal (borderô → BTG → app). Antes ia direto a AUTORIZADO sem
+  // borderô = limbo invisível: o operador achava que o lançamento sumiu e
+  // cadastrava de novo (caso real, 05/08).
   const { error } = await supabase
     .from("lancamentos_financeiros")
     .update({
-      status: "AUTORIZADO",
-      autorizado_por: userId,
-      autorizado_em: new Date().toISOString(),
+      status: "CLASSIFICADO",
       dados_extras: { ...dados, excecao_aprovada_por: userId, excecao_aprovada_em: new Date().toISOString() },
     })
     .eq("id", String(id));
   if (error) throw new Error(error.message);
-  return json({ ok: true, status: "AUTORIZADO" });
+  return json({ ok: true, status: "CLASSIFICADO", excecao_aprovada: true });
 }
 
 // ═══════════════════════════════════════════════════════════

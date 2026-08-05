@@ -5,7 +5,7 @@
 //   VERDE    — título ERP (chave dura) ou NF (P3): dívida documentada
 //   AZUL     — rubrica autorizada, valor dentro da faixa
 //   AMARELO  — rubrica autorizada, fora da faixa mas dentro do teto (decidir)
-//   VERMELHO — exceção emergencial (nunca entra em borderô; fluxo próprio)
+//   VERMELHO — exceção emergencial (só entra em borderô APÓS aprovação individual do admin)
 //   SEM_LASTRO — não aprovável, não entra em borderô
 
 export type Selo = "VERDE" | "AZUL" | "AMARELO" | "VERMELHO" | "SEM_LASTRO";
@@ -26,6 +26,12 @@ export interface LancParaAvaliar {
   valor_original?: number | null;
   /** Tipo BTG configurado (BANKSLIP, UTILITIES, PIX_KEY, TED...). */
   btg_payment_type?: string | null;
+  /**
+   * Exceção já aprovada individualmente pelo admin na Mesa
+   * (dados_extras.excecao_aprovada_por). Depois dessa aprovação — a barreira
+   * mais forte do sistema — a exceção volta ao trilho normal do borderô.
+   */
+  excecao_aprovada?: boolean;
 }
 
 // ─── Edição manual de valor ──────────────────────────────────
@@ -186,15 +192,22 @@ export function avaliarLancamento(l: LancParaAvaliar, rubrica: RubricaAvaliavel 
     return av;
   }
 
-  // Lastro C — exceção (nunca via borderô)
+  // Lastro C — exceção. Antes da aprovação individual do admin: fora do
+  // borderô (VERMELHO pendente). Depois de aprovada: entra em borderô — a
+  // barreira que a regra protegia (aprovação individual) já aconteceu; mantê-la
+  // fora só criava um limbo sem caminho de pagamento.
   if (l.lastro === "EXCECAO") {
     const ok = validarJustificativa(l.justificativa);
+    if (!ok) {
+      return { selo: "SEM_LASTRO", podeBordero: false, motivo: "Exceção sem justificativa válida (mínimo 20 caracteres)" };
+    }
+    if (l.excecao_aprovada) {
+      return { selo: "VERMELHO", podeBordero: true, motivo: "Exceção aprovada individualmente pelo admin — liberada para borderô" };
+    }
     return {
-      selo: ok ? "VERMELHO" : "SEM_LASTRO",
+      selo: "VERMELHO",
       podeBordero: false,
-      motivo: ok
-        ? "Exceção emergencial — aprovação individual do admin, fora do borderô"
-        : "Exceção sem justificativa válida (mínimo 20 caracteres)",
+      motivo: "Exceção emergencial — aguarda aprovação individual do admin na Mesa",
     };
   }
 

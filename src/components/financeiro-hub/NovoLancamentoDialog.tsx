@@ -136,7 +136,7 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="RUBRICA">Rubrica autorizada (recorrente pré-aprovado)</SelectItem>
-                <SelectItem value="EXCECAO">Exceção emergencial (admin aprova individualmente)</SelectItem>
+                <SelectItem value="EXCECAO">Exceção emergencial (gasto único — não fica salvo para reuso)</SelectItem>
               </SelectContent>
             </Select>
             {lastroTipo === "RUBRICA" ? (
@@ -168,7 +168,9 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
                   placeholder="Justificativa obrigatória (mínimo 20 caracteres) — ex.: conserto emergencial do ar-condicionado da loja Centro"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Exceção não entra em borderô: o admin aprova individualmente na Mesa de Aprovação.
+                  Exceção vale só para ESTE lançamento e não fica salva para reuso. O admin aprova
+                  individualmente na Mesa; aprovada, ela volta para cá e entra em borderô normalmente.
+                  Se o gasto se repete todo mês, o caminho certo é cadastrar uma rubrica.
                 </p>
               </div>
             )}

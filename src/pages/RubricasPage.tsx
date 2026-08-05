@@ -245,7 +245,9 @@ export default function RubricasPage() {
                       <TableCell className="text-sm text-right font-medium">{fmt(r.valor_teto)}</TableCell>
                       <TableCell className="text-center">
                         <Badge variant="outline" className="text-[10px]">
-                          {r.cod_empresa == null ? "Global" : `Emp. ${r.cod_empresa}`}
+                          {r.cod_empresa == null
+                            ? "Global"
+                            : ((empresas || []).find((e) => e.codEmpresa === r.cod_empresa)?.nome || `Emp. ${r.cod_empresa}`)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-center">
@@ -280,7 +282,7 @@ export default function RubricasPage() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         title="Nova rubrica autorizada"
-        description="Nasce em rascunho; outro admin aprova. Pagamentos com esta rubrica só passam se o favorecido bater exatamente e o valor respeitar faixa e teto."
+        description="Rubrica é para gasto RECORRENTE (aluguel, energia, vale transporte...): cadastra uma vez, fica salva e cobre todos os meses. Gasto único e urgente não vira rubrica — lance no Contas a Pagar como Exceção emergencial, que vale só para aquele lançamento. Nasce em rascunho; outro admin aprova. Pagamentos só passam se o favorecido bater exatamente e o valor respeitar faixa e teto."
         footer={
           <>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
