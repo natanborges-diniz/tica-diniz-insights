@@ -101,7 +101,6 @@ async function importar(body: Record<string, unknown>, userId: string) {
   // Dados bancários não são exigidos aqui: entram pela planilha de contas
   // depois, com a competência já em rascunho.
   const validadas = completadas.map((l) => validarLinha(l, { exigirDadosBancarios: false }));
-  const semDestino = validadas.filter((l) => (l as { semDestino?: boolean }).semDestino).length;
   const comErro = validadas.filter((l) => l.erros.length > 0);
   if (comErro.length > 0) {
     // Devolve TODOS os problemas de uma vez: corrigir de um em um numa folha de

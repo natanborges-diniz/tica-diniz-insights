@@ -91,6 +91,8 @@ export interface LinhaFolha {
 export interface LinhaValidada extends LinhaFolha {
   cpf: string;
   erros: string[];
+  /** Sem conta completa e sem chave Pix — pendência, resolvida antes do fechamento. */
+  semDestino?: boolean;
 }
 
 const soDigitos = (s: unknown) => String(s ?? "").replace(/\D/g, "");
