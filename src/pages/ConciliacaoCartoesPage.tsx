@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
+import { CieloImportarExtratoDialog } from "@/components/financeiro-hub/CieloImportarExtratoDialog";
 import { toast } from "sonner";
 
 const STATUS_CFG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -26,12 +27,16 @@ const STATUS_CFG: Record<string, { label: string; variant: "default" | "secondar
 const fmtBRL = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const fmtPct = (v: number) => `${(v * 100).toFixed(0)}%`;
 
+// A view v_conciliacao_loja_resumo passou a devolver uma linha por
+// (loja, adquirente) — antes era fixada em REDE e devolvia uma linha por loja.
 type LojaResumo = {
   cod_empresa: number;
   nome_fantasia: string | null;
+  adquirente: string;
   ambiente: string | null;
   gv_optin_status: string | null;
   gv_last_healthcheck_status: string | null;
+  cielo_last_healthcheck_status: string | null;
   qtd_pvs: number;
   qtd_vendas: number;
   total_bruto: number;
@@ -44,11 +49,23 @@ type LojaResumo = {
   qtd_pendente: number;
 };
 
+type SyncRedeResposta = {
+  inserted?: number;
+  pvs_com_dados?: number;
+  pvs_consultados?: number;
+};
+
+type SyncCieloResposta = {
+  arquivos?: Array<{ vendas_upsert?: number; rejeitado?: boolean }>;
+  falhas?: Array<{ error?: string; error_code?: string }>;
+};
+
 export default function ConciliacaoCartoesPage() {
   const queryClient = useQueryClient();
 
   const [tab, setTab] = useState<"lojas" | "pvs" | "transacoes">("lojas");
   const [lojaSelecionada, setLojaSelecionada] = useState<number | null>(null);
+  const [filtroAdquirente, setFiltroAdquirente] = useState("todas");
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [dataInicio, setDataInicio] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 30);
@@ -68,8 +85,8 @@ export default function ConciliacaoCartoesPage() {
     return data;
   };
 
-  // KPIs por loja (view)
-  const { data: lojas = [], isLoading: loadingLojas, refetch: refetchLojas } = useQuery({
+  // KPIs por (loja, adquirente) (view)
+  const { data: lojasTodas = [], isLoading: loadingLojas, refetch: refetchLojas } = useQuery({
     queryKey: ["conciliacao-loja-resumo"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -80,9 +97,21 @@ export default function ConciliacaoCartoesPage() {
     },
   });
 
-  // Transações (todas ou filtradas por loja)
+  const adquirentesDisponiveis = useMemo(
+    () => [...new Set(lojasTodas.map(l => l.adquirente).filter(Boolean))].sort(),
+    [lojasTodas],
+  );
+
+  const lojas = useMemo(
+    () => filtroAdquirente === "todas"
+      ? lojasTodas
+      : lojasTodas.filter(l => l.adquirente === filtroAdquirente),
+    [lojasTodas, filtroAdquirente],
+  );
+
+  // Transações (todas ou filtradas por loja/adquirente)
   const { data: vendasCartao = [], isLoading: loadingVendas } = useQuery({
-    queryKey: ["vendas-cartao", lojaSelecionada, dataInicio, dataFim],
+    queryKey: ["vendas-cartao", lojaSelecionada, filtroAdquirente, dataInicio, dataFim],
     queryFn: async () => {
       let q = supabase
         .from("vendas_cartao")
@@ -92,6 +121,7 @@ export default function ConciliacaoCartoesPage() {
         .order("data_venda", { ascending: false })
         .limit(1000);
       if (lojaSelecionada) q = q.eq("cod_empresa", lojaSelecionada);
+      if (filtroAdquirente !== "todas") q = q.eq("adquirente", filtroAdquirente);
       const { data, error } = await q;
       if (error) throw error;
       return data || [];
@@ -121,14 +151,73 @@ export default function ConciliacaoCartoesPage() {
     queryClient.invalidateQueries({ queryKey: ["conciliacao-loja-resumo"] });
   };
 
+  // Cada adquirente tem a sua propria rotina de ingestao: a REDE consulta a API
+  // de Gestao de Vendas, a Cielo baixa e parseia o Extrato Eletronico.
   const syncMutation = useMutation({
-    mutationFn: (codEmpresa?: number) => invokeFunc("sync-vendas-cartao", {
-      data_inicio: dataInicio,
-      data_fim: dataFim,
-      ...(codEmpresa ? { cod_empresa: codEmpresa } : {}),
-    }),
-    onSuccess: (data: any) => {
-      toast.success(`Sync: ${data?.inserted || 0} venda(s) inseridas em ${data?.pvs_com_dados || 0}/${data?.pvs_consultados || 0} PV(s)`);
+    mutationFn: async (adquirenteAlvo?: string) => {
+      const alvos = adquirenteAlvo
+        ? [adquirenteAlvo]
+        : filtroAdquirente === "todas" ? adquirentesDisponiveis : [filtroAdquirente];
+
+      // Sem alvo o loop abaixo nao roda e nenhum toast aparece — o botao
+      // simplesmente nao faria nada e o usuario nao saberia por quê.
+      if (alvos.length === 0) {
+        throw new Error(
+          "Nenhuma adquirente ativa encontrada. Cadastre uma em Admin > Adquirentes.",
+        );
+      }
+
+      const resultados: Array<{ adquirente: string; ok: boolean; resumo: string }> = [];
+
+      for (const adq of alvos) {
+        try {
+          if (adq === "REDE") {
+            const d = await invokeFunc("sync-vendas-cartao", {
+              data_inicio: dataInicio,
+              data_fim: dataFim,
+            }) as SyncRedeResposta;
+            resultados.push({
+              adquirente: adq,
+              ok: true,
+              resumo: `${d?.inserted || 0} venda(s) em ${d?.pvs_com_dados || 0}/${d?.pvs_consultados || 0} PV(s)`,
+            });
+          } else if (adq === "CIELO") {
+            const d = await invokeFunc("sync-vendas-cielo", { data: dataFim }) as SyncCieloResposta;
+            const arquivos = d?.arquivos || [];
+            const falhas = d?.falhas || [];
+            const vendas = arquivos.reduce((a, x) => a + (x.vendas_upsert || 0), 0);
+            const mtls = falhas.some((f) => String(f.error_code || "").startsWith("MTLS"));
+            // Arquivo recusado por divergência de trailer volta em `arquivos`,
+            // não em `falhas` — olhar só `falhas` daria um toast verde para uma
+            // importação que não gravou nada.
+            const rejeitados = arquivos.filter((a) => a.rejeitado).length;
+            resultados.push({
+              adquirente: adq,
+              ok: falhas.length === 0 && rejeitados === 0,
+              resumo: mtls
+                ? "certificado mTLS não aceito — importe o arquivo do extrato manualmente"
+                : [
+                    `${arquivos.length} arquivo(s)`,
+                    `${vendas} venda(s)`,
+                    rejeitados ? `${rejeitados} recusado(s) por divergência no trailer` : "",
+                    falhas.length ? `${falhas.length} falha(s)` : "",
+                  ].filter(Boolean).join(", "),
+            });
+          } else {
+            resultados.push({ adquirente: adq, ok: false, resumo: "sem rotina de sincronizacao" });
+          }
+        } catch (e) {
+          resultados.push({ adquirente: adq, ok: false, resumo: (e as Error).message });
+        }
+      }
+      return resultados;
+    },
+    onSuccess: (resultados) => {
+      for (const r of resultados) {
+        const msg = `${r.adquirente}: ${r.resumo}`;
+        if (r.ok) toast.success(msg);
+        else toast.error(msg);
+      }
       invalidateAll();
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao sincronizar"),
@@ -169,17 +258,25 @@ export default function ConciliacaoCartoesPage() {
   // Breakdown por PV (Tab 2)
   const pvBreakdown = useMemo(() => {
     if (!lojaSelecionada) return null;
-    const loja = lojas.find(l => l.cod_empresa === lojaSelecionada);
-    if (!loja) return null;
+    const linhasDaLoja = lojas.filter(l => l.cod_empresa === lojaSelecionada);
+    if (linhasDaLoja.length === 0) return null;
+    // A loja pode ter mais de uma adquirente; os PVs vem somados.
+    const loja = {
+      ...linhasDaLoja[0],
+      qtd_pvs: linhasDaLoja.reduce((a, l) => a + Number(l.qtd_pvs || 0), 0),
+    };
 
-    // Busca PVs configurados via vendas (dados_extras.merchant.companyNumber agrupado)
-    const pvMap = new Map<string, { pv: string; qtd: number; bruto: number; liquido: number; ultima: string | null }>();
+    // O identificador do ponto de venda vive em lugares diferentes conforme a
+    // adquirente: a REDE devolve merchant.companyNumber, a Cielo grava o
+    // estabelecimento submissor do registro do extrato.
+    const pvMap = new Map<string, { pv: string; adquirente: string; qtd: number; bruto: number; liquido: number; ultima: string | null }>();
     vendasCartao.forEach((vc: any) => {
       const pv = vc.dados_extras?.merchant?.companyNumber
+        || vc.dados_extras?.estabelecimento
         || vc.dados_extras?._source_matriz_pv
         || "—";
-      const key = String(pv);
-      const cur = pvMap.get(key) || { pv: key, qtd: 0, bruto: 0, liquido: 0, ultima: null };
+      const key = `${vc.adquirente}|${pv}`;
+      const cur = pvMap.get(key) || { pv: String(pv), adquirente: vc.adquirente, qtd: 0, bruto: 0, liquido: 0, ultima: null };
       cur.qtd++;
       cur.bruto += Number(vc.valor_bruto || 0);
       cur.liquido += Number(vc.valor_liquido || 0);
@@ -193,13 +290,16 @@ export default function ConciliacaoCartoesPage() {
     <div className="space-y-6">
       <ModuleHeader
         title="Conciliação de Cartões"
-        subtitle="Vendas REDE × ERP — visão por loja, PV e transação"
+        subtitle="Vendas das adquirentes × ERP — visão por loja, PV e transação"
         icon={<CreditCard className="h-5 w-5" />}
         actions={
           <div className="flex gap-2">
+            <CieloImportarExtratoDialog onImportado={invalidateAll} />
             <Button size="sm" variant="outline" onClick={() => syncMutation.mutate(undefined)} disabled={syncMutation.isPending}>
               <Download className="h-4 w-4 mr-1" />
-              {syncMutation.isPending ? "Sincronizando..." : "Sincronizar todas"}
+              {syncMutation.isPending
+                ? "Sincronizando..."
+                : filtroAdquirente === "todas" ? "Sincronizar todas" : `Sincronizar ${filtroAdquirente}`}
             </Button>
           </div>
         }
@@ -243,6 +343,18 @@ export default function ConciliacaoCartoesPage() {
           <p className="text-xs text-muted-foreground mb-1">Até</p>
           <Input type="date" className="w-36" value={dataFim} onChange={e => setDataFim(e.target.value)} />
         </div>
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Adquirente</p>
+          <Select value={filtroAdquirente} onValueChange={setFiltroAdquirente}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Todas</SelectItem>
+              {adquirentesDisponiveis.map(a => (
+                <SelectItem key={a} value={a}>{a}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         {tab === "transacoes" && (
           <Select value={filtroStatus} onValueChange={setFiltroStatus}>
             <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
@@ -274,7 +386,8 @@ export default function ConciliacaoCartoesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Loja</TableHead>
-                    <TableHead className="text-center">Opt-in</TableHead>
+                    <TableHead>Adquirente</TableHead>
+                    <TableHead className="text-center">Integração</TableHead>
                     <TableHead className="text-center">PVs</TableHead>
                     <TableHead className="text-right">Vendas</TableHead>
                     <TableHead className="text-right">Bruto</TableHead>
@@ -286,24 +399,31 @@ export default function ConciliacaoCartoesPage() {
                 </TableHeader>
                 <TableBody>
                   {loadingLojas ? (
-                    <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
                   ) : lojas.length === 0 ? (
-                    <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Nenhuma loja com REDE configurada</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                      Nenhuma loja com adquirente configurada. Cadastre em Admin &gt; Adquirentes.
+                    </TableCell></TableRow>
                   ) : lojas.map((l) => {
                     const total = l.qtd_conciliado + l.qtd_divergente + l.qtd_pendente;
                     const pct = total > 0 ? (l.qtd_conciliado / total) * 100 : 0;
-                    const optinOk = l.gv_optin_status === "APROVADO";
+                    // Cada adquirente sinaliza saude por um caminho diferente: a
+                    // REDE pelo Opt-in do PV, a Cielo pelo health da API EXTC.
+                    const integracao = l.adquirente === "CIELO"
+                      ? { ok: l.cielo_last_healthcheck_status === "ATIVA", rotulo: l.cielo_last_healthcheck_status || "não verificada" }
+                      : { ok: l.gv_optin_status === "APROVADO", rotulo: l.gv_optin_status || "—" };
                     return (
-                      <TableRow key={l.cod_empresa}>
+                      <TableRow key={`${l.cod_empresa}-${l.adquirente}`}>
                         <TableCell>
                           <div className="font-medium">{l.nome_fantasia || `Empresa ${l.cod_empresa}`}</div>
                           <div className="text-xs text-muted-foreground">cod {l.cod_empresa}</div>
                         </TableCell>
+                        <TableCell><Badge variant="outline">{l.adquirente}</Badge></TableCell>
                         <TableCell className="text-center">
-                          {optinOk ? (
-                            <Badge variant="default" className="text-xs"><Wifi className="h-3 w-3 mr-1" /> Aprovado</Badge>
+                          {integracao.ok ? (
+                            <Badge variant="default" className="text-xs"><Wifi className="h-3 w-3 mr-1" /> {integracao.rotulo}</Badge>
                           ) : (
-                            <Badge variant="secondary" className="text-xs"><WifiOff className="h-3 w-3 mr-1" /> {l.gv_optin_status || "—"}</Badge>
+                            <Badge variant="secondary" className="text-xs"><WifiOff className="h-3 w-3 mr-1" /> {integracao.rotulo}</Badge>
                           )}
                         </TableCell>
                         <TableCell className="text-center font-mono text-sm">{l.qtd_pvs}</TableCell>
@@ -361,6 +481,7 @@ export default function ConciliacaoCartoesPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>PV (Merchant)</TableHead>
+                        <TableHead>Adquirente</TableHead>
                         <TableHead>Última venda</TableHead>
                         <TableHead className="text-right">Vendas</TableHead>
                         <TableHead className="text-right">Bruto</TableHead>
@@ -369,10 +490,11 @@ export default function ConciliacaoCartoesPage() {
                     </TableHeader>
                     <TableBody>
                       {pvBreakdown.pvsComMov.length === 0 ? (
-                        <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Sem movimento no período</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Sem movimento no período</TableCell></TableRow>
                       ) : pvBreakdown.pvsComMov.map(p => (
-                        <TableRow key={p.pv}>
+                        <TableRow key={`${p.adquirente}-${p.pv}`}>
                           <TableCell className="font-mono">{p.pv}</TableCell>
+                          <TableCell><Badge variant="outline">{p.adquirente}</Badge></TableCell>
                           <TableCell>{p.ultima || "—"}</TableCell>
                           <TableCell className="text-right font-mono">{p.qtd}</TableCell>
                           <TableCell className="text-right font-mono">{fmtBRL(p.bruto)}</TableCell>
@@ -397,6 +519,7 @@ export default function ConciliacaoCartoesPage() {
                     <TableHead className="w-8"></TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Loja</TableHead>
+                    <TableHead>Adquirente</TableHead>
                     <TableHead>Bandeira</TableHead>
                     <TableHead>NSU</TableHead>
                     <TableHead className="text-right">Bruto</TableHead>
@@ -407,9 +530,9 @@ export default function ConciliacaoCartoesPage() {
                 </TableHeader>
                 <TableBody>
                   {loadingVendas ? (
-                    <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
                   ) : vendasCartao.length === 0 ? (
-                    <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Sem transações no período.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Sem transações no período.</TableCell></TableRow>
                   ) : vendasCartao
                       .filter((vc: any) => {
                         if (filtroStatus === "todos") return true;
@@ -429,6 +552,7 @@ export default function ConciliacaoCartoesPage() {
                               <TableCell>{isExp ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</TableCell>
                               <TableCell className="font-mono text-sm">{vc.data_venda}</TableCell>
                               <TableCell className="text-xs">{lojaNome}</TableCell>
+                              <TableCell><Badge variant="outline" className="text-xs">{vc.adquirente}</Badge></TableCell>
                               <TableCell>{vc.bandeira || "—"}</TableCell>
                               <TableCell className="font-mono text-xs">{vc.nsu || "—"}</TableCell>
                               <TableCell className="text-right font-mono">{fmtBRL(Number(vc.valor_bruto))}</TableCell>
@@ -444,16 +568,26 @@ export default function ConciliacaoCartoesPage() {
                             </TableRow>
                             {isExp && (
                               <TableRow key={vc.id + "_exp"}>
-                                <TableCell colSpan={9} className="bg-muted/30">
+                                <TableCell colSpan={10} className="bg-muted/30">
                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs py-2">
                                     <div><span className="text-muted-foreground">TID:</span> <span className="font-mono">{vc.tid || "—"}</span></div>
                                     <div><span className="text-muted-foreground">Autorização:</span> <span className="font-mono">{vc.autorizacao || "—"}</span></div>
                                     <div><span className="text-muted-foreground">Tipo:</span> {vc.tipo} ({vc.parcelas}x)</div>
                                     <div><span className="text-muted-foreground">Crédito previsto:</span> {vc.data_prevista_credito || "—"}</div>
                                     <div><span className="text-muted-foreground">MDR:</span> {vc.taxa_percentual ? `${vc.taxa_percentual}%` : "—"}</div>
-                                    <div><span className="text-muted-foreground">PV:</span> <span className="font-mono">{vc.dados_extras?.merchant?.companyNumber || "—"}</span></div>
-                                    <div><span className="text-muted-foreground">Captura:</span> {vc.dados_extras?.captureType || "—"}</div>
+                                    <div><span className="text-muted-foreground">PV:</span> <span className="font-mono">{vc.dados_extras?.merchant?.companyNumber || vc.dados_extras?.estabelecimento || "—"}</span></div>
+                                    <div><span className="text-muted-foreground">Captura:</span> {vc.dados_extras?.captureType || vc.dados_extras?.tipo_captura || "—"}</div>
                                     <div><span className="text-muted-foreground">Cartão:</span> <span className="font-mono">{vc.dados_extras?.cardNumber || "—"}</span></div>
+                                    {vc.adquirente === "CIELO" && (
+                                      <>
+                                        <div className="col-span-2"><span className="text-muted-foreground">Chave UR:</span> <span className="font-mono">{vc.dados_extras?.chave_ur || "—"}</span></div>
+                                        <div className="col-span-2"><span className="text-muted-foreground">Cód. transação recebida:</span> <span className="font-mono">{vc.dados_extras?.codigo_transacao_recebida || "—"}</span></div>
+                                        <div><span className="text-muted-foreground">Lançamento:</span> <span className="font-mono">{vc.dados_extras?.tipo_lancamento || "—"}</span></div>
+                                        <div><span className="text-muted-foreground">Parcela:</span> {vc.dados_extras?.parcela ?? "—"}/{vc.dados_extras?.total_parcelas ?? "—"}</div>
+                                        <div><span className="text-muted-foreground">Canal:</span> {vc.dados_extras?.canal_venda || "—"}</div>
+                                        <div><span className="text-muted-foreground">Terminal:</span> <span className="font-mono">{vc.dados_extras?.terminal || "—"}</span></div>
+                                      </>
+                                    )}
                                     {conc && (
                                       <div className="col-span-full pt-2 border-t">
                                         <span className="text-muted-foreground">Conciliação:</span> {conc.observacao || conc.status}

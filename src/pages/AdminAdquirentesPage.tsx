@@ -47,6 +47,14 @@ interface AdquirenteConfig {
   gv_last_healthcheck_status?: string | null;
   gv_last_healthcheck_message?: string | null;
   gv_optin_mirrored_from?: number | null;
+  // Cielo — Extrato Eletronico (layout v15). O acesso e por matriz de extrato
+  // (raiz de CNPJ), nao por PV individual como na REDE.
+  cielo_estabelecimento_matriz?: string | null;
+  cielo_pvs?: string[] | null;
+  cielo_documento?: string | null;
+  cielo_last_healthcheck_at?: string | null;
+  cielo_last_healthcheck_status?: string | null;
+  cielo_last_healthcheck_message?: string | null;
 }
 
 interface EditForm {
@@ -58,6 +66,9 @@ interface EditForm {
   pv_matriz: string;
   pv_matriz_production: string;
   pvs_matriz_production: string[];
+  cielo_estabelecimento_matriz: string;
+  cielo_documento: string;
+  cielo_pvs: string[];
   ativo: boolean;
 }
 
@@ -284,6 +295,169 @@ function PvsMatrizManager({
   );
 }
 
+function CieloPvsManager({
+  configId,
+  pvs,
+  onChange,
+}: {
+  configId: string;
+  pvs: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    if (pvs.includes(v)) { setDraft(""); return; }
+    onChange([...pvs, v]);
+    setDraft("");
+  };
+  const remove = (pv: string) => onChange(pvs.filter(p => p !== pv));
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium">Estabelecimentos submissores (PVs) desta loja</Label>
+      <div className="flex gap-1">
+        <Input
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          className="font-mono text-sm"
+          placeholder="Ex.: 1234567"
+          inputMode="numeric"
+        />
+        <Button variant="outline" size="sm" onClick={add} disabled={!draft.trim()} className="shrink-0">
+          <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar
+        </Button>
+      </div>
+      {pvs.length === 0 ? (
+        <Badge className="bg-warning/15 text-warning border-warning/30 text-[10px]">
+          Sem PV: as vendas entram sem loja associada
+        </Badge>
+      ) : (
+        <div className="flex flex-wrap gap-1 pt-1">
+          {pvs.map(pv => (
+            <Badge key={`${configId}-cielo-${pv}`} variant="secondary" className="font-mono text-xs gap-1 pr-1">
+              {pv}
+              <button onClick={() => remove(pv)} className="hover:bg-destructive/20 rounded p-0.5" aria-label={`Remover ${pv}`}>
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+      <p className="text-[10px] text-muted-foreground">
+        É o campo "Estabelecimento submissor" (posições 2 a 11) de cada registro do extrato. Sem ele
+        a importação não sabe a qual loja a venda pertence. Se a matriz de extrato cobrir uma única
+        loja, a associação é feita automaticamente.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Painel da Cielo. Definido no topo do modulo, e nao dentro do componente de
+ * pagina: um componente recriado a cada render e desmontado e remontado pelo
+ * React, o que faria o <Input> perder o foco a cada tecla e zerar o rascunho do
+ * gerenciador de PVs.
+ */
+function CieloFields({
+  config,
+  form,
+  testing,
+  onUpdateForm,
+  onUpdatePvs,
+  onTest,
+}: {
+  config: AdquirenteConfig;
+  form: EditForm;
+  testing: string | null;
+  onUpdateForm: (id: string, field: string, value: string | boolean) => void;
+  onUpdatePvs: (next: string[]) => void;
+  onTest: () => void;
+}) {
+  const configId = config.id;
+  const temMatriz = !!form.cielo_estabelecimento_matriz;
+  const healthOk = config.cielo_last_healthcheck_status === "ATIVA";
+  const testeEmCurso = !!testing && testing.startsWith(`${configId}-cielo`);
+
+  return (
+    <div className="space-y-4">
+      <div className={`flex items-center gap-2 p-2.5 rounded-md ${temMatriz ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
+        {temMatriz ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+        <span className="text-xs font-medium">
+          {temMatriz
+            ? "Matriz de extrato configurada"
+            : "Informe o estabelecimento matriz de extrato eletrônico"}
+        </span>
+      </div>
+
+      <div className="grid gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium">Estabelecimento matriz de extrato</Label>
+          <Input
+            value={form.cielo_estabelecimento_matriz}
+            onChange={e => onUpdateForm(configId, "cielo_estabelecimento_matriz", e.target.value)}
+            className="font-mono text-sm"
+            placeholder="Ex.: 1234567890"
+            inputMode="numeric"
+          />
+          <p className="text-[10px] text-muted-foreground">
+            Posições 2 a 11 do header do arquivo. Agrupa as filiais por raiz de CNPJ — lojas do
+            mesmo grupo compartilham o mesmo número.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium">CNPJ da matriz de extrato</Label>
+          <Input
+            value={form.cielo_documento}
+            onChange={e => onUpdateForm(configId, "cielo_documento", e.target.value)}
+            className="font-mono text-sm"
+            placeholder="Somente números"
+            inputMode="numeric"
+          />
+          <p className="text-[10px] text-muted-foreground">Enviado como DocumentNumber nas chamadas da API EXTC.</p>
+        </div>
+
+        <CieloPvsManager
+          configId={configId}
+          pvs={form.cielo_pvs || []}
+          onChange={onUpdatePvs}
+        />
+      </div>
+
+      <div className="rounded-md border bg-muted/30 p-3 space-y-1.5">
+        <p className="text-xs font-medium">Credenciais da API EXTC</p>
+        <p className="text-[10px] text-muted-foreground">
+          <code>CIELO_CLIENT_ID</code>, <code>CIELO_CLIENT_SECRET</code>,{" "}
+          <code>CIELO_MTLS_CERT</code> e <code>CIELO_MTLS_KEY</code> são secrets do projeto e valem
+          para todas as lojas — não ficam nesta tela. Os campos acima também não variam entre
+          sandbox e produção: a matriz de extrato é a mesma nos dois ambientes.
+        </p>
+      </div>
+
+      {config.cielo_last_healthcheck_at && (
+        <div className="flex items-center gap-2 text-xs">
+          <Badge variant={healthOk ? "default" : "secondary"}>
+            {config.cielo_last_healthcheck_status || "—"}
+          </Badge>
+          <span className="text-muted-foreground truncate">
+            {config.cielo_last_healthcheck_message}
+          </span>
+        </div>
+      )}
+
+      <div className="flex gap-2 pt-1">
+        <Button size="sm" variant="outline" className="text-xs" disabled={!!testing} onClick={onTest}>
+          {testeEmCurso ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1" />}
+          Testar API EXTC
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminAdquirentesPage() {
   const { isAdmin } = useAuth();
   const { empresas } = useEmpresas();
@@ -324,6 +498,9 @@ export default function AdminAdquirentesPage() {
           pv_matriz: r.pv_matriz || "",
           pv_matriz_production: r.pv_matriz_production || "",
           pvs_matriz_production: Array.isArray(r.pvs_matriz_production) ? r.pvs_matriz_production : [],
+          cielo_estabelecimento_matriz: r.cielo_estabelecimento_matriz || "",
+          cielo_documento: r.cielo_documento || "",
+          cielo_pvs: Array.isArray(r.cielo_pvs) ? r.cielo_pvs : [],
           ativo: r.ativo,
         };
       });
@@ -352,6 +529,9 @@ export default function AdminAdquirentesPage() {
         pv_matriz: form.pv_matriz || null,
         pv_matriz_production: form.pv_matriz_production || null,
         pvs_matriz_production: form.pvs_matriz_production || [],
+        cielo_estabelecimento_matriz: form.cielo_estabelecimento_matriz || null,
+        cielo_documento: form.cielo_documento || null,
+        cielo_pvs: form.cielo_pvs || [],
         ativo: form.ativo,
       } as any)
       .eq("id", config.id);
@@ -663,7 +843,14 @@ export default function AdminAdquirentesPage() {
     const formPvs = form.pvs_matriz_production || [];
     const pvsChanged = cfgPvs.length !== formPvs.length
       || cfgPvs.some((v, i) => v !== formPvs[i]);
+    const cfgCieloPvs = Array.isArray(config.cielo_pvs) ? config.cielo_pvs : [];
+    const formCieloPvs = form.cielo_pvs || [];
+    const cieloPvsChanged = cfgCieloPvs.length !== formCieloPvs.length
+      || cfgCieloPvs.some((v, i) => v !== formCieloPvs[i]);
     return form.ambiente !== config.ambiente
+      || form.cielo_estabelecimento_matriz !== (config.cielo_estabelecimento_matriz || "")
+      || form.cielo_documento !== (config.cielo_documento || "")
+      || cieloPvsChanged
       || form.merchant_id !== (config.merchant_id || "")
       || form.merchant_id_production !== (config.merchant_id_production || "")
       || form.integration_key_encrypted !== (config.integration_key_encrypted || "")
@@ -679,9 +866,77 @@ export default function AdminAdquirentesPage() {
     return emp?.nome || `Empresa ${cod}`;
   };
 
+  const handleTestCielo = async (config: AdquirenteConfig, targetAmbiente: "sandbox" | "production") => {
+    const testId = `${config.id}-cielo-${targetAmbiente}`;
+    setTesting(testId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sessão expirada");
+
+      const { data, error } = await supabase.functions.invoke("cielo-extrato-proxy", {
+        body: { action: "health", ambiente: targetAmbiente },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+
+      const health = (data ?? {}) as {
+        ok?: boolean;
+        status?: string;
+        error?: string;
+        fallback?: string;
+      };
+      const ok = Boolean(health.ok);
+      const status = health.status || (ok ? "ATIVA" : "ERRO");
+      const mensagem = health.error || "Conexão com a API EXTC estabelecida";
+
+      await supabase
+        .from("adquirentes_config")
+        .update({
+          cielo_last_healthcheck_at: new Date().toISOString(),
+          cielo_last_healthcheck_status: status,
+          cielo_last_healthcheck_message: mensagem,
+        } as any)
+        .eq("id", config.id);
+
+      if (ok) {
+        toast.success(`Cielo ${targetAmbiente}: API EXTC respondendo`);
+      } else if (health.fallback === "IMPORTACAO_ARQUIVO") {
+        // Falha esperada enquanto o mTLS nao estiver de pe — a mensagem precisa
+        // apontar o caminho alternativo, senao vira suporte.
+        toast.error(
+          `Cielo ${targetAmbiente}: ${mensagem} Use "Importar extrato Cielo" na tela de Conciliação de Cartões.`,
+          { duration: 10000 },
+        );
+      } else {
+        toast.error(`Cielo ${targetAmbiente}: ${mensagem}`);
+      }
+      fetchConfigs();
+    } catch (e) {
+      toast.error(`Erro ao testar Cielo: ${(e as Error).message}`);
+    } finally {
+      setTesting(null);
+    }
+  };
+
   const CredentialFields = ({ config, ambiente, form }: {
     config: AdquirenteConfig; ambiente: "sandbox" | "production"; form: EditForm;
   }) => {
+    // A Cielo nao usa PV + chave de integracao como a REDE: o acesso ao Extrato
+    // Eletronico e por matriz de extrato + credenciais globais (client_id,
+    // client_secret e certificado mTLS), guardadas em secrets do projeto.
+    if (config.adquirente === "CIELO") {
+      return (
+        <CieloFields
+          config={config}
+          form={form}
+          testing={testing}
+          onUpdateForm={updateForm}
+          onUpdatePvs={(next) => setEditForms(prev => ({ ...prev, [config.id]: { ...prev[config.id], cielo_pvs: next } }))}
+          onTest={() => handleTestCielo(config, ambiente)}
+        />
+      );
+    }
+
     const configId = config.id;
     const pvField = ambiente === "production" ? "merchant_id_production" : "merchant_id";
     const keyField = ambiente === "production" ? "integration_key_production" : "integration_key_encrypted";
