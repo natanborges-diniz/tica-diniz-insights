@@ -3917,6 +3917,9 @@ export type Database = {
         Row: {
           aprovado_em: string | null
           aprovado_por: string | null
+          cancelada_em: string | null
+          cancelada_por: string | null
+          cancelamento_motivo: string | null
           cod_empresa: number | null
           conta_numero: string
           created_at: string
@@ -3951,6 +3954,9 @@ export type Database = {
         Insert: {
           aprovado_em?: string | null
           aprovado_por?: string | null
+          cancelada_em?: string | null
+          cancelada_por?: string | null
+          cancelamento_motivo?: string | null
           cod_empresa?: number | null
           conta_numero: string
           created_at?: string
@@ -3985,6 +3991,9 @@ export type Database = {
         Update: {
           aprovado_em?: string | null
           aprovado_por?: string | null
+          cancelada_em?: string | null
+          cancelada_por?: string | null
+          cancelamento_motivo?: string | null
           cod_empresa?: number | null
           conta_numero?: string
           created_at?: string
@@ -4017,6 +4026,44 @@ export type Database = {
           vigencia_inicio?: string
         }
         Relationships: []
+      }
+      rubricas_edicoes: {
+        Row: {
+          alteracoes: Json
+          editado_em: string
+          editado_por: string | null
+          exigiu_reaprovacao: boolean
+          id: string
+          motivo: string | null
+          rubrica_id: string
+        }
+        Insert: {
+          alteracoes: Json
+          editado_em?: string
+          editado_por?: string | null
+          exigiu_reaprovacao?: boolean
+          id?: string
+          motivo?: string | null
+          rubrica_id: string
+        }
+        Update: {
+          alteracoes?: Json
+          editado_em?: string
+          editado_por?: string | null
+          exigiu_reaprovacao?: boolean
+          id?: string
+          motivo?: string | null
+          rubrica_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rubricas_edicoes_rubrica_id_fkey"
+            columns: ["rubrica_id"]
+            isOneToOne: false
+            referencedRelation: "rubricas_autorizadas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sync_jobs: {
         Row: {
