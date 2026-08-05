@@ -680,7 +680,7 @@ export default function FolhaPagamentoPage() {
         }
       >
         <div className="space-y-3 py-2">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label>Evento</Label>
               <Select value={evento} onValueChange={setEvento}>
@@ -694,18 +694,12 @@ export default function FolhaPagamentoPage() {
               <Label>Competência</Label>
               <Input type="month" value={competencia} onChange={e => setCompetencia(e.target.value)} />
             </div>
-            <div className="space-y-1">
-              <Label>Data de pagamento</Label>
-              <Input
-                type="date"
-                value={dataPagamento}
-                onChange={e => { setDataPagamento(e.target.value); setDataTocada(true); }}
-              />
-            </div>
           </div>
           <p className="text-xs text-muted-foreground">
             Cada evento é uma remessa separada no banco — salário e férias do mesmo mês não vão juntos.
+            A data de pagamento é escolhida uma única vez, no fechamento da competência.
           </p>
+
 
           <div className="space-y-1">
             <Label>Relatório em PDF</Label>
