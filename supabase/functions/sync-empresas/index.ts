@@ -59,13 +59,39 @@ Deno.serve(async (req) => {
       }, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
+    // O CNPJ chegava sempre nulo: o Firebird do ERP nomeia o campo de um jeito
+    // que `e.cnpj ?? e.documento` nao alcancava. Como o nome varia entre
+    // instalacoes, a busca passa a ser por padrao no nome da chave — e o valor
+    // e normalizado para 14 digitos, que e o formato usado nas conciliacoes.
+    const extrairCnpj = (e: Record<string, unknown>): string | null => {
+      const chave = Object.keys(e).find((k) =>
+        /^(cnpj|cgc|documento|doc|nrcnpj|numcnpj|cnpjcpf|cpfcnpj|inscricao)/i.test(
+          k.replace(/[\s_-]/g, ""),
+        )
+      );
+      if (!chave) return null;
+      const digitos = String(e[chave] ?? "").replace(/\D/g, "");
+      return digitos.length === 14 ? digitos : null;
+    };
+
     const empresasRows = allEmpresas.map((e: any) => ({
       cod_empresa: e.codEmpresa ?? e.cod_empresa ?? e.id,
       razao_social: e.razaoSocial ?? e.razao_social ?? null,
       nome_fantasia: e.nomeFantasia ?? e.nome_fantasia ?? e.nome ?? null,
-      cnpj: e.cnpj ?? e.documento ?? null,
+      cnpj: extrairCnpj(e),
       cidade: e.cidade ?? e.municipio ?? null, uf: e.uf ?? e.estado ?? null,
     }));
+
+    const semCnpj = empresasRows.filter((r) => !r.cnpj).length;
+    if (semCnpj > 0) {
+      // Sem CNPJ a conciliacao de cartoes nao consegue ligar estabelecimento da
+      // adquirente a loja. Chame esta funcao com ?debug=true para ver os nomes
+      // de campo que o ERP realmente devolve.
+      console.warn(
+        `[sync-empresas] ${semCnpj}/${empresasRows.length} empresa(s) sem CNPJ. ` +
+        `Chaves disponiveis no ERP: ${allEmpresas[0] ? Object.keys(allEmpresas[0]).join(", ") : "?"}`,
+      );
+    }
 
     if (empresasRows.length > 0) {
       const { error } = await supabase.from('empresa').upsert(empresasRows, { onConflict: 'cod_empresa' });
