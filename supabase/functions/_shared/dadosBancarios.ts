@@ -35,15 +35,18 @@ export interface Casamento {
   por: MotivoCasamento;
 }
 
+export type MotivoRecusa = "SEM_DADOS_DE_PAGAMENTO" | "NAO_ESTA_NA_FOLHA";
+
 export interface ResultadoCruzamento {
   casados: Casamento[];
-  /** Linha da planilha que não corresponde a ninguém na folha. */
-  sem_correspondente: LinhaBancaria[];
+  /** Linha da planilha que não corresponde a ninguém na folha (com o motivo). */
+  sem_correspondente: Array<LinhaBancaria & { motivo: MotivoRecusa }>;
   /** Colaborador da folha que a planilha não cobriu. */
   nao_cobertos: ColaboradorAlvo[];
   /** Nome que bate com mais de uma pessoa — nunca casa sozinho. */
   ambiguos: Array<{ nome: string; quantidade: number }>;
 }
+
 
 export function soDigitos(v: unknown): string {
   return String(v ?? "").replace(/\D/g, "");
