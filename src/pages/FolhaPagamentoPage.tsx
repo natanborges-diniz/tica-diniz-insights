@@ -378,13 +378,33 @@ export default function FolhaPagamentoPage() {
     onSuccess: (r: {
       casados?: number; por_cpf?: number; por_nome?: number; rubricas_atualizadas?: number;
       ambiguos?: Array<{ nome: string; quantidade: number }>;
+      linhas_planilha?: number; colaboradores_folha?: number;
+      sem_correspondente?: number;
+      sem_correspondente_detalhe?: Array<{ nome: string; cpf: string; motivo: string }>;
       nao_cobertos?: Array<{ nome: string }>; erros?: string[];
     }) => {
       toast.dismiss("importar-contas");
-      toast.success(
-        `${r?.casados ?? 0} conta(s) preenchida(s) — ${r?.por_cpf ?? 0} por CPF, ${r?.por_nome ?? 0} por nome. ` +
-        `${r?.rubricas_atualizadas ?? 0} rubrica(s) guardadas para os próximos meses.`,
-      );
+      const detalhe = r?.sem_correspondente_detalhe ?? [];
+      const foraDaFolha = detalhe.filter(d => d.motivo === "NAO_ESTA_NA_FOLHA");
+      const semDados = detalhe.filter(d => d.motivo === "SEM_DADOS_DE_PAGAMENTO");
+
+      if ((r?.casados ?? 0) === 0) {
+        // Zero casamentos é sempre um dos dois casos abaixo — dizer qual evita
+        // o operador reenviar a mesma planilha achando que foi falha de upload.
+        const causa = foraDaFolha.length >= semDados.length && foraDaFolha.length > 0
+          ? `nenhum CPF/nome da planilha existe nesta competência (ex.: ${foraDaFolha.slice(0, 3).map(d => `${d.nome}${d.cpf ? ` — ${d.cpf}` : ""}`).join("; ")})`
+          : `as linhas não trazem banco+agência+conta nem chave Pix (${semDados.length} linha(s))`;
+        toast.error(
+          `0 conta(s) preenchida(s): ${causa}. ` +
+          `Planilha com ${r?.linhas_planilha ?? 0} linha(s), folha com ${r?.colaboradores_folha ?? 0} colaborador(es).`,
+          { duration: 15000 },
+        );
+      } else {
+        toast.success(
+          `${r?.casados ?? 0} conta(s) preenchida(s) — ${r?.por_cpf ?? 0} por CPF, ${r?.por_nome ?? 0} por nome. ` +
+          `${r?.rubricas_atualizadas ?? 0} rubrica(s) guardadas para os próximos meses.`,
+        );
+      }
       if (r?.ambiguos?.length) {
         toast.error(
           `${r.ambiguos.length} nome(s) repetido(s) na folha ficaram de fora: ` +
@@ -397,6 +417,7 @@ export default function FolhaPagamentoPage() {
           `${r.nao_cobertos.length > 3 ? "…" : ""}`,
         );
       }
+
       queryClient.invalidateQueries({ queryKey: ["folha"] });
       queryClient.invalidateQueries({ queryKey: ["folha-detalhe"] });
     },

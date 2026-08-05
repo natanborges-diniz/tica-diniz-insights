@@ -628,13 +628,15 @@ async function importarDadosBancarios(body: Record<string, unknown>, userId: str
   let rubricasAtualizadas = 0;
 
   for (const c of r.casados) {
-    const { error } = await supabase.from("folha_itens").update({
-      banco: c.dados.banco,
-      agencia: c.dados.agencia,
-      conta: c.dados.conta,
-      tipo_conta: c.dados.tipo_conta,
-      chave_pix: c.dados.chave_pix ?? null,
-    }).eq("id", c.alvo.id);
+    // Campo ausente na planilha não apaga o que já estava no item: planilha só
+    // de Pix não deve zerar a conta que alguém digitou à mão.
+    const patch: Record<string, unknown> = { tipo_conta: c.dados.tipo_conta };
+    if (c.dados.banco) patch.banco = c.dados.banco;
+    if (c.dados.agencia) patch.agencia = c.dados.agencia;
+    if (c.dados.conta) patch.conta = c.dados.conta;
+    if (c.dados.chave_pix) patch.chave_pix = c.dados.chave_pix;
+
+    const { error } = await supabase.from("folha_itens").update(patch).eq("id", c.alvo.id);
     if (error) { erros.push(`${c.alvo.nome}: ${error.message}`); continue; }
 
     // A rubrica é o cadastro que atravessa competências.
@@ -647,18 +649,29 @@ async function importarDadosBancarios(body: Record<string, unknown>, userId: str
       .maybeSingle();
 
     if (rub) {
-      const { error: rErr } = await supabase.from("rubricas_autorizadas").update({
-        favorecido_banco: c.dados.banco,
-        favorecido_agencia: c.dados.agencia,
-        favorecido_conta: c.dados.conta,
+      const rubPatch: Record<string, unknown> = {
         favorecido_tipo_conta: c.dados.tipo_conta,
-        favorecido_chave: c.dados.chave_pix ?? null,
         forma_pagamento: "PIX_MANUAL",
-      }).eq("id", rub.id);
+      };
+      if (c.dados.banco) rubPatch.favorecido_banco = c.dados.banco;
+      if (c.dados.agencia) rubPatch.favorecido_agencia = c.dados.agencia;
+      if (c.dados.conta) rubPatch.favorecido_conta = c.dados.conta;
+      if (c.dados.chave_pix) rubPatch.favorecido_chave = c.dados.chave_pix;
+
+      const { error: rErr } = await supabase
+        .from("rubricas_autorizadas").update(rubPatch).eq("id", rub.id);
       if (rErr) erros.push(`rubrica de ${c.alvo.nome}: ${rErr.message}`);
       else rubricasAtualizadas++;
     }
   }
+
+  // Diagnóstico: sem isto, "0 conta(s) preenchida(s)" não dizia se o problema
+  // era coluna vazia na planilha ou CPF/nome que não existe nesta competência.
+  const recusadas = r.sem_correspondente.map((l) => ({
+    nome: String(l.nome ?? "").trim() || "(sem nome)",
+    cpf: String(l.cpf ?? "").trim(),
+    motivo: l.motivo,
+  }));
 
   return json({
     ok: true,
@@ -667,10 +680,14 @@ async function importarDadosBancarios(body: Record<string, unknown>, userId: str
     por_nome: r.casados.filter((c) => c.por === "NOME").length,
     rubricas_atualizadas: rubricasAtualizadas,
     ambiguos: r.ambiguos,
-    sem_correspondente: r.sem_correspondente.length,
+    linhas_planilha: linhas.length,
+    colaboradores_folha: itens.length,
+    sem_correspondente: recusadas.length,
+    sem_correspondente_detalhe: recusadas.slice(0, 20),
     nao_cobertos: r.nao_cobertos.map((a) => ({ nome: a.nome, cpf: a.cpf })),
     erros,
   });
+
 }
 
 // ─── MAIN ────────────────────────────────────────────────────

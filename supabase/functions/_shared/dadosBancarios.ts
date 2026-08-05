@@ -35,15 +35,18 @@ export interface Casamento {
   por: MotivoCasamento;
 }
 
+export type MotivoRecusa = "SEM_DADOS_DE_PAGAMENTO" | "NAO_ESTA_NA_FOLHA";
+
 export interface ResultadoCruzamento {
   casados: Casamento[];
-  /** Linha da planilha que não corresponde a ninguém na folha. */
-  sem_correspondente: LinhaBancaria[];
+  /** Linha da planilha que não corresponde a ninguém na folha (com o motivo). */
+  sem_correspondente: Array<LinhaBancaria & { motivo: MotivoRecusa }>;
   /** Colaborador da folha que a planilha não cobriu. */
   nao_cobertos: ColaboradorAlvo[];
   /** Nome que bate com mais de uma pessoa — nunca casa sozinho. */
   ambiguos: Array<{ nome: string; quantidade: number }>;
 }
+
 
 export function soDigitos(v: unknown): string {
   return String(v ?? "").replace(/\D/g, "");
@@ -66,9 +69,16 @@ export function normalizarNome(v: unknown): string {
     .toUpperCase();
 }
 
-/** Só aceitamos o que serve para pagar: banco, agência e conta juntos. */
+/**
+ * Serve para pagar: banco + agência + conta juntos, OU chave Pix.
+ *
+ * A planilha de algumas lojas só traz o Pix — recusá-la deixava o operador com
+ * "0 conta(s) preenchida(s)" e nenhuma pista do motivo. O pagamento por chave
+ * já existe no caminho manual (PIX_MANUAL), então aceitar aqui é coerente.
+ */
 export function temDadosDePagamento(l: LinhaBancaria): boolean {
-  return !!(soDigitos(l.banco) && soDigitos(l.agencia) && soDigitos(l.conta));
+  const contaCompleta = !!(soDigitos(l.banco) && soDigitos(l.agencia) && soDigitos(l.conta));
+  return contaCompleta || !!String(l.chave_pix ?? "").trim();
 }
 
 /** CC/PP/PG a partir do que o RH escreve na planilha. */
@@ -94,13 +104,13 @@ export function cruzarDadosBancarios(
   }
 
   const casados: Casamento[] = [];
-  const semCorrespondente: LinhaBancaria[] = [];
+  const semCorrespondente: ResultadoCruzamento["sem_correspondente"] = [];
   const ambiguos: Array<{ nome: string; quantidade: number }> = [];
   const usados = new Set<string>();
 
   for (const l of linhas) {
     if (!temDadosDePagamento(l)) {
-      semCorrespondente.push(l);
+      semCorrespondente.push({ ...l, motivo: "SEM_DADOS_DE_PAGAMENTO" });
       continue;
     }
 
@@ -123,18 +133,19 @@ export function cruzarDadosBancarios(
       }
     }
 
-    if (!alvo) { semCorrespondente.push(l); continue; }
+    if (!alvo) { semCorrespondente.push({ ...l, motivo: "NAO_ESTA_NA_FOLHA" }); continue; }
     if (usados.has(alvo.id)) continue; // primeira linha vence; duplicata é ruído
 
+    const banco = soDigitos(l.banco);
     usados.add(alvo.id);
     casados.push({
       alvo,
       por,
       dados: {
         ...l,
-        banco: soDigitos(l.banco).padStart(3, "0"),
-        agencia: soDigitos(l.agencia),
-        conta: soDigitos(l.conta),
+        banco: banco ? banco.padStart(3, "0") : null,
+        agencia: soDigitos(l.agencia) || null,
+        conta: soDigitos(l.conta) || null,
         tipo_conta: normalizarTipoConta(l.tipo_conta),
         chave_pix: l.chave_pix ? String(l.chave_pix).trim() : null,
       },
@@ -147,4 +158,5 @@ export function cruzarDadosBancarios(
     nao_cobertos: alvos.filter((a) => !usados.has(a.id)),
     ambiguos,
   };
+
 }
