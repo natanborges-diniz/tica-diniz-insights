@@ -590,8 +590,9 @@ Deno.serve(async (req) => {
       case "criar_rubricas": return await criarRubricas(body, auth.userId);
       case "fechar": return await fechar(body, auth.userId);
       case "cancelar": return await cancelar(body, auth.userId);
+      case "atualizar_dados_bancarios": return await atualizarDadosBancarios(body, auth.userId);
       default:
-        return json({ error: `Ação desconhecida: '${body.action}'. Use: importar, listar, detalhe, criar_rubricas, fechar, cancelar` }, 400);
+        return json({ error: `Ação desconhecida: '${body.action}'. Use: importar, listar, detalhe, criar_rubricas, fechar, cancelar, atualizar_dados_bancarios` }, 400);
     }
   } catch (err) {
     console.error("[folha-pagamento]", err);
