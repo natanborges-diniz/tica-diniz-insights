@@ -447,6 +447,14 @@ async function fechar(body: Record<string, unknown>, userId: string) {
     }
   }
 
+  // O borderô guarda o que realmente entrou — cabeçalho batendo com o conteúdo.
+  const totalCriado = itens
+    .filter((i: Record<string, unknown>) => !falhas.some((f) => f.startsWith(`${i.nome}:`)))
+    .reduce((s: number, i: Record<string, unknown>) => s + Number(i.valor_liquido), 0);
+  await supabase.from("borderos")
+    .update({ qtd_lancamentos: criados, total_valor: totalCriado })
+    .eq("id", bordero.id);
+
   await supabase.from("folha_competencias").update({
     status: "FECHADA",
     data_pagamento: dataPagamento,
@@ -463,8 +471,10 @@ async function fechar(body: Record<string, unknown>, userId: string) {
     com_rubrica: comRubrica,
     sem_rubrica: criados - comRubrica,
     encargos: encargosCriados,
-    total_liquido: Number(comp.total_liquido),
+    falhas,
+    total_liquido: totalCriado,
   });
+
 }
 
 // ─── cancelar ────────────────────────────────────────────────
