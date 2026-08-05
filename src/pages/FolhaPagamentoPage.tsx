@@ -360,7 +360,19 @@ export default function FolhaPagamentoPage() {
 
 
       if (linhas.length === 0) throw new Error("A primeira aba da planilha está vazia");
+
+      // Diagnóstico explícito: sem esta checagem, coluna não reconhecida virava
+      // "0 conta(s) preenchida(s)" sem dizer o porquê.
+      const utilizavel = linhas.some(l => (l.banco && l.agencia && l.conta) || l.chave_pix);
+      if (!utilizavel) {
+        const cabecalhos = Object.keys(linhasBrutas[0] ?? {}).join(", ");
+        throw new Error(
+          "Não encontrei banco, agência e conta (nem chave Pix) na planilha. " +
+          `Colunas lidas: ${cabecalhos || "nenhuma"}`,
+        );
+      }
       return invoke("importar_dados_bancarios", { competencia_id: id, linhas });
+
     },
     onMutate: () => toast.loading("Importando contas da planilha…", { id: "importar-contas" }),
     onSuccess: (r: {
