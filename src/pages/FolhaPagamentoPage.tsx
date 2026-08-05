@@ -182,7 +182,11 @@ export default function FolhaPagamentoPage() {
   // individual num borderô comum.
   const [modoPagamento, setModoPagamento] = useState("PIX_INDIVIDUAL");
   const [contaFolha, setContaFolha] = useState("");
+  /** Data de pagamento usada no fechamento — separada da importação. */
+  const [dataFechamento, setDataFechamento] = useState(format(agoraSP(), "yyyy-MM-dd"));
   const [lendoPdf, setLendoPdf] = useState(false);
+  /** O operador mexeu na data? A partir daí o relatório não manda mais nela. */
+  const [dataTocada, setDataTocada] = useState(false);
   // Competência que está recebendo a planilha de contas; o input de arquivo é
   // um só, disparado pelo botão da linha.
   const [contasParaId, setContasParaId] = useState<string | null>(null);
@@ -260,8 +264,16 @@ export default function FolhaPagamentoPage() {
   useEffect(() => {
     if (!relatorio) return;
     if (relatorio.competencia) setCompetencia(relatorio.competencia);
-    if (relatorio.data_pagamento) setDataPagamento(relatorio.data_pagamento);
-  }, [relatorio?.competencia, relatorio?.data_pagamento]);
+
+    // A data impressa é a do mês da competência — julho fechado em agosto traz
+    // 30/07, que já passou. Preencher com ela fazia o borderô antecipar tudo
+    // para "hoje" e ignorar qualquer data escolhida depois. Data vencida vira
+    // sugestão de hoje; a escolha do operador nunca é sobrescrita.
+    if (relatorio.data_pagamento && !dataTocada) {
+      const hoje = format(agoraSP(), "yyyy-MM-dd");
+      setDataPagamento(relatorio.data_pagamento < hoje ? hoje : relatorio.data_pagamento);
+    }
+  }, [relatorio?.competencia, relatorio?.data_pagamento, dataTocada]);
 
   const importarMutation = useMutation({
     mutationFn: () => invoke("importar", {
@@ -428,7 +440,13 @@ export default function FolhaPagamentoPage() {
   });
 
   const fecharMutation = useMutation({
-    mutationFn: (id: string) => invoke("fechar", { competencia_id: id, modo_pagamento: modoPagamento }),
+    // A data vai junto: é ela que vira o vencimento dos títulos e a data do
+    // borderô. Sem isso valia a do relatório, quase sempre no passado.
+    mutationFn: (id: string) => invoke("fechar", {
+      competencia_id: id,
+      modo_pagamento: modoPagamento,
+      data_pagamento: dataFechamento || undefined,
+    }),
     onSuccess: (r: {
       ok?: boolean; code?: string; error?: string;
       colaboradores?: Array<{ nome: string; cpf: string }>;
@@ -534,6 +552,18 @@ export default function FolhaPagamentoPage() {
               {modoPagamento === "PIX_INDIVIDUAL"
                 ? "Cada colaborador vira um Pix com banco, agência e conta, num borderô comum — o caminho que funciona hoje."
                 : "Remessa única pelo endpoint de folha do BTG. Depende do escopo payroll liberado pelo banco e de conta salário."}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Data de pagamento no fechamento</Label>
+            <Input
+              type="date"
+              value={dataFechamento}
+              onChange={e => setDataFechamento(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              É esta data que vira o vencimento dos títulos e a data do borderô — não a impressa
+              no relatório, que costuma ser do mês da competência e já ter passado.
             </p>
           </div>
           <div className="space-y-1">
@@ -691,7 +721,11 @@ export default function FolhaPagamentoPage() {
             </div>
             <div className="space-y-1">
               <Label>Data de pagamento</Label>
-              <Input type="date" value={dataPagamento} onChange={e => setDataPagamento(e.target.value)} />
+              <Input
+                type="date"
+                value={dataPagamento}
+                onChange={e => { setDataPagamento(e.target.value); setDataTocada(true); }}
+              />
             </div>
           </div>
           <p className="text-xs text-muted-foreground">

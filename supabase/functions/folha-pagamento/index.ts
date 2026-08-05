@@ -22,6 +22,8 @@ import {
   montarEncargos,
   totalizar,
   vincularRubricas,
+  destinoDoColaborador,
+  exigeContaBancaria,
   ROTULO_EVENTO,
   type EventoFolha,
   type LinhaFolha,
@@ -271,7 +273,19 @@ async function fechar(body: Record<string, unknown>, userId: string) {
   const ev = comp.evento as EventoFolha;
   const rotulo = ROTULO_EVENTO[ev] ?? ev;
 
-  // Como o dinheiro sai.
+  // Data em que a folha será paga.
+  //
+  // Vem do relatório do contador, que traz a data do mês da competência — julho
+  // fechado em agosto imprime 30/07. Essa data já passou, e usá-la como
+  // vencimento fazia o borderô antecipar tudo para "hoje" e ignorar a data
+  // escolhida: o operador trocava a data, salvava, e nada mudava.
+  //
+  // Aqui a data escolhida no fechamento manda, e é ela que vira o vencimento de
+  // cada lançamento — para folha, vencimento e data de pagamento são a mesma
+  // coisa, não há juros a antecipar.
+  const dataPagamento = /^\d{4}-\d{2}-\d{2}$/.test(String(body.data_pagamento ?? ""))
+    ? String(body.data_pagamento)
+    : String(comp.data_pagamento);
   //
   // FOLHA usa POST /banking/payroll/payments, que exige o escopo `payroll` — e
   // esse escopo depende de liberação do BTG e de conta salário. Enquanto isso
@@ -283,14 +297,20 @@ async function fechar(body: Record<string, unknown>, userId: string) {
     : "PIX_INDIVIDUAL";
   const ehLoteFolha = modo === "FOLHA_BTG";
 
-  // Sem banco/agência/conta ninguém é pago, nos dois modos.
-  const semConta = itens.filter((i: Record<string, unknown>) => !(i.banco && i.agencia && i.conta));
-  if (semConta.length > 0) {
+  // Sem destino ninguém é pago. O que conta como destino depende do modo:
+  // no lote de folha do BTG só conta bancária serve; no Pix individual, chave
+  // também resolve — e é o que várias lojas têm.
+  const semDestino = ehLoteFolha
+    ? itens.filter((i: Record<string, unknown>) => exigeContaBancaria(i))
+    : itens.filter((i: Record<string, unknown>) => !destinoDoColaborador(i));
+  if (semDestino.length > 0) {
     return json({
       ok: false,
       code: "SEM_DADOS_BANCARIOS",
-      error: `${semConta.length} colaborador(es) sem banco, agência ou conta`,
-      colaboradores: semConta.map((i: Record<string, unknown>) => ({ nome: i.nome, cpf: i.cpf })),
+      error: ehLoteFolha
+        ? `${semDestino.length} colaborador(es) sem banco, agência ou conta — o lote de folha do BTG não aceita chave Pix`
+        : `${semDestino.length} colaborador(es) sem conta bancária e sem chave Pix`,
+      colaboradores: semDestino.map((i: Record<string, unknown>) => ({ nome: i.nome, cpf: i.cpf })),
     });
   }
 
@@ -300,7 +320,7 @@ async function fechar(body: Record<string, unknown>, userId: string) {
     tipo: ehLoteFolha ? "FOLHA" : "PAGAMENTOS",
     folha_competencia_id: id,
     descricao: `${rotulo} ${comp.competencia}`,
-    data_pagamento: comp.data_pagamento,
+    data_pagamento: dataPagamento,
     modo_data: "DATA_UNICA",
     status: "MONTAGEM",
     criado_por: userId,
@@ -331,6 +351,7 @@ async function fechar(body: Record<string, unknown>, userId: string) {
   for (const it of itens) {
     const rubricaId = vinculoRubrica.get(String(it.cpf).replace(/\D/g, "")) ?? null;
     if (rubricaId) comRubrica++;
+    const destino = destinoDoColaborador(it);
     const { data: lanc, error } = await supabase.from("lancamentos_financeiros").insert({
       cod_empresa: comp.cod_empresa,
       tipo: "PAGAR",
@@ -341,7 +362,7 @@ async function fechar(body: Record<string, unknown>, userId: string) {
       pessoa_nome: it.nome,
       pessoa_documento: it.cpf,
       valor: Number(it.valor_liquido),
-      data_vencimento: comp.data_pagamento,
+      data_vencimento: dataPagamento,
       natureza: "DESPESAS_OPERACIONAIS",
       categoria: "PESSOAL",
       subcategoria: rotulo,
@@ -359,17 +380,11 @@ async function fechar(body: Record<string, unknown>, userId: string) {
         conta: it.conta,
         chave_pix: it.chave_pix,
         // No modo Pix o lançamento já sai preparado: o operador não precisa
-        // abrir "Preparar pagamento" em cada colaborador.
-        ...(ehLoteFolha ? {} : {
-          btg_payment_type: "PIX_MANUAL",
-          btg_details: {
-            bankCode: it.banco,
-            branch: it.agencia,
-            account: it.conta,
-            accountType: it.tipo_conta || "CC",
-            name: it.nome,
-            taxId: it.cpf,
-          },
+        // abrir "Preparar pagamento" em cada colaborador. Quem tem conta vai
+        // por PIX_MANUAL; quem só tem chave, por PIX_KEY.
+        ...(ehLoteFolha || !destino ? {} : {
+          btg_payment_type: destino.tipo,
+          btg_details: destino.detalhes,
         }),
       },
     }).select("id").single();
@@ -408,6 +423,7 @@ async function fechar(body: Record<string, unknown>, userId: string) {
 
   await supabase.from("folha_competencias").update({
     status: "FECHADA",
+    data_pagamento: dataPagamento,
     fechado_por: userId,
     fechado_em: new Date().toISOString(),
   }).eq("id", id);
@@ -416,6 +432,7 @@ async function fechar(body: Record<string, unknown>, userId: string) {
     ok: true,
     bordero_id: bordero.id,
     modo_pagamento: modo,
+    data_pagamento: dataPagamento,
     lancamentos: criados,
     com_rubrica: comRubrica,
     sem_rubrica: criados - comRubrica,
@@ -509,7 +526,8 @@ async function criarRubricas(body: Record<string, unknown>, userId: string) {
       favorecido_agencia: it.agencia ?? null,
       favorecido_conta: it.conta ?? null,
       favorecido_tipo_conta: it.tipo_conta ?? "CC",
-      forma_pagamento: "PIX_MANUAL",
+      // Quem tem conta paga por dados bancários; quem só tem chave, por chave.
+      forma_pagamento: destinoDoColaborador(it)?.tipo ?? "PIX_MANUAL",
       folha_evento: ev,
       conta_numero: contaNumero,
       periodicidade: "MENSAL",

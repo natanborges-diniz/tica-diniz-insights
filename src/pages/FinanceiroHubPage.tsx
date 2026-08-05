@@ -121,6 +121,8 @@ export default function FinanceiroHubPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [borderoDialogOpen, setBorderoDialogOpen] = useState(false);
   const [borderoDetalheId, setBorderoDetalheId] = useState<string | null>(null);
+  /** Data em edição no detalhe do borderô — vazio = mostrando a atual. */
+  const [novaDataBordero, setNovaDataBordero] = useState("");
   const [borderoBloqueio, setBorderoBloqueio] = useState<BorderoBloqueioPayload | null>(null);
 
   const [activeTab, setActiveTab] = useState("contas-pagar");
@@ -376,6 +378,24 @@ export default function FinanceiroHubPage() {
       toast.success(`✓ ${data?.baixados || 0} lançamentos baixados`); invalidateAll();
     },
     onError: (e: Error) => toast.error(e.message || "Erro ao confirmar"),
+  });
+
+  // A data do borderô era decidida na criação e virava pedra: quem errasse
+  // cancelava o borderô inteiro e remontava. Com folha de 30 pessoas, é refazer
+  // tudo por causa de um campo.
+  const editarBorderoMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: string }) =>
+      invokeAction("editar_bordero", { bordero_id: id, data_pagamento: data }),
+    onSuccess: (r: { titulos_atualizados?: number }) => {
+      toast.success(
+        `Data do borderô alterada` +
+        ((r?.titulos_atualizados ?? 0) > 0 ? ` — ${r.titulos_atualizados} título(s) acompanharam` : ""),
+      );
+      setNovaDataBordero("");
+      invalidateAll();
+      queryClient.invalidateQueries({ queryKey: ["bordero-detalhe"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const cancelarBorderoMutation = useMutation({
@@ -1090,6 +1110,39 @@ export default function FinanceiroHubPage() {
                     <span className="text-xs text-muted-foreground">({borderoDetalhe.bordero.qtd_lancamentos} lançamentos)</span>
                   </div>
                   <p className="text-xs text-muted-foreground">{est.titulo}</p>
+
+                  {["MONTAGEM", "APROVADO"].includes(borderoDetalhe.bordero.status) && (
+                    <div className="w-full flex items-end gap-2 pt-2 border-t">
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Data de pagamento</label>
+                        <Input
+                          type="date"
+                          className="h-8 w-[160px]"
+                          value={novaDataBordero || borderoDetalhe.bordero.data_pagamento || ""}
+                          onChange={(e) => setNovaDataBordero(e.target.value)}
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        disabled={
+                          !novaDataBordero ||
+                          novaDataBordero === borderoDetalhe.bordero.data_pagamento ||
+                          editarBorderoMutation.isPending
+                        }
+                        onClick={() => editarBorderoMutation.mutate({
+                          id: borderoDetalhe.bordero.id,
+                          data: novaDataBordero,
+                        })}
+                      >
+                        Alterar data
+                      </Button>
+                      <p className="text-xs text-muted-foreground flex-1">
+                        Só antes do envio. Depois de enviado a data está com o banco.
+                      </p>
+                    </div>
+                  )}
                 </div>
               );
             })()}

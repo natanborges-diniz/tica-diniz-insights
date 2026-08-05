@@ -127,6 +127,8 @@ Deno.serve(async (req) => {
         return await aprovarBordero(body, auth.userId);
       case "enviar_bordero_btg":
         return await enviarBorderoBtg(body, auth.userId);
+      case "editar_bordero":
+        return await editarBordero(body, auth.userId);
       case "cancelar_bordero":
         return await cancelarBordero(body);
       case "liberar_processando_orfao":
@@ -750,6 +752,78 @@ async function reabrir(body: Record<string, unknown>, userId: string) {
 // BORDERÔS
 // ═══════════════════════════════════════════════════════════
 
+
+
+/**
+ * Muda data de pagamento, modo de data ou descrição de um borderô ainda não
+ * enviado.
+ *
+ * Não existia: a data era decidida na criação e virava pedra. Quem errasse
+ * cancelava o borderô inteiro e remontava — com folha de 30 pessoas, isso é
+ * refazer tudo por causa de um campo.
+ *
+ * Só antes do envio. Depois de ENVIADO a data está com o banco, e mudar aqui só
+ * criaria divergência entre o que a tela mostra e o que foi contratado.
+ *
+ * A data de pagamento é replicada no vencimento dos títulos de FOLHA: ali
+ * vencimento e data de pagamento são a mesma coisa, e deixá-los diferentes faz
+ * o agendamento antecipar para o vencimento antigo — foi exatamente o que
+ * travava a folha no dia impresso no relatório do contador.
+ */
+async function editarBordero(body: Record<string, unknown>, userId: string) {
+  const id = String(body.bordero_id || "");
+  if (!id) throw new Error("bordero_id obrigatório");
+
+  const { data: bordero } = await supabase.from("borderos").select("*").eq("id", id).single();
+  if (!bordero) throw new Error("Borderô não encontrado");
+
+  if (!["MONTAGEM", "APROVADO"].includes(String(bordero.status))) {
+    return json({
+      ok: false,
+      code: "BORDERO_NAO_EDITAVEL",
+      error: `Borderô em ${bordero.status} não pode ser alterado — a data já está com o banco. ` +
+        `Cancele e monte outro, ou aguarde o retorno.`,
+    });
+  }
+
+  const patch: Record<string, unknown> = {};
+
+  if (body.data_pagamento !== undefined) {
+    const d = String(body.data_pagamento ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error("data_pagamento deve ser yyyy-MM-dd");
+    // Data no passado o banco recusa com `past-payment-date`; barramos antes.
+    if (d < hojeBrt()) throw new Error(`Data ${d} já passou — escolha hoje ou uma data futura`);
+    patch.data_pagamento = d;
+  }
+
+  if (body.modo_data !== undefined) {
+    const m = String(body.modo_data);
+    if (!["DATA_UNICA", "VENCIMENTO"].includes(m)) throw new Error("modo_data inválido");
+    patch.modo_data = m;
+  }
+
+  if (body.descricao !== undefined) patch.descricao = String(body.descricao);
+
+  if (Object.keys(patch).length === 0) throw new Error("Nada a alterar");
+
+  const { error } = await supabase.from("borderos").update(patch).eq("id", id);
+  if (error) throw new Error(error.message);
+
+  // Folha: o vencimento acompanha a data de pagamento.
+  let titulosAtualizados = 0;
+  if (patch.data_pagamento && bordero.tipo === "FOLHA") {
+    const { data: afetados } = await supabase
+      .from("lancamentos_financeiros")
+      .update({ data_vencimento: patch.data_pagamento })
+      .eq("bordero_id", id)
+      .in("status", ["BORDERO", "PREVISTO", "AUTORIZADO"])
+      .select("id");
+    titulosAtualizados = afetados?.length ?? 0;
+  }
+
+  console.log(`[financeiro-lancamentos] bordero ${id} alterado por ${userId}:`, JSON.stringify(patch));
+  return json({ ok: true, ...patch, titulos_atualizados: titulosAtualizados });
+}
 
 // ─── Rubricas: editar e cancelar ─────────────────────────────
 /**

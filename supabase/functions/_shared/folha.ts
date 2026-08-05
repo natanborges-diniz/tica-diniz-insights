@@ -295,6 +295,71 @@ export function montarLoteFolha(args: {
   };
 }
 
+// ─── Destino do dinheiro ─────────────────────────────────────
+
+export interface DestinoPagamento {
+  /** Tipo do BTG a gravar em dados_extras.btg_payment_type. */
+  tipo: "PIX_MANUAL" | "PIX_KEY";
+  detalhes: Record<string, unknown>;
+}
+
+export interface ColaboradorPagavel {
+  nome?: string | null;
+  cpf?: string | null;
+  banco?: string | null;
+  agencia?: string | null;
+  conta?: string | null;
+  tipo_conta?: string | null;
+  chave_pix?: string | null;
+}
+
+/**
+ * Como pagar este colaborador — conta bancária ou chave Pix.
+ *
+ * A planilha do RH nem sempre traz agência e conta: em várias lojas só existe a
+ * chave Pix, e exigir os três campos deixava a pessoa de fora do pagamento sem
+ * necessidade. Pix por chave é caminho válido no BTG e resolve o caso.
+ *
+ * Conta completa tem prioridade sobre chave: é o dado que o banco valida contra
+ * o CPF do titular, então erra menos.
+ *
+ * Devolve null quando não há nem um nem outro — e aí ninguém é pago mesmo.
+ */
+export function destinoDoColaborador(i: ColaboradorPagavel): DestinoPagamento | null {
+  const banco = soDigitos(i.banco);
+  const agencia = soDigitos(i.agencia);
+  const conta = soDigitos(i.conta);
+
+  if (banco && agencia && conta) {
+    return {
+      tipo: "PIX_MANUAL",
+      detalhes: {
+        bankCode: banco,
+        branch: agencia,
+        account: conta,
+        accountType: i.tipo_conta || "CC",
+        name: i.nome ?? "",
+        taxId: soDigitos(i.cpf),
+      },
+    };
+  }
+
+  const chave = String(i.chave_pix ?? "").trim();
+  if (chave) {
+    return {
+      tipo: "PIX_KEY",
+      detalhes: { pixKey: chave, name: i.nome ?? "", taxId: soDigitos(i.cpf) },
+    };
+  }
+
+  return null;
+}
+
+/** O lote de folha do BTG exige conta bancária; chave Pix não serve lá. */
+export function exigeContaBancaria(i: ColaboradorPagavel): boolean {
+  return !(soDigitos(i.banco) && soDigitos(i.agencia) && soDigitos(i.conta));
+}
+
 // ─── Vínculo com a rubrica do colaborador ────────────────────
 
 /**

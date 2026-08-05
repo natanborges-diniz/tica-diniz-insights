@@ -15,6 +15,8 @@ import {
   totalizar,
   extrairRetornoFolha,
   vincularRubricas,
+  destinoDoColaborador,
+  exigeContaBancaria,
 } from '../../../../supabase/functions/_shared/folha';
 
 // CPFs válidos (dígitos verificadores conferem)
@@ -293,5 +295,60 @@ describe('vincularRubricas — o lastro do salário no mês seguinte', () => {
 
   it('sem rubrica nenhuma, devolve mapa vazio sem quebrar', () => {
     expect(vincularRubricas(itens, []).size).toBe(0);
+  });
+});
+
+describe('destinoDoColaborador — para onde o salário vai', () => {
+  const base = { nome: 'EDINEIA FERNANDES DIAS', cpf: '356.961.978-84' };
+
+  it('com banco, agência e conta paga por dados bancários', () => {
+    const d = destinoDoColaborador({ ...base, banco: '208', agencia: '0050', conta: '008792899' });
+    expect(d?.tipo).toBe('PIX_MANUAL');
+    expect(d?.detalhes).toMatchObject({
+      bankCode: '208', branch: '0050', account: '008792899', accountType: 'CC',
+      name: 'EDINEIA FERNANDES DIAS', taxId: '35696197884',
+    });
+  });
+
+  it('só com chave Pix paga pela chave — várias lojas só têm isso', () => {
+    const d = destinoDoColaborador({ ...base, chave_pix: 'edineia@email.com' });
+    expect(d?.tipo).toBe('PIX_KEY');
+    expect(d?.detalhes).toMatchObject({ pixKey: 'edineia@email.com', taxId: '35696197884' });
+  });
+
+  it('conta completa vence a chave — é o dado que o banco valida contra o CPF', () => {
+    const d = destinoDoColaborador({
+      ...base, banco: '208', agencia: '0050', conta: '008792899', chave_pix: 'x@y.com',
+    });
+    expect(d?.tipo).toBe('PIX_MANUAL');
+  });
+
+  it('conta incompleta cai para a chave em vez de deixar a pessoa de fora', () => {
+    const d = destinoDoColaborador({ ...base, banco: '208', chave_pix: '11999998888' });
+    expect(d?.tipo).toBe('PIX_KEY');
+  });
+
+  it('sem conta e sem chave não há destino — aí ninguém é pago mesmo', () => {
+    expect(destinoDoColaborador(base)).toBeNull();
+  });
+
+  it('máscara na conta não impede o pagamento', () => {
+    const d = destinoDoColaborador({ ...base, banco: '033', agencia: '1234-5', conta: '87.928-9' });
+    expect(d?.detalhes).toMatchObject({ branch: '12345', account: '879289' });
+  });
+
+  it('tipo de conta informado é respeitado', () => {
+    const d = destinoDoColaborador({ ...base, banco: '208', agencia: '50', conta: '123', tipo_conta: 'PG' });
+    expect(d?.detalhes).toMatchObject({ accountType: 'PG' });
+  });
+});
+
+describe('exigeContaBancaria — o lote de folha do BTG não aceita chave', () => {
+  it('quem só tem chave não entra no lote de folha', () => {
+    expect(exigeContaBancaria({ chave_pix: 'a@b.com' })).toBe(true);
+  });
+
+  it('com conta completa, entra', () => {
+    expect(exigeContaBancaria({ banco: '208', agencia: '50', conta: '123' })).toBe(false);
   });
 });
