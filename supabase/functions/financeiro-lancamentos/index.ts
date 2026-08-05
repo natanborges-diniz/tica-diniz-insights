@@ -1030,16 +1030,40 @@ async function criarBordero(body: Record<string, unknown>, userId: string) {
   if (bErr) throw new Error(bErr.message);
 
   if (ids.length > 0) {
-    const { error: uErr } = await supabase
+    // Antes o update silencioso deixava um borderô fantasma: qtd_lancamentos
+    // vinha de ids.length, mas nenhum título tinha sido anexado (já estava em
+    // outro borderô, CANCELADO, BAIXADO...). O erro só aparecia depois, no
+    // envio, como "Borderô vazio". Agora falha aqui, dizendo o motivo.
+    const { data: anexados, error: uErr } = await supabase
       .from("lancamentos_financeiros")
       .update({ bordero_id: bordero.id, status: "BORDERO" })
       .in("id", ids)
       .in("status", ["PREVISTO", "CLASSIFICADO"])
-      .eq("tipo", "PAGAR");
+      .eq("tipo", "PAGAR")
+      .select("id");
 
-    if (uErr) throw new Error(uErr.message);
+    if (uErr) {
+      await supabase.from("borderos").delete().eq("id", bordero.id);
+      throw new Error(uErr.message);
+    }
+
+    if ((anexados || []).length === 0) {
+      await supabase.from("borderos").delete().eq("id", bordero.id);
+      const { data: atuais } = await supabase
+        .from("lancamentos_financeiros")
+        .select("descricao, status")
+        .in("id", ids);
+      const detalhe = (atuais || [])
+        .map((l) => `"${l.descricao ?? "sem descrição"}" está em ${l.status}`)
+        .join("; ");
+      throw new Error(
+        `Nenhum lançamento pôde entrar no borderô — só entram títulos a PAGAR em PREVISTO ou CLASSIFICADO. ${detalhe || "Os itens selecionados não existem mais."}`,
+      );
+    }
+
     await recalcBordero(bordero.id);
   }
+
 
   const { data: updated } = await supabase.from("borderos").select("*").eq("id", bordero.id).single();
   return json(updated, 201);
