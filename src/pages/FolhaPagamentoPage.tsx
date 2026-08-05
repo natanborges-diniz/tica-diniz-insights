@@ -615,23 +615,44 @@ export default function FolhaPagamentoPage() {
                 <TableRow>
                   <TableHead>Colaborador</TableHead>
                   <TableHead>CPF</TableHead>
-                  <TableHead>Conta</TableHead>
+                  <TableHead>Como recebe</TableHead>
                   <TableHead className="text-right">Líquido</TableHead>
+                  <TableHead className="w-[90px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {((detalhe as { itens?: Array<Record<string, unknown>> })?.itens || []).map((i) => (
-                  <TableRow key={String(i.id)}>
-                    <TableCell className="text-sm">{String(i.nome)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{String(i.cpf)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {i.banco ? `${i.banco} / ${i.agencia} / ${i.conta}` : (i.chave_pix ? "PIX" : "—")}
-                    </TableCell>
-                    <TableCell className="text-right text-sm font-medium">{fmt(Number(i.valor_liquido))}</TableCell>
-                  </TableRow>
-                ))}
+                {((detalhe as { itens?: Array<Record<string, unknown>> })?.itens || []).map((i) => {
+                  const semDados = !i.chave_pix && !(i.banco && i.agencia && i.conta);
+                  return (
+                    <TableRow key={String(i.id)}>
+                      <TableCell className="text-sm">{String(i.nome)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{String(i.cpf)}</TableCell>
+                      <TableCell className="text-xs">
+                        {i.chave_pix ? (
+                          <span className="text-muted-foreground">PIX {String(i.chave_pix)}</span>
+                        ) : i.banco ? (
+                          <span className="text-muted-foreground">{`${i.banco} / ${i.agencia} / ${i.conta}`}</span>
+                        ) : (
+                          <Badge variant="destructive" className="text-[10px]">sem dados de pagamento</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right text-sm font-medium">{fmt(Number(i.valor_liquido))}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant={semDados ? "default" : "ghost"}
+                          className="h-7 text-xs"
+                          onClick={() => abrirEdicao(i)}
+                        >
+                          {semDados ? "Informar" : "Editar"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
+
 
             {((detalhe as { encargos?: Array<Record<string, unknown>> })?.encargos || []).length > 0 && (
               <div>
