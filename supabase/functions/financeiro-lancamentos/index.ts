@@ -1101,15 +1101,25 @@ async function adicionarAoBordero(body: Record<string, unknown>) {
     throw new Error(`Sem lastro para borderô — resolva antes de adicionar:\n${rejeitados.join("\n")}`);
   }
 
-  const { error } = await supabase
+  const { data: anexados, error } = await supabase
     .from("lancamentos_financeiros")
     .update({ bordero_id: String(bordero_id), status: "BORDERO" })
     .in("id", ids)
     .in("status", ["PREVISTO", "CLASSIFICADO"])
-    .eq("tipo", "PAGAR");
+    .eq("tipo", "PAGAR")
+    .select("id");
 
   if (error) throw new Error(error.message);
+  if ((anexados || []).length === 0) {
+    const detalhe = (lancs || [])
+      .map((l) => `"${l.descricao ?? "sem descrição"}"`)
+      .join("; ");
+    throw new Error(
+      `Nenhum lançamento foi adicionado — só entram títulos a PAGAR em PREVISTO ou CLASSIFICADO. ${detalhe}`,
+    );
+  }
   await recalcBordero(String(bordero_id));
+
   return json({ ok: true });
 }
 
