@@ -46,6 +46,21 @@ async function requireAdmin(userId: string) {
   if (!data || data.length === 0) throw new Error("Apenas admin");
 }
 
+async function requireFinanceEdit(userId: string, codEmpresa: number) {
+  const { data: roles } = await supabase.from("user_roles")
+    .select("role").eq("user_id", userId).in("role", ["admin", "master"]);
+  if (roles && roles.length > 0) return;
+
+  const [{ data: podeEditar }, { data: empresas }] = await Promise.all([
+    supabase.rpc("has_module_edit_access", { _user_id: userId, _module: "financeiro" }),
+    supabase.from("user_empresa_permissions").select("cod_empresa").eq("user_id", userId),
+  ]);
+  const podeVerEmpresa = (empresas || []).some((e) => Number(e.cod_empresa) === codEmpresa);
+  if (!podeEditar || !podeVerEmpresa) {
+    throw new Error("Sem permissão para editar a folha desta empresa");
+  }
+}
+
 // ─── importar ────────────────────────────────────────────────
 /**
  * Recebe a planilha já parseada pelo front (nome, cpf, banco, valores).
@@ -591,7 +606,6 @@ async function atualizarDadosBancarios(body: Record<string, unknown>, userId: st
  * para a conta errada, e isso não se desfaz com um clique.
  */
 async function importarDadosBancarios(body: Record<string, unknown>, userId: string) {
-  await requireAdmin(userId);
   const id = String(body.competencia_id || "");
   const linhas = (body.linhas as LinhaBancaria[]) || [];
   if (!id) throw new Error("competencia_id obrigatório");
@@ -599,6 +613,7 @@ async function importarDadosBancarios(body: Record<string, unknown>, userId: str
 
   const { data: comp } = await supabase.from("folha_competencias").select("*").eq("id", id).single();
   if (!comp) throw new Error("Folha não encontrada");
+  await requireFinanceEdit(userId, Number(comp.cod_empresa));
 
   const { data: itens } = await supabase
     .from("folha_itens").select("id, nome, cpf").eq("competencia_id", id);

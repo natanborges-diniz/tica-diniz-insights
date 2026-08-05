@@ -199,7 +199,20 @@ export default function FolhaPagamentoPage() {
     const { data, error } = await supabase.functions.invoke("folha-pagamento", {
       body: { action, ...params },
     });
-    if (error) throw error;
+    if (error) {
+      const context = (error as { context?: Response }).context;
+      if (context) {
+        try {
+          const body = await context.clone().json() as { error?: string };
+          throw new Error(body.error || error.message);
+        } catch (contextError) {
+          if (contextError instanceof Error && contextError.message !== "Unexpected end of JSON input") {
+            throw contextError;
+          }
+        }
+      }
+      throw new Error(error.message);
+    }
     // Planilha inválida não é falha de chamada: a função devolve `error` junto
     // com a lista de linhas problemáticas, e lançar aqui apagava justamente a
     // explicação que o operador precisa ler.
@@ -338,11 +351,13 @@ export default function FolhaPagamentoPage() {
       if (linhas.length === 0) throw new Error("A primeira aba da planilha está vazia");
       return invoke("importar_dados_bancarios", { competencia_id: id, linhas });
     },
+    onMutate: () => toast.loading("Importando contas da planilha…", { id: "importar-contas" }),
     onSuccess: (r: {
       casados?: number; por_cpf?: number; por_nome?: number; rubricas_atualizadas?: number;
       ambiguos?: Array<{ nome: string; quantidade: number }>;
       nao_cobertos?: Array<{ nome: string }>; erros?: string[];
     }) => {
+      toast.dismiss("importar-contas");
       toast.success(
         `${r?.casados ?? 0} conta(s) preenchida(s) — ${r?.por_cpf ?? 0} por CPF, ${r?.por_nome ?? 0} por nome. ` +
         `${r?.rubricas_atualizadas ?? 0} rubrica(s) guardadas para os próximos meses.`,
@@ -362,7 +377,10 @@ export default function FolhaPagamentoPage() {
       queryClient.invalidateQueries({ queryKey: ["folha"] });
       queryClient.invalidateQueries({ queryKey: ["folha-detalhe"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      toast.dismiss("importar-contas");
+      toast.error(e.message);
+    },
   });
 
   const fecharMutation = useMutation({
