@@ -19,6 +19,12 @@ export type Database = {
           adquirente: string
           ambiente: string
           ativo: boolean
+          cielo_documento: string | null
+          cielo_estabelecimento_matriz: string | null
+          cielo_last_healthcheck_at: string | null
+          cielo_last_healthcheck_message: string | null
+          cielo_last_healthcheck_status: string | null
+          cielo_pvs: string[]
           cod_empresa: number
           created_at: string
           gv_approved_at: string | null
@@ -46,6 +52,12 @@ export type Database = {
           adquirente?: string
           ambiente?: string
           ativo?: boolean
+          cielo_documento?: string | null
+          cielo_estabelecimento_matriz?: string | null
+          cielo_last_healthcheck_at?: string | null
+          cielo_last_healthcheck_message?: string | null
+          cielo_last_healthcheck_status?: string | null
+          cielo_pvs?: string[]
           cod_empresa: number
           created_at?: string
           gv_approved_at?: string | null
@@ -73,6 +85,12 @@ export type Database = {
           adquirente?: string
           ambiente?: string
           ativo?: boolean
+          cielo_documento?: string | null
+          cielo_estabelecimento_matriz?: string | null
+          cielo_last_healthcheck_at?: string | null
+          cielo_last_healthcheck_message?: string | null
+          cielo_last_healthcheck_status?: string | null
+          cielo_pvs?: string[]
           cod_empresa?: number
           created_at?: string
           gv_approved_at?: string | null
@@ -650,6 +668,563 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      cielo_extratos_arquivos: {
+        Row: {
+          bytes: number | null
+          cadastro_completo: boolean | null
+          created_at: string
+          data_processamento: string | null
+          erro: string | null
+          estabelecimento_matriz: string
+          hierarquia_cadastro: string | null
+          id: string
+          importado_por: string | null
+          nome_arquivo: string | null
+          origem: string
+          periodo_final: string | null
+          periodo_inicial: string | null
+          processado_em: string | null
+          reprocessamento: boolean
+          sequencia: number
+          sha256: string
+          status: string
+          tipo_arquivo: string
+          totais: Json
+          updated_at: string
+          validacao: Json
+          versao_layout: string | null
+        }
+        Insert: {
+          bytes?: number | null
+          cadastro_completo?: boolean | null
+          created_at?: string
+          data_processamento?: string | null
+          erro?: string | null
+          estabelecimento_matriz: string
+          hierarquia_cadastro?: string | null
+          id?: string
+          importado_por?: string | null
+          nome_arquivo?: string | null
+          origem?: string
+          periodo_final?: string | null
+          periodo_inicial?: string | null
+          processado_em?: string | null
+          reprocessamento?: boolean
+          sequencia: number
+          sha256: string
+          status?: string
+          tipo_arquivo: string
+          totais?: Json
+          updated_at?: string
+          validacao?: Json
+          versao_layout?: string | null
+        }
+        Update: {
+          bytes?: number | null
+          cadastro_completo?: boolean | null
+          created_at?: string
+          data_processamento?: string | null
+          erro?: string | null
+          estabelecimento_matriz?: string
+          hierarquia_cadastro?: string | null
+          id?: string
+          importado_por?: string | null
+          nome_arquivo?: string | null
+          origem?: string
+          periodo_final?: string | null
+          periodo_inicial?: string | null
+          processado_em?: string | null
+          reprocessamento?: boolean
+          sequencia?: number
+          sha256?: string
+          status?: string
+          tipo_arquivo?: string
+          totais?: Json
+          updated_at?: string
+          validacao?: Json
+          versao_layout?: string | null
+        }
+        Relationships: []
+      }
+      cielo_lancamentos: {
+        Row: {
+          agencia: string | null
+          arn: string | null
+          arquivo_id: string
+          banco: string | null
+          bandeira_autorizacao_codigo: string | null
+          bandeira_liquidacao: string | null
+          bandeira_liquidacao_codigo: string | null
+          bin_cartao: string | null
+          canal_venda: string | null
+          canal_venda_codigo: string | null
+          cartao_estrangeiro: boolean
+          chave_rastreio: string
+          chave_ur: string
+          cod_empresa: number | null
+          codigo_ajuste: string | null
+          codigo_autorizacao: string | null
+          codigo_original_venda: string | null
+          codigo_pedido: string | null
+          codigo_transacao_recebida: string | null
+          codigo_unico_venda: string | null
+          conta: string | null
+          cpf_cnpj_negociador: string | null
+          cpf_cnpj_recebedor: string | null
+          created_at: string
+          dados_extras: Json
+          data_autorizacao: string | null
+          data_captura: string | null
+          data_lancamento: string | null
+          data_original_lancamento: string | null
+          data_vencimento_original: string | null
+          estabelecimento_submissor: string
+          final_cartao: string | null
+          forma_pagamento: string | null
+          grupo_cartoes: string | null
+          hora_transacao: string | null
+          id: string
+          identificador_efeito_negociacao: string | null
+          motivo_rejeicao: string | null
+          negociacao_com_cielo: boolean
+          nsu: string | null
+          numero_terminal: string | null
+          numero_transacao_processada: string | null
+          parcela: number
+          parcelado_cliente: boolean
+          rejeitada: boolean
+          taxa_mdr_percentual: number | null
+          taxa_ra_percentual: number | null
+          taxa_venda_percentual: number | null
+          tid: string | null
+          tipo_arquivo: string
+          tipo_captura: string | null
+          tipo_captura_codigo: string | null
+          tipo_cartao: string | null
+          tipo_lancamento: string
+          tipo_lancamento_descricao: string | null
+          tipo_liquidacao: string | null
+          tipo_transacao: string | null
+          total_parcelas: number
+          ur_id: string | null
+          valor_bruto: number
+          valor_cielo_promo: number
+          valor_comissao: number
+          valor_dcc: number
+          valor_liquido: number
+          valor_tarifa_administrativa: number
+          valor_tarifa_mdr: number
+          valor_total_venda: number
+          venda_cartao_id: string | null
+        }
+        Insert: {
+          agencia?: string | null
+          arn?: string | null
+          arquivo_id: string
+          banco?: string | null
+          bandeira_autorizacao_codigo?: string | null
+          bandeira_liquidacao?: string | null
+          bandeira_liquidacao_codigo?: string | null
+          bin_cartao?: string | null
+          canal_venda?: string | null
+          canal_venda_codigo?: string | null
+          cartao_estrangeiro?: boolean
+          chave_rastreio: string
+          chave_ur: string
+          cod_empresa?: number | null
+          codigo_ajuste?: string | null
+          codigo_autorizacao?: string | null
+          codigo_original_venda?: string | null
+          codigo_pedido?: string | null
+          codigo_transacao_recebida?: string | null
+          codigo_unico_venda?: string | null
+          conta?: string | null
+          cpf_cnpj_negociador?: string | null
+          cpf_cnpj_recebedor?: string | null
+          created_at?: string
+          dados_extras?: Json
+          data_autorizacao?: string | null
+          data_captura?: string | null
+          data_lancamento?: string | null
+          data_original_lancamento?: string | null
+          data_vencimento_original?: string | null
+          estabelecimento_submissor: string
+          final_cartao?: string | null
+          forma_pagamento?: string | null
+          grupo_cartoes?: string | null
+          hora_transacao?: string | null
+          id?: string
+          identificador_efeito_negociacao?: string | null
+          motivo_rejeicao?: string | null
+          negociacao_com_cielo?: boolean
+          nsu?: string | null
+          numero_terminal?: string | null
+          numero_transacao_processada?: string | null
+          parcela?: number
+          parcelado_cliente?: boolean
+          rejeitada?: boolean
+          taxa_mdr_percentual?: number | null
+          taxa_ra_percentual?: number | null
+          taxa_venda_percentual?: number | null
+          tid?: string | null
+          tipo_arquivo: string
+          tipo_captura?: string | null
+          tipo_captura_codigo?: string | null
+          tipo_cartao?: string | null
+          tipo_lancamento: string
+          tipo_lancamento_descricao?: string | null
+          tipo_liquidacao?: string | null
+          tipo_transacao?: string | null
+          total_parcelas?: number
+          ur_id?: string | null
+          valor_bruto?: number
+          valor_cielo_promo?: number
+          valor_comissao?: number
+          valor_dcc?: number
+          valor_liquido?: number
+          valor_tarifa_administrativa?: number
+          valor_tarifa_mdr?: number
+          valor_total_venda?: number
+          venda_cartao_id?: string | null
+        }
+        Update: {
+          agencia?: string | null
+          arn?: string | null
+          arquivo_id?: string
+          banco?: string | null
+          bandeira_autorizacao_codigo?: string | null
+          bandeira_liquidacao?: string | null
+          bandeira_liquidacao_codigo?: string | null
+          bin_cartao?: string | null
+          canal_venda?: string | null
+          canal_venda_codigo?: string | null
+          cartao_estrangeiro?: boolean
+          chave_rastreio?: string
+          chave_ur?: string
+          cod_empresa?: number | null
+          codigo_ajuste?: string | null
+          codigo_autorizacao?: string | null
+          codigo_original_venda?: string | null
+          codigo_pedido?: string | null
+          codigo_transacao_recebida?: string | null
+          codigo_unico_venda?: string | null
+          conta?: string | null
+          cpf_cnpj_negociador?: string | null
+          cpf_cnpj_recebedor?: string | null
+          created_at?: string
+          dados_extras?: Json
+          data_autorizacao?: string | null
+          data_captura?: string | null
+          data_lancamento?: string | null
+          data_original_lancamento?: string | null
+          data_vencimento_original?: string | null
+          estabelecimento_submissor?: string
+          final_cartao?: string | null
+          forma_pagamento?: string | null
+          grupo_cartoes?: string | null
+          hora_transacao?: string | null
+          id?: string
+          identificador_efeito_negociacao?: string | null
+          motivo_rejeicao?: string | null
+          negociacao_com_cielo?: boolean
+          nsu?: string | null
+          numero_terminal?: string | null
+          numero_transacao_processada?: string | null
+          parcela?: number
+          parcelado_cliente?: boolean
+          rejeitada?: boolean
+          taxa_mdr_percentual?: number | null
+          taxa_ra_percentual?: number | null
+          taxa_venda_percentual?: number | null
+          tid?: string | null
+          tipo_arquivo?: string
+          tipo_captura?: string | null
+          tipo_captura_codigo?: string | null
+          tipo_cartao?: string | null
+          tipo_lancamento?: string
+          tipo_lancamento_descricao?: string | null
+          tipo_liquidacao?: string | null
+          tipo_transacao?: string | null
+          total_parcelas?: number
+          ur_id?: string | null
+          valor_bruto?: number
+          valor_cielo_promo?: number
+          valor_comissao?: number
+          valor_dcc?: number
+          valor_liquido?: number
+          valor_tarifa_administrativa?: number
+          valor_tarifa_mdr?: number
+          valor_total_venda?: number
+          venda_cartao_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cielo_lancamentos_arquivo_id_fkey"
+            columns: ["arquivo_id"]
+            isOneToOne: false
+            referencedRelation: "cielo_extratos_arquivos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cielo_lancamentos_ur_id_fkey"
+            columns: ["ur_id"]
+            isOneToOne: false
+            referencedRelation: "cielo_urs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cielo_lancamentos_venda_cartao_id_fkey"
+            columns: ["venda_cartao_id"]
+            isOneToOne: false
+            referencedRelation: "vendas_cartao"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cielo_pix: {
+        Row: {
+          agencia: string | null
+          arquivo_id: string
+          banco: string | null
+          canal_venda_codigo: string | null
+          cod_empresa: number | null
+          conta: string | null
+          created_at: string
+          data_captura: string | null
+          data_pagamento: string | null
+          data_pagamento_conta_cielo: string | null
+          data_transacao: string | null
+          estabelecimento_submissor: string
+          hora_transacao: string | null
+          id: string
+          id_pagamento_pix: string | null
+          id_pix: string
+          id_pix_original: string | null
+          id_recorrencia: string | null
+          indicativo_troco_saque: string | null
+          liquidado: boolean
+          nsu: string | null
+          nsu_longo: string | null
+          numero_terminal: string | null
+          origem_ajuste: string | null
+          origem_ajuste_codigo: string | null
+          status_transferencia: string | null
+          status_transferencia_codigo: string | null
+          tarifa_administrativa: number | null
+          taxa_administrativa_percentual: number | null
+          tipo_transacao: string
+          transferencia_automatica: boolean
+          transferencia_programada: boolean
+          tx_id: string | null
+          valor_bruto: number
+          valor_liquido: number
+          valor_taxa_administrativa: number
+        }
+        Insert: {
+          agencia?: string | null
+          arquivo_id: string
+          banco?: string | null
+          canal_venda_codigo?: string | null
+          cod_empresa?: number | null
+          conta?: string | null
+          created_at?: string
+          data_captura?: string | null
+          data_pagamento?: string | null
+          data_pagamento_conta_cielo?: string | null
+          data_transacao?: string | null
+          estabelecimento_submissor: string
+          hora_transacao?: string | null
+          id?: string
+          id_pagamento_pix?: string | null
+          id_pix: string
+          id_pix_original?: string | null
+          id_recorrencia?: string | null
+          indicativo_troco_saque?: string | null
+          liquidado?: boolean
+          nsu?: string | null
+          nsu_longo?: string | null
+          numero_terminal?: string | null
+          origem_ajuste?: string | null
+          origem_ajuste_codigo?: string | null
+          status_transferencia?: string | null
+          status_transferencia_codigo?: string | null
+          tarifa_administrativa?: number | null
+          taxa_administrativa_percentual?: number | null
+          tipo_transacao: string
+          transferencia_automatica?: boolean
+          transferencia_programada?: boolean
+          tx_id?: string | null
+          valor_bruto?: number
+          valor_liquido?: number
+          valor_taxa_administrativa?: number
+        }
+        Update: {
+          agencia?: string | null
+          arquivo_id?: string
+          banco?: string | null
+          canal_venda_codigo?: string | null
+          cod_empresa?: number | null
+          conta?: string | null
+          created_at?: string
+          data_captura?: string | null
+          data_pagamento?: string | null
+          data_pagamento_conta_cielo?: string | null
+          data_transacao?: string | null
+          estabelecimento_submissor?: string
+          hora_transacao?: string | null
+          id?: string
+          id_pagamento_pix?: string | null
+          id_pix?: string
+          id_pix_original?: string | null
+          id_recorrencia?: string | null
+          indicativo_troco_saque?: string | null
+          liquidado?: boolean
+          nsu?: string | null
+          nsu_longo?: string | null
+          numero_terminal?: string | null
+          origem_ajuste?: string | null
+          origem_ajuste_codigo?: string | null
+          status_transferencia?: string | null
+          status_transferencia_codigo?: string | null
+          tarifa_administrativa?: number | null
+          taxa_administrativa_percentual?: number | null
+          tipo_transacao?: string
+          transferencia_automatica?: boolean
+          transferencia_programada?: boolean
+          tx_id?: string | null
+          valor_bruto?: number
+          valor_liquido?: number
+          valor_taxa_administrativa?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cielo_pix_arquivo_id_fkey"
+            columns: ["arquivo_id"]
+            isOneToOne: false
+            referencedRelation: "cielo_extratos_arquivos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cielo_urs: {
+        Row: {
+          agencia: string | null
+          arquivo_id: string
+          banco: string | null
+          bandeira: string | null
+          bandeira_codigo: string | null
+          chave_ur: string
+          cod_empresa: number | null
+          conta: string | null
+          cpf_cnpj_negociador: string | null
+          cpf_cnpj_recebedor: string | null
+          cpf_cnpj_titular: string | null
+          created_at: string
+          data_envio_banco: string | null
+          data_pagamento: string | null
+          data_vencimento_original: string | null
+          digito_conta: string | null
+          estabelecimento_pagamento: string | null
+          estabelecimento_submissor: string
+          extrato_lancamento_id: string | null
+          id: string
+          lancamento_pendente: boolean
+          liquidado: boolean
+          matriz_pagamento: string | null
+          negociacao_gravame: boolean
+          qtd_lancamentos: number
+          reenvio_pagamento: boolean
+          status_pagamento: string | null
+          status_pagamento_codigo: string | null
+          tipo_lancamento: string
+          tipo_lancamento_original: string | null
+          tipo_liquidacao: string | null
+          valor_bruto: number
+          valor_liquido: number
+          valor_taxa_administrativa: number
+        }
+        Insert: {
+          agencia?: string | null
+          arquivo_id: string
+          banco?: string | null
+          bandeira?: string | null
+          bandeira_codigo?: string | null
+          chave_ur: string
+          cod_empresa?: number | null
+          conta?: string | null
+          cpf_cnpj_negociador?: string | null
+          cpf_cnpj_recebedor?: string | null
+          cpf_cnpj_titular?: string | null
+          created_at?: string
+          data_envio_banco?: string | null
+          data_pagamento?: string | null
+          data_vencimento_original?: string | null
+          digito_conta?: string | null
+          estabelecimento_pagamento?: string | null
+          estabelecimento_submissor: string
+          extrato_lancamento_id?: string | null
+          id?: string
+          lancamento_pendente?: boolean
+          liquidado?: boolean
+          matriz_pagamento?: string | null
+          negociacao_gravame?: boolean
+          qtd_lancamentos?: number
+          reenvio_pagamento?: boolean
+          status_pagamento?: string | null
+          status_pagamento_codigo?: string | null
+          tipo_lancamento: string
+          tipo_lancamento_original?: string | null
+          tipo_liquidacao?: string | null
+          valor_bruto?: number
+          valor_liquido?: number
+          valor_taxa_administrativa?: number
+        }
+        Update: {
+          agencia?: string | null
+          arquivo_id?: string
+          banco?: string | null
+          bandeira?: string | null
+          bandeira_codigo?: string | null
+          chave_ur?: string
+          cod_empresa?: number | null
+          conta?: string | null
+          cpf_cnpj_negociador?: string | null
+          cpf_cnpj_recebedor?: string | null
+          cpf_cnpj_titular?: string | null
+          created_at?: string
+          data_envio_banco?: string | null
+          data_pagamento?: string | null
+          data_vencimento_original?: string | null
+          digito_conta?: string | null
+          estabelecimento_pagamento?: string | null
+          estabelecimento_submissor?: string
+          extrato_lancamento_id?: string | null
+          id?: string
+          lancamento_pendente?: boolean
+          liquidado?: boolean
+          matriz_pagamento?: string | null
+          negociacao_gravame?: boolean
+          qtd_lancamentos?: number
+          reenvio_pagamento?: boolean
+          status_pagamento?: string | null
+          status_pagamento_codigo?: string | null
+          tipo_lancamento?: string
+          tipo_lancamento_original?: string | null
+          tipo_liquidacao?: string | null
+          valor_bruto?: number
+          valor_liquido?: number
+          valor_taxa_administrativa?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cielo_urs_arquivo_id_fkey"
+            columns: ["arquivo_id"]
+            isOneToOne: false
+            referencedRelation: "cielo_extratos_arquivos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       comissao_taxas: {
         Row: {
@@ -3192,13 +3767,17 @@ export type Database = {
           bandeira: string | null
           btg_extrato_id: string | null
           btg_receivable_id: string | null
+          chave_ur: string | null
           cod_empresa: number
           created_at: string
+          data_liquidacao: string | null
           data_vencimento: string
           id: string
+          origem_recebivel_id: string | null
           status: string
           taxa_percentual: number | null
           taxa_valor: number | null
+          tipo_lancamento: string | null
           updated_at: string
           valor_bruto: number
           valor_liquido: number
@@ -3209,13 +3788,17 @@ export type Database = {
           bandeira?: string | null
           btg_extrato_id?: string | null
           btg_receivable_id?: string | null
+          chave_ur?: string | null
           cod_empresa: number
           created_at?: string
+          data_liquidacao?: string | null
           data_vencimento: string
           id?: string
+          origem_recebivel_id?: string | null
           status?: string
           taxa_percentual?: number | null
           taxa_valor?: number | null
+          tipo_lancamento?: string | null
           updated_at?: string
           valor_bruto?: number
           valor_liquido?: number
@@ -3226,13 +3809,17 @@ export type Database = {
           bandeira?: string | null
           btg_extrato_id?: string | null
           btg_receivable_id?: string | null
+          chave_ur?: string | null
           cod_empresa?: number
           created_at?: string
+          data_liquidacao?: string | null
           data_vencimento?: string
           id?: string
+          origem_recebivel_id?: string | null
           status?: string
           taxa_percentual?: number | null
           taxa_valor?: number | null
+          tipo_lancamento?: string | null
           updated_at?: string
           valor_bruto?: number
           valor_liquido?: number
@@ -4029,7 +4616,9 @@ export type Database = {
       }
       v_conciliacao_loja_resumo: {
         Row: {
+          adquirente: string | null
           ambiente: string | null
+          cielo_last_healthcheck_status: string | null
           cod_empresa: number | null
           gv_last_healthcheck_status: string | null
           gv_optin_status: string | null
