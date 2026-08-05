@@ -329,11 +329,21 @@ export default function FolhaPagamentoPage() {
 
       // Cabeçalho reconhecido por nome, não por posição: cada RH monta a
       // planilha do seu jeito, e exigir ordem fixa só geraria retrabalho.
+      // Comparação por "começa com" porque títulos reais vêm sujos —
+      // "CONTA C/ DIGITO", "AGÊNCIA Nº", "CPF DO COLABORADOR".
       const achar = (linha: Record<string, unknown>, ...nomes: string[]) => {
-        for (const [k, v] of Object.entries(linha)) {
-          const norm = k.trim().toLowerCase()
-            .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]/g, "");
-          if (nomes.includes(norm)) return v == null ? null : String(v);
+        const chaves = Object.entries(linha).map(([k, v]) => [
+          k.trim().toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]/g, ""),
+          v,
+        ] as const);
+        for (const nome of nomes) {
+          const exato = chaves.find(([k]) => k === nome);
+          if (exato) return exato[1] == null ? null : String(exato[1]);
+        }
+        for (const nome of nomes) {
+          const parcial = chaves.find(([k]) => k.startsWith(nome) || k.includes(nome));
+          if (parcial) return parcial[1] == null ? null : String(parcial[1]);
         }
         return null;
       };
@@ -343,10 +353,11 @@ export default function FolhaPagamentoPage() {
         cpf: achar(l, "cpf", "documento"),
         banco: achar(l, "banco", "codigobanco"),
         agencia: achar(l, "agencia"),
-        conta: achar(l, "conta", "numeroconta", "contacomdigito"),
-        tipo_conta: achar(l, "tipoconta", "tipo"),
+        conta: achar(l, "contacomdigito", "contacdigito", "conta", "numeroconta"),
+        tipo_conta: achar(l, "tipoconta", "tipodeconta"),
         chave_pix: achar(l, "chavepix", "pix"),
       }));
+
 
       if (linhas.length === 0) throw new Error("A primeira aba da planilha está vazia");
       return invoke("importar_dados_bancarios", { competencia_id: id, linhas });
