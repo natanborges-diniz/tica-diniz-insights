@@ -346,11 +346,27 @@ async function fechar(body: Record<string, unknown>, userId: string) {
   );
 
   // 2. Um lançamento por colaborador, já no borderô.
+  //
+  // Reprocessar uma competência cancelada colidia com o índice único
+  // (cod_empresa, rubrica_id, competencia_rubrica): o lançamento antigo, mesmo
+  // CANCELADO, continuava ocupando a chave. O insert falhava, o erro era
+  // engolido e o borderô nascia vazio. Aqui liberamos a chave dos cancelados
+  // antes de inserir, e qualquer falha restante estoura na cara do operador.
   let criados = 0;
   let comRubrica = 0;
+  const falhas: string[] = [];
   for (const it of itens) {
     const rubricaId = vinculoRubrica.get(String(it.cpf).replace(/\D/g, "")) ?? null;
     if (rubricaId) comRubrica++;
+    if (rubricaId) {
+      await supabase
+        .from("lancamentos_financeiros")
+        .update({ competencia_rubrica: null })
+        .eq("cod_empresa", comp.cod_empresa)
+        .eq("rubrica_id", rubricaId)
+        .eq("competencia_rubrica", comp.competencia)
+        .eq("status", "CANCELADO");
+    }
     const destino = destinoDoColaborador(it);
     const { data: lanc, error } = await supabase.from("lancamentos_financeiros").insert({
       cod_empresa: comp.cod_empresa,
@@ -392,8 +408,18 @@ async function fechar(body: Record<string, unknown>, userId: string) {
     if (!error && lanc) {
       await supabase.from("folha_itens").update({ lancamento_id: lanc.id }).eq("id", it.id);
       criados++;
+    } else {
+      falhas.push(`${it.nome}: ${error?.message || "não foi possível criar o lançamento"}`);
     }
   }
+
+  // Borderô vazio é pior que erro: passa pela mesa e quebra no envio. Se nenhum
+  // lançamento entrou, desfaz o borderô e diz o porquê.
+  if (criados === 0) {
+    await supabase.from("borderos").delete().eq("id", bordero.id);
+    throw new Error(`Nenhum lançamento pôde ser criado — ${falhas.join(" | ")}`);
+  }
+
 
   // 3. Encargos: títulos avulsos, fora do borderô de folha (vão por guia/DARF).
   const { data: encargos } = await supabase.from("folha_encargos").select("*").eq("competencia_id", id);
@@ -421,6 +447,14 @@ async function fechar(body: Record<string, unknown>, userId: string) {
     }
   }
 
+  // O borderô guarda o que realmente entrou — cabeçalho batendo com o conteúdo.
+  const totalCriado = itens
+    .filter((i: Record<string, unknown>) => !falhas.some((f) => f.startsWith(`${i.nome}:`)))
+    .reduce((s: number, i: Record<string, unknown>) => s + Number(i.valor_liquido), 0);
+  await supabase.from("borderos")
+    .update({ qtd_lancamentos: criados, total_valor: totalCriado })
+    .eq("id", bordero.id);
+
   await supabase.from("folha_competencias").update({
     status: "FECHADA",
     data_pagamento: dataPagamento,
@@ -437,8 +471,10 @@ async function fechar(body: Record<string, unknown>, userId: string) {
     com_rubrica: comRubrica,
     sem_rubrica: criados - comRubrica,
     encargos: encargosCriados,
-    total_liquido: Number(comp.total_liquido),
+    falhas,
+    total_liquido: totalCriado,
   });
+
 }
 
 // ─── cancelar ────────────────────────────────────────────────
