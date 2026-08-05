@@ -181,6 +181,14 @@ export default function FolhaPagamentoPage() {
   const [modoPagamento, setModoPagamento] = useState("PIX_INDIVIDUAL");
   const [contaFolha, setContaFolha] = useState("");
 
+  // Correção pontual do Pix/conta de um colaborador, sem recolar a planilha.
+  const [editItem, setEditItem] = useState<{ id: string; nome: string; cpf: string } | null>(null);
+  const [editPix, setEditPix] = useState("");
+  const [editBanco, setEditBanco] = useState("");
+  const [editAgencia, setEditAgencia] = useState("");
+  const [editConta, setEditConta] = useState("");
+  const [editTipoConta, setEditTipoConta] = useState("");
+
   const invoke = async (action: string, params: Record<string, unknown> = {}) => {
     const { data, error } = await supabase.functions.invoke("folha-pagamento", {
       body: { action, ...params },
@@ -288,6 +296,37 @@ export default function FolhaPagamentoPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const dadosBancariosMutation = useMutation({
+    mutationFn: () => invoke("atualizar_dados_bancarios", {
+      item_id: editItem?.id,
+      chave_pix: editPix,
+      banco: editBanco,
+      agencia: editAgencia,
+      conta: editConta,
+      tipo_conta: editTipoConta,
+    }),
+    onSuccess: (r: { rubrica_atualizada?: boolean }) => {
+      toast.success(
+        "Dados de pagamento atualizados" +
+        (r?.rubrica_atualizada ? " — a rubrica do colaborador voltou para rascunho e precisa ser aprovada" : ""),
+      );
+      setEditItem(null);
+      queryClient.invalidateQueries({ queryKey: ["folha-detalhe", detalheId] });
+      queryClient.invalidateQueries({ queryKey: ["folha"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const abrirEdicao = (i: Record<string, unknown>) => {
+    setEditItem({ id: String(i.id), nome: String(i.nome), cpf: String(i.cpf ?? "") });
+    setEditPix(String(i.chave_pix ?? ""));
+    setEditBanco(String(i.banco ?? ""));
+    setEditAgencia(String(i.agencia ?? ""));
+    setEditConta(String(i.conta ?? ""));
+    setEditTipoConta(String(i.tipo_conta ?? ""));
+  };
+
 
   return (
     <div className="space-y-4">
@@ -576,23 +615,44 @@ export default function FolhaPagamentoPage() {
                 <TableRow>
                   <TableHead>Colaborador</TableHead>
                   <TableHead>CPF</TableHead>
-                  <TableHead>Conta</TableHead>
+                  <TableHead>Como recebe</TableHead>
                   <TableHead className="text-right">Líquido</TableHead>
+                  <TableHead className="w-[90px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {((detalhe as { itens?: Array<Record<string, unknown>> })?.itens || []).map((i) => (
-                  <TableRow key={String(i.id)}>
-                    <TableCell className="text-sm">{String(i.nome)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{String(i.cpf)}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {i.banco ? `${i.banco} / ${i.agencia} / ${i.conta}` : (i.chave_pix ? "PIX" : "—")}
-                    </TableCell>
-                    <TableCell className="text-right text-sm font-medium">{fmt(Number(i.valor_liquido))}</TableCell>
-                  </TableRow>
-                ))}
+                {((detalhe as { itens?: Array<Record<string, unknown>> })?.itens || []).map((i) => {
+                  const semDados = !i.chave_pix && !(i.banco && i.agencia && i.conta);
+                  return (
+                    <TableRow key={String(i.id)}>
+                      <TableCell className="text-sm">{String(i.nome)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{String(i.cpf)}</TableCell>
+                      <TableCell className="text-xs">
+                        {i.chave_pix ? (
+                          <span className="text-muted-foreground">PIX {String(i.chave_pix)}</span>
+                        ) : i.banco ? (
+                          <span className="text-muted-foreground">{`${i.banco} / ${i.agencia} / ${i.conta}`}</span>
+                        ) : (
+                          <Badge variant="destructive" className="text-[10px]">sem dados de pagamento</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right text-sm font-medium">{fmt(Number(i.valor_liquido))}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant={semDados ? "default" : "ghost"}
+                          className="h-7 text-xs"
+                          onClick={() => abrirEdicao(i)}
+                        >
+                          {semDados ? "Informar" : "Editar"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
+
 
             {((detalhe as { encargos?: Array<Record<string, unknown>> })?.encargos || []).length > 0 && (
               <div>
@@ -615,6 +675,70 @@ export default function FolhaPagamentoPage() {
           </div>
         )}
       </BaseDialog>
+
+      {/* Dados de pagamento de um colaborador */}
+      <BaseDialog
+        open={!!editItem}
+        onOpenChange={(o) => { if (!o) setEditItem(null); }}
+        title={`Dados de pagamento — ${editItem?.nome ?? ""}`}
+        description="A chave Pix tem prioridade. Sem ela, informe banco, agência e conta."
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEditItem(null)}>Cancelar</Button>
+            <Button
+              onClick={() => dadosBancariosMutation.mutate()}
+              disabled={dadosBancariosMutation.isPending}
+            >
+              Salvar
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 py-2">
+          <div className="space-y-1">
+            <Label>Chave Pix</Label>
+            <Input
+              value={editPix}
+              onChange={e => setEditPix(e.target.value)}
+              placeholder="CPF, celular, e-mail ou chave aleatória"
+              maxLength={140}
+            />
+            <p className="text-xs text-muted-foreground">
+              A mesma validação do envio ao banco roda aqui — chave inválida não salva.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1">
+              <Label>Banco</Label>
+              <Input value={editBanco} onChange={e => setEditBanco(e.target.value)} maxLength={10} />
+            </div>
+            <div className="space-y-1">
+              <Label>Agência</Label>
+              <Input value={editAgencia} onChange={e => setEditAgencia(e.target.value)} maxLength={10} />
+            </div>
+            <div className="space-y-1">
+              <Label>Conta</Label>
+              <Input value={editConta} onChange={e => setEditConta(e.target.value)} maxLength={20} />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label>Tipo de conta</Label>
+            <Select value={editTipoConta || "CC"} onValueChange={setEditTipoConta}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CC">Conta corrente</SelectItem>
+                <SelectItem value="PP">Poupança</SelectItem>
+                <SelectItem value="PG">Conta pagamento</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            A correção também atualiza a rubrica deste CPF, então a próxima folha já vem certa —
+            e a rubrica volta para rascunho, exigindo nova aprovação.
+          </p>
+        </div>
+      </BaseDialog>
     </div>
+
   );
 }

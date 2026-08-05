@@ -25,6 +25,7 @@ import {
   type LinhaFolha,
   type TipoEncargo,
 } from "../_shared/folha.ts";
+import { normalizarChavePix } from "../_shared/btgPayment.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -497,6 +498,83 @@ async function criarRubricas(body: Record<string, unknown>, userId: string) {
   return json({ ok: true, criadas, atualizadas, erros });
 }
 
+// ─── atualizar dados bancários de UM colaborador ─────────────
+/**
+ * Corrigir a chave Pix (ou a conta) de um colaborador sem cancelar a
+ * competência e recolar a planilha inteira — que era o único caminho antes.
+ *
+ * A correção também sobe para a rubrica autorizada do CPF, para a próxima folha
+ * já nascer certa. Mudar a chave da rubrica reabre a aprovação dela por
+ * trigger (fn_rubrica_reaprovacao), e isso é proposital: dado bancário novo
+ * passa por quatro olhos.
+ */
+async function atualizarDadosBancarios(body: Record<string, unknown>, userId: string) {
+  await requireAdmin(userId);
+  const itemId = String(body.item_id || "");
+  if (!itemId) throw new Error("item_id obrigatório");
+
+  const { data: item } = await supabase.from("folha_itens")
+    .select("*, folha_competencias!inner(id, status, cod_empresa)")
+    .eq("id", itemId).single();
+  if (!item) throw new Error("Colaborador não encontrado nesta folha");
+
+  const comp = (item as Record<string, unknown>).folha_competencias as
+    { id: string; status: string; cod_empresa: number };
+  if (comp.status !== "RASCUNHO") {
+    throw new Error(
+      `A folha está ${comp.status} — os lançamentos já foram gerados. ` +
+      `Ajuste o favorecido no lançamento/borderô ou cancele a folha.`,
+    );
+  }
+
+  const chaveBruta = String(body.chave_pix ?? "").trim();
+  let chave: string | null = null;
+  if (chaveBruta) {
+    // Mesma normalização do envio ao banco: erro de chave aparece aqui, não no
+    // 400 do BTG depois de o borderô estar aprovado.
+    chave = normalizarChavePix(chaveBruta);
+  }
+
+  const banco = String(body.banco ?? "").trim() || null;
+  const agencia = String(body.agencia ?? "").trim() || null;
+  const conta = String(body.conta ?? "").trim() || null;
+  const tipoConta = String(body.tipo_conta ?? "").trim() || null;
+
+  if (!chave && !(banco && agencia && conta)) {
+    throw new Error("Informe a chave Pix ou banco + agência + conta completos");
+  }
+
+  const { error: upErr } = await supabase.from("folha_itens").update({
+    chave_pix: chave,
+    banco, agencia, conta,
+    tipo_conta: tipoConta,
+  }).eq("id", itemId);
+  if (upErr) throw new Error(upErr.message);
+
+  // Propaga para a rubrica do CPF, se existir.
+  let rubricaAtualizada = false;
+  const cpf = String((item as Record<string, unknown>).cpf ?? "");
+  if (cpf) {
+    const { data: rub } = await supabase.from("rubricas_autorizadas")
+      .select("id").eq("cod_empresa", comp.cod_empresa)
+      .eq("favorecido_documento", cpf).limit(1);
+    if (rub && rub.length > 0) {
+      const { error } = await supabase.from("rubricas_autorizadas").update({
+        favorecido_chave: chave,
+        favorecido_banco: banco,
+        favorecido_agencia: agencia,
+        favorecido_conta: conta,
+        favorecido_tipo_conta: tipoConta,
+        forma_pagamento: chave ? "PIX" : "TED",
+      }).eq("id", rub[0].id);
+      rubricaAtualizada = !error;
+    }
+  }
+
+  return json({ ok: true, chave_pix: chave, rubrica_atualizada: rubricaAtualizada });
+}
+
+
 // ─── MAIN ────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -512,8 +590,9 @@ Deno.serve(async (req) => {
       case "criar_rubricas": return await criarRubricas(body, auth.userId);
       case "fechar": return await fechar(body, auth.userId);
       case "cancelar": return await cancelar(body, auth.userId);
+      case "atualizar_dados_bancarios": return await atualizarDadosBancarios(body, auth.userId);
       default:
-        return json({ error: `Ação desconhecida: '${body.action}'. Use: importar, listar, detalhe, criar_rubricas, fechar, cancelar` }, 400);
+        return json({ error: `Ação desconhecida: '${body.action}'. Use: importar, listar, detalhe, criar_rubricas, fechar, cancelar, atualizar_dados_bancarios` }, 400);
     }
   } catch (err) {
     console.error("[folha-pagamento]", err);
