@@ -690,6 +690,21 @@ export default function FolhaPagamentoPage() {
               {prévia.erro}
             </p>
           )}
+          {planilha.trim() && !relatorio && prévia.itens.length === 0 && (
+            <div className="text-xs bg-destructive/5 border border-destructive/20 rounded-md p-3 space-y-1">
+              <p className="font-medium text-destructive flex items-center gap-1">
+                <AlertTriangle className="h-3.5 w-3.5" /> Não reconheci nenhum colaborador neste texto
+              </p>
+              <p className="text-muted-foreground">
+                O leitor precisa de <strong>nome, CPF e valor líquido na mesma linha</strong>. Se o PDF
+                for digitalizado (imagem), não há texto para extrair — peça o arquivo original ao
+                contador. Abaixo, o começo do que foi lido:
+              </p>
+              <pre className="font-mono text-[10px] whitespace-pre-wrap text-muted-foreground max-h-32 overflow-auto">
+                {planilha.split("\n").slice(0, 12).join("\n")}
+              </pre>
+            </div>
+          )}
           {prévia.itens.length > 0 && (
             <p className="text-xs text-primary bg-primary/5 border border-primary/20 rounded-md p-2">
               {prévia.itens.length} colaborador(es) reconhecido(s) — líquido{" "}

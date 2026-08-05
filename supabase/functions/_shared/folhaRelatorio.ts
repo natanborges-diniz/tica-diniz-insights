@@ -33,7 +33,8 @@ export interface RelatorioFolha {
 
 /** "1.234,56" → 1234.56 */
 function valorBr(s: string): number {
-  return Number(s.replace(/\./g, "").replace(",", ".")) || 0;
+  // Espaços aparecem quando o PDF quebra "3.290,14" em dois pedaços de texto.
+  return Number(s.replace(/\s/g, "").replace(/\./g, "").replace(",", ".")) || 0;
 }
 
 /** "30/07/2026" → "2026-07-30" */
@@ -42,9 +43,11 @@ function dataBr(s: string): string | null {
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
 }
 
-// Código, nome, CPF formatado, data e valor — nessa ordem, numa linha só.
-// O nome é preguiçoso (.+?) para não engolir o CPF quando há sobrenome longo.
-const LINHA = /^(\d+)\s+(.+?)\s+(\d{3}\.\d{3}\.\d{3}-\d{2})\s+(\d{2}\/\d{2}\/\d{4})\s+([\d.]*\d,\d{2})\s*$/;
+// Nome, CPF e valor na mesma linha. Código, pontuação do CPF e data de
+// pagamento são opcionais: cada escritório de contabilidade emite o relatório
+// com um recorte de colunas diferente, e recusar o arquivo inteiro por causa
+// de uma coluna ausente deixava o operador sem caminho nenhum.
+const LINHA = /^(?:(\d{1,6})\s+)?(.+?)\s+(\d{3}\.?\s?\d{3}\.?\s?\d{3}\s?-?\s?\d{2})\s+(?:(\d{2}\/\d{2}\/\d{4})\s+)?(\d{1,3}(?:\.\d{3})*,\s?\d{2}|\d+,\s?\d{2})\s*$/;
 
 /**
  * O texto colado é a Relação de Totais Líquidos?
@@ -54,8 +57,12 @@ const LINHA = /^(\d+)\s+(.+?)\s+(\d{3}\.\d{3}\.\d{3}-\d{2})\s+(\d{2}\/\d{2}\/\d{
  * passaria na validação e importaria folha vazia.
  */
 export function ehRelatorioTotaisLiquidos(texto: string): boolean {
-  if (!/Totais\s+L[íi]quidos/i.test(texto)) return false;
-  return texto.split(/\r?\n/).some((l) => LINHA.test(l.trim()));
+  const linhas = texto.split(/\r?\n/);
+  const temLinhas = linhas.filter((l) => LINHA.test(l.trim())).length;
+  // O título é a pista principal, mas o relatório de alguns escritórios sai sem
+  // ele. Duas linhas de colaborador já não são coincidência de planilha.
+  if (/Totais\s*L[íi]quidos|Rela[çc][ãa]o\s+de\s+Total/i.test(texto)) return temLinhas > 0;
+  return temLinhas >= 2;
 }
 
 export function parseRelatorioFolha(texto: string): RelatorioFolha {
@@ -74,7 +81,7 @@ export function parseRelatorioFolha(texto: string): RelatorioFolha {
     const item = l.match(LINHA);
     if (item) {
       colaboradores.push({
-        codigo: item[1],
+        codigo: item[1] ?? null,
         nome: item[2].replace(/\s+/g, " ").trim(),
         cpf: item[3].replace(/\D/g, ""),
         data_pagamento: dataBr(item[4]),
