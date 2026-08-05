@@ -13,6 +13,7 @@ import {
   montarEncargos,
   montarLoteFolha,
   totalizar,
+  extrairRetornoFolha,
 } from '../../../../supabase/functions/_shared/folha';
 
 // CPFs válidos (dígitos verificadores conferem)
@@ -197,5 +198,54 @@ describe('totalizar', () => {
 
   it('tolera linhas sem bruto informado', () => {
     expect(totalizar([{ valor_liquido: 1000 }]).total_liquido).toBe(1000);
+  });
+});
+
+describe('extrairRetornoFolha — leitura do retorno do lote', () => {
+  // A folha ainda não rodou em produção (escopo payroll bloqueado), então o
+  // formato exato da resposta é suposição. O que estes testes garantem é que
+  // formatos plausíveis são lidos e que o desconhecido não vira baixa errada.
+
+  it('lê itens na raiz, correlacionando pelo reference que enviamos', () => {
+    const r = extrairRetornoFolha({
+      status: 'PROCESSED',
+      items: [
+        { reference: 'lanc-1', status: 'PAID', netAmount: 3290.14, executedAt: '2026-07-30T10:00:00Z' },
+        { reference: 'lanc-2', status: 'REJECTED', netAmount: 1714.45 },
+      ],
+    });
+    expect(r.statusLote).toBe('PROCESSED');
+    expect(r.itens).toHaveLength(2);
+    expect(r.itens[0]).toEqual({
+      referencia: 'lanc-1', status: 'PAID', valor: 3290.14, data: '2026-07-30',
+    });
+    expect(r.itens[1].status).toBe('REJECTED');
+  });
+
+  it('lê itens aninhados em companies[].items — mesmo formato do envio', () => {
+    const r = extrairRetornoFolha({
+      data: { status: 'COMPLETED', companies: [{ items: [{ reference: 'lanc-9', status: 'PAID', amount: 100 }] }] },
+    });
+    expect(r.itens[0].referencia).toBe('lanc-9');
+    expect(r.itens[0].valor).toBe(100);
+  });
+
+  it('item sem status herda o status do lote', () => {
+    const r = extrairRetornoFolha({ status: 'PROCESSED', payments: [{ reference: 'lanc-3' }] });
+    expect(r.itens[0].status).toBe('PROCESSED');
+  });
+
+  it('formato desconhecido devolve lista vazia em vez de inventar baixa', () => {
+    const r = extrairRetornoFolha({ mensagem: 'algo que não esperávamos' });
+    expect(r.itens).toEqual([]);
+  });
+
+  it('resposta nula não quebra', () => {
+    expect(extrairRetornoFolha(null)).toEqual({ statusLote: '', itens: [] });
+  });
+
+  it('item sem reference é lido, mas sem âncora — o chamador não vai baixá-lo', () => {
+    const r = extrairRetornoFolha({ items: [{ status: 'PAID', amount: 50 }] });
+    expect(r.itens[0].referencia).toBeNull();
   });
 });

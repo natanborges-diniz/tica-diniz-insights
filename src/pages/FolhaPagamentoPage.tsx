@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Users, Upload, CheckCircle2, XCircle, FileSpreadsheet, AlertTriangle } from "lucide-react";
@@ -7,6 +7,7 @@ import { useEmpresas } from "@/hooks/useEmpresas";
 import { useDefaultEmpresa } from "@/hooks/useDefaultEmpresa";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { BaseDialog } from "@/components/system/BaseDialog";
+import { PlanoContaSelect } from "@/components/banking/PlanoContaSelect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { agoraSP } from "@/lib/datetime";
+import {
+  ehRelatorioTotaisLiquidos,
+  parseRelatorioFolha,
+} from "../../supabase/functions/_shared/folhaRelatorio";
 
 // Espelha _shared/folha.ts. Os códigos numéricos do BTG ficam no backend —
 // aqui só o vocabulário da casa.
@@ -69,6 +74,29 @@ const fmt = (v: number) =>
  * ordem das colunas não importa.
  */
 function parsePlanilha(texto: string) {
+  // Antes de tentar planilha: é a Relação de Totais Líquidos colada do PDF?
+  // É o que a contabilidade manda de verdade, um relatório por loja.
+  if (ehRelatorioTotaisLiquidos(texto)) {
+    const r = parseRelatorioFolha(texto);
+    return {
+      itens: r.colaboradores.map(c => ({
+        nome: c.nome,
+        cpf: c.cpf,
+        matricula: c.codigo,
+        // O relatório não traz banco: vem da rubrica do colaborador, no backend.
+        banco: null as string | null,
+        agencia: null as string | null,
+        conta: null as string | null,
+        chave_pix: null as string | null,
+        valor_bruto: 0,
+        descontos: 0,
+        valor_liquido: c.valor_liquido,
+      })),
+      erro: null as string | null,
+      relatorio: r,
+    };
+  }
+
   const linhas = texto.trim().split(/\r?\n/).filter(l => l.trim());
   if (linhas.length < 2) return { itens: [], erro: "Cole o cabeçalho e ao menos uma linha" };
 
@@ -148,6 +176,10 @@ export default function FolhaPagamentoPage() {
   const [fgts, setFgts] = useState("");
   const [irrf, setIrrf] = useState("");
   const [linhasInvalidas, setLinhasInvalidas] = useState<Array<{ nome: string; cpf: string; erros: string[] }>>([]);
+  // Enquanto o escopo de folha do BTG não sai, o caminho que funciona é Pix
+  // individual num borderô comum.
+  const [modoPagamento, setModoPagamento] = useState("PIX_INDIVIDUAL");
+  const [contaFolha, setContaFolha] = useState("");
 
   const invoke = async (action: string, params: Record<string, unknown> = {}) => {
     const { data, error } = await supabase.functions.invoke("folha-pagamento", {
@@ -170,6 +202,14 @@ export default function FolhaPagamentoPage() {
   });
 
   const prévia = parsePlanilha(planilha);
+  const relatorio = (prévia as { relatorio?: ReturnType<typeof parseRelatorioFolha> }).relatorio ?? null;
+
+  // Competência e data vêm impressas no relatório — redigitar é chance de errar.
+  useEffect(() => {
+    if (!relatorio) return;
+    if (relatorio.competencia) setCompetencia(relatorio.competencia);
+    if (relatorio.data_pagamento) setDataPagamento(relatorio.data_pagamento);
+  }, [relatorio?.competencia, relatorio?.data_pagamento]);
 
   const importarMutation = useMutation({
     mutationFn: () => invoke("importar", {
@@ -201,11 +241,39 @@ export default function FolhaPagamentoPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const fecharMutation = useMutation({
-    mutationFn: (id: string) => invoke("fechar", { competencia_id: id }),
-    onSuccess: (r: { lancamentos?: number; encargos?: number }) => {
+  const rubricasMutation = useMutation({
+    mutationFn: (id: string) => invoke("criar_rubricas", { competencia_id: id, conta_numero: contaFolha }),
+    onSuccess: (r: { criadas?: number; atualizadas?: number; erros?: string[] }) => {
       toast.success(
-        `Folha fechada: ${r?.lancamentos ?? 0} lançamento(s) e ${r?.encargos ?? 0} encargo(s) no contas a pagar`,
+        `${r?.criadas ?? 0} rubrica(s) criada(s) e ${r?.atualizadas ?? 0} atualizada(s). ` +
+        `As novas nascem em rascunho — aprove em Rubricas para valerem no selo.`,
+      );
+      if (r?.erros?.length) toast.error(`${r.erros.length} com problema: ${r.erros[0]}`);
+      queryClient.invalidateQueries({ queryKey: ["folha"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const fecharMutation = useMutation({
+    mutationFn: (id: string) => invoke("fechar", { competencia_id: id, modo_pagamento: modoPagamento }),
+    onSuccess: (r: {
+      ok?: boolean; code?: string; error?: string;
+      colaboradores?: Array<{ nome: string; cpf: string }>;
+      lancamentos?: number; encargos?: number; modo_pagamento?: string;
+    }) => {
+      if (r?.ok === false && r.code === "SEM_DADOS_BANCARIOS") {
+        // O relatório do contador não traz conta. Sem ela ninguém é pago, e o
+        // lugar de descobrir isso é aqui, não no envio ao banco.
+        toast.error(
+          `${r.colaboradores?.length ?? 0} sem dados bancários: ` +
+          `${(r.colaboradores || []).slice(0, 3).map(c => c.nome).join(", ")}` +
+          `${(r.colaboradores?.length ?? 0) > 3 ? "…" : ""}. Complete na rubrica de cada um.`,
+        );
+        return;
+      }
+      toast.success(
+        `Folha fechada: ${r?.lancamentos ?? 0} lançamento(s) e ${r?.encargos ?? 0} encargo(s) no contas a pagar` +
+        (r?.modo_pagamento === "PIX_INDIVIDUAL" ? " — já preparados como Pix" : ""),
       );
       queryClient.invalidateQueries({ queryKey: ["folha"] });
     },
@@ -243,6 +311,41 @@ export default function FolhaPagamentoPage() {
           </div>
         }
       />
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Como esta folha é paga</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-1">
+            <Label className="text-xs">Forma de pagamento</Label>
+            <Select value={modoPagamento} onValueChange={setModoPagamento}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PIX_INDIVIDUAL">Pix por dados bancários (borderô comum)</SelectItem>
+                <SelectItem value="FOLHA_BTG">Lote de folha do BTG (exige escopo payroll)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {modoPagamento === "PIX_INDIVIDUAL"
+                ? "Cada colaborador vira um Pix com banco, agência e conta, num borderô comum — o caminho que funciona hoje."
+                : "Remessa única pelo endpoint de folha do BTG. Depende do escopo payroll liberado pelo banco e de conta salário."}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Conta do DRE para as rubricas</Label>
+            <PlanoContaSelect
+              value={contaFolha || null}
+              onChange={(c) => setContaFolha(c.conta_numero)}
+              grupos={["DESPESAS_OPERACIONAIS", "OUTRAS_DESPESAS"]}
+              placeholder="Selecionar conta de pessoal"
+            />
+            <p className="text-xs text-muted-foreground">
+              Usada ao criar as rubricas dos colaboradores em massa.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader><CardTitle className="text-base">Competências</CardTitle></CardHeader>
@@ -288,6 +391,16 @@ export default function FolhaPagamentoPage() {
                     <TableCell><Badge variant={st.variant}>{st.label}</Badge></TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
+                        {c.status === "RASCUNHO" && (
+                          <Button size="sm" variant="outline"
+                            onClick={() => rubricasMutation.mutate(c.id)}
+                            disabled={rubricasMutation.isPending || !contaFolha}
+                            title={contaFolha
+                              ? "Cria uma rubrica por colaborador, guardando os dados bancários para os próximos meses"
+                              : "Selecione a conta do DRE acima antes de criar as rubricas"}>
+                            <Users className="h-3.5 w-3.5 mr-1" /> Rubricas
+                          </Button>
+                        )}
                         {c.status === "RASCUNHO" && (
                           <Button size="sm" onClick={() => fecharMutation.mutate(c.id)}
                             disabled={fecharMutation.isPending}
@@ -358,19 +471,51 @@ export default function FolhaPagamentoPage() {
           </p>
 
           <div className="space-y-1">
-            <Label>Planilha</Label>
+            <Label>Planilha ou relatório do contador</Label>
             <Textarea
               value={planilha}
               onChange={e => setPlanilha(e.target.value)}
               rows={8}
               className="font-mono text-xs"
-              placeholder={"Cole aqui direto do Excel (com o cabeçalho).\n\nnome\tcpf\tbanco\tagencia\tconta\tvalor_bruto\tdescontos\tvalor_liquido\nMARIA DA SILVA\t529.982.247-25\t208\t50\t008792899\t4000,00\t800,00\t3200,00"}
+              placeholder={"Cole a Relação de Totais Líquidos (selecione tudo no PDF e cole aqui),\nou uma planilha do Excel com cabeçalho.\n\nnome\tcpf\tbanco\tagencia\tconta\tvalor_bruto\tdescontos\tvalor_liquido\nMARIA DA SILVA\t529.982.247-25\t208\t50\t008792899\t4000,00\t800,00\t3200,00"}
             />
             <p className="text-xs text-muted-foreground">
-              Mínimo: <strong>nome</strong>, <strong>cpf</strong> e <strong>valor líquido</strong>.
-              A ordem das colunas não importa. Sem dados bancários, informe a chave pix.
+              Aceita a <strong>Relação de Totais Líquidos</strong> colada do PDF ou planilha.
+              Na planilha, o mínimo é <strong>nome</strong>, <strong>cpf</strong> e
+              <strong> valor líquido</strong>; a ordem das colunas não importa.
             </p>
           </div>
+
+          {relatorio && (
+            <div className="text-xs bg-primary/5 border border-primary/20 rounded-md p-3 space-y-1">
+              <p className="font-medium text-primary">Relação de Totais Líquidos reconhecida</p>
+              <p className="text-muted-foreground">
+                {relatorio.razao_social}
+                {relatorio.cnpj && ` · CNPJ ${relatorio.cnpj}`}
+                {relatorio.competencia && ` · competência ${relatorio.competencia}`}
+              </p>
+              <p className="text-muted-foreground">
+                Competência e data de pagamento foram preenchidas a partir do relatório.
+                Confirme se a loja selecionada acima é esta.
+              </p>
+              {relatorio.divergencia !== null && relatorio.divergencia !== 0 && (
+                <p className="text-destructive font-medium">
+                  ⚠ O total impresso ({fmt(relatorio.total_informado ?? 0)}) não bate com a soma das
+                  linhas lidas — diferença de {fmt(Math.abs(relatorio.divergencia))}. Faltou copiar
+                  parte do relatório.
+                </p>
+              )}
+              {relatorio.divergencia === 0 && (
+                <p className="text-green-700">
+                  ✓ Soma confere com o total impresso: {fmt(relatorio.total_informado ?? 0)}
+                </p>
+              )}
+              <p className="text-muted-foreground">
+                O relatório não traz banco, agência e conta — eles vêm da rubrica de cada
+                colaborador. Quem ainda não tiver rubrica precisa ser completado antes de fechar.
+              </p>
+            </div>
+          )}
 
           {prévia.erro && (
             <p className="text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded-md p-2">

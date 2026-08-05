@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { ShieldCheck, Info, CreditCard, Banknote, FileText, Building2 } from "lucide-react";
+import { ShieldCheck, Info, CreditCard, Banknote, FileText, Building2, Landmark } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,11 @@ interface Lancamento {
 const PAYMENT_TYPES = [
   { value: "PIX_KEY", label: "PIX (Chave)", icon: CreditCard, hint: "Informe a chave PIX do beneficiário (CPF, CNPJ, e-mail, telefone ou aleatória)" },
   { value: "BANKSLIP", label: "Boleto ou conta", icon: FileText, hint: "Boleto de fornecedor ou conta de concessionária (água, luz, gás, telefone) — informe a linha digitável ou o código de barras" },
-  { value: "TED", label: "TED", icon: Building2, hint: "Informe os dados bancários do beneficiário para transferência" },
+  // PIX_MANUAL: mesmos dados de uma TED, mas liquida pelo Pix — sem custo, sem
+  // janela de horário e cai na hora. Enquanto a conta salário do BTG não estiver
+  // alinhada, é por aqui que a folha é paga.
+  { value: "PIX_MANUAL", label: "PIX (Dados bancários)", icon: Landmark, hint: "Pix direto para banco, agência e conta — não exige chave cadastrada. Liquida na hora, sem tarifa" },
+  { value: "TED", label: "TED", icon: Building2, hint: "Transferência tradicional por banco, agência e conta — sujeita a tarifa e a horário" },
   { value: "DARF", label: "DARF (Tributo)", icon: Banknote, hint: "Informe o código de barras do DARF ou guia de tributo" },
 ];
 
@@ -75,7 +79,8 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
   const isValid = () => {
     if (payType === "PIX_KEY") return pixKey.length > 3;
     if (payType === "BANKSLIP" || payType === "DARF") return barcode.length > 10;
-    if (payType === "TED") {
+    // PIX_MANUAL e TED exigem o mesmo creditParty completo.
+    if (payType === "TED" || payType === "PIX_MANUAL") {
       const doc = soDigitos(favDoc);
       return !!(banco && agencia && conta && favNome.trim() && (doc.length === 11 || doc.length === 14));
     }
@@ -96,7 +101,7 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
       // decide é o código, não o operador — gravamos já corrigido.
       dadosExtras.btg_payment_type = tipoPorLinhaDigitavel(barcode) ?? "BANKSLIP";
       dadosExtras.btg_details = { barcode };
-    } else if (payType === "TED") {
+    } else if (payType === "TED" || payType === "PIX_MANUAL") {
       dadosExtras.btg_details = {
         bankCode: banco, branch: agencia, account: conta,
         accountType: tipoConta, name: favNome.trim(), taxId: soDigitos(favDoc),
@@ -262,7 +267,7 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
                 </div>
               )}
 
-              {payType === "TED" && (
+              {(payType === "TED" || payType === "PIX_MANUAL") && (
                 <>
                   <div className="space-y-1">
                     <Label>Código do banco</Label>
@@ -278,8 +283,9 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
                       <Input value={conta} onChange={e => setConta(e.target.value)} placeholder="12345-6" />
                     </div>
                   </div>
-                  {/* creditParty: a API recusa TED sem nome e documento do
-                      beneficiário. Faltavam na tela, e todo TED falhava. */}
+                  {/* creditParty: a API recusa TED e PIX_MANUAL sem nome e
+                      documento do beneficiário. Faltavam na tela, e todo TED
+                      falhava. */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1 col-span-2">
                       <Label>Nome do beneficiário</Label>
@@ -304,6 +310,13 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
                       Obrigatório: o banco valida a titularidade da conta contra este documento.
                     </p>
                   </div>
+                  {payType === "PIX_MANUAL" && (
+                    <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md p-2">
+                      O beneficiário não precisa ter chave Pix cadastrada — a liquidação usa
+                      banco, agência e conta. Confira o CPF: é ele que o banco compara com o
+                      titular da conta antes de liberar.
+                    </p>
+                  )}
                 </>
               )}
             </div>

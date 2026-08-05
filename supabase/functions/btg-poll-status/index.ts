@@ -10,6 +10,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { flattenStatements, normalizeMovement, assignDedupeKeys } from "../_shared/btgExtrato.ts";
 import { reprocessarEventosPendentes, baixarLancamentoBtg } from "../_shared/btgEventos.ts";
 import { ratearValorPago } from "../_shared/rateio.ts";
+import { extrairRetornoFolha } from "../_shared/folha.ts";
 import { conciliarAgora } from "../_shared/conciliacaoAuto.ts";
 
 const corsHeaders = {
@@ -294,6 +295,129 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
   return resultado;
 }
 
+// ─── 1b. Borderôs de FOLHA ───────────────────────────────────
+/**
+ * Retorno do lote de folha.
+ *
+ * pollBorderos consulta `GET /banking/payments?batchId=` — a rota dos pagamentos
+ * comuns. Folha vai por outro endpoint, então um borderô de folha enviado ficava
+ * ENVIADO para sempre, com os colaboradores travados em PROCESSANDO: nada
+ * baixava, nada conciliava, e o dinheiro tinha saído do banco.
+ *
+ * A correlação é pelo `reference` que mandamos no item (id do lançamento), mesma
+ * âncora do `tags.externalId` nos pagamentos comuns.
+ */
+// deno-lint-ignore no-explicit-any
+async function pollFolhas(db: any, apiBase: string, isSandbox: boolean) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const comBaixa = new Set<number>();
+  const resultado = {
+    verificados: 0, baixados: 0, rejeitados: 0, processados: 0,
+    empresas_com_baixa: [] as number[], erros: [] as string[],
+  };
+
+  const { data: borderos } = await db
+    .from("borderos")
+    .select("*")
+    .eq("tipo", "FOLHA")
+    .eq("status", "ENVIADO")
+    .not("btg_batch_id", "is", null)
+    .limit(20);
+
+  for (const bordero of (borderos || [])) {
+    try {
+      resultado.verificados++;
+
+      const { data: lancs } = await db
+        .from("lancamentos_financeiros")
+        .select("*")
+        .eq("bordero_id", bordero.id)
+        .eq("status", "PROCESSANDO");
+      if (!lancs || lancs.length === 0) {
+        await db.from("borderos").update({ status: "PROCESSADO" }).eq("id", bordero.id);
+        continue;
+      }
+
+      let retorno = { statusLote: "PENDENTE", itens: [] as ReturnType<typeof extrairRetornoFolha>["itens"] };
+      if (isSandbox) {
+        retorno = {
+          statusLote: "PROCESSED",
+          itens: lancs.map((l: Record<string, unknown>) => ({
+            referencia: String(l.id), status: "PROCESSED", valor: Number(l.valor), data: hoje,
+          })),
+        };
+      } else {
+        const token = await getBtgToken(bordero.cod_empresa);
+        const cnpj = await getCnpj(bordero.cod_empresa);
+        if (!token || !cnpj) {
+          resultado.erros.push(`folha ${bordero.id}: token/cnpj indisponível (empresa ${bordero.cod_empresa})`);
+          continue;
+        }
+        const res = await fetch(
+          `${apiBase}/${cnpj}/banking/payroll/payments/${bordero.btg_batch_id}`,
+          { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } },
+        );
+        if (!res.ok) {
+          resultado.erros.push(`folha ${bordero.id}: BTG ${res.status}`);
+          continue;
+        }
+        retorno = extrairRetornoFolha(await res.json());
+      }
+
+      // Índice por reference. Sem item reconhecido, o status do lote decide —
+      // mas só quando é terminal: PENDENTE não baixa nem rejeita ninguém.
+      const porReferencia = new Map<string, typeof retorno.itens[number]>();
+      for (const i of retorno.itens) {
+        if (i.referencia) porReferencia.set(i.referencia, i);
+      }
+      const stLote = normStatus(retorno.statusLote);
+
+      let pendentes = 0;
+      let rejeitadosFolha = 0;
+      for (const lanc of lancs) {
+        const item = porReferencia.get(String(lanc.id));
+        const st = item ? normStatus(item.status) : stLote;
+
+        if (st === "PAGO") {
+          await baixarLancamentoBtg(db, lanc, {
+            valorPago: item?.valor ?? Number(lanc.valor),
+            dataPagamento: item?.data ?? hoje,
+            statusBtg: String(item?.status ?? retorno.statusLote ?? "FOLHA_PAGA"),
+            origem: "btg-poll-status/folha",
+            pay: { paymentId: bordero.btg_batch_id, ...(item ?? {}) },
+            ratear: ratearValorPago,
+          });
+          comBaixa.add(Number(bordero.cod_empresa));
+          resultado.baixados++;
+        } else if (st === "FALHA") {
+          await rejeitarLancamento(db, lanc, String(item?.status ?? retorno.statusLote ?? "FOLHA_FALHA"));
+          resultado.rejeitados++;
+          rejeitadosFolha++;
+        } else {
+          pendentes++;
+        }
+      }
+
+      if (pendentes === 0) {
+        const novoStatus = rejeitadosFolha > 0 ? "PROCESSADO_PARCIAL" : "PROCESSADO";
+        await db.from("borderos").update({ status: novoStatus }).eq("id", bordero.id);
+        if (bordero.folha_competencia_id) {
+          await db.from("folha_competencias").update({
+            status: "PROCESSADA",
+            btg_status: retorno.statusLote || null,
+          }).eq("id", bordero.folha_competencia_id);
+        }
+        resultado.processados++;
+      }
+    } catch (e) {
+      resultado.erros.push(`folha ${bordero.id}: ${String(e)}`);
+    }
+  }
+
+  resultado.empresas_com_baixa = [...comBaixa];
+  return resultado;
+}
+
 // ─── 2. btg_pagamentos avulsos em trânsito ───────────────────
 // deno-lint-ignore no-explicit-any
 async function pollPagamentos(db: any, apiBase: string, isSandbox: boolean) {
@@ -568,6 +692,7 @@ Deno.serve(async (req) => {
 
     if (action === "executar") {
       const borderos = await pollBorderos(db, apiBase, isSandbox);
+      const folhas = await pollFolhas(db, apiBase, isSandbox);
       const pagamentos = await pollPagamentos(db, apiBase, isSandbox);
       const cobrancas = await pollCobrancas(db, apiBase, isSandbox);
       const pix = await pollPixCharges(db);
@@ -575,9 +700,9 @@ Deno.serve(async (req) => {
       const eventos = await reprocessarEventosPendentes(db, 10);
       // A baixa é o outro gatilho: quando o extrato chegou primeiro, a linha
       // ficou PENDENTE sem candidato até o lançamento sair de PROCESSANDO.
-      const conciliacao = await conciliarAgora(borderos.empresas_com_baixa);
-      console.log("[btg-poll-status] executar:", JSON.stringify({ borderos, pagamentos, cobrancas, pix, eventos, conciliacao }));
-      return json({ success: true, borderos, pagamentos, cobrancas, pix, eventos, conciliacao });
+      const conciliacao = await conciliarAgora([...borderos.empresas_com_baixa, ...folhas.empresas_com_baixa]);
+      console.log("[btg-poll-status] executar:", JSON.stringify({ borderos, folhas, pagamentos, cobrancas, pix, eventos, conciliacao }));
+      return json({ success: true, borderos, folhas, pagamentos, cobrancas, pix, eventos, conciliacao });
     }
 
     return json({ error: `Ação desconhecida: '${action}'. Use: executar, importar_extratos` }, 400);

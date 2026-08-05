@@ -1266,13 +1266,28 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
 
   // O envio de lote exige escopo de ESCRITA de pagamentos. Tokens autorizados
   // antes da inclusão desse escopo falham com 403 "Insufficient scope" no BTG.
+  //
+  // Folha usa OUTRO escopo. A checagem cobria só `payments`, então o borderô de
+  // folha passava daqui e morria num 403 cru do BTG, sem dizer o que fazer.
   const scopes: string[] = Array.isArray(tokenData.scopes) ? tokenData.scopes : [];
-  const temPayments = scopes.includes("brn:btg:empresas:banking:payments") ||
-    scopes.includes("empresas.btgpactual.com/payments");
-  if (scopes.length > 0 && !temPayments) {
+  const ehFolha = bordero.tipo === "FOLHA";
+  const escopoNecessario = ehFolha
+    ? "brn:btg:empresas:banking:payroll"
+    : "brn:btg:empresas:banking:payments";
+  const escopoLegado = ehFolha
+    ? "empresas.btgpactual.com/payroll"
+    : "empresas.btgpactual.com/payments";
+
+  if (scopes.length > 0 && !scopes.includes(escopoNecessario) && !scopes.includes(escopoLegado)) {
     throw new Error(
-      `A autorização BTG da empresa ${bordero.cod_empresa} não inclui o escopo de pagamentos. ` +
-      `Reautorize esta loja em /admin/btg-validacao (botão Autorizar) e envie o borderô novamente.`,
+      ehFolha
+        ? `A autorização BTG da empresa ${bordero.cod_empresa} não inclui o escopo de folha ` +
+          `(${escopoNecessario}). Diferente dos demais, esse escopo não é liberado no portal do ` +
+          `desenvolvedor: precisa ser habilitado pelo BTG a pedido do gerente da conta. ` +
+          `Depois de liberado, reautorize a loja em /admin/btg-validacao e envie de novo. ` +
+          `Nada foi debitado.`
+        : `A autorização BTG da empresa ${bordero.cod_empresa} não inclui o escopo de pagamentos. ` +
+          `Reautorize esta loja em /admin/btg-validacao (botão Autorizar) e envie o borderô novamente.`,
     );
   }
 

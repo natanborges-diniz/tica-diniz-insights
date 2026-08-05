@@ -63,7 +63,40 @@ async function importar(body: Record<string, unknown>, userId: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data_pagamento))) throw new Error("data_pagamento deve ser yyyy-MM-dd");
   if (linhas.length === 0) throw new Error("Planilha sem colaboradores");
 
-  const validadas = linhas.map(validarLinha);
+  // Dados bancários vindos da rubrica do colaborador.
+  //
+  // A Relação de Totais Líquidos traz nome, CPF e líquido — e nada de banco.
+  // Sem isto, toda competência exigiria redigitar agência e conta de todo mundo,
+  // que é exatamente onde se erra um dígito e o salário some. A rubrica guarda
+  // esses dados uma vez; aqui eles voltam sozinhos.
+  const cpfs = [...new Set(linhas.map((l) => String(l.cpf ?? "").replace(/\D/g, "")).filter(Boolean))];
+  const porCpf = new Map<string, Record<string, unknown>>();
+  if (cpfs.length > 0) {
+    const { data: rubs } = await supabase
+      .from("rubricas_autorizadas")
+      .select("favorecido_documento, favorecido_banco, favorecido_agencia, favorecido_conta, favorecido_tipo_conta, favorecido_chave, forma_pagamento")
+      .eq("cod_empresa", Number(cod_empresa))
+      .not("folha_evento", "is", null)
+      .in("favorecido_documento", cpfs);
+    for (const r of (rubs || [])) porCpf.set(String(r.favorecido_documento), r);
+  }
+
+  const completadas = linhas.map((l) => {
+    const cpf = String(l.cpf ?? "").replace(/\D/g, "");
+    const r = porCpf.get(cpf);
+    if (!r) return l;
+    // A planilha, quando traz o dado, manda: pode ser justamente a correção.
+    return {
+      ...l,
+      banco: l.banco || (r.favorecido_banco as string | null),
+      agencia: l.agencia || (r.favorecido_agencia as string | null),
+      conta: l.conta || (r.favorecido_conta as string | null),
+      tipo_conta: l.tipo_conta || (r.favorecido_tipo_conta as string | null),
+      chave_pix: l.chave_pix || (r.favorecido_chave as string | null),
+    };
+  });
+
+  const validadas = completadas.map(validarLinha);
   const comErro = validadas.filter((l) => l.erros.length > 0);
   if (comErro.length > 0) {
     // Devolve TODOS os problemas de uma vez: corrigir de um em um numa folha de
@@ -146,12 +179,20 @@ async function importar(body: Record<string, unknown>, userId: string) {
     );
   }
 
+  // Quem ficou sem banco/agência/conta não pode ser pago: avisamos agora, na
+  // importação, e não no envio do borderô.
+  const semConta = validadas
+    .filter((l) => !(l.banco && l.agencia && l.conta))
+    .map((l) => ({ nome: l.nome, cpf: l.cpf }));
+
   return json({
     ok: true,
     competencia_id: competenciaId,
     ...totais,
     encargos: encargos.length,
     substituiu: !!existente,
+    herdados_da_rubrica: validadas.filter((l) => porCpf.has(l.cpf)).length,
+    sem_dados_bancarios: semConta,
   });
 }
 
@@ -208,10 +249,33 @@ async function fechar(body: Record<string, unknown>, userId: string) {
   const ev = comp.evento as EventoFolha;
   const rotulo = ROTULO_EVENTO[ev] ?? ev;
 
-  // 1. Borderô do tipo FOLHA — passa pela mesma aprovação dos demais.
+  // Como o dinheiro sai.
+  //
+  // FOLHA usa POST /banking/payroll/payments, que exige o escopo `payroll` — e
+  // esse escopo depende de liberação do BTG e de conta salário. Enquanto isso
+  // não sai, PIX_INDIVIDUAL paga cada colaborador por Pix com os dados
+  // bancários, num borderô comum. Mesmo dinheiro, mesma conferência, caminho
+  // que já funciona hoje.
+  const modo = String(body.modo_pagamento || "PIX_INDIVIDUAL") === "FOLHA_BTG"
+    ? "FOLHA_BTG"
+    : "PIX_INDIVIDUAL";
+  const ehLoteFolha = modo === "FOLHA_BTG";
+
+  // Sem banco/agência/conta ninguém é pago, nos dois modos.
+  const semConta = itens.filter((i: Record<string, unknown>) => !(i.banco && i.agencia && i.conta));
+  if (semConta.length > 0) {
+    return json({
+      ok: false,
+      code: "SEM_DADOS_BANCARIOS",
+      error: `${semConta.length} colaborador(es) sem banco, agência ou conta`,
+      colaboradores: semConta.map((i: Record<string, unknown>) => ({ nome: i.nome, cpf: i.cpf })),
+    });
+  }
+
+  // 1. Borderô — passa pela mesma aprovação dos demais.
   const { data: bordero, error: bErr } = await supabase.from("borderos").insert({
     cod_empresa: comp.cod_empresa,
-    tipo: "FOLHA",
+    tipo: ehLoteFolha ? "FOLHA" : "NORMAL",
     folha_competencia_id: id,
     descricao: `${rotulo} ${comp.competencia}`,
     data_pagamento: comp.data_pagamento,
@@ -250,6 +314,19 @@ async function fechar(body: Record<string, unknown>, userId: string) {
         agencia: it.agencia,
         conta: it.conta,
         chave_pix: it.chave_pix,
+        // No modo Pix o lançamento já sai preparado: o operador não precisa
+        // abrir "Preparar pagamento" em cada colaborador.
+        ...(ehLoteFolha ? {} : {
+          btg_payment_type: "PIX_MANUAL",
+          btg_details: {
+            bankCode: it.banco,
+            branch: it.agencia,
+            account: it.conta,
+            accountType: it.tipo_conta || "CC",
+            name: it.nome,
+            taxId: it.cpf,
+          },
+        }),
       },
     }).select("id").single();
 
@@ -294,6 +371,7 @@ async function fechar(body: Record<string, unknown>, userId: string) {
   return json({
     ok: true,
     bordero_id: bordero.id,
+    modo_pagamento: modo,
     lancamentos: criados,
     encargos: encargosCriados,
     total_liquido: Number(comp.total_liquido),
@@ -324,6 +402,101 @@ async function cancelar(body: Record<string, unknown>, userId: string) {
   return json({ ok: true });
 }
 
+// ─── criar_rubricas ──────────────────────────────────────────
+/**
+ * Uma rubrica por colaborador, criada em massa a partir da competência.
+ *
+ * A rubrica é o cadastro de colaborador que não temos. Ela guarda os dados
+ * bancários (que o relatório da contabilidade não traz), sustenta a média dos
+ * últimos meses e faz o selo de governança funcionar — um salário fora da faixa
+ * passa a parar na Mesa, como qualquer outra despesa.
+ *
+ * Idempotente por (loja, CPF, evento): rodar de novo atualiza o valor esperado
+ * em vez de duplicar. Nasce em RASCUNHO — quem aprova é outra pessoa, e não é
+ * este endpoint que fura a segregação.
+ */
+async function criarRubricas(body: Record<string, unknown>, userId: string) {
+  await requireAdmin(userId);
+  const id = String(body.competencia_id || "");
+  if (!id) throw new Error("competencia_id obrigatório");
+
+  const { data: comp } = await supabase.from("folha_competencias").select("*").eq("id", id).single();
+  if (!comp) throw new Error("Folha não encontrada");
+
+  const { data: itens } = await supabase.from("folha_itens").select("*").eq("competencia_id", id);
+  if (!itens || itens.length === 0) throw new Error("Folha sem colaboradores");
+
+  const ev = comp.evento as EventoFolha;
+  const rotulo = ROTULO_EVENTO[ev] ?? ev;
+  const contaNumero = String(body.conta_numero || "");
+  if (!contaNumero) {
+    throw new Error("conta_numero obrigatório — é a conta do plano do DRE onde a folha é classificada");
+  }
+
+  const cpfs = itens.map((i: Record<string, unknown>) => String(i.cpf));
+  const { data: existentes } = await supabase
+    .from("rubricas_autorizadas")
+    .select("id, favorecido_documento, valor_esperado")
+    .eq("cod_empresa", comp.cod_empresa)
+    .eq("folha_evento", ev)
+    .in("favorecido_documento", cpfs);
+  const porCpf = new Map((existentes || []).map((r: Record<string, unknown>) => [String(r.favorecido_documento), r]));
+
+  // O dia do vencimento sai da data de pagamento da folha; 28 é o teto para não
+  // criar dia inexistente em fevereiro.
+  const diaVencimento = Math.min(28, Number(String(comp.data_pagamento).slice(8, 10)) || 5);
+
+  let criadas = 0;
+  let atualizadas = 0;
+  const erros: string[] = [];
+
+  for (const it of itens) {
+    const liquido = Number(it.valor_liquido);
+    const campos = {
+      cod_empresa: comp.cod_empresa,
+      descricao: `${rotulo} — ${it.nome}`,
+      favorecido_nome: it.nome,
+      favorecido_documento: String(it.cpf),
+      favorecido_chave: it.chave_pix ?? null,
+      favorecido_banco: it.banco ?? null,
+      favorecido_agencia: it.agencia ?? null,
+      favorecido_conta: it.conta ?? null,
+      favorecido_tipo_conta: it.tipo_conta ?? "CC",
+      forma_pagamento: "PIX_MANUAL",
+      folha_evento: ev,
+      conta_numero: contaNumero,
+      periodicidade: "MENSAL",
+      dia_vencimento: diaVencimento,
+      valor_esperado: liquido,
+      // Salário varia com hora extra, falta e comissão: 10% de banda é apertado
+      // demais e faria toda folha cair na Mesa. O teto protege o extremo.
+      tolerancia_pct: 20,
+      valor_teto: Math.round(liquido * 1.5 * 100) / 100,
+    };
+
+    const ja = porCpf.get(String(it.cpf));
+    if (ja) {
+      const { error } = await supabase.from("rubricas_autorizadas").update({
+        ...campos,
+        // Não mexe em vigência nem em status: rubrica já aprovada continua
+        // aprovada, e reimportar a folha não pode reabrir a autorização.
+      }).eq("id", ja.id);
+      if (error) erros.push(`${it.nome}: ${error.message}`);
+      else atualizadas++;
+    } else {
+      const { error } = await supabase.from("rubricas_autorizadas").insert({
+        ...campos,
+        status: "RASCUNHO",
+        criado_por: userId,
+      });
+      if (error) erros.push(`${it.nome}: ${error.message}`);
+      else criadas++;
+    }
+  }
+
+  return json({ ok: true, criadas, atualizadas, erros });
+}
+
 // ─── MAIN ────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -336,10 +509,11 @@ Deno.serve(async (req) => {
       case "importar": return await importar(body, auth.userId);
       case "listar": return await listar(body);
       case "detalhe": return await detalhe(body);
+      case "criar_rubricas": return await criarRubricas(body, auth.userId);
       case "fechar": return await fechar(body, auth.userId);
       case "cancelar": return await cancelar(body, auth.userId);
       default:
-        return json({ error: `Ação desconhecida: '${body.action}'. Use: importar, listar, detalhe, fechar, cancelar` }, 400);
+        return json({ error: `Ação desconhecida: '${body.action}'. Use: importar, listar, detalhe, criar_rubricas, fechar, cancelar` }, 400);
     }
   } catch (err) {
     console.error("[folha-pagamento]", err);

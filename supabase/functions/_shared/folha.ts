@@ -284,6 +284,74 @@ export function montarLoteFolha(args: {
   };
 }
 
+// ─── Retorno do lote ─────────────────────────────────────────
+
+export interface RetornoItemFolha {
+  /** O `reference` que enviamos — id do lançamento do colaborador. */
+  referencia: string | null;
+  status: string;
+  valor: number | null;
+  data: string | null;
+}
+
+export interface RetornoFolha {
+  statusLote: string;
+  itens: RetornoItemFolha[];
+}
+
+/**
+ * Lê a resposta da consulta do lote de folha.
+ *
+ * Escrito para ser tolerante de propósito: a folha ainda não rodou em produção
+ * (o escopo `payroll` não está liberado), então o formato exato da resposta é
+ * suposição a partir da referência. Em vez de fixar um caminho e quebrar no
+ * primeiro lote real, procuramos a lista de itens onde ela estiver e aceitamos
+ * os nomes de campo que a API usa nos outros endpoints.
+ *
+ * Se nada for reconhecido, devolve lista vazia — o borderô fica como está e o
+ * operador vê o status do lote, em vez de uma baixa errada.
+ */
+export function extrairRetornoFolha(resposta: unknown): RetornoFolha {
+  const raiz = (resposta ?? {}) as Record<string, unknown>;
+  const statusLote = String(
+    raiz.status ?? raiz.batchStatus ?? raiz.paymentStatus ?? (raiz.data as Record<string, unknown>)?.status ?? "",
+  );
+
+  // A lista de colaboradores pode vir na raiz, dentro de `data`, ou aninhada em
+  // `companies[].items` — o mesmo formato do envio.
+  const candidatos: unknown[] = [];
+  const push = (v: unknown) => { if (Array.isArray(v)) candidatos.push(...v); };
+
+  for (const no of [raiz, raiz.data as Record<string, unknown> | undefined]) {
+    if (!no || typeof no !== "object") continue;
+    const n = no as Record<string, unknown>;
+    push(n.items);
+    push(n.payments);
+    push(n.employees);
+    for (const c of (Array.isArray(n.companies) ? n.companies : [])) {
+      push((c as Record<string, unknown>)?.items);
+    }
+  }
+
+  const itens: RetornoItemFolha[] = [];
+  for (const bruto of candidatos) {
+    if (!bruto || typeof bruto !== "object") continue;
+    const i = bruto as Record<string, unknown>;
+    const referencia = i.reference ?? i.externalId ?? i.referenceId ?? null;
+    const valorBruto = i.netAmount ?? i.amount ?? i.paidAmount ?? null;
+    itens.push({
+      referencia: referencia != null ? String(referencia) : null,
+      status: String(i.status ?? i.paymentStatus ?? statusLote ?? ""),
+      valor: valorBruto != null ? Number(valorBruto) || null : null,
+      data: i.executedAt || i.paymentDate || i.settledAt
+        ? String(i.executedAt ?? i.paymentDate ?? i.settledAt).slice(0, 10)
+        : null,
+    });
+  }
+
+  return { statusLote, itens };
+}
+
 /** Totais de uma folha, para o cabeçalho da competência. */
 export function totalizar(itens: Array<{ valor_bruto?: number | null; descontos?: number | null; valor_liquido: number }>) {
   const arred = (v: number) => Math.round(v * 100) / 100;
