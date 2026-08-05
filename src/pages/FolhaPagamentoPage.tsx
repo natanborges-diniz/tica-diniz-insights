@@ -181,6 +181,14 @@ export default function FolhaPagamentoPage() {
   const [modoPagamento, setModoPagamento] = useState("PIX_INDIVIDUAL");
   const [contaFolha, setContaFolha] = useState("");
 
+  // Correção pontual do Pix/conta de um colaborador, sem recolar a planilha.
+  const [editItem, setEditItem] = useState<{ id: string; nome: string; cpf: string } | null>(null);
+  const [editPix, setEditPix] = useState("");
+  const [editBanco, setEditBanco] = useState("");
+  const [editAgencia, setEditAgencia] = useState("");
+  const [editConta, setEditConta] = useState("");
+  const [editTipoConta, setEditTipoConta] = useState("");
+
   const invoke = async (action: string, params: Record<string, unknown> = {}) => {
     const { data, error } = await supabase.functions.invoke("folha-pagamento", {
       body: { action, ...params },
@@ -288,6 +296,37 @@ export default function FolhaPagamentoPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const dadosBancariosMutation = useMutation({
+    mutationFn: () => invoke("atualizar_dados_bancarios", {
+      item_id: editItem?.id,
+      chave_pix: editPix,
+      banco: editBanco,
+      agencia: editAgencia,
+      conta: editConta,
+      tipo_conta: editTipoConta,
+    }),
+    onSuccess: (r: { rubrica_atualizada?: boolean }) => {
+      toast.success(
+        "Dados de pagamento atualizados" +
+        (r?.rubrica_atualizada ? " — a rubrica do colaborador voltou para rascunho e precisa ser aprovada" : ""),
+      );
+      setEditItem(null);
+      queryClient.invalidateQueries({ queryKey: ["folha-detalhe", detalheId] });
+      queryClient.invalidateQueries({ queryKey: ["folha"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const abrirEdicao = (i: Record<string, unknown>) => {
+    setEditItem({ id: String(i.id), nome: String(i.nome), cpf: String(i.cpf ?? "") });
+    setEditPix(String(i.chave_pix ?? ""));
+    setEditBanco(String(i.banco ?? ""));
+    setEditAgencia(String(i.agencia ?? ""));
+    setEditConta(String(i.conta ?? ""));
+    setEditTipoConta(String(i.tipo_conta ?? ""));
+  };
+
 
   return (
     <div className="space-y-4">
