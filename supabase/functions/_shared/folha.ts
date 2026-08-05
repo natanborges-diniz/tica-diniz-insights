@@ -113,7 +113,10 @@ export function cpfValido(raw: unknown): boolean {
  * importação precisa mostrar tudo que está errado de uma vez, não parar no
  * primeiro problema e obrigar o usuário a corrigir de um em um.
  */
-export function validarLinha(l: LinhaFolha): LinhaValidada {
+export function validarLinha(
+  l: LinhaFolha,
+  opcoes: { exigirDadosBancarios?: boolean } = {},
+): LinhaValidada {
   const erros: string[] = [];
   const cpf = soDigitos(l.cpf);
 
@@ -127,8 +130,14 @@ export function validarLinha(l: LinhaFolha): LinhaValidada {
 
   // Sem chave pix, precisa da conta completa: o item do lote exige
   // bankCode + branchCode + accountNumber.
+  //
+  // Na importação isso é pendência, não erro: o relatório do contador não traz
+  // banco nem Pix, e eles entram depois pela planilha de contas. Barrar aqui
+  // travava a folha antes de existir competência para receber a planilha. O
+  // fechamento é quem exige — lá ninguém é pago sem conta.
   const temConta = !!(soDigitos(l.banco) && soDigitos(l.agencia) && soDigitos(l.conta));
-  if (!temConta && !String(l.chave_pix ?? "").trim()) {
+  const semDestino = !temConta && !String(l.chave_pix ?? "").trim();
+  if (semDestino && opcoes.exigirDadosBancarios !== false) {
     erros.push("sem dados bancários nem chave pix");
   }
 
@@ -138,7 +147,7 @@ export function validarLinha(l: LinhaFolha): LinhaValidada {
     erros.push(`bruto − descontos (${(bruto - desc).toFixed(2)}) não fecha com o líquido (${liquido.toFixed(2)})`);
   }
 
-  return { ...l, cpf, erros };
+  return { ...l, cpf, erros, semDestino };
 }
 
 // ─── Encargos ────────────────────────────────────────────────
