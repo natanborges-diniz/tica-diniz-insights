@@ -15,10 +15,10 @@ import { toast } from "sonner";
 import {
   Loader2, Save, Plus, Eye, EyeOff, CreditCard,
   CheckCircle2, AlertCircle, Trash2, Wifi, ShieldCheck, FlaskConical,
-  Send, Code, X, RefreshCw,
+  Send, Code, X, RefreshCw, Upload,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Navigate } from "react-router-dom";
+import { Navigate, Link } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
 
 interface AdquirenteConfig {
@@ -468,6 +468,7 @@ export default function AdminAdquirentesPage() {
   const [testing, setTesting] = useState<string | null>(null);
   const [editForms, setEditForms] = useState<Record<string, EditForm>>({});
   const [showAddForm, setShowAddForm] = useState(false);
+  const [abaAdquirente, setAbaAdquirente] = useState<string | null>(null);
   const [newForm, setNewForm] = useState({
     cod_empresa: 0,
     adquirente: "REDE",
@@ -866,6 +867,15 @@ export default function AdminAdquirentesPage() {
     return emp?.nome || `Empresa ${cod}`;
   };
 
+  // Com 9 lojas e duas adquirentes a lista vira 18 cards empilhados, sem separar
+  // o que e de quem. As abas agrupam por adquirente e mantem a contagem visivel.
+  const adquirentesPresentes = [...new Set(configs.map(c => c.adquirente))].sort();
+  const abaAtiva = abaAdquirente && adquirentesPresentes.includes(abaAdquirente)
+    ? abaAdquirente
+    : adquirentesPresentes[0];
+  const configsVisiveis = configs.filter(c => c.adquirente === abaAtiva);
+  const contagemPorAdquirente = (adq: string) => configs.filter(c => c.adquirente === adq).length;
+
   const handleTestCielo = async (config: AdquirenteConfig, targetAmbiente: "sandbox" | "production") => {
     const testId = `${config.id}-cielo-${targetAmbiente}`;
     setTesting(testId);
@@ -1016,46 +1026,59 @@ export default function AdminAdquirentesPage() {
         icon={<CreditCard className="h-5 w-5" />}
         actions={
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleSyncVendas}
-              disabled={testing === "sync-vendas"}
-            >
-              {testing === "sync-vendas" ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <Wifi className="h-4 w-4 mr-1" />
-              )}
-              Sincronizar vendas (7 dias)
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleSolicitarLote}
-              disabled={testing === "lote-rede"}
-            >
-              {testing === "lote-rede" ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4 mr-1" />
-              )}
-              Solicitar compartilhamento (lote REDE)
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => handleVerificarLotePendentes(false)}
-              disabled={testing === "lote-verificar"}
-              title="Consulta a REDE sobre todos os Opt-ins ainda pendentes e atualiza automaticamente os que foram aprovados"
-            >
-              {testing === "lote-verificar" ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-1" />
-              )}
-              Verificar aceites pendentes
-            </Button>
+            {/* Opt-in de PV e sync por API sao do fluxo da REDE; na aba da Cielo
+                so confundiriam, porque la a ingestao e por arquivo de extrato. */}
+            {abaAtiva === "REDE" && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSyncVendas}
+                  disabled={testing === "sync-vendas"}
+                >
+                  {testing === "sync-vendas" ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Wifi className="h-4 w-4 mr-1" />
+                  )}
+                  Sincronizar vendas (7 dias)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSolicitarLote}
+                  disabled={testing === "lote-rede"}
+                >
+                  {testing === "lote-rede" ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-1" />
+                  )}
+                  Solicitar compartilhamento (lote REDE)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleVerificarLotePendentes(false)}
+                  disabled={testing === "lote-verificar"}
+                  title="Consulta a REDE sobre todos os Opt-ins ainda pendentes e atualiza automaticamente os que foram aprovados"
+                >
+                  {testing === "lote-verificar" ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                  )}
+                  Verificar aceites pendentes
+                </Button>
+              </>
+            )}
+            {abaAtiva === "CIELO" && (
+              <Button size="sm" variant="outline" asChild>
+                <Link to="/financeiro/cartoes">
+                  <Upload className="h-4 w-4 mr-1" /> Importar extrato Cielo
+                </Link>
+              </Button>
+            )}
             <Button size="sm" onClick={() => setShowAddForm(true)}>
               <Plus className="h-4 w-4 mr-1" /> Nova Adquirente
             </Button>
@@ -1132,7 +1155,22 @@ export default function AdminAdquirentesPage() {
         />
       ) : (
         <div className="space-y-4">
-          {configs.map(config => {
+          {adquirentesPresentes.length > 1 && (
+            <Tabs value={abaAtiva} onValueChange={setAbaAdquirente}>
+              <TabsList>
+                {adquirentesPresentes.map(adq => (
+                  <TabsTrigger key={adq} value={adq} className="gap-1.5">
+                    {adq}
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      {contagemPorAdquirente(adq)}
+                    </Badge>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          )}
+
+          {configsVisiveis.map(config => {
             const form = editForms[config.id];
             if (!form) return null;
             const changed = isChanged(config);
@@ -1194,33 +1232,41 @@ export default function AdminAdquirentesPage() {
                     </div>
                   </div>
 
-                  {/* Tabs for credentials */}
-                  <Tabs defaultValue={form.ambiente} className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="sandbox" className="gap-1.5">
-                        <FlaskConical className="h-3.5 w-3.5" />
-                        Credenciais Sandbox
-                        {form.ambiente === "sandbox" && (
-                          <Badge variant="secondary" className="text-[9px] ml-1 px-1 py-0">EM USO</Badge>
-                        )}
-                      </TabsTrigger>
-                      <TabsTrigger value="production" className="gap-1.5">
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                        Credenciais Produção
-                        {form.ambiente === "production" && (
-                          <Badge variant="secondary" className="text-[9px] ml-1 px-1 py-0">EM USO</Badge>
-                        )}
-                      </TabsTrigger>
-                    </TabsList>
+                  {/* A Cielo nao tem credencial por ambiente: a matriz de extrato
+                      e os PVs sao os mesmos em sandbox e producao, e o que muda
+                      (client_id, certificado) vive em secrets do projeto. Duas
+                      abas identicas so dariam a impressao de que ha algo a
+                      preencher em cada uma. */}
+                  {config.adquirente === "CIELO" ? (
+                    <CredentialFields config={config} ambiente={form.ambiente as "sandbox" | "production"} form={form} />
+                  ) : (
+                    <Tabs defaultValue={form.ambiente} className="w-full">
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="sandbox" className="gap-1.5">
+                          <FlaskConical className="h-3.5 w-3.5" />
+                          Credenciais Sandbox
+                          {form.ambiente === "sandbox" && (
+                            <Badge variant="secondary" className="text-[9px] ml-1 px-1 py-0">EM USO</Badge>
+                          )}
+                        </TabsTrigger>
+                        <TabsTrigger value="production" className="gap-1.5">
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                          Credenciais Produção
+                          {form.ambiente === "production" && (
+                            <Badge variant="secondary" className="text-[9px] ml-1 px-1 py-0">EM USO</Badge>
+                          )}
+                        </TabsTrigger>
+                      </TabsList>
 
-                    <TabsContent value="sandbox" className="mt-3">
-                      <CredentialFields config={config} ambiente="sandbox" form={form} />
-                    </TabsContent>
+                      <TabsContent value="sandbox" className="mt-3">
+                        <CredentialFields config={config} ambiente="sandbox" form={form} />
+                      </TabsContent>
 
-                    <TabsContent value="production" className="mt-3">
-                      <CredentialFields config={config} ambiente="production" form={form} />
-                    </TabsContent>
-                  </Tabs>
+                      <TabsContent value="production" className="mt-3">
+                        <CredentialFields config={config} ambiente="production" form={form} />
+                      </TabsContent>
+                    </Tabs>
+                  )}
 
                   {config.adquirente === "REDE" && (
                     <ActivationGVBlock
