@@ -1226,6 +1226,54 @@ export type Database = {
           },
         ]
       }
+      cielo_vinculo_diagnostico: {
+        Row: {
+          adquirentes: string | null
+          cielo_cnpj: string | null
+          cielo_qtd_pvs: number | null
+          cielo_rotulo: string | null
+          cnpj_btg: string | null
+          cnpj_empresa: string | null
+          cod_empresa: number | null
+          detalhe: string | null
+          id: number
+          nome_fantasia: string | null
+          razao_social: string | null
+          secao: string
+          status: string | null
+        }
+        Insert: {
+          adquirentes?: string | null
+          cielo_cnpj?: string | null
+          cielo_qtd_pvs?: number | null
+          cielo_rotulo?: string | null
+          cnpj_btg?: string | null
+          cnpj_empresa?: string | null
+          cod_empresa?: number | null
+          detalhe?: string | null
+          id?: number
+          nome_fantasia?: string | null
+          razao_social?: string | null
+          secao: string
+          status?: string | null
+        }
+        Update: {
+          adquirentes?: string | null
+          cielo_cnpj?: string | null
+          cielo_qtd_pvs?: number | null
+          cielo_rotulo?: string | null
+          cnpj_btg?: string | null
+          cnpj_empresa?: string | null
+          cod_empresa?: number | null
+          detalhe?: string | null
+          id?: number
+          nome_fantasia?: string | null
+          razao_social?: string | null
+          secao?: string
+          status?: string | null
+        }
+        Relationships: []
+      }
       comissao_taxas: {
         Row: {
           atualizado_em: string
