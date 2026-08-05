@@ -188,6 +188,15 @@ export default function FolhaPagamentoPage() {
   const [lendoPdf, setLendoPdf] = useState(false);
   /** O operador mexeu na data? A partir daí o relatório não manda mais nela. */
   const [dataTocada, setDataTocada] = useState(false);
+  /**
+   * CPFs desmarcados na conferência.
+   *
+   * Conferir olhando o texto cru do relatório não é conferir: ninguém lê 30
+   * linhas de PDF colado procurando quem saiu no meio do mês. A lista limpa,
+   * com o valor de cada um, é o que permite dizer "esse não".
+   */
+  const [excluidos, setExcluidos] = useState<Set<string>>(new Set());
+  const [verTexto, setVerTexto] = useState(false);
   // Competência que está recebendo a planilha de contas; o input de arquivo é
   // um só, disparado pelo botão da linha.
   const [contasParaId, setContasParaId] = useState<string | null>(null);
@@ -251,6 +260,9 @@ export default function FolhaPagamentoPage() {
       const texto = await extrairTextoPdf(arquivo);
       setPlanilha(texto);
       setLinhasInvalidas([]);
+      // Arquivo novo, conferência nova: manter exclusões de outro relatório
+      // faria sumir gente sem ninguém perceber.
+      setExcluidos(new Set());
     } catch (e) {
       toast.error(`Não consegui ler o PDF: ${e instanceof Error ? e.message : "arquivo inválido"}`);
     } finally {
@@ -259,6 +271,8 @@ export default function FolhaPagamentoPage() {
   };
 
   const prévia = parsePlanilha(planilha);
+  const itensSelecionados = prévia.itens.filter(i => !excluidos.has(i.cpf));
+  const totalSelecionado = itensSelecionados.reduce((s, i) => s + i.valor_liquido, 0);
   const relatorio = (prévia as { relatorio?: ReturnType<typeof parseRelatorioFolha> }).relatorio ?? null;
 
   // Competência e data vêm impressas no relatório — redigitar é chance de errar.
@@ -282,7 +296,7 @@ export default function FolhaPagamentoPage() {
       competencia,
       evento,
       data_pagamento: dataPagamento,
-      itens: prévia.itens,
+      itens: itensSelecionados,
       encargos: {
         INSS: Number(inss.replace(",", ".")) || 0,
         FGTS: Number(fgts.replace(",", ".")) || 0,
@@ -313,6 +327,7 @@ export default function FolhaPagamentoPage() {
       }
       setImportOpen(false);
       setPlanilha("");
+      setExcluidos(new Set());
       queryClient.invalidateQueries({ queryKey: ["folha"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -671,10 +686,10 @@ export default function FolhaPagamentoPage() {
             <Button variant="outline" onClick={() => setImportOpen(false)}>Cancelar</Button>
             <Button
               onClick={() => importarMutation.mutate()}
-              disabled={importarMutation.isPending || prévia.itens.length === 0}
+              disabled={importarMutation.isPending || itensSelecionados.length === 0}
             >
               <FileSpreadsheet className="h-4 w-4 mr-1" />
-              Importar {prévia.itens.length > 0 && `(${prévia.itens.length})`}
+              Importar {itensSelecionados.length > 0 && `(${itensSelecionados.length})`}
             </Button>
           </>
         }
@@ -719,21 +734,98 @@ export default function FolhaPagamentoPage() {
             </p>
           </div>
 
-          <div className="space-y-1">
-            <Label>Planilha ou texto do relatório</Label>
-            <Textarea
-              value={planilha}
-              onChange={e => setPlanilha(e.target.value)}
-              rows={8}
-              className="font-mono text-xs"
-              placeholder={"Cole a Relação de Totais Líquidos (selecione tudo no PDF e cole aqui),\nou uma planilha do Excel com cabeçalho.\n\nnome\tcpf\tbanco\tagencia\tconta\tvalor_bruto\tdescontos\tvalor_liquido\nMARIA DA SILVA\t529.982.247-25\t208\t50\t008792899\t4000,00\t800,00\t3200,00"}
-            />
-            <p className="text-xs text-muted-foreground">
-              Aceita a <strong>Relação de Totais Líquidos</strong> colada do PDF ou planilha.
-              Na planilha, o mínimo é <strong>nome</strong>, <strong>cpf</strong> e
-              <strong> valor líquido</strong>; a ordem das colunas não importa.
-            </p>
-          </div>
+          {/* Texto cru só antes de reconhecer alguém, ou sob demanda.
+              Depois de reconhecido, o que importa é a lista limpa. */}
+          {(prévia.itens.length === 0 || verTexto) && (
+            <div className="space-y-1">
+              <Label>Planilha ou texto do relatório</Label>
+              <Textarea
+                value={planilha}
+                onChange={e => { setPlanilha(e.target.value); setExcluidos(new Set()); }}
+                rows={prévia.itens.length === 0 ? 8 : 5}
+                className="font-mono text-xs"
+                placeholder={"Cole a Relação de Totais Líquidos (selecione tudo no PDF e cole aqui),\nou uma planilha do Excel com cabeçalho.\n\nnome\tcpf\tbanco\tagencia\tconta\tvalor_bruto\tdescontos\tvalor_liquido\nMARIA DA SILVA\t529.982.247-25\t208\t50\t008792899\t4000,00\t800,00\t3200,00"}
+              />
+              <p className="text-xs text-muted-foreground">
+                Aceita a <strong>Relação de Totais Líquidos</strong> colada do PDF ou planilha.
+                Na planilha, o mínimo é <strong>nome</strong>, <strong>cpf</strong> e
+                <strong> valor líquido</strong>; a ordem das colunas não importa.
+              </p>
+            </div>
+          )}
+
+          {/* Conferência: quem entra na folha */}
+          {prévia.itens.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Confira quem será importado</Label>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                  onClick={() => setVerTexto(v => !v)}
+                >
+                  {verTexto ? "Esconder texto original" : "Ver texto original"}
+                </button>
+              </div>
+
+              <div className="border rounded-md max-h-72 overflow-auto">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background">
+                    <TableRow>
+                      <TableHead className="w-[40px]"></TableHead>
+                      <TableHead className="w-[60px]">Cód.</TableHead>
+                      <TableHead>Colaborador</TableHead>
+                      <TableHead className="w-[130px]">CPF</TableHead>
+                      <TableHead className="w-[110px] text-right">Líquido</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {prévia.itens.map((i, idx) => {
+                      const fora = excluidos.has(i.cpf);
+                      return (
+                        <TableRow key={`${i.cpf}-${idx}`} className={fora ? "opacity-40" : ""}>
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 cursor-pointer"
+                              checked={!fora}
+                              onChange={() => setExcluidos(prev => {
+                                const novo = new Set(prev);
+                                if (novo.has(i.cpf)) novo.delete(i.cpf); else novo.add(i.cpf);
+                                return novo;
+                              })}
+                              title={fora ? "Incluir de volta" : "Deixar de fora desta folha"}
+                            />
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{i.matricula ?? "—"}</TableCell>
+                          <TableCell className={`text-sm ${fora ? "line-through" : ""}`}>{i.nome}</TableCell>
+                          <TableCell className="text-xs font-mono text-muted-foreground">{i.cpf}</TableCell>
+                          <TableCell className={`text-sm text-right font-medium ${fora ? "line-through" : ""}`}>
+                            {fmt(i.valor_liquido)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  {excluidos.size > 0
+                    ? `${itensSelecionados.length} de ${prévia.itens.length} — ${excluidos.size} fora`
+                    : `${prévia.itens.length} colaborador(es)`}
+                </span>
+                <span className="font-medium">Total a importar: {fmt(totalSelecionado)}</span>
+              </div>
+
+              {itensSelecionados.length === 0 && (
+                <p className="text-xs text-destructive">
+                  Todos foram desmarcados — não há nada para importar.
+                </p>
+              )}
+            </div>
+          )}
 
           {relatorio && (
             <div className="text-xs bg-primary/5 border border-primary/20 rounded-md p-3 space-y-1">
@@ -747,16 +839,26 @@ export default function FolhaPagamentoPage() {
                 Competência e data de pagamento foram preenchidas a partir do relatório.
                 Confirme se a loja selecionada acima é esta.
               </p>
+              {/* Esta conferência é sobre a LEITURA, não sobre a seleção: compara
+                  o total impresso com tudo que foi reconhecido. Quem você
+                  desmarcar de propósito aparece na linha seguinte. */}
               {relatorio.divergencia !== null && relatorio.divergencia !== 0 && (
                 <p className="text-destructive font-medium">
                   ⚠ O total impresso ({fmt(relatorio.total_informado ?? 0)}) não bate com a soma das
-                  linhas lidas — diferença de {fmt(Math.abs(relatorio.divergencia))}. Faltou copiar
-                  parte do relatório.
+                  linhas lidas — diferença de {fmt(Math.abs(relatorio.divergencia))}. Faltou parte
+                  do relatório.
                 </p>
               )}
               {relatorio.divergencia === 0 && (
                 <p className="text-green-700">
-                  ✓ Soma confere com o total impresso: {fmt(relatorio.total_informado ?? 0)}
+                  ✓ Leitura completa: as {prévia.itens.length} linhas somam o total impresso
+                  ({fmt(relatorio.total_informado ?? 0)})
+                </p>
+              )}
+              {excluidos.size > 0 && (
+                <p className="text-amber-700">
+                  {excluidos.size} colaborador(es) desmarcado(s) por você — serão importados{" "}
+                  {fmt(totalSelecionado)} em vez de {fmt(relatorio.total_informado ?? 0)}.
                 </p>
               )}
               <p className="text-muted-foreground">
@@ -785,12 +887,6 @@ export default function FolhaPagamentoPage() {
                 {planilha.split("\n").slice(0, 12).join("\n")}
               </pre>
             </div>
-          )}
-          {prévia.itens.length > 0 && (
-            <p className="text-xs text-primary bg-primary/5 border border-primary/20 rounded-md p-2">
-              {prévia.itens.length} colaborador(es) reconhecido(s) — líquido{" "}
-              <strong>{fmt(prévia.itens.reduce((s, i) => s + i.valor_liquido, 0))}</strong>
-            </p>
           )}
 
           <div className="grid grid-cols-3 gap-3">
