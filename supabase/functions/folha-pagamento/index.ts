@@ -294,7 +294,7 @@ async function fechar(body: Record<string, unknown>, userId: string) {
   // 1. Borderô — passa pela mesma aprovação dos demais.
   const { data: bordero, error: bErr } = await supabase.from("borderos").insert({
     cod_empresa: comp.cod_empresa,
-    tipo: ehLoteFolha ? "FOLHA" : "NORMAL",
+    tipo: ehLoteFolha ? "FOLHA" : "PAGAMENTOS",
     folha_competencia_id: id,
     descricao: `${rotulo} ${comp.competencia}`,
     data_pagamento: comp.data_pagamento,
