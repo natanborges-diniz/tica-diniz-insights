@@ -9,6 +9,7 @@ import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { BaseDialog } from "@/components/system/BaseDialog";
 import { PlanoContaSelect } from "@/components/banking/PlanoContaSelect";
 import { extrairTextoPdf } from "@/lib/pdf/textoPdf";
+import { mapearLinhaBancaria } from "../../supabase/functions/_shared/dadosBancarios";
 import { Landmark } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -339,37 +340,11 @@ export default function FolhaPagamentoPage() {
         wb.Sheets[wb.SheetNames[0]], { defval: "" },
       );
 
-      // Cabeçalho reconhecido por nome, não por posição: cada RH monta a
-      // planilha do seu jeito, e exigir ordem fixa só geraria retrabalho.
-      // Comparação por "começa com" porque títulos reais vêm sujos —
-      // "CONTA C/ DIGITO", "AGÊNCIA Nº", "CPF DO COLABORADOR".
-      const achar = (linha: Record<string, unknown>, ...nomes: string[]) => {
-        const chaves = Object.entries(linha).map(([k, v]) => [
-          k.trim().toLowerCase()
-            .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]/g, ""),
-          v,
-        ] as const);
-        for (const nome of nomes) {
-          const exato = chaves.find(([k]) => k === nome);
-          if (exato) return exato[1] == null ? null : String(exato[1]);
-        }
-        for (const nome of nomes) {
-          const parcial = chaves.find(([k]) => k.startsWith(nome) || k.includes(nome));
-          if (parcial) return parcial[1] == null ? null : String(parcial[1]);
-        }
-        return null;
-      };
-
-      const linhas = linhasBrutas.map(l => ({
-        nome: achar(l, "nome", "colaborador", "funcionario"),
-        cpf: achar(l, "cpf", "documento"),
-        banco: achar(l, "banco", "codigobanco"),
-        agencia: achar(l, "agencia"),
-        conta: achar(l, "contacomdigito", "contacdigito", "conta", "numeroconta"),
-        tipo_conta: achar(l, "tipoconta", "tipodeconta"),
-        chave_pix: achar(l, "chavepix", "pix"),
-      }));
-
+      // O reconhecimento das colunas mora em _shared/dadosBancarios.ts, testado:
+      // cada RH escreve o cabeçalho do seu jeito ("Chave PIX", "PIX", "Nº da
+      // Conta"), e exigir grafia exata devolvia "0 conta(s) preenchida(s)" sem
+      // dizer por quê.
+      const linhas = linhasBrutas.map(mapearLinhaBancaria);
 
       if (linhas.length === 0) throw new Error("A primeira aba da planilha está vazia");
 

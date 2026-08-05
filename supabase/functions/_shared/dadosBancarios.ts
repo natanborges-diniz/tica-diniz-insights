@@ -52,6 +52,89 @@ export function soDigitos(v: unknown): string {
   return String(v ?? "").replace(/\D/g, "");
 }
 
+// ─── Leitura do cabeçalho da planilha ────────────────────────
+//
+// Cada loja monta a planilha do seu jeito: "Chave PIX", "chave_pix", "PIX",
+// "Conta c/ dígito", "Nº da conta". Exigir nome exato faria a importação
+// devolver "0 conta(s) preenchida(s)" sem dizer por quê — e o operador não tem
+// como adivinhar qual grafia o sistema espera.
+
+/** "Conta c/ Dígito" → "contacdigito". Acento, espaço e pontuação somem. */
+export function normalizarCabecalho(v: unknown): string {
+  return String(v ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Nomes aceitos por campo, em ordem de prioridade.
+ *
+ * A ordem importa: "contacomdigito" tem de ser testado antes de "conta", senão
+ * uma planilha com as duas colunas pegaria a errada.
+ */
+const ALIASES: Record<keyof LinhaBancaria, string[]> = {
+  nome: ["nome", "colaborador", "funcionario", "nomedocolaborador", "nomecompleto"],
+  cpf: ["cpf", "documento", "cpfdocolaborador"],
+  banco: ["banco", "codigobanco", "codigodobanco", "codbanco", "numerobanco"],
+  agencia: ["agencia", "numeroagencia", "agenciasemdigito"],
+  conta: ["contacomdigito", "contacdigito", "conta", "numeroconta", "numerodaconta", "contacorrente"],
+  tipo_conta: ["tipoconta", "tipodeconta", "tipo"],
+  chave_pix: ["chavepix", "pix", "chave", "pixkey", "chavepixcpf", "chavedopix"],
+};
+
+/**
+ * Uma linha da planilha, com as colunas reconhecidas por nome.
+ *
+ * Depois dos nomes exatos, cai para "começa com" — assim "Chave PIX do
+ * colaborador" e "Nº da Conta (com dígito)" entram sem cadastro prévio. O
+ * prefixo só vale para o que sobrou: campo já resolvido não é reescrito.
+ */
+/**
+ * Tira o ruído da frente do cabeçalho: "Nº da Conta" → "conta".
+ *
+ * Sem isto, "Nº da Conta (com dígito)" vira "ndacontacomdigito" e não bate com
+ * alias nenhum — nem por prefixo, porque começa em "n". Preferimos limpar a
+ * frente a sair procurando o alias em qualquer posição: "Chave do contrato" não
+ * pode virar chave Pix, e uma busca por conteúdo faria isso.
+ */
+function nucleo(cabecalho: string): string {
+  return cabecalho.replace(/^(numero|num|nro|nr|no|n)?(da|de|do)?/, "");
+}
+
+export function mapearLinhaBancaria(linha: Record<string, unknown>): LinhaBancaria {
+  const colunas = Object.entries(linha).map(([k, v]) => {
+    const chave = normalizarCabecalho(k);
+    return { chave, nucleo: nucleo(chave), valor: v };
+  });
+  const out: LinhaBancaria = {};
+
+  const preencher = (
+    campo: keyof LinhaBancaria,
+    casa: (c: { chave: string; nucleo: string }, nome: string) => boolean,
+    nomes: string[],
+  ) => {
+    for (const nome of nomes) {
+      const achado = colunas.find((c) => casa(c, nome));
+      if (achado && achado.valor != null && String(achado.valor).trim() !== "") {
+        out[campo] = String(achado.valor).trim();
+        return true;
+      }
+    }
+    return false;
+  };
+
+  for (const [campo, nomes] of Object.entries(ALIASES) as Array<[keyof LinhaBancaria, string[]]>) {
+    // Nome exato primeiro; depois sem o ruído da frente; por último, prefixo.
+    preencher(campo, (c, n) => c.chave === n, nomes) ||
+      preencher(campo, (c, n) => c.nucleo === n, nomes) ||
+      preencher(campo, (c, n) => c.chave.startsWith(n) || c.nucleo.startsWith(n), nomes);
+  }
+
+  return out;
+}
+
 /**
  * Nome comparável: sem acento, sem pontuação, sem espaço duplo, em caixa alta.
  *

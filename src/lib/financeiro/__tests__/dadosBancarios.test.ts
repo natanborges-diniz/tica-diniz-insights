@@ -9,6 +9,8 @@ import {
   normalizarNome,
   normalizarTipoConta,
   temDadosDePagamento,
+  mapearLinhaBancaria,
+  normalizarCabecalho,
   type ColaboradorAlvo,
 } from '../../../../supabase/functions/_shared/dadosBancarios';
 
@@ -142,5 +144,71 @@ describe('cruzarDadosBancarios', () => {
     const r = cruzarDadosBancarios([], [EDINEIA, YASMIN]);
     expect(r.casados).toEqual([]);
     expect(r.nao_cobertos).toHaveLength(2);
+  });
+});
+
+describe('mapearLinhaBancaria — cabeçalho que cada RH escreve do seu jeito', () => {
+  it('reconhece a coluna de chave Pix nas grafias comuns', () => {
+    for (const cabecalho of ['Chave PIX', 'chave_pix', 'PIX', 'Chave', 'chavePix']) {
+      expect(mapearLinhaBancaria({ [cabecalho]: 'edineia@email.com' }).chave_pix)
+        .toBe('edineia@email.com');
+    }
+  });
+
+  it('cabeçalho mais longo entra pelo prefixo', () => {
+    expect(mapearLinhaBancaria({ 'Chave PIX do colaborador': '11999998888' }).chave_pix)
+      .toBe('11999998888');
+    expect(mapearLinhaBancaria({ 'Nº da Conta (com dígito)': '008792899' }).conta)
+      .toBe('008792899');
+  });
+
+  it('planilha completa é lida inteira', () => {
+    const l = mapearLinhaBancaria({
+      'Nome': 'EDINEIA FERNANDES DIAS',
+      'CPF': '356.961.978-84',
+      'Banco': '208',
+      'Agência': '0050',
+      'Conta c/ Dígito': '008792899',
+      'Tipo de Conta': 'Corrente',
+      'Chave PIX': 'edineia@email.com',
+    });
+    expect(l).toEqual({
+      nome: 'EDINEIA FERNANDES DIAS',
+      cpf: '356.961.978-84',
+      banco: '208',
+      agencia: '0050',
+      conta: '008792899',
+      tipo_conta: 'Corrente',
+      chave_pix: 'edineia@email.com',
+    });
+  });
+
+  it('"Conta c/ Dígito" ganha de "Conta" quando as duas existem', () => {
+    const l = mapearLinhaBancaria({ 'Conta': '87928', 'Conta com dígito': '008792899' });
+    expect(l.conta).toBe('008792899');
+  });
+
+  it('célula vazia não vira string vazia — o campo simplesmente não vem', () => {
+    const l = mapearLinhaBancaria({ 'Nome': 'X', 'Agência': '   ', 'Chave PIX': '' });
+    expect(l.agencia).toBeUndefined();
+    expect(l.chave_pix).toBeUndefined();
+  });
+
+  it('coluna desconhecida é ignorada, não quebra a leitura', () => {
+    const l = mapearLinhaBancaria({ 'Nome': 'X', 'Centro de custo': '42' });
+    expect(l.nome).toBe('X');
+  });
+
+  it('planilha só com Pix é lida — é o caso que motivou tudo isto', () => {
+    const l = mapearLinhaBancaria({ 'Funcionário': 'YASMIN', 'CPF': '55359782803', 'PIX': '553.597.828-03' });
+    expect(l.chave_pix).toBe('553.597.828-03');
+    expect(temDadosDePagamento(l)).toBe(true);
+  });
+});
+
+describe('normalizarCabecalho', () => {
+  it('tira acento, espaço e pontuação', () => {
+    expect(normalizarCabecalho('Conta c/ Dígito')).toBe('contacdigito');
+    expect(normalizarCabecalho(' AGÊNCIA ')).toBe('agencia');
   });
 });
