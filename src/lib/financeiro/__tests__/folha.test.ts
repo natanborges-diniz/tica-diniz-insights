@@ -14,6 +14,7 @@ import {
   montarLoteFolha,
   totalizar,
   extrairRetornoFolha,
+  vincularRubricas,
 } from '../../../../supabase/functions/_shared/folha';
 
 // CPFs válidos (dígitos verificadores conferem)
@@ -247,5 +248,50 @@ describe('extrairRetornoFolha — leitura do retorno do lote', () => {
   it('item sem reference é lido, mas sem âncora — o chamador não vai baixá-lo', () => {
     const r = extrairRetornoFolha({ items: [{ status: 'PAID', amount: 50 }] });
     expect(r.itens[0].referencia).toBeNull();
+  });
+});
+
+describe('vincularRubricas — o lastro do salário no mês seguinte', () => {
+  // Sem este vínculo a rubrica existia, aprovada e com faixa, e todo salário
+  // ainda saía SEM_LASTRO: a governança avalia por rubrica_id, não por
+  // favorecido.
+  const itens = [{ cpf: '35696197884' }, { cpf: '553.597.828-03' }];
+
+  it('liga cada colaborador à rubrica do seu CPF', () => {
+    const v = vincularRubricas(itens, [
+      { id: 'r1', favorecido_documento: '356.961.978-84' },
+      { id: 'r2', favorecido_documento: '55359782803' },
+    ]);
+    expect(v.get('35696197884')).toBe('r1');
+    expect(v.get('55359782803')).toBe('r2');
+  });
+
+  it('pontuação não impede o vínculo dos dois lados', () => {
+    const v = vincularRubricas([{ cpf: '356.961.978-84' }], [{ id: 'r1', favorecido_documento: '35696197884' }]);
+    expect(v.get('35696197884')).toBe('r1');
+  });
+
+  it('quem não tem rubrica fica de fora, sem vínculo inventado', () => {
+    const v = vincularRubricas(itens, [{ id: 'r1', favorecido_documento: '35696197884' }]);
+    expect(v.size).toBe(1);
+    expect(v.has('55359782803')).toBe(false);
+  });
+
+  it('CPF repetido em duas rubricas do mesmo evento não vincula nenhuma', () => {
+    // Cadastro inconsistente: escolher uma seria fazer o selo de uma pessoa
+    // responder por parâmetros que ninguém revisou.
+    const v = vincularRubricas([{ cpf: '35696197884' }], [
+      { id: 'r1', favorecido_documento: '35696197884' },
+      { id: 'r2', favorecido_documento: '35696197884' },
+    ]);
+    expect(v.size).toBe(0);
+  });
+
+  it('rubrica sem documento é ignorada — nome não vincula', () => {
+    expect(vincularRubricas(itens, [{ id: 'r1', favorecido_documento: null }]).size).toBe(0);
+  });
+
+  it('sem rubrica nenhuma, devolve mapa vazio sem quebrar', () => {
+    expect(vincularRubricas(itens, []).size).toBe(0);
   });
 });

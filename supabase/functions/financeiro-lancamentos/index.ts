@@ -21,6 +21,7 @@ import { casarTitulo, JANELA_DIAS } from "../_shared/ddaMatch.ts";
 import { montarLoteFolha } from "../_shared/folha.ts";
 import { tipoPorLinhaDigitavel } from "../_shared/btgPayment.ts";
 import { resumirComposicao, type ItemBordero } from "../_shared/borderoEstado.ts";
+import { validarEdicao, validarCancelamento, CAMPOS_EDITAVEIS } from "../_shared/rubricaEdicao.ts";
 import {
   hojeBrt,
   proximaSegunda,
@@ -108,6 +109,10 @@ Deno.serve(async (req) => {
         return await adicionarAoBordero(body);
       case "remover_do_bordero":
         return await removerDoBordero(body);
+      case "editar_rubrica":
+        return await editarRubrica(body, auth.userId);
+      case "cancelar_rubrica":
+        return await cancelarRubrica(body, auth.userId);
       case "criar_rubrica_de_lancamento":
         return await criarRubricaDeLancamento(body, auth.userId);
       case "sugerir_rubricas":
@@ -744,6 +749,118 @@ async function reabrir(body: Record<string, unknown>, userId: string) {
 // ═══════════════════════════════════════════════════════════
 // BORDERÔS
 // ═══════════════════════════════════════════════════════════
+
+
+// ─── Rubricas: editar e cancelar ─────────────────────────────
+/**
+ * Edita uma rubrica existente.
+ *
+ * Editar sem regra seria a porta dos fundos da aprovação: bastaria aprovar uma
+ * rubrica de R$ 100 e depois trocar o teto para R$ 100.000. Por isso mexer no
+ * que define o risco — favorecido, valores, faixa, destino do dinheiro —
+ * devolve a rubrica a rascunho, e a aprovação tem de acontecer de novo, por
+ * outra pessoa.
+ *
+ * Tudo fica registrado em `rubricas_edicoes`, com antes e depois.
+ */
+async function editarRubrica(body: Record<string, unknown>, userId: string) {
+  const id = String(body.rubrica_id || "");
+  if (!id) throw new Error("rubrica_id obrigatório");
+
+  const { data: atual, error: errBusca } = await supabase
+    .from("rubricas_autorizadas").select("*").eq("id", id).single();
+  if (errBusca || !atual) throw new Error("Rubrica não encontrada");
+
+  const mudancas: Record<string, unknown> = {};
+  for (const campo of CAMPOS_EDITAVEIS) {
+    if (campo in body) mudancas[campo] = body[campo];
+  }
+
+  const v = validarEdicao(atual, mudancas);
+  if (v.erros.length > 0) {
+    return json({ ok: false, code: "EDICAO_INVALIDA", error: v.erros.join(" · "), erros: v.erros });
+  }
+
+  // Só o que mudou vai para o update e para a trilha.
+  const patch: Record<string, unknown> = {};
+  const alteracoes: Record<string, { antes: unknown; depois: unknown }> = {};
+  for (const campo of v.alterados) {
+    patch[campo] = mudancas[campo] === "" ? null : mudancas[campo];
+    alteracoes[campo] = { antes: atual[campo] ?? null, depois: patch[campo] };
+  }
+
+  if (v.exigeReaprovacao) {
+    patch.status = "RASCUNHO";
+    patch.aprovado_por = null;
+    patch.aprovado_em = null;
+  }
+
+  const { error } = await supabase.from("rubricas_autorizadas").update(patch).eq("id", id);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("rubricas_edicoes").insert({
+    rubrica_id: id,
+    editado_por: userId,
+    alteracoes,
+    exigiu_reaprovacao: v.exigeReaprovacao,
+    motivo: body.motivo ? String(body.motivo) : null,
+  });
+
+  return json({
+    ok: true,
+    alterados: v.alterados,
+    exige_reaprovacao: v.exigeReaprovacao,
+    status: v.exigeReaprovacao ? "RASCUNHO" : atual.status,
+  });
+}
+
+/**
+ * Cancela uma rubrica.
+ *
+ * Terminal e sem exclusão: o histórico de pagamentos aponta para ela, e um DRE
+ * que perde a referência do que autorizou a despesa deixa de ser auditável.
+ *
+ * Com título em aberto vinculado, recusamos e sugerimos suspender — cancelar
+ * deixaria o lançamento órfão de lastro no meio do caminho, entre a criação e o
+ * borderô.
+ */
+async function cancelarRubrica(body: Record<string, unknown>, userId: string) {
+  const id = String(body.rubrica_id || "");
+  if (!id) throw new Error("rubrica_id obrigatório");
+
+  const { data: atual } = await supabase
+    .from("rubricas_autorizadas").select("*").eq("id", id).single();
+  if (!atual) throw new Error("Rubrica não encontrada");
+
+  const { count } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id", { count: "exact", head: true })
+    .eq("rubrica_id", id)
+    .not("status", "in", '("BAIXADO","CANCELADO")');
+
+  const v = validarCancelamento(atual, Number(count ?? 0), body.motivo);
+  if (v.erros.length > 0) {
+    return json({ ok: false, code: "CANCELAMENTO_INVALIDO", error: v.erros.join(" · "), erros: v.erros });
+  }
+
+  const { error } = await supabase.from("rubricas_autorizadas").update({
+    status: "CANCELADA",
+    cancelada_por: userId,
+    cancelada_em: new Date().toISOString(),
+    cancelamento_motivo: String(body.motivo),
+  }).eq("id", id);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("rubricas_edicoes").insert({
+    rubrica_id: id,
+    editado_por: userId,
+    alteracoes: { status: { antes: atual.status, depois: "CANCELADA" } },
+    exigiu_reaprovacao: false,
+    motivo: String(body.motivo),
+  });
+
+  return json({ ok: true, status: "CANCELADA" });
+}
 
 async function listarBorderos(body: Record<string, unknown>) {
   const { cod_empresa, status: st, limit: lim } = body;

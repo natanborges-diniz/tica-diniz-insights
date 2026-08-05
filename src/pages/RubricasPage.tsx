@@ -3,7 +3,7 @@
 // Aprovação é de outro usuário (constraint no banco impede auto-aprovação).
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BookmarkCheck, Plus, Pause, Play, CheckCircle2 } from "lucide-react";
+import { BookmarkCheck, Plus, Pause, Play, CheckCircle2, Pencil, Ban, Landmark } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
@@ -24,6 +24,16 @@ interface Rubrica {
   favorecido_nome: string;
   favorecido_documento: string | null;
   favorecido_chave: string | null;
+  favorecido_banco?: string | null;
+  favorecido_agencia?: string | null;
+  favorecido_conta?: string | null;
+  favorecido_tipo_conta?: string | null;
+  forma_pagamento?: string | null;
+  folha_evento?: string | null;
+  dia_vencimento?: number | null;
+  // Opcional porque os tipos gerados do Supabase só ganham a coluna depois que
+  // a migration 20260805190000 for aplicada.
+  cancelamento_motivo?: string | null;
   conta_numero: string;
   periodicidade: string;
   valor_esperado: number | null;
@@ -38,7 +48,19 @@ const STATUS_CLS: Record<string, string> = {
   ATIVA: "bg-success/10 text-success border-success/30",
   RASCUNHO: "bg-warning/10 text-warning border-warning/30",
   SUSPENSA: "bg-muted text-muted-foreground",
+  CANCELADA: "bg-destructive/10 text-destructive border-destructive/30",
 };
+
+/** Resumo de como a rubrica paga, para caber numa célula. */
+function comoPaga(r: Rubrica): string {
+  const conta = [r.favorecido_banco, r.favorecido_agencia, r.favorecido_conta].filter(Boolean);
+  if (conta.length === 3) {
+    const forma = r.forma_pagamento === "TED" ? "TED" : "PIX";
+    return `${forma} · ${r.favorecido_banco}/${r.favorecido_agencia}/${r.favorecido_conta}`;
+  }
+  if (r.favorecido_chave) return `PIX · ${r.favorecido_chave}`;
+  return "—";
+}
 
 export default function RubricasPage() {
   const { empresas } = useEmpresas();
@@ -56,6 +78,17 @@ export default function RubricasPage() {
   const [fTeto, setFTeto] = useState("");
   const [fEmpresa, setFEmpresa] = useState<string>("global");
   const [fDiaVenc, setFDiaVenc] = useState("10");
+  // Dados bancários: estavam salvos no banco desde a folha, mas a tela não
+  // mostrava nem deixava corrigir — conta trocada era motivo para recriar tudo.
+  const [fBanco, setFBanco] = useState("");
+  const [fAgencia, setFAgencia] = useState("");
+  const [fConta2, setFConta2] = useState("");
+  const [fTipoConta, setFTipoConta] = useState("CC");
+  const [fForma, setFForma] = useState("PIX_MANUAL");
+  /** Rubrica sendo editada; null = criando uma nova. */
+  const [editando, setEditando] = useState<Rubrica | null>(null);
+  const [cancelando, setCancelando] = useState<Rubrica | null>(null);
+  const [motivoCancel, setMotivoCancel] = useState("");
 
   const { data: rubricas = [], isLoading } = useQuery<Rubrica[]>({
     queryKey: ["rubricas"],
@@ -66,7 +99,7 @@ export default function RubricasPage() {
         .order("status", { ascending: true })
         .order("descricao", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as Rubrica[];
+      return (data ?? []) as unknown as Rubrica[];
     },
   });
 
@@ -163,6 +196,92 @@ export default function RubricasPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  /** Chamada às actions da edge function, com o JWT do usuário. */
+  const invocar = async (action: string, params: Record<string, unknown>) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Sessão expirada");
+    const { data, error } = await supabase.functions.invoke("financeiro-lancamentos", {
+      body: { action, ...params },
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (error) throw error;
+    if (data?.ok === false) throw new Error(String(data.error));
+    if (data?.error) throw new Error(String(data.error));
+    return data;
+  };
+
+  const limparForm = () => {
+    setFDescricao(""); setFFavorecido(""); setFDocumento(""); setFChave(""); setFConta(null);
+    setFEsperado(""); setFTeto(""); setFTolerancia("10"); setFDiaVenc("10"); setFEmpresa("global");
+    setFBanco(""); setFAgencia(""); setFConta2(""); setFTipoConta("CC"); setFForma("PIX_MANUAL");
+  };
+
+  const abrirEdicao = (r: Rubrica) => {
+    setEditando(r);
+    setFDescricao(r.descricao);
+    setFFavorecido(r.favorecido_nome);
+    setFDocumento(r.favorecido_documento ?? "");
+    setFChave(r.favorecido_chave ?? "");
+    setFConta({ conta_numero: r.conta_numero, conta_descricao: "", grupo_dre: "", categoria: "" });
+    setFPeriodicidade(r.periodicidade);
+    setFEsperado(r.valor_esperado != null ? String(r.valor_esperado) : "");
+    setFTolerancia(String(r.tolerancia_pct));
+    setFTeto(String(r.valor_teto));
+    setFEmpresa(r.cod_empresa == null ? "global" : String(r.cod_empresa));
+    setFDiaVenc(String(r.dia_vencimento ?? 10));
+    setFBanco(r.favorecido_banco ?? "");
+    setFAgencia(r.favorecido_agencia ?? "");
+    setFConta2(r.favorecido_conta ?? "");
+    setFTipoConta(r.favorecido_tipo_conta ?? "CC");
+    setFForma(r.forma_pagamento ?? "PIX_MANUAL");
+    setDialogOpen(true);
+  };
+
+  const editarMutation = useMutation({
+    mutationFn: () => {
+      if (!editando) throw new Error("Nenhuma rubrica em edição");
+      return invocar("editar_rubrica", {
+        rubrica_id: editando.id,
+        descricao: fDescricao.trim(),
+        conta_numero: fConta?.conta_numero,
+        periodicidade: fPeriodicidade,
+        dia_vencimento: Number(fDiaVenc) || null,
+        favorecido_nome: fFavorecido.trim(),
+        favorecido_documento: fDocumento.trim() || null,
+        favorecido_chave: fChave.trim() || null,
+        favorecido_banco: fBanco.trim() || null,
+        favorecido_agencia: fAgencia.trim() || null,
+        favorecido_conta: fConta2.trim() || null,
+        favorecido_tipo_conta: fTipoConta,
+        forma_pagamento: fForma,
+        valor_esperado: fEsperado === "" ? null : Number(fEsperado),
+        tolerancia_pct: Number(fTolerancia),
+        valor_teto: Number(fTeto),
+      });
+    },
+    onSuccess: (d: { alterados?: string[]; exige_reaprovacao?: boolean }) => {
+      toast.success(
+        d?.exige_reaprovacao
+          ? `Alterado (${(d.alterados || []).join(", ")}). Como mexeu em valor ou destino, a rubrica voltou para rascunho e precisa ser aprovada de novo.`
+          : `Alterado: ${(d?.alterados || []).join(", ")}`,
+      );
+      setDialogOpen(false); setEditando(null); limparForm(); invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const cancelarMutation = useMutation({
+    mutationFn: () => invocar("cancelar_rubrica", {
+      rubrica_id: cancelando?.id,
+      motivo: motivoCancel.trim(),
+    }),
+    onSuccess: () => {
+      toast.success("Rubrica cancelada — o histórico dos pagamentos continua apontando para ela");
+      setCancelando(null); setMotivoCancel(""); invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const toggleSuspensaMutation = useMutation({
     mutationFn: async (r: Rubrica) => {
       const { error } = await supabase
@@ -219,6 +338,7 @@ export default function RubricasPage() {
                   <TableHead className="w-[110px] text-right">Esperado</TableHead>
                   <TableHead className="w-[80px] text-center">Tol.</TableHead>
                   <TableHead className="w-[110px] text-right">Teto</TableHead>
+                  <TableHead className="w-[190px]">Como paga</TableHead>
                   <TableHead className="w-[90px] text-center">Escopo</TableHead>
                   <TableHead className="w-[100px] text-center">Status</TableHead>
                   <TableHead className="w-[180px] text-right">Ações</TableHead>
@@ -226,14 +346,14 @@ export default function RubricasPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
                 ) : rubricas.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     Nenhuma rubrica. Os recorrentes (aluguel, energia, folha, impostos) entram aqui.
                   </TableCell></TableRow>
                 ) : (
                   rubricas.map((r) => (
-                    <TableRow key={r.id} className={r.status === "SUSPENSA" ? "opacity-50" : ""}>
+                    <TableRow key={r.id} className={["SUSPENSA", "CANCELADA"].includes(r.status) ? "opacity-50" : ""}>
                       <TableCell className="text-sm font-medium">{r.descricao}
                         <p className="text-xs text-muted-foreground">{r.conta_numero} · {r.periodicidade}</p>
                       </TableCell>
@@ -243,6 +363,7 @@ export default function RubricasPage() {
                       <TableCell className="text-sm text-right">{fmt(r.valor_esperado)}</TableCell>
                       <TableCell className="text-sm text-center">±{r.tolerancia_pct}%</TableCell>
                       <TableCell className="text-sm text-right font-medium">{fmt(r.valor_teto)}</TableCell>
+                      <TableCell className="text-xs font-mono text-muted-foreground">{comoPaga(r)}</TableCell>
                       <TableCell className="text-center">
                         <Badge variant="outline" className="text-[10px]">
                           {r.cod_empresa == null
@@ -260,13 +381,31 @@ export default function RubricasPage() {
                               <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Aprovar
                             </Button>
                           )}
-                          <Button
-                            variant="ghost" size="sm" className="h-7"
-                            title={r.status === "SUSPENSA" ? "Reativar (volta a rascunho)" : "Suspender"}
-                            onClick={() => toggleSuspensaMutation.mutate(r)}
-                          >
-                            {r.status === "SUSPENSA" ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-                          </Button>
+                          {r.status !== "CANCELADA" && (
+                            <>
+                              <Button
+                                variant="ghost" size="sm" className="h-7"
+                                title="Editar — mexer em valor, faixa, teto ou destino devolve a rubrica a rascunho"
+                                onClick={() => abrirEdicao(r)}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost" size="sm" className="h-7"
+                                title={r.status === "SUSPENSA" ? "Reativar (volta a rascunho)" : "Suspender"}
+                                onClick={() => toggleSuspensaMutation.mutate(r)}
+                              >
+                                {r.status === "SUSPENSA" ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                              </Button>
+                              <Button
+                                variant="ghost" size="sm" className="h-7 text-destructive"
+                                title="Cancelar — definitivo, mas o histórico dos pagamentos continua apontando para ela"
+                                onClick={() => { setCancelando(r); setMotivoCancel(""); }}
+                              >
+                                <Ban className="h-3.5 w-3.5" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -280,13 +419,23 @@ export default function RubricasPage() {
 
       <BaseDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        title="Nova rubrica autorizada"
-        description="Rubrica é para gasto RECORRENTE (aluguel, energia, vale transporte...): cadastra uma vez, fica salva e cobre todos os meses. Gasto único e urgente não vira rubrica — lance no Contas a Pagar como Exceção emergencial, que vale só para aquele lançamento. Nasce em rascunho; outro admin aprova. Pagamentos só passam se o favorecido bater exatamente e o valor respeitar faixa e teto."
+        onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditando(null); limparForm(); } }}
+        title={editando ? `Editar rubrica — ${editando.descricao}` : "Nova rubrica autorizada"}
+        description={editando
+          ? "Mexer em favorecido, valor esperado, tolerância, teto ou destino do dinheiro devolve a rubrica para rascunho: ela precisa ser aprovada de novo, por outra pessoa. Descrição e dia de vencimento não alteram o risco e mantêm a rubrica ativa. Toda alteração fica registrada."
+          : "Rubrica é para gasto RECORRENTE (aluguel, energia, vale transporte...): cadastra uma vez, fica salva e cobre todos os meses. Gasto único e urgente não vira rubrica — lance no Contas a Pagar como Exceção emergencial, que vale só para aquele lançamento. Nasce em rascunho; outro admin aprova. Pagamentos só passam se o favorecido bater exatamente e o valor respeitar faixa e teto."}
         footer={
           <>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={() => criarMutation.mutate()} disabled={criarMutation.isPending}>Criar rascunho</Button>
+            <Button variant="outline" onClick={() => { setDialogOpen(false); setEditando(null); limparForm(); }}>
+              Fechar
+            </Button>
+            {editando ? (
+              <Button onClick={() => editarMutation.mutate()} disabled={editarMutation.isPending}>
+                Salvar alterações
+              </Button>
+            ) : (
+              <Button onClick={() => criarMutation.mutate()} disabled={criarMutation.isPending}>Criar rascunho</Button>
+            )}
           </>
         }
       >
@@ -351,6 +500,91 @@ export default function RubricasPage() {
             <label className="text-xs text-muted-foreground">Dia do vencimento (1–28)</label>
             <Input type="number" min={1} max={28} value={fDiaVenc} onChange={(e) => setFDiaVenc(e.target.value)} />
           </div>
+
+          {/* Dados bancários: já eram gravados pela folha, mas ficavam invisíveis
+              e intocáveis. Conta trocada obrigava a recriar a rubrica inteira. */}
+          <div className="md:col-span-2 pt-2 border-t">
+            <p className="text-xs font-medium flex items-center gap-1.5 mb-2">
+              <Landmark className="h-3.5 w-3.5" /> Para onde o dinheiro vai
+            </p>
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Forma</label>
+                <Select value={fForma} onValueChange={setFForma}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PIX_MANUAL">PIX (dados bancários)</SelectItem>
+                    <SelectItem value="PIX_KEY">PIX (chave)</SelectItem>
+                    <SelectItem value="TED">TED</SelectItem>
+                    <SelectItem value="BANKSLIP">Boleto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Banco</label>
+                <Input value={fBanco} onChange={(e) => setFBanco(e.target.value)} placeholder="208" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Agência</label>
+                <Input value={fAgencia} onChange={(e) => setFAgencia(e.target.value)} placeholder="0050" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Conta</label>
+                <Input value={fConta2} onChange={(e) => setFConta2(e.target.value)} placeholder="008792899" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Tipo de conta</label>
+                <Select value={fTipoConta} onValueChange={setFTipoConta}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CC">Corrente</SelectItem>
+                    <SelectItem value="PP">Poupança</SelectItem>
+                    <SelectItem value="PG">Pagamento / salário</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="md:col-span-3 text-xs text-muted-foreground self-end">
+                Banco, agência e conta juntos permitem pagar por Pix sem o favorecido ter chave
+                cadastrada. É assim que a folha é paga hoje.
+              </p>
+            </div>
+          </div>
+        </div>
+      </BaseDialog>
+
+      <BaseDialog
+        open={!!cancelando}
+        onOpenChange={(open) => { if (!open) { setCancelando(null); setMotivoCancel(""); } }}
+        title={`Cancelar rubrica — ${cancelando?.descricao ?? ""}`}
+        description="Cancelar é definitivo: a rubrica sai de circulação e não volta. Nada é apagado — o histórico de pagamentos continua apontando para ela, senão o DRE perderia a referência do que autorizou cada despesa. Se a intenção é só parar por um tempo, use Suspender."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => { setCancelando(null); setMotivoCancel(""); }}>
+              Voltar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => cancelarMutation.mutate()}
+              disabled={cancelarMutation.isPending || motivoCancel.trim().length < 10}
+            >
+              Cancelar rubrica
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-2">
+          <label className="text-xs text-muted-foreground">
+            Motivo (mínimo 10 caracteres) — fica registrado com seu usuário e a data
+          </label>
+          <Input
+            value={motivoCancel}
+            onChange={(e) => setMotivoCancel(e.target.value)}
+            placeholder="ex.: Colaboradora desligada em 05/08/2026"
+          />
+          <p className="text-xs text-muted-foreground">
+            Se houver título em aberto usando esta rubrica, o cancelamento é recusado — o lançamento
+            ficaria sem lastro no meio do caminho. Pague ou cancele esses títulos antes.
+          </p>
         </div>
       </BaseDialog>
     </div>

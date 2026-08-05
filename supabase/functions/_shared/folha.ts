@@ -295,6 +295,41 @@ export function montarLoteFolha(args: {
   };
 }
 
+// ─── Vínculo com a rubrica do colaborador ────────────────────
+
+/**
+ * Liga cada item da folha à rubrica do colaborador, pelo CPF.
+ *
+ * Sem isto, a rubrica existe mas o lançamento não aponta para ela — e a
+ * governança avalia lastro olhando `rubrica_id`, não o favorecido. O resultado
+ * era o pior dos dois mundos: rubrica cadastrada, aprovada, com valor esperado
+ * e faixa, e mesmo assim todo salário saindo SEM_LASTRO.
+ *
+ * Só o CPF decide. Nome não entra aqui nem como desempate: um vínculo errado
+ * faria o selo de uma pessoa responder pelo valor de outra.
+ */
+export function vincularRubricas<T extends { cpf: string }>(
+  itens: T[],
+  rubricas: Array<{ id: string; favorecido_documento?: string | null }>,
+): Map<string, string> {
+  const porCpf = new Map<string, string>();
+  for (const r of rubricas) {
+    const doc = soDigitos(r.favorecido_documento);
+    // CPF repetido entre rubricas do mesmo evento é cadastro inconsistente:
+    // não escolhemos uma, deixamos as duas de fora.
+    if (!doc) continue;
+    if (porCpf.has(doc)) porCpf.set(doc, "");
+    else porCpf.set(doc, r.id);
+  }
+
+  const vinculo = new Map<string, string>();
+  for (const i of itens) {
+    const id = porCpf.get(soDigitos(i.cpf));
+    if (id) vinculo.set(soDigitos(i.cpf), id);
+  }
+  return vinculo;
+}
+
 // ─── Retorno do lote ─────────────────────────────────────────
 
 export interface RetornoItemFolha {

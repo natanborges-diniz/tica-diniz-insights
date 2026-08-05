@@ -21,6 +21,7 @@ import {
   validarLinha,
   montarEncargos,
   totalizar,
+  vincularRubricas,
   ROTULO_EVENTO,
   type EventoFolha,
   type LinhaFolha,
@@ -306,12 +307,34 @@ async function fechar(body: Record<string, unknown>, userId: string) {
   }).select().single();
   if (bErr) throw new Error(bErr.message);
 
+  // Rubrica de cada colaborador — o lastro do lançamento.
+  //
+  // A governança avalia por `rubrica_id`, não por favorecido. Sem preencher
+  // aqui, a rubrica podia estar cadastrada, aprovada e com faixa definida, e
+  // ainda assim todo salário saía SEM_LASTRO e travava no borderô.
+  const { data: rubricas } = await supabase
+    .from("rubricas_autorizadas")
+    .select("id, favorecido_documento")
+    .eq("cod_empresa", comp.cod_empresa)
+    .eq("folha_evento", ev)
+    .neq("status", "CANCELADA");
+  const vinculoRubrica = vincularRubricas(
+    itens.map((i: Record<string, unknown>) => ({ cpf: String(i.cpf) })),
+    rubricas || [],
+  );
+
   // 2. Um lançamento por colaborador, já no borderô.
   let criados = 0;
+  let comRubrica = 0;
   for (const it of itens) {
+    const rubricaId = vinculoRubrica.get(String(it.cpf).replace(/\D/g, "")) ?? null;
+    if (rubricaId) comRubrica++;
     const { data: lanc, error } = await supabase.from("lancamentos_financeiros").insert({
       cod_empresa: comp.cod_empresa,
       tipo: "PAGAR",
+      rubrica_id: rubricaId,
+      lastro: rubricaId ? "RUBRICA" : null,
+      competencia_rubrica: rubricaId ? comp.competencia : null,
       descricao: `${rotulo} ${comp.competencia} — ${it.nome}`,
       pessoa_nome: it.nome,
       pessoa_documento: it.cpf,
@@ -392,6 +415,8 @@ async function fechar(body: Record<string, unknown>, userId: string) {
     bordero_id: bordero.id,
     modo_pagamento: modo,
     lancamentos: criados,
+    com_rubrica: comRubrica,
+    sem_rubrica: criados - comRubrica,
     encargos: encargosCriados,
     total_liquido: Number(comp.total_liquido),
   });
