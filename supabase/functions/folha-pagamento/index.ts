@@ -15,6 +15,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, authGuard } from "../_shared/authGuard.ts";
+import { cruzarDadosBancarios, type LinhaBancaria } from "../_shared/dadosBancarios.ts";
 import {
   ehEventoFolha,
   validarLinha,
@@ -575,6 +576,86 @@ async function atualizarDadosBancarios(body: Record<string, unknown>, userId: st
 }
 
 
+// ─── importar_dados_bancarios ────────────────────────────────
+/**
+ * Planilha de banco/agência/conta cruzada com os colaboradores da folha.
+ *
+ * Grava nos dois lugares de propósito: no item da competência, para esta folha
+ * poder fechar; e na rubrica do colaborador, para a competência seguinte já vir
+ * preenchida. É a rubrica que faz o dado sobreviver ao mês.
+ *
+ * Nada é gravado quando o casamento é duvidoso — homônimo sem CPF fica de fora e
+ * aparece no relatório de volta. Dado bancário na pessoa errada manda o salário
+ * para a conta errada, e isso não se desfaz com um clique.
+ */
+async function importarDadosBancarios(body: Record<string, unknown>, userId: string) {
+  await requireAdmin(userId);
+  const id = String(body.competencia_id || "");
+  const linhas = (body.linhas as LinhaBancaria[]) || [];
+  if (!id) throw new Error("competencia_id obrigatório");
+  if (linhas.length === 0) throw new Error("Planilha sem linhas");
+
+  const { data: comp } = await supabase.from("folha_competencias").select("*").eq("id", id).single();
+  if (!comp) throw new Error("Folha não encontrada");
+
+  const { data: itens } = await supabase
+    .from("folha_itens").select("id, nome, cpf").eq("competencia_id", id);
+  if (!itens || itens.length === 0) throw new Error("Folha sem colaboradores");
+
+  const r = cruzarDadosBancarios(
+    linhas,
+    itens.map((i: Record<string, unknown>) => ({ id: String(i.id), nome: String(i.nome), cpf: String(i.cpf) })),
+  );
+
+  const erros: string[] = [];
+  let rubricasAtualizadas = 0;
+
+  for (const c of r.casados) {
+    const { error } = await supabase.from("folha_itens").update({
+      banco: c.dados.banco,
+      agencia: c.dados.agencia,
+      conta: c.dados.conta,
+      tipo_conta: c.dados.tipo_conta,
+      chave_pix: c.dados.chave_pix ?? null,
+    }).eq("id", c.alvo.id);
+    if (error) { erros.push(`${c.alvo.nome}: ${error.message}`); continue; }
+
+    // A rubrica é o cadastro que atravessa competências.
+    const { data: rub } = await supabase
+      .from("rubricas_autorizadas")
+      .select("id")
+      .eq("cod_empresa", comp.cod_empresa)
+      .eq("folha_evento", comp.evento)
+      .eq("favorecido_documento", c.alvo.cpf)
+      .maybeSingle();
+
+    if (rub) {
+      const { error: rErr } = await supabase.from("rubricas_autorizadas").update({
+        favorecido_banco: c.dados.banco,
+        favorecido_agencia: c.dados.agencia,
+        favorecido_conta: c.dados.conta,
+        favorecido_tipo_conta: c.dados.tipo_conta,
+        favorecido_chave: c.dados.chave_pix ?? null,
+        forma_pagamento: "PIX_MANUAL",
+      }).eq("id", rub.id);
+      if (rErr) erros.push(`rubrica de ${c.alvo.nome}: ${rErr.message}`);
+      else rubricasAtualizadas++;
+    }
+  }
+
+  return json({
+    ok: true,
+    casados: r.casados.length,
+    por_cpf: r.casados.filter((c) => c.por === "CPF").length,
+    por_nome: r.casados.filter((c) => c.por === "NOME").length,
+    rubricas_atualizadas: rubricasAtualizadas,
+    ambiguos: r.ambiguos,
+    sem_correspondente: r.sem_correspondente.length,
+    nao_cobertos: r.nao_cobertos.map((a) => ({ nome: a.nome, cpf: a.cpf })),
+    erros,
+  });
+}
+
 // ─── MAIN ────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -588,11 +669,12 @@ Deno.serve(async (req) => {
       case "listar": return await listar(body);
       case "detalhe": return await detalhe(body);
       case "criar_rubricas": return await criarRubricas(body, auth.userId);
+      case "importar_dados_bancarios": return await importarDadosBancarios(body, auth.userId);
       case "fechar": return await fechar(body, auth.userId);
       case "cancelar": return await cancelar(body, auth.userId);
       case "atualizar_dados_bancarios": return await atualizarDadosBancarios(body, auth.userId);
       default:
-        return json({ error: `Ação desconhecida: '${body.action}'. Use: importar, listar, detalhe, criar_rubricas, fechar, cancelar, atualizar_dados_bancarios` }, 400);
+        return json({ error: `Ação desconhecida: '${body.action}'. Use: importar, listar, detalhe, criar_rubricas, importar_dados_bancarios, fechar, cancelar, atualizar_dados_bancarios` }, 400);
     }
   } catch (err) {
     console.error("[folha-pagamento]", err);

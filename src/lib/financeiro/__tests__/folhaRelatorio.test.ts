@@ -129,3 +129,38 @@ describe('parseRelatorioFolha — bordas', () => {
     expect(r.colaboradores.find((c) => c.cpf === '55359782803')?.data_pagamento).toBe('2026-07-15');
   });
 });
+
+// Texto como sai do extrator de PDF (montarLinhas sobre o arquivo real de
+// Osasco). Difere da cópia manual em detalhes que quebram regex: "Pág: 1" vem
+// antes do título, e há espaço depois de "Período de:" e de "C.N.P.J./CEI:".
+const DO_PDF = `Pág: 1
+Relação de Totais Líquidos
+Período de: 01/07/2026 à 31/07/2026 Pagamento
+Razão Social:M DE M GOMES OPTICA C.N.P.J./CEI: 13.844.111/0001-26
+Endereço:Rua Dona Primitiva Vianco Nº:355
+Complemento: Bairro:Centro
+Cidade:Osasco UF:SP CEP: 06010-000
+Código Funcionário CPF Data Pagamento Valor Líquido
+75 EDINEIA FERNANDES DIAS 356.961.978-84 30/07/2026 3.290,14
+77 YASMIN SANTOS CORDEIRO 553.597.828-03 30/07/2026 1.714,45
+Total: 5.004,59`;
+
+describe('texto extraído do PDF (não colado à mão)', () => {
+  it('é reconhecido como relatório', () => {
+    expect(ehRelatorioTotaisLiquidos(DO_PDF)).toBe(true);
+  });
+
+  it('lê os mesmos dados da cópia manual', () => {
+    const r = parseRelatorioFolha(DO_PDF);
+    expect(r.cnpj).toBe('13844111000126');
+    expect(r.competencia).toBe('2026-07');
+    expect(r.data_pagamento).toBe('2026-07-30');
+    expect(r.colaboradores).toHaveLength(2);
+    expect(r.divergencia).toBe(0);
+  });
+
+  it('"Pág: 1" antes do título não vira colaborador nem atrapalha', () => {
+    expect(parseRelatorioFolha(DO_PDF).colaboradores.map(c => c.nome))
+      .toEqual(['EDINEIA FERNANDES DIAS', 'YASMIN SANTOS CORDEIRO']);
+  });
+});

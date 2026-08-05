@@ -8,6 +8,8 @@ import { useDefaultEmpresa } from "@/hooks/useDefaultEmpresa";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { BaseDialog } from "@/components/system/BaseDialog";
 import { PlanoContaSelect } from "@/components/banking/PlanoContaSelect";
+import { extrairTextoPdf } from "@/lib/pdf/textoPdf";
+import { Landmark } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -180,6 +182,10 @@ export default function FolhaPagamentoPage() {
   // individual num borderô comum.
   const [modoPagamento, setModoPagamento] = useState("PIX_INDIVIDUAL");
   const [contaFolha, setContaFolha] = useState("");
+  const [lendoPdf, setLendoPdf] = useState(false);
+  // Competência que está recebendo a planilha de contas; o input de arquivo é
+  // um só, disparado pelo botão da linha.
+  const [contasParaId, setContasParaId] = useState<string | null>(null);
 
   // Correção pontual do Pix/conta de um colaborador, sem recolar a planilha.
   const [editItem, setEditItem] = useState<{ id: string; nome: string; cpf: string } | null>(null);
@@ -208,6 +214,27 @@ export default function FolhaPagamentoPage() {
     queryFn: () => invoke("detalhe", { competencia_id: detalheId }),
     enabled: !!detalheId,
   });
+
+  /**
+   * Lê o PDF escolhido e joga o texto no mesmo campo de sempre.
+   *
+   * Mandar o operador selecionar tudo no leitor de PDF e colar funcionava, mas
+   * é onde se perde meia página sem perceber — o relatório continua parecendo
+   * válido, só que com gente a menos. O arquivo inteiro não tem esse risco.
+   */
+  const carregarPdf = async (arquivo: File | undefined) => {
+    if (!arquivo) return;
+    setLendoPdf(true);
+    try {
+      const texto = await extrairTextoPdf(arquivo);
+      setPlanilha(texto);
+      setLinhasInvalidas([]);
+    } catch (e) {
+      toast.error(`Não consegui ler o PDF: ${e instanceof Error ? e.message : "arquivo inválido"}`);
+    } finally {
+      setLendoPdf(false);
+    }
+  };
 
   const prévia = parsePlanilha(planilha);
   const relatorio = (prévia as { relatorio?: ReturnType<typeof parseRelatorioFolha> }).relatorio ?? null;
@@ -258,6 +285,66 @@ export default function FolhaPagamentoPage() {
       );
       if (r?.erros?.length) toast.error(`${r.erros.length} com problema: ${r.erros[0]}`);
       queryClient.invalidateQueries({ queryKey: ["folha"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const contasMutation = useMutation({
+    mutationFn: async ({ id, arquivo }: { id: string; arquivo: File }) => {
+      // SheetJS já é dependência do projeto (usada nas exportações).
+      const XLSX = await import("xlsx");
+      const wb = XLSX.read(await arquivo.arrayBuffer(), { type: "array" });
+      const linhasBrutas = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+        wb.Sheets[wb.SheetNames[0]], { defval: "" },
+      );
+
+      // Cabeçalho reconhecido por nome, não por posição: cada RH monta a
+      // planilha do seu jeito, e exigir ordem fixa só geraria retrabalho.
+      const achar = (linha: Record<string, unknown>, ...nomes: string[]) => {
+        for (const [k, v] of Object.entries(linha)) {
+          const norm = k.trim().toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]/g, "");
+          if (nomes.includes(norm)) return v == null ? null : String(v);
+        }
+        return null;
+      };
+
+      const linhas = linhasBrutas.map(l => ({
+        nome: achar(l, "nome", "colaborador", "funcionario"),
+        cpf: achar(l, "cpf", "documento"),
+        banco: achar(l, "banco", "codigobanco"),
+        agencia: achar(l, "agencia"),
+        conta: achar(l, "conta", "numeroconta", "contacomdigito"),
+        tipo_conta: achar(l, "tipoconta", "tipo"),
+        chave_pix: achar(l, "chavepix", "pix"),
+      }));
+
+      if (linhas.length === 0) throw new Error("A primeira aba da planilha está vazia");
+      return invoke("importar_dados_bancarios", { competencia_id: id, linhas });
+    },
+    onSuccess: (r: {
+      casados?: number; por_cpf?: number; por_nome?: number; rubricas_atualizadas?: number;
+      ambiguos?: Array<{ nome: string; quantidade: number }>;
+      nao_cobertos?: Array<{ nome: string }>; erros?: string[];
+    }) => {
+      toast.success(
+        `${r?.casados ?? 0} conta(s) preenchida(s) — ${r?.por_cpf ?? 0} por CPF, ${r?.por_nome ?? 0} por nome. ` +
+        `${r?.rubricas_atualizadas ?? 0} rubrica(s) guardadas para os próximos meses.`,
+      );
+      if (r?.ambiguos?.length) {
+        toast.error(
+          `${r.ambiguos.length} nome(s) repetido(s) na folha ficaram de fora: ` +
+          `${r.ambiguos.map(a => a.nome).join(", ")}. Informe o CPF na planilha.`,
+        );
+      }
+      if (r?.nao_cobertos?.length) {
+        toast.warning(
+          `${r.nao_cobertos.length} sem conta: ${r.nao_cobertos.slice(0, 3).map(c => c.nome).join(", ")}` +
+          `${r.nao_cobertos.length > 3 ? "…" : ""}`,
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: ["folha"] });
+      queryClient.invalidateQueries({ queryKey: ["folha-detalhe"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -432,6 +519,17 @@ export default function FolhaPagamentoPage() {
                       <div className="flex justify-end gap-1">
                         {c.status === "RASCUNHO" && (
                           <Button size="sm" variant="outline"
+                            onClick={() => {
+                              setContasParaId(c.id);
+                              document.getElementById("input-contas-folha")?.click();
+                            }}
+                            disabled={contasMutation.isPending}
+                            title="Planilha com banco, agência e conta — cruzada por CPF e nome">
+                            <Landmark className="h-3.5 w-3.5 mr-1" /> Contas
+                          </Button>
+                        )}
+                        {c.status === "RASCUNHO" && (
+                          <Button size="sm" variant="outline"
                             onClick={() => rubricasMutation.mutate(c.id)}
                             disabled={rubricasMutation.isPending || !contaFolha}
                             title={contaFolha
@@ -466,6 +564,19 @@ export default function FolhaPagamentoPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Planilha de contas — um input só, acionado pelo botão da linha */}
+      <input
+        id="input-contas-folha"
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        className="hidden"
+        onChange={e => {
+          const arquivo = e.target.files?.[0];
+          e.target.value = "";
+          if (arquivo && contasParaId) contasMutation.mutate({ id: contasParaId, arquivo });
+        }}
+      />
 
       {/* Importar */}
       <BaseDialog
@@ -510,7 +621,25 @@ export default function FolhaPagamentoPage() {
           </p>
 
           <div className="space-y-1">
-            <Label>Planilha ou relatório do contador</Label>
+            <Label>Relatório em PDF</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="file"
+                accept="application/pdf,.pdf"
+                disabled={lendoPdf}
+                onChange={e => { carregarPdf(e.target.files?.[0]); e.target.value = ""; }}
+                className="h-9 text-xs file:mr-3 file:text-xs"
+              />
+              {lendoPdf && <span className="text-xs text-muted-foreground shrink-0">Lendo…</span>}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Escolha a Relação de Totais Líquidos da loja. O texto aparece abaixo já reconhecido —
+              se preferir, ainda dá para colar à mão.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <Label>Planilha ou texto do relatório</Label>
             <Textarea
               value={planilha}
               onChange={e => setPlanilha(e.target.value)}
