@@ -4642,6 +4642,7 @@ export type Database = {
         Args: { p_lock_key: string; p_timeout_minutes?: number }
         Returns: boolean
       }
+      cielo_norm_razao: { Args: { txt: string }; Returns: string }
       cleanup_old_health_logs: {
         Args: { p_retention_days?: number }
         Returns: number
@@ -4695,6 +4696,7 @@ export type Database = {
       }
       pix_verificar_pendentes: { Args: never; Returns: Json }
       release_sync_lock: { Args: { p_lock_key: string }; Returns: undefined }
+      unaccent_simples: { Args: { txt: string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "gestor" | "vendedor" | "analista" | "master"
