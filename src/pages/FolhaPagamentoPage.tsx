@@ -675,6 +675,70 @@ export default function FolhaPagamentoPage() {
           </div>
         )}
       </BaseDialog>
+
+      {/* Dados de pagamento de um colaborador */}
+      <BaseDialog
+        open={!!editItem}
+        onOpenChange={(o) => { if (!o) setEditItem(null); }}
+        title={`Dados de pagamento — ${editItem?.nome ?? ""}`}
+        description="A chave Pix tem prioridade. Sem ela, informe banco, agência e conta."
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEditItem(null)}>Cancelar</Button>
+            <Button
+              onClick={() => dadosBancariosMutation.mutate()}
+              disabled={dadosBancariosMutation.isPending}
+            >
+              Salvar
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 py-2">
+          <div className="space-y-1">
+            <Label>Chave Pix</Label>
+            <Input
+              value={editPix}
+              onChange={e => setEditPix(e.target.value)}
+              placeholder="CPF, celular, e-mail ou chave aleatória"
+              maxLength={140}
+            />
+            <p className="text-xs text-muted-foreground">
+              A mesma validação do envio ao banco roda aqui — chave inválida não salva.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1">
+              <Label>Banco</Label>
+              <Input value={editBanco} onChange={e => setEditBanco(e.target.value)} maxLength={10} />
+            </div>
+            <div className="space-y-1">
+              <Label>Agência</Label>
+              <Input value={editAgencia} onChange={e => setEditAgencia(e.target.value)} maxLength={10} />
+            </div>
+            <div className="space-y-1">
+              <Label>Conta</Label>
+              <Input value={editConta} onChange={e => setEditConta(e.target.value)} maxLength={20} />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label>Tipo de conta</Label>
+            <Select value={editTipoConta || "CC"} onValueChange={setEditTipoConta}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CC">Conta corrente</SelectItem>
+                <SelectItem value="PP">Poupança</SelectItem>
+                <SelectItem value="PG">Conta pagamento</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            A correção também atualiza a rubrica deste CPF, então a próxima folha já vem certa —
+            e a rubrica volta para rascunho, exigindo nova aprovação.
+          </p>
+        </div>
+      </BaseDialog>
     </div>
+
   );
 }
