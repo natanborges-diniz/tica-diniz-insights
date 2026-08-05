@@ -200,7 +200,11 @@ export default function FolhaPagamentoPage() {
       body: { action, ...params },
     });
     if (error) throw error;
-    if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+    // Planilha inválida não é falha de chamada: a função devolve `error` junto
+    // com a lista de linhas problemáticas, e lançar aqui apagava justamente a
+    // explicação que o operador precisa ler.
+    const d = data as { error?: string; linhas_invalidas?: unknown };
+    if (d?.error && !d.linhas_invalidas) throw new Error(d.error);
     return data;
   };
 
