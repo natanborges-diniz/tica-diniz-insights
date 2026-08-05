@@ -32,13 +32,17 @@ describe('normalizarNome', () => {
 });
 
 describe('temDadosDePagamento', () => {
-  it('exige banco, agência e conta juntos', () => {
+  it('exige banco, agência e conta juntos quando não há chave pix', () => {
     expect(temDadosDePagamento(conta())).toBe(true);
     expect(temDadosDePagamento({ banco: '208', agencia: '0050' })).toBe(false);
   });
 
-  it('só chave pix não serve — o pagamento é por conta', () => {
-    expect(temDadosDePagamento({ chave_pix: 'a@b.com' })).toBe(false);
+  it('só chave pix serve — pagamento por chave é caminho válido', () => {
+    expect(temDadosDePagamento({ chave_pix: 'a@b.com' })).toBe(true);
+  });
+
+  it('linha totalmente vazia não serve', () => {
+    expect(temDadosDePagamento({ nome: 'X' })).toBe(false);
   });
 });
 
@@ -104,6 +108,7 @@ describe('cruzarDadosBancarios', () => {
     const r = cruzarDadosBancarios([{ cpf: '35696197884', banco: '208' }], [EDINEIA]);
     expect(r.casados).toHaveLength(0);
     expect(r.sem_correspondente).toHaveLength(1);
+    expect(r.sem_correspondente[0].motivo).toBe('SEM_DADOS_DE_PAGAMENTO');
   });
 
   it('lista quem a planilha não cobriu — é quem trava o fechamento', () => {
@@ -117,6 +122,7 @@ describe('cruzarDadosBancarios', () => {
       [EDINEIA],
     );
     expect(r.sem_correspondente).toHaveLength(1);
+    expect(r.sem_correspondente[0].motivo).toBe('NAO_ESTA_NA_FOLHA');
     expect(r.casados).toHaveLength(0);
   });
 
