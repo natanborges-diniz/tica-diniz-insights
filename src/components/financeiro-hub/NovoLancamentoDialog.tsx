@@ -8,6 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BaseDialog } from "@/components/system/BaseDialog";
+import {
+  somenteDigitos,
+  formatarLinhaDigitavel,
+  diagnosticarBoleto,
+} from "../../../supabase/functions/_shared/boleto";
 
 interface PlanoContaRow {
   id: string;
