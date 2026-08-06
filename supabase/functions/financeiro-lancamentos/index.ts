@@ -116,6 +116,8 @@ Deno.serve(async (req) => {
         return await devolverParaPreparo(body, auth.userId);
       case "painel_pendencias":
         return await painelPendencias(body);
+      case "dispensar_pendencia":
+        return await dispensarPendencia(body, auth.userId);
       case "listar_borderos":
         return await listarBorderos(body);
       case "criar_bordero":
