@@ -13,6 +13,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
 import { useDefaultEmpresa } from "@/hooks/useDefaultEmpresa";
+import { useFiltrosPersistentes } from "@/hooks/useFiltrosPersistentes";
+import { LojaSelect } from "@/components/system/LojaSelect";
+
 import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
