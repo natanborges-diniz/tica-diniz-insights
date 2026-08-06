@@ -105,3 +105,23 @@ describe('estadoBordero — depois do envio', () => {
     expect(e.label).toContain('06/08');
   });
 });
+
+describe('falha do banco sem retorno tratado', () => {
+  it('conta FAILED como recusado mesmo com o título PROCESSANDO', () => {
+    const c = resumirComposicao([
+      { status: 'PROCESSANDO', requer_validacao: false, btg_status: 'FAILED', data_prevista: '2026-08-06' },
+    ]);
+    expect(c.rejeitados).toBe(1);
+    expect(c.nao_processados).toBe(1);
+    expect(c.pendentes).toBe(0);
+    expect(c.motivos_recusa?.[0]).toContain('não processou');
+  });
+
+  it('mantém em trânsito o que o banco ainda não respondeu', () => {
+    const c = resumirComposicao([
+      { status: 'PROCESSANDO', requer_validacao: false, btg_status: 'PENDING', data_prevista: '2026-08-06' },
+    ]);
+    expect(c.rejeitados).toBe(0);
+    expect(c.pendentes).toBe(1);
+  });
+});

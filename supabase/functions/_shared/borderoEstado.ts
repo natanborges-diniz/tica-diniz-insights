@@ -18,6 +18,34 @@ export interface ItemBordero {
   data_prevista?: string | null;
   /** Por que o banco recusou, já traduzido (dados_extras.btg_motivo_recusa). */
   motivo_recusa?: string | null;
+  /**
+   * Último status do pagamento no BTG (dados_extras.btg_payment_status).
+   *
+   * Existe porque `requer_validacao` só é gravado quando o retorno da recusa é
+   * processado por inteiro. Havia item com FAILED no banco que continuava
+   * PROCESSANDO aqui — e o painel o contava como "aguardando autorização",
+   * mandando o operador cobrar uma autorização que o banco nunca vai pedir. O
+   * que o banco disse manda: falhou é falhou.
+   */
+  btg_status?: string | null;
+}
+
+/**
+ * Status do BTG que significam "o dinheiro não saiu e não vai sair sozinho".
+ *
+ * Separar isto de "em trânsito" é o ponto: pagamento não processado precisa de
+ * correção e novo borderô; pagamento em trânsito precisa apenas da autorização
+ * do master. Tratar os dois igual foi o que gerou pendência falsa.
+ */
+const FALHA_BTG = new Set([
+  "FAILED", "FAILURE", "REJECTED", "REFUSED", "DENIED", "ERROR",
+  "CANCELLED", "CANCELED", "INVALIDATED", "INVALID", "EXPIRED",
+  "REVERSED", "RETURNED", "NOT_AUTHORIZED", "UNAUTHORIZED",
+]);
+
+export function falhouNoBanco(status?: string | null): boolean {
+  const v = String(status ?? "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  return v.length > 0 && FALHA_BTG.has(v);
 }
 
 export interface ComposicaoBordero {
@@ -25,6 +53,13 @@ export interface ComposicaoBordero {
   pagos: number;
   rejeitados: number;
   pendentes: number;
+  /**
+   * Recusas detectadas pelo status do banco, sem retorno tratado aqui dentro.
+   *
+   * É a fatia dos rejeitados que estava invisível: o banco não processou e o
+   * sistema ainda mostrava o título como em trânsito.
+   */
+  nao_processados: number;
   /** Menor data prevista entre os itens ainda pendentes (yyyy-MM-dd). */
   proxima_data: string | null;
   /**
@@ -36,6 +71,7 @@ export interface ComposicaoBordero {
    */
   motivos_recusa?: string[];
 }
+
 
 export type ChaveEstado =
   | "MONTAGEM" | "APROVADO" | "CANCELADO"
@@ -53,7 +89,7 @@ export interface EstadoBordero {
 }
 
 export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
-  let pagos = 0, rejeitados = 0, pendentes = 0;
+  let pagos = 0, rejeitados = 0, pendentes = 0, naoProcessados = 0;
   let proxima: string | null = null;
   const motivos: string[] = [];
 
@@ -61,13 +97,24 @@ export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
     const st = String(i.status ?? "").toUpperCase();
     if (st === "BAIXADO") { pagos++; continue; }
     if (st === "CANCELADO") continue; // saiu do borderô, não conta como nada
-    // Recusa do banco devolve o título para AUTORIZADO com requer_validacao.
-    if (i.requer_validacao) {
+
+    // Recusa do banco devolve o título para AUTORIZADO com requer_validacao —
+    // mas o status do próprio BTG também basta. Quando o banco diz FAILED e o
+    // título ficou PROCESSANDO, o pagamento não aconteceu: contar como pendente
+    // virava "aguardando autorização", pedindo ao operador uma ação que não
+    // existe no app do banco.
+    const falhou = falhouNoBanco(i.btg_status);
+    if (i.requer_validacao || falhou) {
       rejeitados++;
+      if (falhou && !i.requer_validacao) naoProcessados++;
       const m = String(i.motivo_recusa ?? "").trim();
-      if (m && !motivos.includes(m)) motivos.push(m);
+      const texto = m || (falhou
+        ? `O banco não processou o pagamento (${String(i.btg_status).toUpperCase()})`
+        : "");
+      if (texto && !motivos.includes(texto)) motivos.push(texto);
       continue;
     }
+
     pendentes++;
     const d = i.data_prevista ? String(i.data_prevista).slice(0, 10) : null;
     if (d && (proxima === null || d < proxima)) proxima = d;
@@ -76,10 +123,12 @@ export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
   return {
     total: pagos + rejeitados + pendentes,
     pagos, rejeitados, pendentes,
+    nao_processados: naoProcessados,
     proxima_data: proxima,
     motivos_recusa: motivos,
   };
 }
+
 
 /** dd/MM a partir de yyyy-MM-dd, sem passar por Date (fuso trocaria o dia). */
 function ddMM(iso: string): string {
