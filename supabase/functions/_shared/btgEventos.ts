@@ -104,21 +104,9 @@ export function referenciasDoPagamento(
  * de fixar um — o que vier, serve.
  */
 export function motivoRecusa(pay: Record<string, unknown> | null | undefined): string | null {
-  if (!pay) return null;
-  const candidatos = [
-    pay.errorMessage, pay.error_message, pay.reason, pay.statusReason,
-    pay.rejectionReason, pay.failureReason, pay.description, pay.detail,
-    pay.message, (pay.error as Record<string, unknown> | undefined)?.message,
-  ];
-  for (const c of candidatos) {
-    const s = String(c ?? "").trim();
-    // Evita ecoar o próprio status como se fosse explicação.
-    if (s && s.length > 2 && s.toUpperCase() !== String(pay.status ?? "").toUpperCase()) {
-      return s.slice(0, 300);
-    }
-  }
-  return null;
+  return lerRecusaBtg(pay)?.motivo ?? null;
 }
+
 
 // ─── Efeitos ─────────────────────────────────────────────────
 /**
