@@ -55,6 +55,7 @@ interface AdquirenteConfig {
   cielo_last_healthcheck_at?: string | null;
   cielo_last_healthcheck_status?: string | null;
   cielo_last_healthcheck_message?: string | null;
+  cielo_hmac_key?: string | null;
 }
 
 interface EditForm {
@@ -69,6 +70,7 @@ interface EditForm {
   cielo_estabelecimento_matriz: string;
   cielo_documento: string;
   cielo_pvs: string[];
+  cielo_hmac_key: string;
   ativo: boolean;
 }
 
@@ -365,6 +367,8 @@ function CieloFields({
   config,
   form,
   testing,
+  chaveVisivel,
+  onToggleChave,
   onUpdateForm,
   onUpdatePvs,
   onTest,
@@ -372,6 +376,8 @@ function CieloFields({
   config: AdquirenteConfig;
   form: EditForm;
   testing: string | null;
+  chaveVisivel: boolean;
+  onToggleChave: () => void;
   onUpdateForm: (id: string, field: string, value: string | boolean) => void;
   onUpdatePvs: (next: string[]) => void;
   onTest: () => void;
@@ -420,6 +426,27 @@ function CieloFields({
           <p className="text-[10px] text-muted-foreground">Enviado como DocumentNumber nas chamadas da API EXTC.</p>
         </div>
 
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium">Chave da API (HMAC) do estabelecimento raiz</Label>
+          <div className="flex gap-1">
+            <Input
+              type={chaveVisivel ? "text" : "password"}
+              value={form.cielo_hmac_key}
+              onChange={e => onUpdateForm(configId, "cielo_hmac_key", e.target.value)}
+              className="font-mono text-sm"
+              placeholder="Cole a chave do portal da Cielo"
+            />
+            <Button variant="ghost" size="icon" className="shrink-0" onClick={onToggleChave}>
+              {chaveVisivel ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Assina as chamadas da API EXTC (header <code>X-Signature</code>). É por estabelecimento
+            raiz — lojas que compartilham a mesma matriz de extrato recebem a chave automaticamente
+            ao salvar. Se ficar em branco, a integração usa o secret <code>CIELO_HMAC_KEY</code>.
+          </p>
+        </div>
+
         <CieloPvsManager
           configId={configId}
           pvs={form.cielo_pvs || []}
@@ -430,10 +457,10 @@ function CieloFields({
       <div className="rounded-md border bg-muted/30 p-3 space-y-1.5">
         <p className="text-xs font-medium">Credenciais da API EXTC</p>
         <p className="text-[10px] text-muted-foreground">
-          <code>CIELO_CLIENT_ID</code>, <code>CIELO_CLIENT_SECRET</code>,{" "}
-          <code>CIELO_MTLS_CERT</code> e <code>CIELO_MTLS_KEY</code> são secrets do projeto e valem
-          para todas as lojas — não ficam nesta tela. Os campos acima também não variam entre
-          sandbox e produção: a matriz de extrato é a mesma nos dois ambientes.
+          <code>CIELO_CLIENT_ID</code> e <code>CIELO_CLIENT_SECRET</code> são secrets do projeto e
+          valem para todas as lojas — não ficam nesta tela. Só a chave HMAC é por estabelecimento
+          raiz. Os campos acima também não variam entre sandbox e produção: a matriz de extrato é a
+          mesma nos dois ambientes.
         </p>
       </div>
 
@@ -502,6 +529,7 @@ export default function AdminAdquirentesPage() {
           cielo_estabelecimento_matriz: r.cielo_estabelecimento_matriz || "",
           cielo_documento: r.cielo_documento || "",
           cielo_pvs: Array.isArray(r.cielo_pvs) ? r.cielo_pvs : [],
+          cielo_hmac_key: r.cielo_hmac_key || "",
           ativo: r.ativo,
         };
       });
@@ -533,6 +561,7 @@ export default function AdminAdquirentesPage() {
         cielo_estabelecimento_matriz: form.cielo_estabelecimento_matriz || null,
         cielo_documento: form.cielo_documento || null,
         cielo_pvs: form.cielo_pvs || [],
+        cielo_hmac_key: form.cielo_hmac_key || null,
         ativo: form.ativo,
       } as any)
       .eq("id", config.id);
@@ -851,6 +880,7 @@ export default function AdminAdquirentesPage() {
     return form.ambiente !== config.ambiente
       || form.cielo_estabelecimento_matriz !== (config.cielo_estabelecimento_matriz || "")
       || form.cielo_documento !== (config.cielo_documento || "")
+      || form.cielo_hmac_key !== (config.cielo_hmac_key || "")
       || cieloPvsChanged
       || form.merchant_id !== (config.merchant_id || "")
       || form.merchant_id_production !== (config.merchant_id_production || "")
@@ -940,6 +970,8 @@ export default function AdminAdquirentesPage() {
           config={config}
           form={form}
           testing={testing}
+          chaveVisivel={Boolean(showKeys[`${config.id}-cielo-hmac`])}
+          onToggleChave={() => setShowKeys(prev => ({ ...prev, [`${config.id}-cielo-hmac`]: !prev[`${config.id}-cielo-hmac`] }))}
           onUpdateForm={updateForm}
           onUpdatePvs={(next) => setEditForms(prev => ({ ...prev, [config.id]: { ...prev[config.id], cielo_pvs: next } }))}
           onTest={() => handleTestCielo(config, ambiente)}

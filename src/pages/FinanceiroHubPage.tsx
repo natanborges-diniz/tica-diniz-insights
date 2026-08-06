@@ -124,6 +124,9 @@ export default function FinanceiroHubPage() {
   const [borderoDetalheId, setBorderoDetalheId] = useState<string | null>(null);
   /** Data em edição no detalhe do borderô — vazio = mostrando a atual. */
   const [novaDataBordero, setNovaDataBordero] = useState("");
+  /** Confirmação de que o lote foi cancelado/expirou no BTG, antes de refazer. */
+  const [confirmouBanco, setConfirmouBanco] = useState(false);
+  const [motivoRefazer, setMotivoRefazer] = useState("");
   const [borderoBloqueio, setBorderoBloqueio] = useState<BorderoBloqueioPayload | null>(null);
 
   const [activeTab, setActiveTab] = useState("contas-pagar");
@@ -275,6 +278,12 @@ export default function FinanceiroHubPage() {
         return;
       case "ENCERRAR_BORDERO":
         encerrarBorderoMutation.mutate(borderoId);
+        return;
+      case "REFAZER_BORDERO":
+        // A confirmação de que o lote morreu no banco não cabe num clique —
+        // mora no detalhe, junto do texto que explica o risco.
+        setActiveTab("borderos");
+        setBorderoDetalheId(borderoId);
         return;
       case "AJUSTAR_DATA":
         // Abre o detalhe, onde fica o campo de data. Não ajustamos sozinhos: a
@@ -470,6 +479,31 @@ export default function FinanceiroHubPage() {
   // Borderô cujos títulos saíram por fora — débito automático, ou alguém pagou
   // no app. Encerrar fecha a casca sem tocar nos títulos, que já estão baixados
   // com o valor e a data reais do ERP.
+  // Lote enviado que o master não autorizou e cuja data venceu. A data não pode
+  // mais ser mudada (está no lote do BTG) e os títulos não voltam sozinhos.
+  // Refazer devolve os que continuam em trânsito e cancela o borderô, para
+  // montar outro com data nova.
+  const refazerBorderoMutation = useMutation({
+    mutationFn: (borderoId: string) => invokeAction("refazer_bordero", {
+      bordero_id: borderoId,
+      confirmado_no_banco: confirmouBanco,
+      motivo: motivoRefazer.trim(),
+    }),
+    onSuccess: (r: { ok?: boolean; error?: string; mensagem?: string }) => {
+      if (r?.ok === false) {
+        toast.error(r.error || "Não foi possível refazer o borderô");
+        return;
+      }
+      toast.success(r?.mensagem || "Títulos devolvidos ao preparo");
+      setBorderoDetalheId(null);
+      setConfirmouBanco(false);
+      setMotivoRefazer("");
+      setActiveTab("contas-pagar");
+      invalidateAll();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const encerrarBorderoMutation = useMutation({
     mutationFn: (borderoId: string) => invokeAction("encerrar_bordero", { bordero_id: borderoId }),
     onSuccess: (r: { ok?: boolean; error?: string; mensagem?: string; pendentes?: Array<{ descricao: string }> }) => {
@@ -1243,6 +1277,54 @@ export default function FinanceiroHubPage() {
                       <p className="text-xs text-muted-foreground flex-1">
                         Só antes do envio. Depois de enviado a data está com o banco.
                       </p>
+                    </div>
+                  )}
+
+                  {/* Lote no banco que não foi autorizado. Sem isto o borderô
+                      ficava sem saída: a data não é editável depois do envio e
+                      os títulos não voltam sozinhos. */}
+                  {borderoDetalhe.bordero.status === "ENVIADO" && comp.pendentes > 0 && (
+                    <div className="w-full pt-2 border-t space-y-2">
+                      <p className="text-xs font-medium">
+                        O lote não foi autorizado no BTG e você quer refazer com outra data?
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        A data já está no lote do banco e não pode ser alterada por aqui. Para refazer,
+                        os {comp.pendentes} título(s) em trânsito voltam ao preparo e este borderô é
+                        cancelado — aí você monta outro com a data correta.
+                      </p>
+                      <label className="flex items-start gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-3.5 w-3.5"
+                          checked={confirmouBanco}
+                          onChange={(e) => setConfirmouBanco(e.target.checked)}
+                        />
+                        <span className="text-destructive">
+                          Confirmo que o lote foi cancelado ou expirou no app do BTG. Se ele ainda
+                          estiver ativo e o master autorizar depois, estes títulos serão pagos duas
+                          vezes — e Pix não volta.
+                        </span>
+                      </label>
+                      <Input
+                        className="h-8 text-xs"
+                        placeholder="O que aconteceu no banco? (mín. 10 caracteres)"
+                        value={motivoRefazer}
+                        onChange={(e) => setMotivoRefazer(e.target.value)}
+                      />
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-8"
+                        disabled={
+                          !confirmouBanco ||
+                          motivoRefazer.trim().length < 10 ||
+                          refazerBorderoMutation.isPending
+                        }
+                        onClick={() => refazerBorderoMutation.mutate(borderoDetalhe.bordero.id)}
+                      >
+                        Devolver ao preparo e cancelar este borderô
+                      </Button>
                     </div>
                   )}
 

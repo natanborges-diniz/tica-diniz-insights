@@ -161,12 +161,18 @@ function paraBase64(buf: ArrayBuffer): string {
   return btoa(bin);
 }
 
-/** Assina exatamente a string recebida — nunca um objeto reserializado. */
-async function assinarHmac(corpo: string): Promise<string> {
-  const chave = Deno.env.get("CIELO_HMAC_KEY");
+/**
+ * Assina exatamente a string recebida — nunca um objeto reserializado.
+ *
+ * A chave pode vir por estabelecimento (o portal da Cielo expoe uma "chave da
+ * API" por estabelecimento master) ou ser unica para o grupo. Quando o chamador
+ * manda `chaveEstabelecimento`, ela vence; senao cai no secret global.
+ */
+async function assinarHmac(corpo: string, chaveEstabelecimento?: string): Promise<string> {
+  const chave = chaveEstabelecimento?.trim() || Deno.env.get("CIELO_HMAC_KEY");
   if (!chave) {
     const err = new Error(
-      "CIELO_HMAC_KEY nao configurada. A API do Extrato Eletronico exige o header X-Signature.",
+      "Nenhuma chave HMAC disponivel: preencha a chave da API na loja (Admin > Adquirentes) ou configure o secret CIELO_HMAC_KEY.",
     ) as Error & { code?: string };
     err.code = "HMAC_AUSENTE";
     throw err;
@@ -198,6 +204,8 @@ interface ParamsLink {
   processType: ProcessType;
   startDate: string;
   endDate: string;
+  /** Chave HMAC do estabelecimento. Ausente = usa o secret global. */
+  hmacKey?: string;
 }
 
 async function gerarLinks(p: ParamsLink): Promise<unknown> {
@@ -219,7 +227,7 @@ async function gerarLinks(p: ParamsLink): Promise<unknown> {
     endDate: p.endDate,
   });
 
-  const assinatura = await assinarHmac(corpo);
+  const assinatura = await assinarHmac(corpo, p.hmacKey);
   const url = `${AMBIENTES[p.ambiente].host}${Deno.env.get("CIELO_EXTC_LINK_PATH") || LINK_PATH_PADRAO}`;
 
   console.log(`[cielo-extc] POST ${url} merchant=${p.merchantCode} fileType=${fileType}`);
@@ -356,6 +364,7 @@ serve(async (req) => {
           processType: (body.process_type as ProcessType) || "D",
           startDate: String(body.start_date || body.data || hoje),
           endDate: String(body.end_date || body.data || hoje),
+          hmacKey: body.hmac_key ? String(body.hmac_key) : undefined,
         });
         break;
       }
@@ -378,6 +387,7 @@ serve(async (req) => {
           processType: (body.process_type as ProcessType) || "D",
           startDate: String(body.start_date || dataRef),
           endDate: String(body.end_date || dataRef),
+          hmacKey: body.hmac_key ? String(body.hmac_key) : undefined,
         });
 
         const links = extrairLinks(payload);
@@ -422,7 +432,8 @@ serve(async (req) => {
           link_path: Deno.env.get("CIELO_EXTC_LINK_PATH") || LINK_PATH_PADRAO,
           tem_client_id: Boolean(Deno.env.get("CIELO_CLIENT_ID")),
           tem_client_secret: Boolean(Deno.env.get("CIELO_CLIENT_SECRET")),
-          tem_hmac_key: Boolean(Deno.env.get("CIELO_HMAC_KEY")),
+          tem_hmac_key_global: Boolean(Deno.env.get("CIELO_HMAC_KEY")),
+          nota_hmac: "A chave tambem pode ser preenchida por loja em Admin > Adquirentes; quando presente, ela vence sobre o secret global.",
           hmac_algo: Deno.env.get("CIELO_HMAC_ALGO") || "SHA-256 (padrao)",
           hmac_encoding: Deno.env.get("CIELO_HMAC_ENCODING") || "hex (padrao)",
           mtls_em_uso: Boolean(mtls.client),

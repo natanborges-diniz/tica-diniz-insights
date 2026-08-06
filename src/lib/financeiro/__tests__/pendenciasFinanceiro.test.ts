@@ -306,3 +306,23 @@ describe('data vencida antes do envio', () => {
     expect(p?.acao_sistema).toBe('ENVIAR_BORDERO');
   });
 });
+
+describe('lote enviado que não foi autorizado — a saída de refazer', () => {
+  it('depois do primeiro dia, oferece refazer além de consultar o banco', () => {
+    // Sem essa segunda saída o operador chegava ao borderô e não encontrava
+    // nada para clicar: a data não é editável depois do envio.
+    const p = pendenciaDoBordero(bordero(), HOJE);
+    expect(p?.acao_sistema).toBe('ATUALIZAR_RETORNO');
+    expect(p?.acao_secundaria).toBe('REFAZER_BORDERO');
+    expect(p?.acao_secundaria_rotulo).toContain('Refazer com nova data');
+  });
+
+  it('no mesmo dia do envio não oferece refazer — ainda pode ser autorizado', () => {
+    const p = pendenciaDoBordero(
+      bordero({ data_pagamento: HOJE, composicao: comp({ proxima_data: HOJE }) }),
+      HOJE,
+    );
+    expect(p?.acao_sistema).toBe('ATUALIZAR_RETORNO');
+    expect(p?.acao_secundaria).toBeUndefined();
+  });
+});

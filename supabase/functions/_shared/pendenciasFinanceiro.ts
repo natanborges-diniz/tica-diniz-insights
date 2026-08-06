@@ -50,6 +50,7 @@ export type Local = "SISTEMA" | "BANCO";
  * pronta e ninguém ter olhado.
  */
 export type AcaoSistema =
+  | "REFAZER_BORDERO"
   | "ENCERRAR_BORDERO"
   | "AJUSTAR_DATA"
   | "ENVIAR_BORDERO"
@@ -97,6 +98,16 @@ export interface Pendencia {
   acao_sistema?: AcaoSistema;
   /** Rótulo do botão. */
   acao_rotulo?: string;
+  /**
+   * Segunda saída, quando a primeira não resolve.
+   *
+   * Existe por um caso concreto: lote enviado que o master não autorizou e cuja
+   * data venceu. Consultar o banco é o primeiro passo, mas se o lote morreu lá,
+   * é preciso refazer — e sem esse segundo botão o operador chegava ao borderô
+   * e não encontrava nada para clicar.
+   */
+  acao_secundaria?: AcaoSistema;
+  acao_secundaria_rotulo?: string;
 }
 
 /** Diferença em dias entre duas datas yyyy-MM-dd, sem passar por fuso. */
@@ -211,6 +222,12 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
       // acontecido e o sistema ainda não ter buscado o retorno.
       acao_sistema: "ATUALIZAR_RETORNO",
       acao_rotulo: "Consultar o banco agora",
+      ...(dias > 0
+        ? {
+          acao_secundaria: "REFAZER_BORDERO" as const,
+          acao_secundaria_rotulo: "Não foi autorizado? Refazer com nova data",
+        }
+        : {}),
     };
   }
 

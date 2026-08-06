@@ -35,6 +35,8 @@ interface CieloConfig {
   cielo_estabelecimento_matriz: string | null;
   cielo_pvs: string[] | null;
   cielo_documento: string | null;
+  /** Chave HMAC do estabelecimento raiz. Nula = usa o secret global. */
+  cielo_hmac_key: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -743,7 +745,7 @@ serve(async (req) => {
 
     const { data: configsRaw, error: errCfg } = await db
       .from("adquirentes_config")
-      .select("cod_empresa, ambiente, cielo_estabelecimento_matriz, cielo_pvs, cielo_documento")
+      .select("cod_empresa, ambiente, cielo_estabelecimento_matriz, cielo_pvs, cielo_documento, cielo_hmac_key")
       .eq("adquirente", "CIELO")
       .eq("ativo", true);
     if (errCfg) throw new Error(`Erro ao buscar configuracoes Cielo: ${errCfg.message}`);
@@ -811,6 +813,8 @@ serve(async (req) => {
             merchant_code: cfg.cielo_estabelecimento_matriz,
             estabelecimento_matriz: cfg.cielo_estabelecimento_matriz,
             documento: cfg.cielo_documento,
+            // Chave do estabelecimento raiz; ausente, o proxy usa o secret global.
+            hmac_key: cfg.cielo_hmac_key,
             data,
             start_date: data_inicio || data,
             end_date: data_fim || data,

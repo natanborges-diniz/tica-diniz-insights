@@ -108,6 +108,8 @@ Deno.serve(async (req) => {
         return await confirmarProcessamento(body, auth.userId);
 
       // ── Borderôs ──
+      case "refazer_bordero":
+        return await refazerBordero(body, auth.userId);
       case "encerrar_bordero":
         return await encerrarBordero(body, auth.userId);
       case "devolver_para_preparo":
@@ -1219,6 +1221,111 @@ async function encerrarBordero(body: Record<string, unknown>, userId: string) {
     status: "PROCESSADO",
     titulos_pagos: count ?? 0,
     mensagem: `Borderô encerrado. Os ${count ?? 0} título(s) permanecem baixados com o valor e a data do ERP.`,
+  });
+}
+
+
+/**
+ * Refaz um borderô que foi ao banco e não foi autorizado.
+ *
+ * O caso: lote enviado, data de pagamento venceu, o master não autorizou a
+ * tempo. A data não pode mais ser alterada (ela está no lote do BTG) e os
+ * títulos não voltam sozinhos — ficam PROCESSANDO para sempre. Não havia saída
+ * pela tela: só "abrir borderô", que não oferecia nada.
+ *
+ * Exige confirmação explícita de que o lote foi cancelado ou expirou no banco,
+ * porque nós não temos como verificar isso. Se o lote ainda estiver vivo e o
+ * master autorizar depois, os mesmos títulos num borderô novo viram pagamento em
+ * duplicidade — e Pix não volta. Por isso o operador afirma, e a afirmação fica
+ * registrada com o usuário e a data.
+ *
+ * Títulos já baixados não são tocados: parte do lote pode ter liquidado.
+ */
+async function refazerBordero(body: Record<string, unknown>, userId: string) {
+  await requireFinanceEdit(userId);
+  const id = String(body.bordero_id || "");
+  if (!id) throw new Error("bordero_id obrigatório");
+
+  const { data: bordero } = await supabase.from("borderos").select("*").eq("id", id).single();
+  if (!bordero) throw new Error("Borderô não encontrado");
+
+  if (String(bordero.status) !== "ENVIADO") {
+    return json({
+      ok: false,
+      code: "NAO_ENVIADO",
+      error: `Borderô em ${bordero.status}. Refazer serve para lote que já foi ao banco e não foi autorizado — ` +
+        `antes do envio, basta alterar a data.`,
+    });
+  }
+
+  if (body.confirmado_no_banco !== true) {
+    return json({
+      ok: false,
+      code: "CONFIRMACAO_OBRIGATORIA",
+      error: "Confirme no app do BTG que o lote foi cancelado ou expirou antes de refazer. " +
+        "Se ele ainda estiver ativo e o master autorizar depois, os títulos serão pagos duas vezes.",
+    });
+  }
+
+  const motivo = String(body.motivo ?? "").trim();
+  if (motivo.length < 10) {
+    return json({
+      ok: false,
+      code: "MOTIVO_OBRIGATORIO",
+      error: "Descreva o que aconteceu no banco (mínimo 10 caracteres) — fica registrado com seu usuário",
+    });
+  }
+
+  // Só o que continua em trânsito volta. O que o banco pagou fica pago.
+  const { data: pendentes } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id, descricao, dados_extras")
+    .eq("bordero_id", id)
+    .eq("status", "PROCESSANDO");
+
+  if (!pendentes || pendentes.length === 0) {
+    return json({
+      ok: false,
+      code: "NADA_EM_TRANSITO",
+      error: "Nenhum título em trânsito neste borderô — nada a refazer",
+    });
+  }
+
+  let devolvidos = 0;
+  for (const l of pendentes) {
+    const extras = (l.dados_extras || {}) as Record<string, unknown>;
+    const { error } = await supabase.from("lancamentos_financeiros").update({
+      // CLASSIFICADO, não PREVISTO: a conta do DRE e a forma de pagamento
+      // continuam válidas — o que falhou foi a autorização, não o preparo.
+      status: "CLASSIFICADO",
+      bordero_id: null,
+      autorizado_por: null,
+      autorizado_em: null,
+      observacao: `Lote não autorizado no BTG (${motivo}). Devolvido para novo borderô com data nova.`,
+      dados_extras: {
+        ...extras,
+        // Trilha do lote abandonado: se um dia aparecer baixa com este batch,
+        // dá para saber de onde veio.
+        btg_batch_abandonado: bordero.btg_batch_id ?? null,
+        btg_batch_id: null,
+      },
+    }).eq("id", l.id);
+    if (!error) devolvidos++;
+  }
+
+  await supabase.from("borderos").update({
+    status: "CANCELADO",
+    observacao: `Lote abandonado no BTG por ${motivo}. ${devolvidos} título(s) devolvidos ao preparo.`,
+    encerrado_por: userId,
+    encerrado_em: new Date().toISOString(),
+  }).eq("id", id);
+
+  console.log(`[financeiro-lancamentos] bordero ${id} refeito por ${userId}: ${devolvidos} devolvidos`);
+  return json({
+    ok: true,
+    devolvidos,
+    mensagem: `${devolvidos} título(s) de volta em Contas a Pagar. ` +
+      `Monte um novo borderô com a data correta — o borderô antigo foi cancelado.`,
   });
 }
 

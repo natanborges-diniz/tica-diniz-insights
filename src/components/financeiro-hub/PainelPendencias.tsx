@@ -227,6 +227,17 @@ export function PainelPendencias({ invokeAction, empresas, onAbrirBordero, onRes
                     {p.acao_rotulo}
                   </Button>
                 )}
+                {p.acao_secundaria && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={resolvendo}
+                    onClick={() => onResolver(p.acao_secundaria!, p.bordero_id)}
+                  >
+                    {p.acao_secundaria_rotulo}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="ghost"
