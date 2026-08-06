@@ -255,12 +255,27 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
               {(payType === "BANKSLIP" || payType === "DARF") && (
                 <div className="space-y-1">
                   <Label>{payType === "DARF" ? "Código de barras do DARF" : "Linha digitável / Código de barras"}</Label>
+                  {/* Pode colar com pontos, espaços e barras: guardamos só os
+                      dígitos e devolvemos a máscara do papel, para conferência. */}
                   <Input
-                    value={barcode}
-                    onChange={e => setBarcode(e.target.value)}
-                    placeholder={payType === "DARF" ? "Código de barras do tributo" : "Cole a linha digitável do boleto"}
+                    value={formatarLinhaDigitavel(barcode)}
+                    onChange={e => setBarcode(somenteDigitos(e.target.value))}
+                    inputMode="numeric"
+                    placeholder={payType === "DARF" ? "Código de barras do tributo" : "Cole a linha digitável do boleto (pontos e espaços são aceitos)"}
                     className="font-mono text-sm"
                   />
+                  {/* Retorno imediato: antes, linha errada só era barrada no envio ao banco. */}
+                  {diagBoleto.status === "ok" && (
+                    <p className="text-xs text-green-700">✓ {diagBoleto.mensagem}</p>
+                  )}
+                  {diagBoleto.status === "incompleto" && (
+                    <p className="text-xs text-muted-foreground">{diagBoleto.mensagem}</p>
+                  )}
+                  {diagBoleto.status === "invalido" && (
+                    <p className="text-xs text-destructive bg-destructive/5 border border-destructive/20 rounded-md p-2">
+                      Linha não confere — {diagBoleto.mensagem}
+                    </p>
+                  )}
                   {ehArrecadacao && (
                     <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md p-2">
                       Conta de concessionária (água, luz, gás ou tributo) — reconhecida pela linha
