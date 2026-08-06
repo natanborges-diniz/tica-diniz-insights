@@ -1440,6 +1440,7 @@ async function listarBorderos(body: Record<string, unknown>) {
         // A data que vale é a combinada com o banco; o vencimento é o fallback.
         data_prevista: (extras.btg_payment_date as string) ?? it.data_vencimento ?? null,
         motivo_recusa: (extras.btg_motivo_recusa as string) ?? null,
+        btg_status: (extras.btg_payment_status as string) ?? null,
       });
 
       porBordero.set(bid, lista);

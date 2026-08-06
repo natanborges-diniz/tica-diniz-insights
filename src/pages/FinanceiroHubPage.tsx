@@ -1239,6 +1239,8 @@ export default function FinanceiroHubPage() {
                     ?? l.data_vencimento,
                   motivo_recusa:
                     ((l.dados_extras || {}) as Record<string, unknown>).btg_motivo_recusa as string ?? null,
+                  btg_status:
+                    ((l.dados_extras || {}) as Record<string, unknown>).btg_payment_status as string ?? null,
                 })),
 
               );

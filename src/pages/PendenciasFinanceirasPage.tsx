@@ -48,15 +48,17 @@ const ICONE: Record<TipoPendencia, typeof Clock> = {
   MESA_PENDENTE: ShieldCheck,
   MONTAGEM_PARADA: AlertTriangle,
   RECUSADO: XCircle,
+  NAO_PROCESSADO: XCircle,
   PAGO_FORA: Archive,
 };
 
 const TITULO: Record<TipoPendencia, string> = {
-  AGUARDANDO_BANCO: "Sem autorização no BTG",
+  AGUARDANDO_BANCO: "Aguardando autorização no BTG",
   AGUARDANDO_ENVIO: "Falta enviar ao banco",
   MESA_PENDENTE: "Exceção na Mesa",
   MONTAGEM_PARADA: "Montagem parada",
   RECUSADO: "Recusado pelo banco",
+  NAO_PROCESSADO: "Não processado pelo banco",
   PAGO_FORA: "Pago fora do borderô",
 };
 
