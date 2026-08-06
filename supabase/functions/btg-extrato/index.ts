@@ -693,17 +693,47 @@ async function handleConciliar(body: Record<string, unknown>, userId: string) {
 }
 
 // ─── ACTION: resumo ─────────────────────────────────────────
-async function handleResumo(body: Record<string, unknown> | null, url: URL) {
+// ultima_data — última data de extrato importada por loja (banner de defasagem)
+async function handleUltimaData(userId: string) {
+  const admin = await isAdmin(userId);
+  const empresas = await getUserEmpresas(userId, admin);
+
+  const db = getServiceClient();
+  let query = db.from("btg_extrato").select("cod_empresa, data_lancamento");
+  if (!admin) query = query.in("cod_empresa", empresas);
+
+  const { data, error } = await query;
+  if (error) return json({ error: "Erro ao buscar última data", details: error.message }, 500);
+
+  const porLoja: Record<string, string> = {};
+  for (const row of (data || []) as Array<{ cod_empresa: number; data_lancamento: string }>) {
+    const k = String(row.cod_empresa);
+    const d = String(row.data_lancamento).slice(0, 10);
+    if (!porLoja[k] || d > porLoja[k]) porLoja[k] = d;
+  }
+  return json({ por_loja: porLoja });
+}
+
+async function handleResumo(body: Record<string, unknown> | null, url: URL, userId: string) {
   const codEmpresa = Number(getParam(body, url, "cod_empresa") || "0");
   const dataInicio = getParam(body, url, "data_inicio");
   const dataFim = getParam(body, url, "data_fim");
 
-  if (!codEmpresa) return json({ error: "cod_empresa obrigatório" }, 400);
+  const admin = await isAdmin(userId);
+  const permitidas = await getUserEmpresas(userId, admin);
 
   const db = getServiceClient();
-  let query = db.from("btg_extrato").select("*").eq("cod_empresa", codEmpresa);
+  let query = db.from("btg_extrato").select("*");
+  if (codEmpresa) {
+    if (!admin && !permitidas.includes(codEmpresa)) return json({ error: "Sem permissão" }, 403);
+    query = query.eq("cod_empresa", codEmpresa);
+  } else if (!admin) {
+    // Consolidado: apenas as lojas permitidas
+    query = query.in("cod_empresa", permitidas);
+  }
   if (dataInicio) query = query.gte("data_lancamento", dataInicio);
   if (dataFim) query = query.lte("data_lancamento", dataFim);
+
 
   const { data, error } = await query;
   if (error) return json({ error: "Erro ao buscar resumo", details: error.message }, 500);
