@@ -770,7 +770,7 @@ export default function FinanceiroHubPage() {
   const selectablePagar = lancamentos.filter(l => l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status));
   const previstosPagar = selectablePagar; // alias for backward compat
 
-  const totalPago = pagos.reduce((s, l) => s + Number(l.valor_pago ?? l.valor), 0);
+  const totalPago = pagosFiltrados.reduce((s, l) => s + Number(l.valor_pago ?? l.valor), 0);
   const toggleSelect = (id: string) => {
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
