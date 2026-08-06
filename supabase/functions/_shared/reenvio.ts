@@ -128,8 +128,23 @@ export function separarParaReenvio(itens: ItemParaReenvio[]): ResultadoReenvio {
  * a classificação. Sai do borderô antigo e perde a autorização, porque a
  * autorização é do lote que já foi.
  */
-export function estadoDeVolta(observacaoBanco?: string | null): Record<string, unknown> {
-  const motivo = String(observacaoBanco ?? "").trim();
+export function estadoDeVolta(
+  dadosExtras?: Record<string, unknown> | null,
+): Record<string, unknown> {
+  const extras = dadosExtras ?? {};
+  const motivo = String(extras.btg_motivo_recusa ?? extras.btg_payment_status ?? "").trim();
+  const historicoAnterior = Array.isArray(extras.btg_tentativas_anteriores)
+    ? extras.btg_tentativas_anteriores
+    : [];
+  const tentativaAnterior = {
+    payment_id: extras.btg_payment_id ?? null,
+    batch_id: extras.btg_batch_id ?? null,
+    external_id: extras.btg_external_id ?? null,
+    status: extras.btg_payment_status ?? null,
+    motivo_recusa: extras.btg_motivo_recusa ?? null,
+    codigo_recusa: extras.btg_recusa_codigo ?? null,
+    devolvida_ao_preparo_em: new Date().toISOString(),
+  };
   return {
     status: "CLASSIFICADO",
     bordero_id: null,
@@ -139,5 +154,24 @@ export function estadoDeVolta(observacaoBanco?: string | null): Record<string, u
     observacao: motivo
       ? `Devolvido ao preparo após recusa do banco (${motivo}). Monte um novo borderô.`
       : "Devolvido ao preparo após recusa do banco. Monte um novo borderô.",
+    // A resposta terminal pertence à tentativa antiga. Mantê-la nos campos
+    // correntes fazia o borderô novo nascer como RETURNED/FAILED antes mesmo de
+    // ser enviado. Guardamos a trilha e limpamos somente o estado operacional.
+    dados_extras: {
+      ...extras,
+      btg_tentativas_anteriores: [...historicoAnterior, tentativaAnterior],
+      btg_payment_id: null,
+      btg_batch_id: null,
+      btg_external_id: null,
+      btg_idempotency_key: null,
+      btg_payment_status: null,
+      btg_motivo_recusa: null,
+      btg_recusa_codigo: null,
+      btg_recusa_resolver: null,
+      btg_recusa_bruta: null,
+      btg_payment_response: null,
+      estorno_detectado_em: null,
+      estorno_extrato_id: null,
+    },
   };
 }

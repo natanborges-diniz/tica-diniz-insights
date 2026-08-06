@@ -99,12 +99,32 @@ describe('estadoDeVolta', () => {
   });
 
   it('guarda o motivo do banco na observação', () => {
-    const e = estadoDeVolta('invalid-account');
+    const e = estadoDeVolta({ btg_payment_status: 'FAILED', btg_motivo_recusa: 'invalid-account' });
     expect(String(e.observacao)).toContain('invalid-account');
     expect(String(e.observacao)).toContain('novo borderô');
   });
 
   it('sem motivo, a observação continua legível', () => {
     expect(String(estadoDeVolta(null).observacao)).toContain('Devolvido ao preparo');
+  });
+
+  it('arquiva a tentativa recusada e limpa o estado bancário do novo envio', () => {
+    const e = estadoDeVolta({
+      btg_payment_id: 'pay-antigo',
+      btg_batch_id: 'lote-antigo',
+      btg_payment_status: 'RETURNED',
+      btg_motivo_recusa: 'Pagamento devolvido',
+    });
+    const dados = e.dados_extras as Record<string, unknown>;
+    expect(dados.btg_payment_status).toBeNull();
+    expect(dados.btg_payment_id).toBeNull();
+    expect(dados.btg_batch_id).toBeNull();
+    expect(dados.btg_tentativas_anteriores).toEqual([
+      expect.objectContaining({
+        payment_id: 'pay-antigo',
+        batch_id: 'lote-antigo',
+        status: 'RETURNED',
+      }),
+    ]);
   });
 });
