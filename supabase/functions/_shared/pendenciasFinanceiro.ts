@@ -158,17 +158,27 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
 
   // Recusa do banco vem primeiro: é o único caso em que o dinheiro definitivamente
   // não saiu e ninguém vai tentar de novo sozinho.
+  //
+  // "Não processado" e "não autorizado" viraram coisas distintas aqui de
+  // propósito: o borderô de Carapicuíba tinha um boleto que o BTG marcou como
+  // FAILED e aparecia como "sem autorização no BTG" — o operador entrava no app
+  // do banco e não achava nada para autorizar. Se o banco recusou ou não
+  // processou, a saída é corrigir e refazer, não cobrar o master.
   if (c && c.rejeitados > 0) {
     const motivos = (c.motivos_recusa ?? []).filter(Boolean);
     const dias = b.data_pagamento ? Math.max(0, diasEntre(b.data_pagamento, hoje)) : 0;
+    const naoProcessados = c.nao_processados ?? 0;
+    const soNaoProcessado = naoProcessados > 0 && naoProcessados === c.rejeitados;
     return {
       ...base,
-      tipo: "RECUSADO",
+      tipo: soNaoProcessado ? "NAO_PROCESSADO" : "RECUSADO",
       severidade: "ALTA",
       dias_parado: dias,
       valor_pendente: 0, // o valor recusado está no detalhe do borderô
       qtd_pendente: c.rejeitados,
-      mensagem: `${c.rejeitados} pagamento(s) recusado(s) pelo banco${c.pagos > 0 ? ` · ${c.pagos} pago(s)` : ""}`,
+      mensagem: soNaoProcessado
+        ? `${naoProcessados} pagamento(s) que o banco não processou — não há nada para autorizar${c.pagos > 0 ? ` · ${c.pagos} pago(s)` : ""}`
+        : `${c.rejeitados} pagamento(s) recusado(s) pelo banco${c.pagos > 0 ? ` · ${c.pagos} pago(s)` : ""}`,
       // O motivo do banco vem no lugar do "veja no app do BTG": o retorno traz o
       // código (ex.: payment-amount-changed), então mandar o operador procurar
       // fora do sistema era descartar o que já sabíamos.
@@ -183,6 +193,7 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
       acao_rotulo: "Devolver ao preparo",
     };
   }
+
 
   // Nada a pagar num borderô que ainda não foi ao banco significa que o
   // pagamento aconteceu por fora — débito automático, ou alguém pagou no app do
