@@ -161,6 +161,14 @@ export function severidadePorDias(dias: number): Severidade {
   return "BAIXA";
 }
 
+/** R$ 1.234,56 — o valor por extenso, como o operador lê no extrato. */
+export function formatarReais(v: number): string {
+  return `R$ ${Number(v ?? 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 const rotulo = (b: BorderoParaPainel) =>
   b.descricao || `Borderô ${b.id.slice(0, 8).toUpperCase()}`;
 
