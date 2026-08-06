@@ -97,6 +97,43 @@ export default function PendenciasFinanceirasPage() {
   const { data, isLoading, isFetching, refetch } = usePendenciasFinanceiro(invokeAction);
   const recarregar = () => queryClient.invalidateQueries({ queryKey: CHAVE_PENDENCIAS });
 
+  /**
+   * Atualizar = olhar o sistema e o banco.
+   *
+   * Antes o botão só relia o próprio painel, então um lote já autorizado no app
+   * do BTG continuava listado até o cron de 30 minutos passar. Agora a consulta
+   * ao banco vem primeiro: o que o BTG já finalizou dá baixa e sai da lista.
+   */
+  const atualizarMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.functions.invoke("btg-poll-status", {
+        body: { action: "executar" },
+      });
+      if (error) throw error;
+      await refetch();
+    },
+    onSuccess: () => toast.success("Sistema e retorno do BTG atualizados"),
+    onError: async (e: Error) => {
+      // A consulta ao banco pode falhar (token, indisponibilidade) sem que o
+      // painel deva ficar velho — recarrega o que é nosso e avisa o resto.
+      await refetch();
+      toast.warning(`Painel atualizado, mas o BTG não respondeu: ${e.message}`);
+    },
+  });
+
+  const dispensarMutation = useMutation({
+    mutationFn: async ({ borderoId, motivo }: { borderoId: string; motivo: string }) =>
+      invokeAction("dispensar_pendencia", { bordero_id: borderoId, motivo: motivo || null }),
+    onSuccess: (r: { ok?: boolean; error?: string; mensagem?: string }) => {
+      if (r?.ok === false) { toast.error(r.error || "Não foi possível dispensar"); return; }
+      toast.success(r?.mensagem || "Aviso dispensado");
+      setDispensando(null);
+      setMotivo("");
+      recarregar();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const acaoMutation = useMutation({
     mutationFn: async ({ acao, borderoId }: { acao: AcaoSistema; borderoId: string }) => {
       if (acao === "ENVIAR_BORDERO") return invokeAction("enviar_bordero_btg", { bordero_id: borderoId });
