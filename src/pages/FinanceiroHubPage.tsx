@@ -37,7 +37,7 @@ import { NovoLancamentoDialog } from "@/components/financeiro-hub/NovoLancamento
 
 import { ClassificarLoteDialog } from "@/components/financeiro-hub/ClassificarLoteDialog";
 import { agoraSP } from "@/lib/datetime";
-import { estadoBordero, resumirComposicao, type ComposicaoBordero } from "../../supabase/functions/_shared/borderoEstado";
+import { estadoBordero, resumirComposicao, falhouNoBanco, type ComposicaoBordero } from "../../supabase/functions/_shared/borderoEstado";
 
 interface Lancamento {
   id: string;
@@ -1421,9 +1421,25 @@ export default function FinanceiroHubPage() {
               <TableBody>
                 {(borderoDetalhe?.lancamentos || []).map((l: Lancamento) => {
                   const payType = l.dados_extras?.btg_payment_type;
+                  // Título com problema no banco: devolvido, recusado ou não
+                  // processado. Sem o destaque, o operador abria o borderô e
+                  // tinha de adivinhar qual dos itens era o do alerta.
+                  const extras = (l.dados_extras || {}) as Record<string, unknown>;
+                  const motivoBanco = (extras.btg_motivo_recusa as string) || null;
+                  const statusBanco = (extras.btg_payment_status as string) || null;
+                  const comProblema =
+                    Boolean((l as unknown as { requer_validacao?: boolean }).requer_validacao) ||
+                    falhouNoBanco(statusBanco);
                   return (
-                    <TableRow key={l.id}>
-                      <TableCell className="text-sm">{l.descricao.toUpperCase()}</TableCell>
+                    <>
+                    <TableRow
+                      key={l.id}
+                      className={comProblema ? "bg-destructive/10 hover:bg-destructive/15" : undefined}
+                    >
+                      <TableCell className="text-sm font-medium">
+                        {comProblema && <span className="mr-1 text-destructive">⚠</span>}
+                        {l.descricao.toUpperCase()}
+                      </TableCell>
                       <TableCell className="text-sm">{l.pessoa_nome?.toUpperCase() || "—"}</TableCell>
                       <TableCell className="text-sm">{format(new Date(l.data_vencimento + "T12:00:00"), "dd/MM/yy")}</TableCell>
                       <TableCell className="text-sm text-right">{fmtCurrency(l.valor)}</TableCell>
@@ -1435,8 +1451,10 @@ export default function FinanceiroHubPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={STATUS_CONFIG[l.status]?.variant || "outline"}>
-                          {STATUS_CONFIG[l.status]?.label || l.status}
+                        <Badge variant={comProblema ? "destructive" : (STATUS_CONFIG[l.status]?.variant || "outline")}>
+                          {comProblema
+                            ? "Não pago pelo banco"
+                            : (STATUS_CONFIG[l.status]?.label || l.status)}
                         </Badge>
                       </TableCell>
                       {borderoDetalhe?.bordero?.status === "MONTAGEM" && (
