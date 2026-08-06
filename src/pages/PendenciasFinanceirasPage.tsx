@@ -121,12 +121,26 @@ export default function PendenciasFinanceirasPage() {
   const irParaBordero = (borderoId: string) =>
     navigate(`/financeiro/hub?bordero=${borderoId}`);
 
-  const resolver = (acao: AcaoSistema, borderoId: string) => {
-    if (["REFAZER_BORDERO", "AJUSTAR_DATA", "APROVAR_BORDERO", "ABRIR_BORDERO"].includes(acao)) {
-      irParaBordero(borderoId);
+  /**
+   * Liberar exceção é na Mesa, não no detalhe do borderô.
+   *
+   * Ao virar página, "Abrir a Mesa" passou a abrir o detalhe — que mostra os
+   * itens mas não deixa autorizar nada. A Mesa já aceita o borderô em foco por
+   * parâmetro, e é lá que o admin decide item a item.
+   */
+  const irParaMesa = (borderoId: string, codEmpresa: number) =>
+    navigate(`/financeiro/mesa?bordero=${borderoId}&empresa=${codEmpresa}`);
+
+  const resolver = (acao: AcaoSistema, p: Pendencia) => {
+    if (acao === "APROVAR_BORDERO") {
+      irParaMesa(p.bordero_id, p.cod_empresa);
       return;
     }
-    acaoMutation.mutate({ acao, borderoId });
+    if (["REFAZER_BORDERO", "AJUSTAR_DATA", "ABRIR_BORDERO"].includes(acao)) {
+      irParaBordero(p.bordero_id);
+      return;
+    }
+    acaoMutation.mutate({ acao, borderoId: p.bordero_id });
   };
 
   const nomeLoja = (cod: number) =>
@@ -251,7 +265,7 @@ function LinhaPendencia({
   p: Pendencia;
   loja: string;
   ocupado: boolean;
-  onResolver: (acao: AcaoSistema, id: string) => void;
+  onResolver: (acao: AcaoSistema, p: Pendencia) => void;
   onAbrir: (id: string) => void;
 }) {
   const Icone = ICONE[p.tipo] ?? Clock;
@@ -314,7 +328,7 @@ function LinhaPendencia({
               variant={noBanco || p.tipo === "PAGO_FORA" ? "outline" : "default"}
               className="h-7 text-xs"
               disabled={ocupado}
-              onClick={() => onResolver(p.acao_sistema!, p.bordero_id)}
+              onClick={() => onResolver(p.acao_sistema!, p)}
             >
               {p.acao_sistema === "ATUALIZAR_RETORNO" && <RefreshCw className="h-3 w-3 mr-1" />}
               {p.acao_sistema === "ENCERRAR_BORDERO" && <Archive className="h-3 w-3 mr-1" />}
@@ -328,7 +342,7 @@ function LinhaPendencia({
               variant="outline"
               className="h-7 text-xs"
               disabled={ocupado}
-              onClick={() => onResolver(p.acao_secundaria!, p.bordero_id)}
+              onClick={() => onResolver(p.acao_secundaria!, p)}
             >
               {p.acao_secundaria_rotulo}
             </Button>
