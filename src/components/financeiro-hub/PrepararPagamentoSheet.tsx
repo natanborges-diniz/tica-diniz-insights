@@ -82,9 +82,14 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
 
   const selectedType = PAYMENT_TYPES.find(t => t.value === payType);
 
+  // Diagnóstico da linha digitável — alimenta o retorno na tela e a liberação
+  // do salvar. Antes bastava "mais de 10 caracteres", e linha corrompida só era
+  // recusada quando o borderô ia ao banco.
+  const diagBoleto = diagnosticarBoleto(barcode);
+
   const isValid = () => {
     if (payType === "PIX_KEY") return pixKey.length > 3;
-    if (payType === "BANKSLIP" || payType === "DARF") return barcode.length > 10;
+    if (payType === "BANKSLIP" || payType === "DARF") return diagBoleto.status === "ok";
     // PIX_MANUAL e TED exigem o mesmo creditParty completo.
     if (payType === "TED" || payType === "PIX_MANUAL") {
       const doc = soDigitos(favDoc);
