@@ -1116,6 +1116,33 @@ export type Database = {
           },
         ]
       }
+      cielo_pvs_planilha: {
+        Row: {
+          cnpj: string
+          cod_empresa: number | null
+          em_operacao: boolean
+          estabelecimento: string
+          observacao: string | null
+          razao_social: string
+        }
+        Insert: {
+          cnpj: string
+          cod_empresa?: number | null
+          em_operacao?: boolean
+          estabelecimento: string
+          observacao?: string | null
+          razao_social: string
+        }
+        Update: {
+          cnpj?: string
+          cod_empresa?: number | null
+          em_operacao?: boolean
+          estabelecimento?: string
+          observacao?: string | null
+          razao_social?: string
+        }
+        Relationships: []
+      }
       cielo_urs: {
         Row: {
           agencia: string | null
