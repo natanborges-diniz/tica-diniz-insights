@@ -145,13 +145,15 @@ export default function BankingExtratoDashboard() {
 
   // Filtros persistidos — a consulta não volta em branco ao sair e retornar.
   const [filtros, setFiltros, limparFiltros] = useFiltrosPersistentes("extrato", {
-    codEmpresa: (codEmpresaDefault ?? 1) as number | null,
+    codEmpresa: (codEmpresaDefault && codEmpresaDefault > 0 ? codEmpresaDefault : null) as number | null,
     dataInicio: format(subDays(new Date(), 30), "yyyy-MM-dd"),
     dataFim: format(new Date(), "yyyy-MM-dd"),
     filtroTipo: "todos",
     filtroStatus: "todos",
   });
-  const { codEmpresa, dataInicio, dataFim, filtroTipo, filtroStatus } = filtros;
+  const { dataInicio, dataFim, filtroTipo, filtroStatus } = filtros;
+  // Empresa 0 = "todas" (código do admin) — nunca uma loja real.
+  const codEmpresa = filtros.codEmpresa && filtros.codEmpresa > 0 ? filtros.codEmpresa : null;
   const setCodEmpresa = (v: number | null) => setFiltros({ codEmpresa: v });
   const setDataInicio = (v: string) => setFiltros({ dataInicio: v });
   const setDataFim = (v: string) => setFiltros({ dataFim: v });
@@ -286,7 +288,7 @@ export default function BankingExtratoDashboard() {
 
   const { data: saldo } = useQuery<SaldoResponse | null>({
     queryKey: ["btg-saldo", codEmpresa],
-    enabled: !consolidado,
+    enabled: !consolidado && !!codEmpresa,
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
         body: { action: "saldo", cod_empresa: codEmpresa },
