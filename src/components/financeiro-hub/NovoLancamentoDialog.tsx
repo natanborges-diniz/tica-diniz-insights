@@ -300,7 +300,23 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Código de barras</Label>
-                <Input value={barcode} onChange={e => setBarcode(e.target.value)} placeholder="Linha digitável" />
+                {/* Aceita colar com pontos e espaços; guardamos só os dígitos. */}
+                <Input
+                  value={formatarLinhaDigitavel(barcode)}
+                  onChange={e => setBarcode(somenteDigitos(e.target.value))}
+                  inputMode="numeric"
+                  className="font-mono text-sm"
+                  placeholder="Linha digitável"
+                />
+                {diagBoleto.status === "ok" && (
+                  <p className="text-xs text-green-700">✓ {diagBoleto.mensagem}</p>
+                )}
+                {diagBoleto.status === "incompleto" && (
+                  <p className="text-xs text-muted-foreground">{diagBoleto.mensagem}</p>
+                )}
+                {diagBoleto.status === "invalido" && (
+                  <p className="text-xs text-destructive">Linha não confere — {diagBoleto.mensagem}</p>
+                )}
               </div>
             </div>
           </div>
