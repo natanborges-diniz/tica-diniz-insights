@@ -347,7 +347,9 @@ export default function FolhaPagamentoPage() {
       }
       setImportOpen(false);
       setPlanilha("");
+      setComplementar(false);
       setExcluidos(new Set());
+
       queryClient.invalidateQueries({ queryKey: ["folha"] });
     },
     onError: (e: Error) => toast.error(e.message),
