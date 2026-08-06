@@ -64,6 +64,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from '@/hooks/use-toast';
 import { AlertTriangle, ChevronLeft, ChevronRight, Download, Save, Package, Plus, X } from 'lucide-react';
+import { SearchField } from '@/components/system/SearchField';
+import { filtrarPorBusca } from '@/lib/busca';
 
 // ── Tipos internos ────────────────────────────────────────────────────────────
 
@@ -465,6 +467,7 @@ export default function PlanoMensalPage() {
 
   // Manual SKU state
   const [manualSkus, setManualSkus] = useState<ManualSkuInput[]>([]);
+  const [buscaPlano, setBuscaPlano] = useState('');
   const [modalManualAberto, setModalManualAberto] = useState(false);
   const [modalManualMarca, setModalManualMarca] = useState('');
   const [novoSkuDescricao, setNovoSkuDescricao] = useState('');
@@ -1165,24 +1168,45 @@ export default function PlanoMensalPage() {
         <div className="space-y-4">
           <AlertaEstouro totalMix={totalMixIdeal} capacidade={capacidadeTotal} />
 
+          <SearchField
+            value={buscaPlano}
+            onChange={setBuscaPlano}
+            placeholder="Buscar fornecedor ou marca..."
+            className="max-w-md"
+            resultados={filtrarPorBusca(gruposFornecedorComManuais, buscaPlano, (g) => [g.fornecedor, ...g.marcas.map(m => m.marca)]).length}
+          />
+
           {/* Compras agrupadas por fornecedor */}
-          {gruposFornecedorComManuais.some(g => g.totalLacuna > 0 || g.marcas.some(m => m.mixTotal > 0)) ? (
-            gruposFornecedorComManuais.map(g => (
-              <GrupoFornecedorCompra
-                key={g.fornecedor}
-                grupo={g}
-                onAdicionarManual={abrirModalManual}
-                onRemoverManual={removerManual}
-                onAtualizarManualQtd={atualizarManualQtd}
-              />
-            ))
-          ) : (
-            <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">
-                Nenhuma compra necessária com o estoque atual.
-              </CardContent>
-            </Card>
-          )}
+          {(() => {
+            const gruposFiltrados = filtrarPorBusca(gruposFornecedorComManuais, buscaPlano, (g) => [g.fornecedor, ...g.marcas.map(m => m.marca)]);
+            if (buscaPlano && gruposFiltrados.length === 0) {
+              return (
+                <Card>
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    Nenhum resultado para "{buscaPlano}"
+                  </CardContent>
+                </Card>
+              );
+            }
+            if (gruposFornecedorComManuais.some(g => g.totalLacuna > 0 || g.marcas.some(m => m.mixTotal > 0))) {
+              return gruposFiltrados.map(g => (
+                <GrupoFornecedorCompra
+                  key={g.fornecedor}
+                  grupo={g}
+                  onAdicionarManual={abrirModalManual}
+                  onRemoverManual={removerManual}
+                  onAtualizarManualQtd={atualizarManualQtd}
+                />
+              ));
+            }
+            return (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  Nenhuma compra necessária com o estoque atual.
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Liquidação */}
           <Card>

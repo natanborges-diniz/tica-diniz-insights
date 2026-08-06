@@ -51,6 +51,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { BaseDialog } from '@/components/system/BaseDialog';
+import { SearchField } from '@/components/system/SearchField';
+import { filtrarPorBusca } from '@/lib/busca';
 import { useToast } from '@/hooks/use-toast';
 import { ChevronLeft, ChevronRight, Download, Eye } from 'lucide-react';
 
@@ -176,6 +178,7 @@ export default function PlanoHistoricoPage() {
   const [page, setPage] = useState(0);
   const [verOpen, setVerOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<PlanoHistoricoRow | null>(null);
+  const [busca, setBusca] = useState('');
 
   const nomeEmpresaSelecionada = useMemo(
     () => empresas.find(e => e.codEmpresa === empresaId)?.nome ?? (empresaId ? `Loja ${empresaId}` : ''),
@@ -184,7 +187,7 @@ export default function PlanoHistoricoPage() {
 
   // ── Query paginada ──────────────────────────────────────────────────────────
 
-  const { data: rows = [], isLoading, isFetching } = useQuery({
+  const { data: rowsRaw = [], isLoading, isFetching } = useQuery({
     queryKey: ['plano_compra_historico', empresaId, page],
     queryFn: async () => {
       if (!empresaId) return [];
@@ -201,6 +204,12 @@ export default function PlanoHistoricoPage() {
     enabled: !!empresaId,
     staleTime: 2 * 60 * 1000,
   });
+
+  const rows = useMemo(() => filtrarPorBusca(rowsRaw, busca, (row) => [
+    empresas.find(e => e.codEmpresa === row.cod_empresa)?.nome ?? `Loja ${row.cod_empresa}`,
+    new Date(row.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }),
+    row.total_sugerido, row.total_final,
+  ]), [rowsRaw, busca, empresas]);
 
   // ── Exportação a partir do histórico ───────────────────────────────────────
 
@@ -311,6 +320,17 @@ export default function PlanoHistoricoPage() {
           </Select>
         </div>
 
+        {/* Busca */}
+        {empresaId && (
+          <SearchField
+            value={busca}
+            onChange={setBusca}
+            placeholder="Buscar loja, data, sugerido, final..."
+            className="max-w-md mb-4"
+            resultados={rows.length}
+          />
+        )}
+
         {/* Tabela */}
         <Card>
           <CardContent className="p-0">
@@ -344,7 +364,7 @@ export default function PlanoHistoricoPage() {
                 {empresaId && !isLoading && rows.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
-                      Nenhum plano salvo para esta loja.
+                      {busca ? `Nenhum resultado para "${busca}"` : 'Nenhum plano salvo para esta loja.'}
                     </TableCell>
                   </TableRow>
                 )}
