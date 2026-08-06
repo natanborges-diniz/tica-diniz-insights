@@ -21,6 +21,7 @@ export type Database = {
           ativo: boolean
           cielo_documento: string | null
           cielo_estabelecimento_matriz: string | null
+          cielo_hmac_key: string | null
           cielo_last_healthcheck_at: string | null
           cielo_last_healthcheck_message: string | null
           cielo_last_healthcheck_status: string | null
@@ -54,6 +55,7 @@ export type Database = {
           ativo?: boolean
           cielo_documento?: string | null
           cielo_estabelecimento_matriz?: string | null
+          cielo_hmac_key?: string | null
           cielo_last_healthcheck_at?: string | null
           cielo_last_healthcheck_message?: string | null
           cielo_last_healthcheck_status?: string | null
@@ -87,6 +89,7 @@ export type Database = {
           ativo?: boolean
           cielo_documento?: string | null
           cielo_estabelecimento_matriz?: string | null
+          cielo_hmac_key?: string | null
           cielo_last_healthcheck_at?: string | null
           cielo_last_healthcheck_message?: string | null
           cielo_last_healthcheck_status?: string | null
