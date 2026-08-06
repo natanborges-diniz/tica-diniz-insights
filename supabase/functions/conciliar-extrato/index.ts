@@ -26,6 +26,13 @@ import {
   type CandidatoForte,
   type Alocacao,
 } from "../_shared/conciliacaoMotor.ts";
+import {
+  ehDevolucao,
+  acharDebitoEstornado,
+  falhaFinalDoBanco,
+  type LinhaExtrato,
+} from "../_shared/estornoExtrato.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
