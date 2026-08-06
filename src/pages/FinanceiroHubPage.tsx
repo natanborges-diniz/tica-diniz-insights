@@ -1431,7 +1431,6 @@ export default function FinanceiroHubPage() {
                     Boolean((l as unknown as { requer_validacao?: boolean }).requer_validacao) ||
                     falhouNoBanco(statusBanco);
                   return (
-                    <>
                     <TableRow
                       key={l.id}
                       className={comProblema ? "bg-destructive/10 hover:bg-destructive/15" : undefined}
@@ -1439,6 +1438,12 @@ export default function FinanceiroHubPage() {
                       <TableCell className="text-sm font-medium">
                         {comProblema && <span className="mr-1 text-destructive">⚠</span>}
                         {l.descricao.toUpperCase()}
+                        {comProblema && (
+                          <span className="block text-xs font-normal text-destructive">
+                            {motivoBanco
+                              || `O banco não processou o pagamento (${String(statusBanco || "").toUpperCase()})`}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm">{l.pessoa_nome?.toUpperCase() || "—"}</TableCell>
                       <TableCell className="text-sm">{format(new Date(l.data_vencimento + "T12:00:00"), "dd/MM/yy")}</TableCell>
