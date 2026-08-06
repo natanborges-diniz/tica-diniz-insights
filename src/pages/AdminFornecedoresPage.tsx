@@ -25,6 +25,8 @@ import {
   Building2, Globe, KeyRound, CheckCircle2, AlertCircle, Settings2, Trash2,
 } from "lucide-react";
 import { Navigate } from "react-router-dom";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 
 // ─────────────────────────────────────────
 // Types
@@ -1105,6 +1107,11 @@ function EmpresasTable({
   onDelete: (config: EmpresaConfig) => void;
   isChanged: (config: EmpresaConfig) => boolean;
 }) {
+  const [busca, setBusca] = useState("");
+  const configsFiltradas = filtrarPorBusca(configs, busca, (c) => [
+    c.alias, c.cnpj, c.cod_cliente_hoya, c.cod_empresa,
+  ]);
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-4">
@@ -1132,9 +1139,18 @@ function EmpresasTable({
             Associe o CNPJ e o código de cliente {fornecedorName} para cada unidade. O alias é usado nos pedidos.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <SearchField
+            value={busca}
+            onChange={setBusca}
+            placeholder="Buscar por loja, CNPJ ou código..."
+            className="max-w-sm"
+            resultados={configsFiltradas.length}
+          />
           {loading ? (
             <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+          ) : configsFiltradas.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma empresa encontrada para a busca.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -1148,7 +1164,7 @@ function EmpresasTable({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {configs.map((config) => {
+                {configsFiltradas.map((config) => {
                   const row = editing[config.id] || { cnpj: "", cod_cliente_hoya: "", alias: "" };
                   const changed = isChanged(config);
                   const isSaving = saving === config.id;
