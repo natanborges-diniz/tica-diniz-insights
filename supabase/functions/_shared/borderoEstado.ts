@@ -28,6 +28,13 @@ export interface ItemBordero {
    * que o banco disse manda: falhou é falhou.
    */
   btg_status?: string | null;
+  /**
+   * Valor do título, para somar o que o banco não pagou.
+   *
+   * Existe porque "1 pagamento devolvido" não diz quanto voltou — e quem cobra
+   * o fornecedor precisa do valor, não da contagem.
+   */
+  valor?: number | null;
 }
 
 /**
