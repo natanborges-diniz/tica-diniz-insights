@@ -1017,7 +1017,7 @@ async function painelPendencias(body: Record<string, unknown>) {
   // e é o que permite distinguir "agendado" de "parado".
   const { data: itens } = await supabase
     .from("lancamentos_financeiros")
-    .select("bordero_id, status, requer_validacao, data_vencimento, dados_extras")
+    .select("bordero_id, status, requer_validacao, valor, data_vencimento, dados_extras")
     .in("bordero_id", borderos.map((b) => b.id));
 
   const porBordero = new Map<string, ItemBordero[]>();
@@ -1034,6 +1034,7 @@ async function painelPendencias(body: Record<string, unknown>) {
       // O que o banco respondeu por último: é o que separa "não processado" de
       // "esperando autorização do master".
       btg_status: (extras.btg_payment_status as string) ?? null,
+      valor: Number(it.valor ?? 0),
     });
 
 
@@ -1497,7 +1498,7 @@ async function listarBorderos(body: Record<string, unknown>) {
   if (ids.length > 0) {
     const { data: itens } = await supabase
       .from("lancamentos_financeiros")
-      .select("bordero_id, status, requer_validacao, data_vencimento, dados_extras")
+      .select("bordero_id, status, requer_validacao, valor, data_vencimento, dados_extras")
       .in("bordero_id", ids);
 
     const porBordero = new Map<string, ItemBordero[]>();
@@ -1512,6 +1513,7 @@ async function listarBorderos(body: Record<string, unknown>) {
         data_prevista: (extras.btg_payment_date as string) ?? it.data_vencimento ?? null,
         motivo_recusa: (extras.btg_motivo_recusa as string) ?? null,
         btg_status: (extras.btg_payment_status as string) ?? null,
+        valor: Number(it.valor ?? 0),
       });
 
       porBordero.set(bid, lista);

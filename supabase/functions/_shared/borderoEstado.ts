@@ -67,6 +67,8 @@ export interface ComposicaoBordero {
    * sistema ainda mostrava o título como em trânsito.
    */
   nao_processados?: number;
+  /** Soma dos títulos que o banco não pagou — o valor que o credor não recebeu. */
+  valor_rejeitado?: number;
   /** Menor data prevista entre os itens ainda pendentes (yyyy-MM-dd). */
   proxima_data: string | null;
   /**
@@ -97,6 +99,7 @@ export interface EstadoBordero {
 
 export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
   let pagos = 0, rejeitados = 0, pendentes = 0, naoProcessados = 0;
+  let valorRejeitado = 0;
   let proxima: string | null = null;
   const motivos: string[] = [];
 
@@ -113,6 +116,7 @@ export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
     const falhou = falhouNoBanco(i.btg_status);
     if (i.requer_validacao || falhou) {
       rejeitados++;
+      valorRejeitado += Number(i.valor ?? 0);
       if (falhou && !i.requer_validacao) naoProcessados++;
       const m = String(i.motivo_recusa ?? "").trim();
       const texto = m || (falhou
@@ -131,6 +135,7 @@ export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
     total: pagos + rejeitados + pendentes,
     pagos, rejeitados, pendentes,
     nao_processados: naoProcessados,
+    valor_rejeitado: Math.round(valorRejeitado * 100) / 100,
     proxima_data: proxima,
     motivos_recusa: motivos,
   };
