@@ -214,9 +214,18 @@ export default function PendenciasFinanceirasPage() {
         subtitle="De todas as lojas — o que não foi processado, recusado ou está esperando alguém"
         icon={<AlertTriangle className="h-5 w-5" />}
         actions={
-          <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw className={cn("h-4 w-4 mr-1", isFetching && "animate-spin")} />
-            Atualizar
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => atualizarMutation.mutate()}
+            disabled={isFetching || atualizarMutation.isPending}
+            title="Relê o sistema e consulta o retorno do BTG"
+          >
+            <RefreshCw className={cn(
+              "h-4 w-4 mr-1",
+              (isFetching || atualizarMutation.isPending) && "animate-spin",
+            )} />
+            {atualizarMutation.isPending ? "Consultando BTG..." : "Atualizar"}
           </Button>
         }
       />
