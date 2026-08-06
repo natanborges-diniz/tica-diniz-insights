@@ -43,11 +43,8 @@ function json(data: unknown, status = 200) {
   });
 }
 
-async function requireAdmin(userId: string) {
-  const { data } = await supabase.from("user_roles")
-    .select("role").eq("user_id", userId).eq("role", "admin");
-  if (!data || data.length === 0) throw new Error("Apenas admin");
-}
+
+
 
 async function requireFinanceEdit(userId: string, codEmpresa: number) {
   const { data: roles } = await supabase.from("user_roles")
