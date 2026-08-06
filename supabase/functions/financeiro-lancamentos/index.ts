@@ -1064,6 +1064,13 @@ async function painelPendencias(body: Record<string, unknown>) {
 
   const pendencias: Pendencia[] = [];
   for (const b of borderos) {
+    // Aviso dispensado: alguém já resolveu o caso por fora (pagou no caixa,
+    // acertou direto com o fornecedor) e não quer mais o alerta. Ele volta
+    // sozinho se a situação do borderô mudar — dispensa não é cegueira.
+    const dispensado = Boolean(b.pendencia_dispensada_em) &&
+      String(b.pendencia_dispensada_status ?? "") === String(b.status);
+    if (dispensado) continue;
+
     const p = pendenciaDoBordero(
       {
         ...b,
@@ -1077,6 +1084,58 @@ async function painelPendencias(body: Record<string, unknown>) {
 
   const ordenadas = ordenarPendencias(pendencias);
   return json({ pendencias: ordenadas, resumo: resumirPendencias(ordenadas), hoje });
+}
+
+/**
+ * Some o aviso de pagamento parado sem mexer no borderô.
+ *
+ * Existe porque o painel guarda casos anteriores aos ajustes do fluxo e casos
+ * resolvidos por fora do sistema. Apagar o borderô seria perder o histórico;
+ * aqui só o alerta é silenciado, com autor e motivo registrados, e amarrado à
+ * situação atual — se o borderô andar (ou voltar), o aviso reaparece.
+ */
+async function dispensarPendencia(body: Record<string, unknown>, userId: string) {
+  await requireFinanceEdit(userId);
+
+  const borderoId = body.bordero_id ? String(body.bordero_id) : null;
+  if (!borderoId) throw new Error("Informe bordero_id");
+
+  const { data: bordero, error: errBusca } = await supabase
+    .from("borderos")
+    .select("id, status, descricao")
+    .eq("id", borderoId)
+    .maybeSingle();
+  if (errBusca) throw new Error(errBusca.message);
+  if (!bordero) throw new Error("Borderô não encontrado");
+
+  const desfazer = body.desfazer === true;
+
+  const { error } = await supabase
+    .from("borderos")
+    .update(
+      desfazer
+        ? {
+            pendencia_dispensada_em: null,
+            pendencia_dispensada_por: null,
+            pendencia_dispensada_status: null,
+            pendencia_dispensada_motivo: null,
+          }
+        : {
+            pendencia_dispensada_em: new Date().toISOString(),
+            pendencia_dispensada_por: userId,
+            pendencia_dispensada_status: String(bordero.status),
+            pendencia_dispensada_motivo: body.motivo ? String(body.motivo).slice(0, 500) : null,
+          },
+    )
+    .eq("id", borderoId);
+  if (error) throw new Error(error.message);
+
+  return json({
+    ok: true,
+    mensagem: desfazer
+      ? "Aviso reativado"
+      : "Aviso dispensado — volta a aparecer se o borderô mudar de situação",
+  });
 }
 
 
