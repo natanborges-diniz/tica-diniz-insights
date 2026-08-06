@@ -309,6 +309,7 @@ export default function FolhaPagamentoPage() {
       competencia,
       evento,
       data_pagamento: dataPagamento,
+      complementar,
       itens: itensSelecionados,
       encargos: {
         INSS: Number(inss.replace(",", ".")) || 0,
@@ -321,6 +322,8 @@ export default function FolhaPagamentoPage() {
       linhas_invalidas?: typeof linhasInvalidas;
       qtd_colaboradores?: number;
       substituiu?: boolean;
+      complementar?: boolean;
+      sequencia?: number;
       sem_dados_bancarios?: Array<{ nome: string; cpf: string }>;
     }) => {
       if (r?.ok === false && r.linhas_invalidas) {
@@ -330,8 +333,12 @@ export default function FolhaPagamentoPage() {
       }
       setLinhasInvalidas([]);
       toast.success(
-        `${r?.qtd_colaboradores ?? 0} colaborador(es) importado(s)${r?.substituiu ? " — versão anterior substituída" : ""}`,
+        `${r?.qtd_colaboradores ?? 0} colaborador(es) importado(s)` +
+        (r?.complementar
+          ? ` — folha complementar ${(r.sequencia ?? 2) - 1} criada`
+          : r?.substituiu ? " — versão anterior substituída" : ""),
       );
+
       if (r?.sem_dados_bancarios?.length) {
         toast.warning(
           `${r.sem_dados_bancarios.length} colaborador(es) ainda sem banco/conta — ` +
