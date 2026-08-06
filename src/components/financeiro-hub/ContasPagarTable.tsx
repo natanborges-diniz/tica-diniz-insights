@@ -303,7 +303,9 @@ function LancamentoRow({
   if (l.bordero_id && ["BORDERO", "AUTORIZADO", "AGRUPADO"].includes(l.status) && onRemoverDoBordero) {
     secondaryActions.push({ label: "Desautorizar (voltar p/ Em Preparo)", icon: Unlink, onClick: () => onRemoverDoBordero(l), destructive: true });
   }
-  if (!l.bordero_id && l.status === "AUTORIZADO") {
+  if (!l.bordero_id && l.status === "AUTORIZADO" && onDevolverParaPreparo) {
+    secondaryActions.push({ label: "Voltar p/ Em Preparo (corrigir dados)", icon: RotateCcw, onClick: () => onDevolverParaPreparo(l) });
+  } else if (!l.bordero_id && l.status === "AUTORIZADO") {
     secondaryActions.push({ label: "Desautorizar (voltar p/ Em Preparo)", icon: RotateCcw, onClick: () => onReabrir(l.id) });
   }
   // PROCESSANDO era um beco sem saída na tela: nenhuma ação aparecia. Quando o
