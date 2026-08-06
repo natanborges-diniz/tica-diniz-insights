@@ -126,9 +126,12 @@ export type Database = {
           criado_por: string | null
           data_pagamento: string | null
           descricao: string | null
+          encerrado_em: string | null
+          encerrado_por: string | null
           folha_competencia_id: string | null
           id: string
           modo_data: string
+          observacao: string | null
           qtd_lancamentos: number
           status: string
           tipo: string
@@ -144,9 +147,12 @@ export type Database = {
           criado_por?: string | null
           data_pagamento?: string | null
           descricao?: string | null
+          encerrado_em?: string | null
+          encerrado_por?: string | null
           folha_competencia_id?: string | null
           id?: string
           modo_data?: string
+          observacao?: string | null
           qtd_lancamentos?: number
           status?: string
           tipo?: string
@@ -162,9 +168,12 @@ export type Database = {
           criado_por?: string | null
           data_pagamento?: string | null
           descricao?: string | null
+          encerrado_em?: string | null
+          encerrado_por?: string | null
           folha_competencia_id?: string | null
           id?: string
           modo_data?: string
+          observacao?: string | null
           qtd_lancamentos?: number
           status?: string
           tipo?: string
