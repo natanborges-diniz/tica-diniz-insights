@@ -997,7 +997,7 @@ async function painelPendencias(body: Record<string, unknown>) {
   // resolvidos, e trazê-los faria a varredura crescer sem propósito.
   let query = supabase
     .from("borderos")
-    .select("id, cod_empresa, descricao, status, tipo, data_pagamento, total_valor")
+    .select("id, cod_empresa, descricao, status, tipo, data_pagamento, total_valor, pendencia_dispensada_em, pendencia_dispensada_status")
     .in("status", ["MONTAGEM", "APROVADO", "ENVIADO", "PROCESSADO_PARCIAL"])
     .order("data_pagamento", { ascending: true })
     .limit(300);
