@@ -11,6 +11,7 @@ import { useEmpresas } from "@/hooks/useEmpresas";
 import { useDefaultEmpresa } from "@/hooks/useDefaultEmpresa";
 import { useAuth } from "@/contexts/AuthContext";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
+import { PainelPendencias } from "@/components/financeiro-hub/PainelPendencias";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -252,6 +253,9 @@ export default function FinanceiroHubPage() {
     queryClient.invalidateQueries({ queryKey: ["lancamentos"] });
     queryClient.invalidateQueries({ queryKey: ["borderos"] });
     queryClient.invalidateQueries({ queryKey: ["bordero-detalhe"] });
+    // Enviar, aprovar ou cancelar muda o que está parado — o painel de
+    // pendências tem de acompanhar, senão mostra um retrato velho.
+    queryClient.invalidateQueries({ queryKey: ["painel-pendencias"] });
   };
 
   const criarMutation = useMutation({
@@ -749,6 +753,16 @@ export default function FinanceiroHubPage() {
               </Button>
             </div>
           }
+        />
+
+        {/* Pagamento parado é a primeira notícia que o financeiro precisa ter —
+            antes ela chegava por telefone, do fornecedor que não recebeu. Vem
+            antes do stepper de propósito: o stepper mostra o fluxo do dia, este
+            painel mostra o que ficou para trás, em qualquer loja. */}
+        <PainelPendencias
+          invokeAction={invokeAction}
+          empresas={empresas || []}
+          onAbrirBordero={(id) => { setActiveTab("borderos"); setBorderoDetalheId(id); }}
         />
 
         {/* Workflow Stepper */}

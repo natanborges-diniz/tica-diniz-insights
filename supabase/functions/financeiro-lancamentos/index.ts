@@ -21,6 +21,12 @@ import { casarTitulo, JANELA_DIAS } from "../_shared/ddaMatch.ts";
 import { montarLoteFolha } from "../_shared/folha.ts";
 import { tipoPorLinhaDigitavel } from "../_shared/btgPayment.ts";
 import { resumirComposicao, type ItemBordero } from "../_shared/borderoEstado.ts";
+import {
+  pendenciaDoBordero,
+  ordenarPendencias,
+  resumirPendencias,
+  type Pendencia,
+} from "../_shared/pendenciasFinanceiro.ts";
 import { validarEdicao, validarCancelamento, CAMPOS_EDITAVEIS } from "../_shared/rubricaEdicao.ts";
 import {
   hojeBrt,
@@ -101,6 +107,8 @@ Deno.serve(async (req) => {
         return await confirmarProcessamento(body, auth.userId);
 
       // ── Borderôs ──
+      case "painel_pendencias":
+        return await painelPendencias(body);
       case "listar_borderos":
         return await listarBorderos(body);
       case "criar_bordero":
@@ -936,6 +944,72 @@ async function cancelarRubrica(body: Record<string, unknown>, userId: string) {
   return json({ ok: true, status: "CANCELADA" });
 }
 
+
+/**
+ * O que está parado, em todas as lojas, num lugar só.
+ *
+ * Um fornecedor cobrou porque não tinha recebido. O sistema sabia: o borderô
+ * estava enviado e o item nunca voltou processado. Mas isso só aparecia dentro
+ * do borderô, na loja daquele borderô — e com dez lojas, ninguém abre uma por
+ * uma todo dia.
+ *
+ * Aqui a varredura é geral e devolve só o que exige ação: o agendado para
+ * semana que vem não aparece, o enviado cuja data já passou sem retorno aparece
+ * em primeiro lugar.
+ */
+async function painelPendencias(body: Record<string, unknown>) {
+  const hoje = hojeBrt();
+
+  // Só os estados que podem esconder pendência. PROCESSADO e CANCELADO estão
+  // resolvidos, e trazê-los faria a varredura crescer sem propósito.
+  let query = supabase
+    .from("borderos")
+    .select("id, cod_empresa, descricao, status, tipo, data_pagamento, total_valor")
+    .in("status", ["MONTAGEM", "APROVADO", "ENVIADO", "PROCESSADO_PARCIAL"])
+    .order("data_pagamento", { ascending: true })
+    .limit(300);
+
+  if (body.cod_empresa) query = query.eq("cod_empresa", Number(body.cod_empresa));
+
+  const { data: borderos, error } = await query;
+  if (error) throw new Error(error.message);
+  if (!borderos || borderos.length === 0) {
+    return json({ pendencias: [], resumo: resumirPendencias([]) });
+  }
+
+  // Composição de todos de uma vez: uma consulta a mais aqui evita N consultas
+  // e é o que permite distinguir "agendado" de "parado".
+  const { data: itens } = await supabase
+    .from("lancamentos_financeiros")
+    .select("bordero_id, status, requer_validacao, data_vencimento, dados_extras")
+    .in("bordero_id", borderos.map((b) => b.id));
+
+  const porBordero = new Map<string, ItemBordero[]>();
+  for (const it of (itens || [])) {
+    const bid = String(it.bordero_id);
+    const extras = (it.dados_extras || {}) as Record<string, unknown>;
+    const lista = porBordero.get(bid) ?? [];
+    lista.push({
+      status: String(it.status),
+      requer_validacao: Boolean(it.requer_validacao),
+      data_prevista: (extras.btg_payment_date as string) ?? it.data_vencimento ?? null,
+    });
+    porBordero.set(bid, lista);
+  }
+
+  const pendencias: Pendencia[] = [];
+  for (const b of borderos) {
+    const p = pendenciaDoBordero(
+      { ...b, composicao: resumirComposicao(porBordero.get(String(b.id)) ?? []) },
+      hoje,
+    );
+    if (p) pendencias.push(p);
+  }
+
+  const ordenadas = ordenarPendencias(pendencias);
+  return json({ pendencias: ordenadas, resumo: resumirPendencias(ordenadas), hoje });
+}
+
 async function listarBorderos(body: Record<string, unknown>) {
   const { cod_empresa, status: st, limit: lim } = body;
 
@@ -1469,6 +1543,24 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     .select("*")
     .eq("bordero_id", bordero_id)
     .eq("status", "AUTORIZADO");
+
+  // Borderô sem item nenhum não vai ao banco.
+  //
+  // A checagem de vazio existia só dentro do ramo de MONTAGEM. Um borderô já
+  // APROVADO que ficasse sem itens — porque foram removidos, cancelados, ou
+  // porque a criação falhou no meio — passava direto por aqui, era marcado
+  // ENVIADO e ficava eternamente "aguardando". Na tela parecia dinheiro em
+  // trânsito; no banco não havia nada, e o fornecedor não recebia.
+  if (!lancamentos || lancamentos.length === 0) {
+    return json({
+      ok: false,
+      code: "BORDERO_VAZIO",
+      bordero_id,
+      cod_empresa: bordero.cod_empresa,
+      error: "Borderô sem itens autorizados — nada foi enviado ao banco. " +
+        "Verifique se os lançamentos foram removidos ou cancelados; se o borderô não serve mais, cancele-o.",
+    });
+  }
 
   if (isSandbox) {
     const mockBatchId = `sandbox-batch-${Date.now()}`;
