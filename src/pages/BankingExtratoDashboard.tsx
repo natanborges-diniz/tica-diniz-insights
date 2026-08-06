@@ -212,7 +212,8 @@ export default function BankingExtratoDashboard() {
     queryKey: ["btg-extrato", codEmpresa, dataInicio, dataFim, filtroTipo, filtroStatus],
     queryFn: async () => {
       const params: Record<string, unknown> = {
-        action: "listar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim,
+        action: "listar", cod_empresa: codEmpresa ?? 0, data_inicio: dataInicio, data_fim: dataFim,
+        limit: consolidado ? 500 : 200,
       };
       if (filtroStatus === "PENDENTE") params.status_conciliacao = "PENDENTE";
       else if (filtroStatus !== "todos") params.status_conciliacao = filtroStatus;
@@ -229,7 +230,7 @@ export default function BankingExtratoDashboard() {
       let items: ExtratoItem[] = Array.isArray(data) ? data : [];
 
       // Auto-import na primeira visita sem dados (persiste e relê — nada de linha "live")
-      if (items.length === 0 && !autoImported && filtroStatus === "PENDENTE") {
+      if (items.length === 0 && !autoImported && !consolidado) {
         setAutoImported(true);
         try {
           const { data: importResult } = await supabase.functions.invoke("btg-extrato", {
@@ -244,6 +245,7 @@ export default function BankingExtratoDashboard() {
           console.warn("Auto-import failed:", e);
         }
       }
+
 
       if (filtroTipo !== "todos") items = items.filter((i) => i.tipo === filtroTipo);
       return items;
