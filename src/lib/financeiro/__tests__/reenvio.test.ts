@@ -46,8 +46,13 @@ describe('decidirReenvio', () => {
     expect(d.explicacao).toContain('autorização do master');
   });
 
-  it('autorizado sem marca de recusa não é caso de reenvio', () => {
+  it('autorizado sem marca de recusa também volta — é lá que se corrige', () => {
     const d = decidirReenvio(recusado({ requer_validacao: false }));
+    expect(d.liberar).toBe(true);
+  });
+
+  it('conciliado no cartão não é caso de preparo', () => {
+    const d = decidirReenvio(recusado({ status: 'CONCILIADO_CARTAO', requer_validacao: false }));
     expect(d.liberar).toBe(false);
     expect(d.motivo).toBe('NAO_RECUSADO');
   });
