@@ -360,10 +360,13 @@ function LancamentoRow({
           />
         )}
       </TableCell>
-      <TableCell className="text-sm max-w-[200px] truncate">
-        {l.descricao.toUpperCase()}
-        {l.requer_validacao && <Badge variant="outline" className="ml-2 text-[10px]">VALIDAR</Badge>}
+      <TableCell className="text-sm max-w-[300px]">
+        <span className="block truncate">{l.descricao.toUpperCase()}</span>
+        {getRecusaBadge(l)
+          ? <div className="mt-0.5">{getRecusaBadge(l)}</div>
+          : l.requer_validacao && <Badge variant="outline" className="ml-2 text-[10px]">VALIDAR</Badge>}
       </TableCell>
+
       <TableCell className="text-sm">{l.pessoa_nome?.toUpperCase() || "—"}</TableCell>
       <TableCell className="text-sm whitespace-nowrap">
         {format(new Date(l.data_vencimento + "T12:00:00"), "dd/MM/yy")}
