@@ -7,7 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { valorDoCodigoBarras } from "../../../supabase/functions/_shared/boleto";
+import {
+  valorDoCodigoBarras,
+  somenteDigitos,
+  formatarLinhaDigitavel,
+  diagnosticarBoleto,
+} from "../../../supabase/functions/_shared/boleto";
 import { tipoPorLinhaDigitavel } from "../../../supabase/functions/_shared/btgPayment";
 
 interface Lancamento {
