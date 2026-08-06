@@ -238,7 +238,10 @@ async function importar(body: Record<string, unknown>, userId: string) {
     competencia_id: competenciaId,
     ...totais,
     encargos: encargos.length,
-    substituiu: !!existente,
+    substituiu: !!rascunho,
+    complementar,
+    sequencia,
+
     herdados_da_rubrica: validadas.filter((l) => porCpf.has(l.cpf)).length,
     sem_dados_bancarios: semConta,
   });
