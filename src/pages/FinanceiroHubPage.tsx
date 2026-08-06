@@ -1253,6 +1253,9 @@ export default function FinanceiroHubPage() {
                     ((l.dados_extras || {}) as Record<string, unknown>).btg_motivo_recusa as string ?? null,
                   btg_status:
                     ((l.dados_extras || {}) as Record<string, unknown>).btg_payment_status as string ?? null,
+                  // O valor entra para o resumo dizer quanto o banco devolveu —
+                  // contagem sozinha não serve para cobrar ninguém.
+                  valor: Number(l.valor ?? 0),
                 })),
 
               );
