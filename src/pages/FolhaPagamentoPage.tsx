@@ -181,6 +181,13 @@ export default function FolhaPagamentoPage() {
   const [competencia, setCompetencia] = useState(format(hoje, "yyyy-MM"));
   const [dataPagamento, setDataPagamento] = useState(format(hoje, "yyyy-MM-dd"));
   const [planilha, setPlanilha] = useState("");
+  /**
+   * Folha complementar: o mês já foi fechado e falta incluir alguém. Em vez de
+   * reabrir a folha fechada (que já virou lançamento e borderô), entra uma
+   * folha nova do mesmo mês/evento, com trilha própria.
+   */
+  const [complementar, setComplementar] = useState(false);
+
   const [inss, setInss] = useState("");
   const [fgts, setFgts] = useState("");
   const [irrf, setIrrf] = useState("");
