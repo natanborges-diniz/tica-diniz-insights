@@ -1026,7 +1026,10 @@ async function painelPendencias(body: Record<string, unknown>) {
       status: String(it.status),
       requer_validacao: Boolean(it.requer_validacao),
       data_prevista: (extras.btg_payment_date as string) ?? it.data_vencimento ?? null,
+      // Já traduzido na hora da recusa (btgRecusa.ts) — aqui é só repassar.
+      motivo_recusa: (extras.btg_motivo_recusa as string) ?? null,
     });
+
     porBordero.set(bid, lista);
   }
 
