@@ -55,6 +55,8 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
   const [formaPgto, setFormaPgto] = useState("");
   const [pixKey, setPixKey] = useState("");
   const [barcode, setBarcode] = useState("");
+  // Retorno imediato da linha digitável (tipo, valor e vencimento lidos do código).
+  const diagBoleto = diagnosticarBoleto(barcode);
   // G2/G3 — lastro obrigatório para PAGAR manual: rubrica ou exceção com justificativa
   const [lastroTipo, setLastroTipo] = useState<"RUBRICA" | "EXCECAO">("RUBRICA");
   const [rubricaId, setRubricaId] = useState("");
