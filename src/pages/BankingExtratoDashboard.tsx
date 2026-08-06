@@ -286,7 +286,7 @@ export default function BankingExtratoDashboard() {
 
   const { data: saldo } = useQuery<SaldoResponse | null>({
     queryKey: ["btg-saldo", codEmpresa],
-    enabled: !consolidado,
+    enabled: !consolidado && !!codEmpresa,
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
         body: { action: "saldo", cod_empresa: codEmpresa },
