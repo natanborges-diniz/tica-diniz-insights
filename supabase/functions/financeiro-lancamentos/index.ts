@@ -2000,12 +2000,38 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
 
   const isSandbox = !config || config.ambiente !== "production";
 
-  // Fetch lancamentos for this borderô
-  const { data: lancamentos } = await supabase
+  // Itens do borderô.
+  //
+  // O filtro era só AUTORIZADO. Um borderô APROVADO cujo item ficasse em
+  // BORDERO — por reabertura, correção de dados ou qualquer ajuste posterior à
+  // aprovação — saía daqui com zero itens: o envio dizia "borderô vazio" e
+  // nada chegava ao banco, mesmo com o borderô aprovado e com valor na tela.
+  // Aprovação é do borderô: item preso a um borderô APROVADO e sem baixa é
+  // promovido a AUTORIZADO no próprio envio.
+  const { data: itensDoBordero } = await supabase
     .from("lancamentos_financeiros")
     .select("*")
     .eq("bordero_id", bordero_id)
-    .eq("status", "AUTORIZADO");
+    .in("status", ["AUTORIZADO", "BORDERO"]);
+
+  const paraPromover = (itensDoBordero || []).filter(
+    (l) => String(l.status) === "BORDERO" && !l.data_baixa && !(Number(l.valor_pago ?? 0) > 0),
+  );
+  if (paraPromover.length > 0) {
+    await supabase
+      .from("lancamentos_financeiros")
+      .update({
+        status: "AUTORIZADO",
+        autorizado_por: userId,
+        autorizado_em: new Date().toISOString(),
+      })
+      .in("id", paraPromover.map((l) => l.id));
+  }
+
+  const lancamentos = (itensDoBordero || [])
+    .filter((l) => !l.data_baixa && !(Number(l.valor_pago ?? 0) > 0))
+    .map((l) => ({ ...l, status: "AUTORIZADO" }));
+
 
   // Borderô sem item nenhum não vai ao banco.
   //
