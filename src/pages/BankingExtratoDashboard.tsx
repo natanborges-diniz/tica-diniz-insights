@@ -721,6 +721,8 @@ export default function BankingExtratoDashboard() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[90px]">Data</TableHead>
+                  {consolidado && <TableHead className="w-[140px]">Loja</TableHead>}
+
                   <TableHead>Descrição</TableHead>
                   <TableHead className="w-[110px] text-right">Valor</TableHead>
                   <TableHead className="w-[130px]">Natureza</TableHead>
