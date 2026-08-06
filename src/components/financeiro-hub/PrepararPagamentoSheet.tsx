@@ -62,7 +62,8 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
     if (!lancamento) return;
     const d = lancamento.dados_extras || {};
     setPayType(String(d.btg_payment_type || "PIX_KEY"));
-    setBarcode(String(d.linha_digitavel || ""));
+    // Guardamos só dígitos: a máscara é de exibição, o banco recebe a linha limpa.
+    setBarcode(somenteDigitos(d.linha_digitavel));
     const details = (d.btg_details || {}) as Record<string, unknown>;
     setPixKey(String(details.pixKey || ""));
     setBanco(String(details.bankCode || ""));
