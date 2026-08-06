@@ -175,6 +175,32 @@ async function requireAdmin(userId: string) {
   }
 }
 
+/**
+ * Quem pode mexer no fluxo do financeiro sem decidir sobre dinheiro.
+ *
+ * Corrigir um pagamento recusado — data errada, linha digitável trocada, chave
+ * Pix incorreta — é trabalho do operador, que é quem vê o motivo no app do
+ * banco. Exigir admin aqui criava fila para uma correção que não autoriza nada:
+ * o controle continua adiante, no lastro do borderô novo e na autorização do
+ * master no BTG.
+ */
+async function requireFinanceEdit(userId: string) {
+  const { data: roles } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .in("role", ["admin", "master"]);
+  if (roles && roles.length > 0) return;
+
+  const { data: podeEditar } = await supabase.rpc("has_module_edit_access", {
+    _user_id: userId,
+    _module: "financeiro",
+  });
+  if (!podeEditar) {
+    throw new Error("Sem permissão de edição no Financeiro");
+  }
+}
+
 
 // ═══════════════════════════════════════════════════════════
 // LANÇAMENTOS
@@ -1000,10 +1026,43 @@ async function painelPendencias(body: Record<string, unknown>) {
     porBordero.set(bid, lista);
   }
 
+  // Borderô em montagem: separar "começado e esquecido" de "pronto, mas com
+  // exceção esperando decisão" — situações com donos diferentes. A conta é a
+  // mesma que trava o envio, então usamos a mesma avaliação de lastro.
+  const emMontagem = borderos.filter((b) => String(b.status).toUpperCase() === "MONTAGEM");
+  const bloqueiosPorBordero = new Map<string, number>();
+
+  if (emMontagem.length > 0) {
+    const { data: lancsMontagem } = await supabase
+      .from("lancamentos_financeiros")
+      .select("id, bordero_id, descricao, valor, lastro, erp_parcela_id, rubrica_id, btg_dda_id, justificativa, pessoa_documento, data_vencimento, dados_extras")
+      .in("bordero_id", emMontagem.map((b) => b.id));
+
+    const rubIds = [...new Set((lancsMontagem || []).map((l) => l.rubrica_id).filter(Boolean))] as string[];
+    const rubMap = new Map<string, Record<string, unknown>>();
+    if (rubIds.length > 0) {
+      const { data: rubs } = await supabase.from("rubricas_autorizadas").select("*").in("id", rubIds);
+      for (const r of (rubs || [])) rubMap.set(String(r.id), r);
+    }
+
+    for (const l of (lancsMontagem || [])) {
+      const rubrica = (l.rubrica_id ? rubMap.get(String(l.rubrica_id)) ?? null : null) as never;
+      const av = avaliarLancamento(l as never, rubrica, hoje);
+      if (av.selo !== "VERDE" && av.selo !== "AZUL") {
+        const bid = String(l.bordero_id);
+        bloqueiosPorBordero.set(bid, (bloqueiosPorBordero.get(bid) ?? 0) + 1);
+      }
+    }
+  }
+
   const pendencias: Pendencia[] = [];
   for (const b of borderos) {
     const p = pendenciaDoBordero(
-      { ...b, composicao: resumirComposicao(porBordero.get(String(b.id)) ?? []) },
+      {
+        ...b,
+        composicao: resumirComposicao(porBordero.get(String(b.id)) ?? []),
+        bloqueios_mesa: bloqueiosPorBordero.get(String(b.id)) ?? 0,
+      },
       hoje,
     );
     if (p) pendencias.push(p);
@@ -1028,7 +1087,14 @@ async function painelPendencias(body: Record<string, unknown>) {
  * chave de idempotência nova, nada ambíguo do lado do banco.
  */
 async function devolverParaPreparo(body: Record<string, unknown>, userId: string) {
-  await requireAdmin(userId);
+  // Operador do financeiro basta.
+  //
+  // Devolver ao preparo não move dinheiro: traz o título de volta para que a
+  // data, a linha digitável ou a chave Pix sejam corrigidas. Quem descobre o
+  // motivo da recusa no app do banco é o operador, e exigir admin só para
+  // desbloquear a correção criava fila sem ganho — o controle continua adiante,
+  // no lastro do borderô novo e na autorização do master no BTG.
+  await requireFinanceEdit(userId);
 
   const borderoId = body.bordero_id ? String(body.bordero_id) : null;
   const ids = (body.lancamento_ids as string[]) || [];

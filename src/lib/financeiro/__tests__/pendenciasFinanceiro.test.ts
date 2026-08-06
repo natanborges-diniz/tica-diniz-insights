@@ -56,7 +56,7 @@ describe('pendenciaDoBordero — o que exige ação', () => {
     expect(p?.tipo).toBe('AGUARDANDO_BANCO');
     expect(p?.dias_parado).toBe(6);
     expect(p?.severidade).toBe('ALTA');
-    expect(p?.acao).toContain('aplicativo do BTG');
+    expect(p?.acao).toContain('app do BTG');
   });
 
   it('enviado hoje ainda não é problema', () => {
@@ -92,10 +92,12 @@ describe('pendenciaDoBordero — o que exige ação', () => {
     expect(p?.tipo).toBe('RECUSADO');
   });
 
-  it('aprovado e não enviado é pendência de gente, não de banco', () => {
+  it('liberado internamente e não enviado é pendência de gente, não de banco', () => {
     const p = pendenciaDoBordero(bordero({ status: 'APROVADO' }), HOJE);
     expect(p?.tipo).toBe('AGUARDANDO_ENVIO');
-    expect(p?.acao).toContain('Envie o borderô');
+    // "Aprovado" solto confundia com a autorização do master no BTG.
+    expect(p?.mensagem).toContain('Liberado internamente');
+    expect(p?.acao).toContain('avise o master');
   });
 
   it('aprovado com data futura fica em baixa — ainda dá tempo', () => {
@@ -103,10 +105,30 @@ describe('pendenciaDoBordero — o que exige ação', () => {
     expect(p?.severidade).toBe('BAIXA');
   });
 
-  it('montagem com data vencida cobra atenção', () => {
+  it('montagem sem bloqueio e com data vencida é borderô esquecido', () => {
     const p = pendenciaDoBordero(bordero({ status: 'MONTAGEM' }), HOJE);
-    expect(p?.tipo).toBe('MONTAGEM_ATRASADA');
+    expect(p?.tipo).toBe('MONTAGEM_PARADA');
+    expect(p?.responsavel).toBe('OPERADOR');
     expect(p?.dias_parado).toBe(6);
+  });
+
+  it('montagem com item fora da faixa é decisão da Mesa, não esquecimento', () => {
+    const p = pendenciaDoBordero(
+      bordero({ status: 'MONTAGEM', composicao: comp({ total: 9 }), bloqueios_mesa: 2 }),
+      HOJE,
+    );
+    expect(p?.tipo).toBe('MESA_PENDENTE');
+    expect(p?.responsavel).toBe('ADMIN');
+    expect(p?.mensagem).toContain('2 de 9');
+    expect(p?.acao_rotulo).toBe('Abrir a Mesa');
+  });
+
+  it('exceção aparece mesmo antes da data — descobrir na véspera é tarde', () => {
+    const p = pendenciaDoBordero(
+      bordero({ status: 'MONTAGEM', data_pagamento: '2026-08-30', bloqueios_mesa: 1 }),
+      HOJE,
+    );
+    expect(p?.tipo).toBe('MESA_PENDENTE');
   });
 
   it('montagem com data futura é trabalho em andamento, não pendência', () => {
@@ -173,10 +195,13 @@ describe('resumirPendencias', () => {
 });
 
 describe('quem faz e onde — a pendência não pode circular entre as pessoas', () => {
-  it('sem retorno é do master do BTG, no aplicativo do banco', () => {
+  it('sem retorno é do operador: ele confere no banco e lembra o master', () => {
+    // O master não abre este painel; deixá-lo como responsável tirava o dono da
+    // pendência de dentro da equipe.
     const p = pendenciaDoBordero(bordero(), HOJE);
-    expect(p?.responsavel).toBe('MASTER_BTG');
+    expect(p?.responsavel).toBe('OPERADOR');
     expect(p?.local).toBe('BANCO');
+    expect(p?.acao).toContain('lembre o master');
   });
 
   it('mas ainda oferece consultar o banco daqui, antes de cobrar alguém', () => {
@@ -186,14 +211,15 @@ describe('quem faz e onde — a pendência não pode circular entre as pessoas',
     expect(p?.acao_rotulo).toBe('Consultar o banco agora');
   });
 
-  it('recusado é do admin, resolvido no sistema', () => {
+  it('recusado é do operador: ele vê o motivo no banco e corrige aqui', () => {
     const p = pendenciaDoBordero(
       bordero({ composicao: comp({ total: 3, pagos: 2, rejeitados: 1, pendentes: 0 }) }),
       HOJE,
     );
-    expect(p?.responsavel).toBe('ADMIN');
+    expect(p?.responsavel).toBe('OPERADOR');
     expect(p?.local).toBe('SISTEMA');
     expect(p?.acao_sistema).toBe('DEVOLVER_PREPARO');
+    expect(p?.acao).toContain('horário-limite ou saldo');
   });
 
   it('aprovado sem envio é do operador, resolvido no sistema', () => {
@@ -203,10 +229,10 @@ describe('quem faz e onde — a pendência não pode circular entre as pessoas',
     expect(p?.acao_sistema).toBe('ENVIAR_BORDERO');
   });
 
-  it('montagem atrasada é do admin — quem monta não aprova o próprio pagamento', () => {
-    const p = pendenciaDoBordero(bordero({ status: 'MONTAGEM' }), HOJE);
+  it('decisão de Mesa é do admin — quem monta não libera o próprio pagamento', () => {
+    const p = pendenciaDoBordero(bordero({ status: 'MONTAGEM', bloqueios_mesa: 1 }), HOJE);
     expect(p?.responsavel).toBe('ADMIN');
-    expect(p?.acao_sistema).toBe('ABRIR_BORDERO');
+    expect(p?.acao_sistema).toBe('APROVAR_BORDERO');
   });
 
   it('toda pendência diz quem faz, onde, e o que o botão dispara', () => {
@@ -214,6 +240,7 @@ describe('quem faz e onde — a pendência não pode circular entre as pessoas',
       bordero(),
       bordero({ status: 'APROVADO' }),
       bordero({ status: 'MONTAGEM' }),
+      bordero({ status: 'MONTAGEM', bloqueios_mesa: 1 }),
       bordero({ composicao: comp({ total: 2, pagos: 1, rejeitados: 1, pendentes: 0 }) }),
     ];
     for (const b of casos) {

@@ -15,12 +15,14 @@
 import type { ComposicaoBordero } from "./borderoEstado.ts";
 
 export type TipoPendencia =
-  /** Enviado ao banco, data chegou, e o pagamento não voltou processado. */
+  /** Enviado ao banco e sem autorização do master no app do BTG. */
   | "AGUARDANDO_BANCO"
-  /** Aprovado internamente e ninguém enviou. */
+  /** Liberado internamente e ninguém clicou em enviar. */
   | "AGUARDANDO_ENVIO"
-  /** Em montagem com a data de pagamento já vencida. */
-  | "MONTAGEM_ATRASADA"
+  /** Tem item fora da faixa esperando decisão na Mesa. */
+  | "MESA_PENDENTE"
+  /** Montagem começada e não finalizada, sem pendência de Mesa. */
+  | "MONTAGEM_PARADA"
   /** O banco recusou itens — o fornecedor não recebeu. */
   | "RECUSADO";
 
@@ -54,6 +56,13 @@ export type AcaoSistema =
 
 export interface BorderoParaPainel {
   id: string;
+  /**
+   * Itens que não passam no lastro e travam o envio (selo fora de verde/azul).
+   *
+   * É o que separa "borderô começado e esquecido" de "borderô pronto, mas com
+   * exceção esperando alguém decidir" — duas situações com donos diferentes.
+   */
+  bloqueios_mesa?: number;
   cod_empresa: number;
   descricao: string | null;
   status: string;
@@ -137,8 +146,9 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
       valor_pendente: 0, // o valor recusado está no detalhe do borderô
       qtd_pendente: c.rejeitados,
       mensagem: `${c.rejeitados} pagamento(s) recusado(s) pelo banco${c.pagos > 0 ? ` · ${c.pagos} pago(s)` : ""}`,
-      acao: "Devolva os recusados ao preparo, corrija o que o banco apontou e monte um novo borderô",
-      responsavel: "ADMIN",
+      acao: "Veja no app do BTG o motivo (horário-limite ou saldo), devolva ao preparo, "
+        + "corrija o que for preciso e monte um novo borderô — depois avise o master para autorizar",
+      responsavel: "OPERADOR",
       local: "SISTEMA",
       acao_sistema: "DEVOLVER_PREPARO",
       acao_rotulo: "Devolver ao preparo",
@@ -163,8 +173,11 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
       mensagem: dias === 0
         ? `${c.pendentes} pagamento(s) enviados hoje, ainda sem retorno do banco`
         : `${c.pendentes} pagamento(s) sem retorno há ${dias} dia(s)`,
-      acao: "Confira no aplicativo do BTG se o lote está aguardando autorização do master",
-      responsavel: "MASTER_BTG",
+      acao: "Confira no app do BTG se o lote está aguardando autorização e lembre o master",
+      // O operador é quem age: entra no banco, confirma que o lote está parado
+      // esperando autorização e cobra o master. Marcar o master como responsável
+      // deixava a pendência sem dono dentro da equipe — ele nem abre este painel.
+      responsavel: "OPERADOR",
       local: "BANCO",
       // Antes de cobrar o master, perguntar ao banco: a autorização pode já ter
       // acontecido e o sistema ainda não ter buscado o retorno.
@@ -182,8 +195,10 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
       dias_parado: dias,
       valor_pendente: Number(b.total_valor),
       qtd_pendente: c?.total ?? 0,
-      mensagem: "Aprovado e ainda não enviado ao banco",
-      acao: "Envie o borderô ao BTG",
+      // "Aprovado" sozinho confundia com a autorização do master no banco. Aqui
+      // é liberação interna: o lote nem chegou ao BTG.
+      mensagem: "Liberado internamente e ainda não enviado ao banco",
+      acao: "Envie ao BTG e avise o master para autorizar no aplicativo",
       responsavel: "OPERADOR",
       local: "SISTEMA",
       acao_sistema: "ENVIAR_BORDERO",
@@ -192,27 +207,54 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
   }
 
   if (st === "MONTAGEM") {
-    // Rascunho só vira pendência quando a data de pagamento já passou: até lá,
-    // é trabalho em andamento e não deve competir por atenção.
-    if (!b.data_pagamento || b.data_pagamento > hoje) return null;
     if (!c || c.total === 0) return null;
 
-    const dias = Math.max(0, diasEntre(b.data_pagamento, hoje));
+    const dias = b.data_pagamento ? Math.max(0, diasEntre(b.data_pagamento, hoje)) : 0;
+    const bloqueios = b.bloqueios_mesa ?? 0;
+
+    // Exceção esperando decisão é pendência mesmo antes da data: o item não vai
+    // ao banco enquanto ninguém liberar, e descobrir isso na véspera do
+    // pagamento é tarde. Já a montagem sem bloqueio é trabalho em andamento —
+    // só vira pendência quando a data passa.
+    if (bloqueios > 0) {
+      return {
+        ...base,
+        tipo: "MESA_PENDENTE",
+        severidade: b.data_pagamento && b.data_pagamento <= hoje
+          ? severidadePorDias(dias)
+          : "MEDIA",
+        dias_parado: dias,
+        valor_pendente: Number(b.total_valor),
+        qtd_pendente: bloqueios,
+        mensagem: `${bloqueios} de ${c.total} item(ns) fora da faixa autorizada — o borderô não vai ao banco assim`,
+        acao: "Decida na Mesa: libere o valor fora da faixa, ajuste o item ou registre exceção com justificativa",
+        // Liberar valor fora da faixa é a decisão que a rubrica existe para
+        // exigir; por isso é do admin, e quem montou não decide sobre o próprio
+        // borderô.
+        responsavel: "ADMIN",
+        local: "SISTEMA",
+        acao_sistema: "APROVAR_BORDERO",
+        acao_rotulo: "Abrir a Mesa",
+      };
+    }
+
+    if (!b.data_pagamento || b.data_pagamento > hoje) return null;
+
     return {
       ...base,
-      tipo: "MONTAGEM_ATRASADA",
+      tipo: "MONTAGEM_PARADA",
       severidade: severidadePorDias(dias),
       dias_parado: dias,
       valor_pendente: Number(b.total_valor),
       qtd_pendente: c.total,
-      mensagem: `Em montagem, com data de pagamento vencida há ${dias} dia(s)`,
-      acao: "Aprove o borderô (ou ajuste a data, se o pagamento foi remarcado)",
-      // Aprovar exige admin, e quem montou não aprova: é a separação de funções
-      // que impede a mesma pessoa autorizar o próprio pagamento.
-      responsavel: "ADMIN",
+      mensagem: `Montagem começada e não finalizada — data de pagamento venceu há ${dias} dia(s)`,
+      // Sem bloqueio de Mesa, o próprio envio libera o borderô: todos os itens
+      // têm lastro. Falta alguém clicar.
+      acao: "Envie ao BTG (o borderô se libera sozinho, pois todos os itens têm lastro) ou ajuste a data",
+      responsavel: "OPERADOR",
       local: "SISTEMA",
-      acao_sistema: "ABRIR_BORDERO",
-      acao_rotulo: "Abrir para aprovar",
+      acao_sistema: "ENVIAR_BORDERO",
+      acao_rotulo: "Enviar ao BTG",
     };
   }
 

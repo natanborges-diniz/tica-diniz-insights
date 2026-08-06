@@ -85,6 +85,33 @@ export function referenciasDoPagamento(
   return [...vistos];
 }
 
+/**
+ * Por que o banco recusou.
+ *
+ * Guardávamos só o status cru ("REJECTED", "FAILED"), que não diz nada ao
+ * operador: horário-limite? saldo? conta inválida? Sem isso ele tinha de abrir o
+ * app do BTG para descobrir, e quem não abre repete o mesmo erro no reenvio.
+ *
+ * O nome do campo varia conforme o endpoint, então varremos os candidatos em vez
+ * de fixar um — o que vier, serve.
+ */
+export function motivoRecusa(pay: Record<string, unknown> | null | undefined): string | null {
+  if (!pay) return null;
+  const candidatos = [
+    pay.errorMessage, pay.error_message, pay.reason, pay.statusReason,
+    pay.rejectionReason, pay.failureReason, pay.description, pay.detail,
+    pay.message, (pay.error as Record<string, unknown> | undefined)?.message,
+  ];
+  for (const c of candidatos) {
+    const s = String(c ?? "").trim();
+    // Evita ecoar o próprio status como se fosse explicação.
+    if (s && s.length > 2 && s.toUpperCase() !== String(pay.status ?? "").toUpperCase()) {
+      return s.slice(0, 300);
+    }
+  }
+  return null;
+}
+
 // ─── Efeitos ─────────────────────────────────────────────────
 /**
  * Baixa de lançamento por retorno do BTG — único caminho, webhook ou polling.
@@ -159,13 +186,21 @@ export async function baixarLancamentoBtg(
 }
 
 // deno-lint-ignore no-explicit-any
-async function rejeitarLancamento(db: any, lanc: Record<string, unknown>, statusBtg: string) {
+export async function rejeitarLancamentoBtg(
+  db: any,
+  lanc: Record<string, unknown>,
+  statusBtg: string,
+  pay?: Record<string, unknown> | null,
+) {
   const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
+  const motivo = motivoRecusa(pay);
   await db.from("lancamentos_financeiros").update({
     status: "AUTORIZADO",
     requer_validacao: true,
-    observacao: `Pagamento rejeitado pelo BTG (status: ${statusBtg}) — revisar dados e reenviar`,
-    dados_extras: { ...dados, btg_payment_status: statusBtg },
+    observacao: motivo
+      ? `Recusado pelo BTG: ${motivo} (status: ${statusBtg}) — corrija e monte um novo borderô`
+      : `Pagamento rejeitado pelo BTG (status: ${statusBtg}) — revisar dados e reenviar`,
+    dados_extras: { ...dados, btg_payment_status: statusBtg, btg_motivo_recusa: motivo },
   }).eq("id", lanc.id);
 }
 
@@ -281,7 +316,7 @@ export async function processarEvento(db: any, eventType: string, rawPayload: Re
         await db.from("btg_pagamentos").update({ status: "REJEITADO" }).eq("id", p.id);
       }
       for (const lanc of lancs) {
-        await rejeitarLancamento(db, lanc, String(payload.status));
+        await rejeitarLancamentoBtg(db, lanc, String(payload.status), payload);
         if (lanc.bordero_id) borderos.add(String(lanc.bordero_id));
       }
     }

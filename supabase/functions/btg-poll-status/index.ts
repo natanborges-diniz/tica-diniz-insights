@@ -8,7 +8,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { flattenStatements, normalizeMovement, assignDedupeKeys } from "../_shared/btgExtrato.ts";
-import { reprocessarEventosPendentes, baixarLancamentoBtg } from "../_shared/btgEventos.ts";
+import { reprocessarEventosPendentes, baixarLancamentoBtg, rejeitarLancamentoBtg } from "../_shared/btgEventos.ts";
 import { ratearValorPago } from "../_shared/rateio.ts";
 import { extrairRetornoFolha } from "../_shared/folha.ts";
 import { conciliarAgora } from "../_shared/conciliacaoAuto.ts";
@@ -115,18 +115,6 @@ function extractAmount(obj: Record<string, unknown>): number | null {
   if (raw == null) return null;
   if (typeof raw === "object") return Number((raw as Record<string, unknown>).amount ?? 0) || null;
   return Number(raw) || null;
-}
-
-// ─── Baixa de lançamento com dados reais ─────────────────────
-// deno-lint-ignore no-explicit-any
-async function rejeitarLancamento(db: any, lanc: Record<string, unknown>, statusBtg: string) {
-  const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
-  await db.from("lancamentos_financeiros").update({
-    status: "AUTORIZADO",
-    requer_validacao: true,
-    observacao: `Pagamento rejeitado pelo BTG (status: ${statusBtg}) — revisar dados e reenviar`,
-    dados_extras: { ...dados, btg_payment_status: statusBtg },
-  }).eq("id", lanc.id);
 }
 
 // ─── 1. Borderôs ENVIADO → consulta batch e baixa por pagamento ──
@@ -272,7 +260,7 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
           comBaixa.add(Number(bordero.cod_empresa));
           resultado.baixados++;
         } else if (st === "FALHA") {
-          await rejeitarLancamento(db, lanc, String(pay?.status ?? "BATCH_FALHA"));
+          await rejeitarLancamentoBtg(db, lanc, String(pay?.status ?? "BATCH_FALHA"), pay);
           resultado.rejeitados++;
           rejeitadosBordero++;
         } else {
@@ -390,7 +378,7 @@ async function pollFolhas(db: any, apiBase: string, isSandbox: boolean) {
           comBaixa.add(Number(bordero.cod_empresa));
           resultado.baixados++;
         } else if (st === "FALHA") {
-          await rejeitarLancamento(db, lanc, String(item?.status ?? retorno.statusLote ?? "FOLHA_FALHA"));
+          await rejeitarLancamentoBtg(db, lanc, String(item?.status ?? retorno.statusLote ?? "FOLHA_FALHA"), item as unknown as Record<string, unknown>);
           resultado.rejeitados++;
           rejeitadosFolha++;
         } else {

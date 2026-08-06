@@ -50,14 +50,23 @@ const RESPONSAVEL: Record<Responsavel, { rotulo: string; icone: typeof User }> =
 const ICONE: Record<TipoPendencia, typeof Clock> = {
   AGUARDANDO_BANCO: Clock,
   AGUARDANDO_ENVIO: Send,
-  MONTAGEM_ATRASADA: AlertTriangle,
+  MESA_PENDENTE: ShieldCheck,
+  MONTAGEM_PARADA: AlertTriangle,
   RECUSADO: XCircle,
 };
 
+/**
+ * Rótulos sem a palavra "aprovado" solta.
+ *
+ * "Aprovado, não enviado" confundia com a autorização do master no BTG — duas
+ * aprovações diferentes, em lugares diferentes, com donos diferentes. Aqui o
+ * vocabulário separa: liberação é interna, autorização é do banco.
+ */
 const TITULO: Record<TipoPendencia, string> = {
-  AGUARDANDO_BANCO: "Sem retorno do banco",
-  AGUARDANDO_ENVIO: "Aprovado, não enviado",
-  MONTAGEM_ATRASADA: "Em montagem, atrasado",
+  AGUARDANDO_BANCO: "No BTG, sem autorização do master",
+  AGUARDANDO_ENVIO: "Liberado internamente, falta enviar",
+  MESA_PENDENTE: "Exceção aguardando decisão na Mesa",
+  MONTAGEM_PARADA: "Borderô começado e não finalizado",
   RECUSADO: "Recusado pelo banco",
 };
 
@@ -229,8 +238,9 @@ export function PainelPendencias({ invokeAction, empresas, onAbrirBordero, onRes
 
         {pendencias.some((p) => p.tipo === "AGUARDANDO_BANCO") && (
           <p className="text-xs text-muted-foreground pt-1">
-            Borderô enviado e sem retorno costuma estar aguardando a autorização do master no
-            aplicativo do BTG — essa etapa acontece fora deste sistema.
+            Borderô enviado e sem retorno costuma estar parado no aplicativo do BTG esperando a
+            autorização do master. Confirme lá antes de cobrar — pode já ter sido autorizado e o
+            sistema ainda não ter buscado o retorno.
           </p>
         )}
       </CardContent>
