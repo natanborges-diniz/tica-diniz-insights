@@ -89,7 +89,7 @@ export interface EstadoBordero {
 }
 
 export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
-  let pagos = 0, rejeitados = 0, pendentes = 0;
+  let pagos = 0, rejeitados = 0, pendentes = 0, naoProcessados = 0;
   let proxima: string | null = null;
   const motivos: string[] = [];
 
@@ -97,13 +97,24 @@ export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
     const st = String(i.status ?? "").toUpperCase();
     if (st === "BAIXADO") { pagos++; continue; }
     if (st === "CANCELADO") continue; // saiu do borderô, não conta como nada
-    // Recusa do banco devolve o título para AUTORIZADO com requer_validacao.
-    if (i.requer_validacao) {
+
+    // Recusa do banco devolve o título para AUTORIZADO com requer_validacao —
+    // mas o status do próprio BTG também basta. Quando o banco diz FAILED e o
+    // título ficou PROCESSANDO, o pagamento não aconteceu: contar como pendente
+    // virava "aguardando autorização", pedindo ao operador uma ação que não
+    // existe no app do banco.
+    const falhou = falhouNoBanco(i.btg_status);
+    if (i.requer_validacao || falhou) {
       rejeitados++;
+      if (falhou && !i.requer_validacao) naoProcessados++;
       const m = String(i.motivo_recusa ?? "").trim();
-      if (m && !motivos.includes(m)) motivos.push(m);
+      const texto = m || (falhou
+        ? `O banco não processou o pagamento (${String(i.btg_status).toUpperCase()})`
+        : "");
+      if (texto && !motivos.includes(texto)) motivos.push(texto);
       continue;
     }
+
     pendentes++;
     const d = i.data_prevista ? String(i.data_prevista).slice(0, 10) : null;
     if (d && (proxima === null || d < proxima)) proxima = d;
@@ -112,10 +123,12 @@ export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
   return {
     total: pagos + rejeitados + pendentes,
     pagos, rejeitados, pendentes,
+    nao_processados: naoProcessados,
     proxima_data: proxima,
     motivos_recusa: motivos,
   };
 }
+
 
 /** dd/MM a partir de yyyy-MM-dd, sem passar por Date (fuso trocaria o dia). */
 function ddMM(iso: string): string {
