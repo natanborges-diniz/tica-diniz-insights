@@ -9,6 +9,9 @@ import {
   valorDoCodigoBarras,
   somenteDigitos,
   mod10,
+  formatarLinhaDigitavel,
+  vencimentoDoCodigoBarras,
+  diagnosticarBoleto,
 } from '../../../../supabase/functions/_shared/boleto';
 
 // Boleto real (Luxottica, Santander 033, venc 07/08/2026 = fator 1531, R$ 15,96)
@@ -120,5 +123,84 @@ describe('valorDoCodigoBarras', () => {
   it('devolve null em vez de lançar quando o código é inválido', () => {
     expect(valorDoCodigoBarras('123')).toBeNull();
     expect(valorDoCodigoBarras(null)).toBeNull();
+  });
+});
+
+// A tela agora dá retorno na hora: o operador cola do papel e vê se a linha
+// está certa, com valor e vencimento lidos do próprio código.
+describe('formatarLinhaDigitavel', () => {
+  it('formata a linha de 47 como está impressa no boleto', () => {
+    expect(formatarLinhaDigitavel(LINHA_LUXOTTICA))
+      .toBe('03399.94030 80900.001985 84636.301016 4 15310000001596');
+  });
+
+  it('é idempotente: formatar o já formatado dá o mesmo resultado', () => {
+    const uma = formatarLinhaDigitavel(LINHA_LUXOTTICA);
+    expect(formatarLinhaDigitavel(uma)).toBe(uma);
+  });
+
+  it('formata arrecadação em 4 blocos de 12', () => {
+    expect(formatarLinhaDigitavel('846700000017435900240209024050002435842126912197'))
+      .toBe('846700000017 435900240209 024050002435 842126912197');
+  });
+
+  it('formata parcialmente enquanto o operador digita', () => {
+    expect(formatarLinhaDigitavel('033999403')).toBe('03399.9403');
+    expect(formatarLinhaDigitavel('')).toBe('');
+  });
+});
+
+describe('vencimentoDoCodigoBarras', () => {
+  it('lê o vencimento do fator (Luxottica, fator 1531 = 07/08/2026)', () => {
+    expect(vencimentoDoCodigoBarras(LINHA_LUXOTTICA)).toBe('2026-08-07');
+    expect(vencimentoDoCodigoBarras(BARRAS_LUXOTTICA)).toBe('2026-08-07');
+  });
+
+  it('devolve null para arrecadação e para código inválido', () => {
+    expect(vencimentoDoCodigoBarras('846700000017435900240209024050002435842126912197')).toBeNull();
+    expect(vencimentoDoCodigoBarras('123')).toBeNull();
+  });
+});
+
+describe('diagnosticarBoleto', () => {
+  it('vazio quando não há dígitos', () => {
+    expect(diagnosticarBoleto('').status).toBe('vazio');
+    expect(diagnosticarBoleto(null).status).toBe('vazio');
+  });
+
+  it('incompleto (não erro) enquanto falta dígito', () => {
+    const d = diagnosticarBoleto(LINHA_LUXOTTICA.slice(0, 40));
+    expect(d.status).toBe('incompleto');
+    expect(d.mensagem).toContain('faltam 7');
+  });
+
+  it('ok com tipo, valor e vencimento na mensagem (caso real)', () => {
+    const d = diagnosticarBoleto('03399.94030 80900.001985 84636.301016 4 15310000001596');
+    expect(d.status).toBe('ok');
+    expect(d.tipo).toBe('COBRANCA');
+    expect(d.valor).toBe(15.96);
+    expect(d.vencimento).toBe('2026-08-07');
+    expect(d.mensagem).toContain('Boleto de cobrança');
+    expect(d.mensagem).toContain('07/08/2026');
+  });
+
+  it('reconhece arrecadação', () => {
+    const d = diagnosticarBoleto('846700000017435900240209024050002435842126912197');
+    expect(d.status).toBe('ok');
+    expect(d.tipo).toBe('ARRECADACAO');
+    expect(d.valor).toBeNull();
+  });
+
+  it('invalido quando o DV do campo não confere', () => {
+    const corrompida = LINHA_LUXOTTICA.slice(0, 4) + '0' + LINHA_LUXOTTICA.slice(5);
+    const d = diagnosticarBoleto(corrompida);
+    expect(d.status).toBe('invalido');
+    expect(d.mensagem).toMatch(/DV do campo/);
+  });
+
+  it('invalido quando o tamanho passa do esperado', () => {
+    const d = diagnosticarBoleto(LINHA_LUXOTTICA + '99999');
+    expect(d.status).toBe('invalido');
+    expect(d.mensagem).toContain('52 dígitos');
   });
 });

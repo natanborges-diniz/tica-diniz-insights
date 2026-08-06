@@ -143,3 +143,162 @@ export function paraLinhaDigitavel(entrada: unknown): string {
     `Código de boleto com ${d.length} dígitos — esperado 44 (barras), 47 (cobrança) ou 48 (arrecadação)`,
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Apoio à digitação na tela. O operador cola a linha do papel — com pontos,
+// espaços e barras — e precisa saber NA HORA se ela está certa. Antes, o campo
+// aceitava qualquer coisa e o erro só aparecia quando o borderô ia ao banco.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Máscara FEBRABAN, do jeito que está impressa no boleto — serve para o
+ * operador conferir o que colou contra o papel.
+ *
+ * Formatação parcial é intencional: o campo mostra progresso enquanto digita.
+ */
+export function formatarLinhaDigitavel(entrada: unknown): string {
+  const d = somenteDigitos(entrada);
+  if (!d) return "";
+
+  // Arrecadação (inicia em 8): 4 blocos de 12.
+  if (d[0] === "8") {
+    return (d.match(/.{1,12}/g) ?? []).join(" ");
+  }
+
+  // Cobrança: 5-5 . 5-6 . 5-6 . 1 . 14
+  const blocos = [
+    [0, 5],
+    [5, 10],
+    [10, 15],
+    [15, 21],
+    [21, 26],
+    [26, 32],
+    [32, 33],
+    [33, 47],
+  ] as const;
+  const separadores = [".", " ", ".", " ", ".", " ", " "];
+
+  let saida = "";
+  for (let i = 0; i < blocos.length; i++) {
+    const [ini, fim] = blocos[i];
+    if (d.length <= ini) break;
+    if (i > 0) saida += separadores[i - 1];
+    saida += d.slice(ini, fim);
+  }
+  return saida;
+}
+
+/** Base do fator de vencimento FEBRABAN. */
+const BASE_FATOR = Date.UTC(1997, 9, 7);
+
+/**
+ * Vencimento lido do fator (posições 5–8 do código de barras).
+ *
+ * Fator 0000 significa "sem vencimento". Acima de 9999 a FEBRABAN reiniciou a
+ * contagem em 1000 (regra de 2025), então fatores baixos são interpretados no
+ * ciclo novo. Arrecadação usa outro layout e devolve null.
+ */
+export function vencimentoDoCodigoBarras(entrada: unknown): string | null {
+  let barras: string;
+  try {
+    barras = paraCodigoBarras(entrada);
+  } catch {
+    return null;
+  }
+  if (barras[0] === "8") return null;
+
+  let fator = Number(barras.slice(5, 9));
+  if (!Number.isFinite(fator) || fator === 0) return null;
+  if (fator < 1000) fator += 9000; // ciclo reiniciado pós-fator 9999
+
+  const ms = BASE_FATOR + fator * 86400000;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+export type TipoBoleto = "COBRANCA" | "ARRECADACAO";
+
+export interface DiagnosticoBoleto {
+  status: "vazio" | "incompleto" | "invalido" | "ok";
+  digitos: number;
+  tipo: TipoBoleto | null;
+  valor: number | null;
+  vencimento: string | null;
+  mensagem: string;
+}
+
+/**
+ * Diagnóstico para exibir embaixo do campo.
+ *
+ * "incompleto" existe para não acusar erro a cada tecla: enquanto a linha não
+ * alcança um tamanho válido, o retorno é de progresso, não de falha.
+ */
+export function diagnosticarBoleto(entrada: unknown): DiagnosticoBoleto {
+  const d = somenteDigitos(entrada);
+  const arrecadacao = d[0] === "8";
+  const tipo: TipoBoleto | null = d ? (arrecadacao ? "ARRECADACAO" : "COBRANCA") : null;
+
+  if (!d) {
+    return { status: "vazio", digitos: 0, tipo: null, valor: null, vencimento: null, mensagem: "" };
+  }
+
+  const alvo = arrecadacao ? 48 : 47;
+  if (d.length !== 44 && d.length !== 47 && d.length !== 48) {
+    if (d.length < alvo) {
+      return {
+        status: "incompleto",
+        digitos: d.length,
+        tipo,
+        valor: null,
+        vencimento: null,
+        mensagem: `${d.length} de ${alvo} dígitos — faltam ${alvo - d.length}`,
+      };
+    }
+    return {
+      status: "invalido",
+      digitos: d.length,
+      tipo,
+      valor: null,
+      vencimento: null,
+      mensagem: `${d.length} dígitos — esperado 47 (boleto), 48 (concessionária) ou 44 (código de barras)`,
+    };
+  }
+
+  try {
+    paraCodigoBarras(d);
+  } catch (e) {
+    return {
+      status: "invalido",
+      digitos: d.length,
+      tipo,
+      valor: null,
+      vencimento: null,
+      mensagem: e instanceof Error
+        ? e.message
+        : "Linha inválida — confira os dígitos contra o boleto",
+    };
+  }
+
+  const valor = valorDoCodigoBarras(d);
+  const vencimento = vencimentoDoCodigoBarras(d);
+  const partes: string[] = [
+    arrecadacao ? "Conta de concessionária ou tributo" : "Boleto de cobrança",
+  ];
+  if (valor !== null) {
+    partes.push(
+      `valor ${valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
+    );
+  }
+  if (vencimento) {
+    const [a, m, dia] = vencimento.split("-");
+    partes.push(`vence ${dia}/${m}/${a}`);
+  }
+
+  return {
+    status: "ok",
+    digitos: d.length,
+    tipo,
+    valor,
+    vencimento,
+    mensagem: partes.join(" · "),
+  };
+}
