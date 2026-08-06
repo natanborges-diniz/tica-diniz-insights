@@ -4,15 +4,20 @@
 // motor (conciliar-extrato) ou pelas ações desta fila.
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, subDays, differenceInCalendarDays } from "date-fns";
+import { format, subDays, differenceInCalendarDays, startOfWeek, startOfMonth } from "date-fns";
+import { Link } from "react-router-dom";
 import {
   ArrowDownCircle, ArrowUpCircle, Download, Landmark, TrendingUp, TrendingDown,
   PieChart, CheckCircle2, Sparkles, Search, EyeOff, FilePlus2, Undo2, Clock, Settings2,
-  AlertTriangle,
+  AlertTriangle, Info,
 } from "lucide-react";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
 import { useDefaultEmpresa } from "@/hooks/useDefaultEmpresa";
+import { useFiltrosPersistentes } from "@/hooks/useFiltrosPersistentes";
+import { LojaSelect } from "@/components/system/LojaSelect";
+
 import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -138,18 +143,41 @@ export default function BankingExtratoDashboard() {
   const { codEmpresa: codEmpresaDefault, isAdmin } = useDefaultEmpresa();
   const queryClient = useQueryClient();
 
-  const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
-  const [dataInicio, setDataInicio] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
-  const [dataFim, setDataFim] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [filtroTipo, setFiltroTipo] = useState<string>("todos");
-  const [filtroStatus, setFiltroStatus] = useState<string>("PENDENTE");
+  // Filtros persistidos — a consulta não volta em branco ao sair e retornar.
+  const [filtros, setFiltros, limparFiltros] = useFiltrosPersistentes("extrato", {
+    codEmpresa: (codEmpresaDefault ?? 1) as number | null,
+    dataInicio: format(subDays(new Date(), 30), "yyyy-MM-dd"),
+    dataFim: format(new Date(), "yyyy-MM-dd"),
+    filtroTipo: "todos",
+    filtroStatus: "todos",
+  });
+  const { codEmpresa, dataInicio, dataFim, filtroTipo, filtroStatus } = filtros;
+  const setCodEmpresa = (v: number | null) => setFiltros({ codEmpresa: v });
+  const setDataInicio = (v: string) => setFiltros({ dataInicio: v });
+  const setDataFim = (v: string) => setFiltros({ dataFim: v });
+  const setFiltroTipo = (v: string) => setFiltros({ filtroTipo: v });
+  const setFiltroStatus = (v: string) => setFiltros({ filtroStatus: v });
+  const consolidado = codEmpresa === null;
+
+  const aplicarPreset = (preset: "semana" | "7d" | "mes" | "30d") => {
+    const hoje = new Date();
+    const inicio =
+      preset === "semana" ? startOfWeek(hoje, { weekStartsOn: 1 })
+      : preset === "7d" ? subDays(hoje, 7)
+      : preset === "mes" ? startOfMonth(hoje)
+      : subDays(hoje, 30);
+    setFiltros({ dataInicio: format(inicio, "yyyy-MM-dd"), dataFim: format(hoje, "yyyy-MM-dd") });
+  };
+
   const [btgAccessIssue, setBtgAccessIssue] = useState<string | null>(null);
+  const [comoFuncionaAberto, setComoFuncionaAberto] = useState(false);
 
   const [autoImported, setAutoImported] = useState(false);
   useEffect(() => {
     setAutoImported(false);
     setBtgAccessIssue(null);
   }, [codEmpresa]);
+
 
   // Dialogs
   const [candidatosFor, setCandidatosFor] = useState<ExtratoItem | null>(null);
@@ -186,7 +214,8 @@ export default function BankingExtratoDashboard() {
     queryKey: ["btg-extrato", codEmpresa, dataInicio, dataFim, filtroTipo, filtroStatus],
     queryFn: async () => {
       const params: Record<string, unknown> = {
-        action: "listar", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim,
+        action: "listar", cod_empresa: codEmpresa ?? 0, data_inicio: dataInicio, data_fim: dataFim,
+        limit: consolidado ? 500 : 200,
       };
       if (filtroStatus === "PENDENTE") params.status_conciliacao = "PENDENTE";
       else if (filtroStatus !== "todos") params.status_conciliacao = filtroStatus;
@@ -203,7 +232,7 @@ export default function BankingExtratoDashboard() {
       let items: ExtratoItem[] = Array.isArray(data) ? data : [];
 
       // Auto-import na primeira visita sem dados (persiste e relê — nada de linha "live")
-      if (items.length === 0 && !autoImported && filtroStatus === "PENDENTE") {
+      if (items.length === 0 && !autoImported && !consolidado) {
         setAutoImported(true);
         try {
           const { data: importResult } = await supabase.functions.invoke("btg-extrato", {
@@ -219,6 +248,7 @@ export default function BankingExtratoDashboard() {
         }
       }
 
+
       if (filtroTipo !== "todos") items = items.filter((i) => i.tipo === filtroTipo);
       return items;
     },
@@ -228,7 +258,7 @@ export default function BankingExtratoDashboard() {
     queryKey: ["btg-extrato-resumo", codEmpresa, dataInicio, dataFim],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
-        body: { action: "resumo", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
+        body: { action: "resumo", cod_empresa: codEmpresa ?? 0, data_inicio: dataInicio, data_fim: dataFim },
       });
       if (error) {
         const message = await getFunctionErrorMessage(error);
@@ -242,8 +272,21 @@ export default function BankingExtratoDashboard() {
     },
   });
 
+  // Última data importada por loja — base do aviso de extrato desatualizado
+  const { data: ultimaData } = useQuery<Record<string, string>>({
+    queryKey: ["btg-extrato-ultima-data"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("btg-extrato", {
+        body: { action: "ultima_data" },
+      });
+      if (error) return {};
+      return (data?.por_loja ?? {}) as Record<string, string>;
+    },
+  });
+
   const { data: saldo } = useQuery<SaldoResponse | null>({
     queryKey: ["btg-saldo", codEmpresa],
+    enabled: !consolidado,
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
         body: { action: "saldo", cod_empresa: codEmpresa },
@@ -259,6 +302,7 @@ export default function BankingExtratoDashboard() {
       return data as SaldoResponse;
     },
   });
+
 
   // ─── Mutations ───────────────────────────────────────────
   const importarMutation = useMutation({
@@ -407,6 +451,17 @@ export default function BankingExtratoDashboard() {
 
   const saldoDisponivel = saldo?.available?.amount;
 
+  const nomeLoja = (cod: number) =>
+    (empresas || []).find((e) => e.codEmpresa === cod)?.nome || `Loja ${cod}`;
+
+  // Lojas com extrato defasado (última importação anterior a ontem)
+  const ontem = format(subDays(new Date(), 1), "yyyy-MM-dd");
+  const lojasDefasadas = Object.entries(ultimaData ?? {})
+    .filter(([cod, d]) => (consolidado || Number(cod) === codEmpresa) && d < ontem)
+    .map(([cod, d]) => ({ cod: Number(cod), ultima: d }))
+    .sort((a, b) => a.ultima.localeCompare(b.ultima));
+
+
   const statusBadge = (item: ExtratoItem) => {
     const s = item.status_conciliacao || "PENDENTE";
     if (s === "PENDENTE") {
@@ -435,21 +490,41 @@ export default function BankingExtratoDashboard() {
         icon={<Landmark className="h-5 w-5" />}
       />
 
+      {/* ── Como funciona ───────────────────────────────────── */}
+      <Card className="border-primary/20 bg-primary/[0.03]">
+        <CardHeader className="pb-2">
+          <button
+            type="button"
+            className="flex items-center gap-2 text-sm font-medium text-left"
+            onClick={() => setComoFuncionaAberto((v) => !v)}
+          >
+            <Info className="h-4 w-4 text-primary" />
+            Como funciona a conciliação bancária
+            <span className="text-xs text-muted-foreground">
+              ({comoFuncionaAberto ? "ocultar" : "ver explicação"})
+            </span>
+          </button>
+        </CardHeader>
+        {comoFuncionaAberto && (
+          <CardContent className="text-sm text-muted-foreground space-y-1.5 pt-0">
+            <p><strong>Extrato</strong> = tudo que entrou e saiu da conta corrente no BTG, como no espelho do banco.</p>
+            <p><strong>Conciliar</strong> = apontar cada linha do extrato para o registro que a explica: um título do contas a pagar, um pagamento/boleto BTG, um recebível de cartão ou uma tarifa.</p>
+            <p><strong>Pendente</strong> = o que ainda não foi explicado. É o trabalho humano que resta — o resto o motor já fechou.</p>
+            <p className="pt-1">
+              Procurando uma <strong>conta paga</strong> (comprovante, valor pago, data da baixa)?
+              Isso não vive aqui: vá em{" "}
+              <Link to="/financeiro/hub" className="text-primary hover:underline font-medium">
+                Hub Financeiro → aba Pagos
+              </Link>
+              , que lista pela <strong>data de pagamento</strong>. Nem toda baixa passa por borderô — o sincronismo do ERP também baixa títulos.
+            </p>
+          </CardContent>
+        )}
+      </Card>
+
       {/* ── Filters + actions ───────────────────────────────── */}
       <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Empresa</label>
-          <Select value={String(codEmpresa)} onValueChange={(v) => setCodEmpresa(Number(v))}>
-            <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {(empresas || []).map((e) => (
-                <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
-                  {e.nome || `Empresa ${e.codEmpresa}`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <LojaSelect value={codEmpresa} onChange={setCodEmpresa} />
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">De</label>
           <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="w-[150px]" />
@@ -472,24 +547,37 @@ export default function BankingExtratoDashboard() {
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Status</label>
           <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-            <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[190px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="PENDENTE">A conciliar</SelectItem>
-              
-              <SelectItem value="CONCILIADO_AUTO">Conciliadas (auto)</SelectItem>
-              <SelectItem value="CONCILIADO_MANUAL">Conciliadas (manual)</SelectItem>
-              <SelectItem value="IGNORADO">Ignoradas</SelectItem>
-              <SelectItem value="todos">Todas</SelectItem>
+              <SelectItem value="todos">
+                Todas{resumo ? ` (${resumo.total_lancamentos})` : ""}
+              </SelectItem>
+              <SelectItem value="PENDENTE">
+                A conciliar{resumo ? ` (${resumo.total_pendente})` : ""}
+              </SelectItem>
+              <SelectItem value="CONCILIADO_AUTO">
+                Conciliadas (auto){resumo ? ` (${(resumo.por_metodo?.EXATO ?? 0) + (resumo.por_metodo?.TOLERANCIA ?? 0) + (resumo.por_metodo?.AGRUPADO ?? 0) + (resumo.por_metodo?.REGRA ?? 0)})` : ""}
+              </SelectItem>
+              <SelectItem value="CONCILIADO_MANUAL">
+                Conciliadas (manual){resumo ? ` (${resumo.por_metodo?.MANUAL ?? 0})` : ""}
+              </SelectItem>
+              <SelectItem value="IGNORADO">
+                Ignoradas{resumo ? ` (${resumo.por_metodo?.IGNORADO ?? 0})` : ""}
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" size="sm" onClick={() => importarMutation.mutate()} disabled={importarMutation.isPending}>
+        <Button variant="outline" size="sm" onClick={() => importarMutation.mutate()}
+          disabled={importarMutation.isPending || consolidado}
+          title={consolidado ? "Escolha uma loja para importar o extrato" : undefined}>
           <Download className="h-4 w-4 mr-1" />
           Importar BTG
         </Button>
         {isAdmin && (
           <>
-            <Button size="sm" onClick={() => executarMotorMutation.mutate()} disabled={executarMotorMutation.isPending}>
+            <Button size="sm" onClick={() => executarMotorMutation.mutate()}
+              disabled={executarMotorMutation.isPending || consolidado}
+              title={consolidado ? "Escolha uma loja para rodar o motor" : undefined}>
               <Sparkles className="h-4 w-4 mr-1" />
               {executarMotorMutation.isPending ? "Conciliando..." : "Rodar motor"}
             </Button>
@@ -499,6 +587,16 @@ export default function BankingExtratoDashboard() {
             </Button>
           </>
         )}
+      </div>
+
+      {/* Atalhos de período */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">Período:</span>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => aplicarPreset("semana")}>Esta semana</Button>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => aplicarPreset("7d")}>Últimos 7 dias</Button>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => aplicarPreset("mes")}>Este mês</Button>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => aplicarPreset("30d")}>30 dias</Button>
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={limparFiltros}>Limpar filtros</Button>
       </div>
 
       {btgAccessIssue && (
@@ -511,11 +609,32 @@ export default function BankingExtratoDashboard() {
         </Alert>
       )}
 
+      {lojasDefasadas.length > 0 && (
+        <Alert variant="destructive">
+          <Clock className="h-4 w-4" />
+          <AlertTitle>Extrato desatualizado</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>
+              {lojasDefasadas.map((l) => `${nomeLoja(l.cod)} (até ${format(new Date(l.ultima + "T12:00:00"), "dd/MM")})`).join(" · ")}
+              {" "}— sem importação desde então, então a semana pode não estar completa aqui.
+            </p>
+            {!consolidado && (
+              <Button size="sm" variant="outline" onClick={() => importarMutation.mutate()}
+                disabled={importarMutation.isPending}>
+                <Download className="h-4 w-4 mr-1" />
+                Importar o período faltante
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* ── KPI Cards ───────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+
               <Landmark className="h-4 w-4" /> Saldo Disponível
             </CardTitle>
           </CardHeader>
@@ -602,6 +721,8 @@ export default function BankingExtratoDashboard() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[90px]">Data</TableHead>
+                  {consolidado && <TableHead className="w-[140px]">Loja</TableHead>}
+
                   <TableHead>Descrição</TableHead>
                   <TableHead className="w-[110px] text-right">Valor</TableHead>
                   <TableHead className="w-[130px]">Natureza</TableHead>
@@ -613,17 +734,19 @@ export default function BankingExtratoDashboard() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={consolidado ? 8 : 7} className="text-center py-8 text-muted-foreground">
                       Carregando...
                     </TableCell>
                   </TableRow>
                 ) : lancamentos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={consolidado ? 8 : 7} className="text-center py-8 text-muted-foreground">
                       {btgAccessIssue
                         ? "Empresa sem autenticação BTG — conecte antes de importar o extrato."
                         : filtroStatus === "PENDENTE"
                         ? "Nenhuma pendência — extrato 100% explicado. 🎉"
+                        : consolidado
+                        ? "Nenhum lançamento no período para as lojas selecionadas."
                         : "Nenhum lançamento encontrado."}
                     </TableCell>
                   </TableRow>
@@ -637,6 +760,9 @@ export default function BankingExtratoDashboard() {
                         <TableCell className="text-sm">
                           {format(new Date(item.data_lancamento + "T12:00:00"), "dd/MM/yy")}
                         </TableCell>
+                        {consolidado && (
+                          <TableCell className="text-xs font-medium">{nomeLoja(item.cod_empresa)}</TableCell>
+                        )}
                         <TableCell className="text-sm max-w-[280px]">
                           <div className="flex items-center gap-2">
                             {item.tipo === "CREDITO" ? (
