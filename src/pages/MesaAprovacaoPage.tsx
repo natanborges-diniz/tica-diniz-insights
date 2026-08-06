@@ -18,6 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 
 interface LancMesa {
   id: string;
@@ -89,6 +91,7 @@ export default function MesaAprovacaoPage() {
   );
   const [filtroSelo, setFiltroSelo] = useState<string>("todos");
   const [borderoFoco, setBorderoFoco] = useState<string | null>(borderoFocoParam);
+  const [busca, setBusca] = useState("");
 
 
   const invokeAction = async (action: string, extra: Record<string, unknown> = {}) => {
@@ -137,8 +140,11 @@ export default function MesaAprovacaoPage() {
         return acc;
       }, {})
     : (mesa?.resumo_selos ?? {});
-  const lancamentos = escopoLancs
-    .filter((l) => filtroSelo === "todos" || l.selo === filtroSelo);
+  const lancamentos = filtrarPorBusca(
+    escopoLancs.filter((l) => filtroSelo === "todos" || l.selo === filtroSelo),
+    busca,
+    (l) => [l.pessoa_nome, l.descricao, l.rubrica_descricao, l.valor],
+  );
 
   // Exceção aprovada tem selo VERMELHO com pode_bordero=true — já saiu da fila.
   const excecoesPendentes = (mesa?.lancamentos ?? [])
@@ -210,6 +216,13 @@ export default function MesaAprovacaoPage() {
           ))}
 
         </div>
+        <SearchField
+          value={busca}
+          onChange={setBusca}
+          placeholder="Buscar por favorecido, descrição ou valor..."
+          className="max-w-sm"
+          resultados={lancamentos.length}
+        />
       </div>
 
       {/* Cobranças chegando sem entrada no ERP (DDA órfão) */}
@@ -359,7 +372,9 @@ export default function MesaAprovacaoPage() {
                 {isLoading ? (
                   <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
                 ) : lancamentos.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nada pendente neste filtro. 🎉</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    {busca ? "Nenhum lançamento encontrado para a busca." : "Nada pendente neste filtro. 🎉"}
+                  </TableCell></TableRow>
                 ) : (
                   lancamentos.map((l) => (
                     <TableRow key={l.id}>
