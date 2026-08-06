@@ -26,6 +26,13 @@ import {
   type CandidatoForte,
   type Alocacao,
 } from "../_shared/conciliacaoMotor.ts";
+import {
+  ehDevolucao,
+  acharDebitoEstornado,
+  falhaFinalDoBanco,
+  type LinhaExtrato,
+} from "../_shared/estornoExtrato.ts";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -274,6 +281,10 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
   for (const l of (lancTransito || [])) {
     if (usados.has(`LANCAMENTO|${l.id}`)) continue;
     const extras = (l.dados_extras || {}) as Record<string, unknown>;
+    // Banco já respondeu falha: o débito que aparecer no extrato vem com
+    // devolução atrás. Não é candidato a baixa.
+    if (falhaFinalDoBanco(extras)) continue;
+
     const cand: CandidatoForte = {
       alvo_tipo: "LANCAMENTO",
       id: l.id,
@@ -349,14 +360,24 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
     }));
 
   // Ambos ← lançamentos em aberto
+  //
+  // Recusa do banco tira o lançamento do pool: um pagamento que voltou FAILED
+  // não pode ser baixado por coincidência de valor com uma linha do extrato. Foi
+  // assim que um salário devolvido pelo Pix apareceu como "Baixado" — o débito
+  // estava no extrato, o crédito da devolução também, e o motor casou só o
+  // primeiro. Enquanto o operador não corrigir e reenviar, ele não é candidato.
   const { data: lancAbertos } = await db
     .from("lancamentos_financeiros")
-    .select("id, tipo, valor, data_vencimento, descricao")
+    .select("id, tipo, valor, data_vencimento, descricao, requer_validacao, dados_extras")
     .eq("cod_empresa", codEmpresa)
     .in("status", ["PREVISTO", "AUTORIZADO", "PROCESSANDO"])
     .is("btg_extrato_id", null);
   const poolLanc = (lancAbertos || [])
-    .filter((l: { id: string }) => !usados.has(`LANCAMENTO|${l.id}`))
+    .filter((l: { id: string; requer_validacao?: boolean | null; dados_extras?: Record<string, unknown> | null }) =>
+      !usados.has(`LANCAMENTO|${l.id}`) &&
+      !l.requer_validacao &&
+      !falhaFinalDoBanco(l.dados_extras)
+    )
     .map((l: { id: string; tipo: string; valor: number; data_vencimento: string; descricao: string | null }) => ({
       id: l.id,
       tipo: l.tipo as "PAGAR" | "RECEBER",
@@ -364,6 +385,7 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
       data_vencimento: l.data_vencimento,
       label: l.descricao ?? undefined,
     }));
+
 
   // Regras: específicas da empresa primeiro, depois globais
   const { data: regras } = await db
@@ -393,8 +415,169 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
   };
 }
 
+/**
+ * Devoluções primeiro: dinheiro que saiu e voltou não é despesa.
+ *
+ * Roda antes do matching por dois motivos. Um: se a devolução ficar para depois,
+ * o débito já terá sido conciliado e o lançamento baixado — e desfazer depois
+ * exige que alguém perceba. Dois: nenhuma das duas linhas pode entrar no
+ * waterfall, porque ambas casariam por valor exato com títulos que não têm nada
+ * a ver com elas.
+ *
+ * Efeitos: desfaz a conciliação do débito (o que devolve o lançamento ao fluxo),
+ * marca o lançamento como não processado pelo banco, e sela o par como estorno.
+ */
+async function processarEstornos(
+  db: ReturnType<typeof getServiceClient>,
+  codEmpresa: number,
+): Promise<{ pares: number; lancamentos_reabertos: number; erros: string[] }> {
+  const saida = { pares: 0, lancamentos_reabertos: 0, erros: [] as string[] };
+
+  const { data: pendentes } = await db
+    .from("btg_extrato")
+    .select("id, data_lancamento, descricao, valor, tipo, dados_extras")
+    .eq("cod_empresa", codEmpresa)
+    .eq("tipo", "CREDITO")
+    .eq("status_conciliacao", "PENDENTE")
+    .order("data_lancamento", { ascending: true })
+    .limit(300);
+
+  const devolucoes = (pendentes || []).filter((l: { descricao: string | null; tipo: string }) =>
+    ehDevolucao({ descricao: l.descricao, tipo: l.tipo as "CREDITO" })
+  );
+  if (devolucoes.length === 0) return saida;
+
+  // Débitos candidatos: 30 dias para trás cobrem devolução tardia de boleto.
+  const desde = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const { data: debitosRaw } = await db
+    .from("btg_extrato")
+    .select("id, data_lancamento, descricao, valor, tipo, dados_extras, status_conciliacao")
+    .eq("cod_empresa", codEmpresa)
+    .eq("tipo", "DEBITO")
+    .gte("data_lancamento", desde)
+    .limit(2000);
+
+  const debitos: LinhaExtrato[] = (debitosRaw || []).map((d: Record<string, unknown>) => ({
+    id: String(d.id),
+    data_lancamento: String(d.data_lancamento),
+    descricao: (d.descricao as string) ?? null,
+    valor: Number(d.valor),
+    tipo: "DEBITO",
+    referencias: extrairReferencias(d.dados_extras),
+  }));
+
+  for (const dev of devolucoes) {
+    try {
+      const linha: LinhaExtrato = {
+        id: dev.id,
+        data_lancamento: dev.data_lancamento,
+        descricao: dev.descricao,
+        valor: Number(dev.valor),
+        tipo: "CREDITO",
+        referencias: extrairReferencias(dev.dados_extras),
+      };
+      const par = acharDebitoEstornado(linha, debitos);
+      if (!par) continue;
+
+      // 1. Desfaz a conciliação do débito, se existir: a RPC também reverte a
+      //    baixa do lançamento (ou apaga o lançamento criado a partir da linha).
+      const { data: alocs } = await db
+        .from("conciliacao_extrato")
+        .select("alvo_tipo, alvo_id")
+        .eq("extrato_id", par.debito_id);
+      const lancamentosAfetados = (alocs || [])
+        .filter((a: { alvo_tipo: string; alvo_id: string | null }) => a.alvo_tipo === "LANCAMENTO" && a.alvo_id)
+        .map((a: { alvo_id: string }) => a.alvo_id);
+
+      if ((alocs || []).length > 0) {
+        const { error } = await db.rpc("fn_desconciliar_extrato", {
+          p_extrato_id: par.debito_id,
+          p_user: null,
+        });
+        if (error) {
+          saida.erros.push(`estorno ${dev.id}: ${error.message}`);
+          continue;
+        }
+      }
+
+      // 2. O lançamento volta a exigir ação: o dinheiro voltou, ninguém recebeu.
+      for (const lancId of lancamentosAfetados) {
+        const { data: lanc } = await db
+          .from("lancamentos_financeiros")
+          .select("id, dados_extras")
+          .eq("id", lancId)
+          .maybeSingle();
+        if (!lanc) continue;
+        const extras = (lanc.dados_extras || {}) as Record<string, unknown>;
+        await db.from("lancamentos_financeiros").update({
+          status: "AUTORIZADO",
+          requer_validacao: true,
+          valor_pago: null,
+          data_pagamento: null,
+          data_baixa: null,
+          baixado_em: null,
+          btg_extrato_id: null,
+          observacao: "Pagamento devolvido pelo banco — o valor saiu e voltou na conta. "
+            + "Corrija os dados do favorecido e monte um novo borderô",
+          dados_extras: {
+            ...extras,
+            btg_payment_status: "RETURNED",
+            btg_motivo_recusa: "Pagamento devolvido pelo banco (crédito de devolução no extrato)",
+            btg_recusa_codigo: "payment-returned",
+            btg_recusa_resolver: "Confira dados bancários/chave Pix do favorecido e reenvie",
+            estorno_extrato_id: dev.id,
+            estorno_detectado_em: new Date().toISOString(),
+          },
+          updated_at: new Date().toISOString(),
+        }).eq("id", lancId);
+        saida.lancamentos_reabertos++;
+      }
+
+      // 3. Sela o par: as duas linhas saem do waterfall e ficam auditáveis.
+      const nowIso = new Date().toISOString();
+      const dadosDev = (dev.dados_extras || {}) as Record<string, unknown>;
+      await db.from("btg_extrato").update({
+        status_conciliacao: "IGNORADO",
+        metodo_conciliacao: "ESTORNO",
+        conciliado: true,
+        conciliado_em: nowIso,
+        dados_extras: {
+          ...dadosDev,
+          estorno_par_extrato_id: par.debito_id,
+          estorno_motivo: par.motivo,
+          ignorar_observacao: "Devolução do pagamento — anula o débito correspondente",
+        },
+        updated_at: nowIso,
+      }).eq("id", dev.id);
+
+      const debitoOriginal = (debitosRaw || []).find((d: { id: string }) => d.id === par.debito_id);
+      const dadosDeb = (debitoOriginal?.dados_extras || {}) as Record<string, unknown>;
+      await db.from("btg_extrato").update({
+        status_conciliacao: "IGNORADO",
+        metodo_conciliacao: "ESTORNO",
+        conciliado: true,
+        conciliado_em: nowIso,
+        dados_extras: {
+          ...dadosDeb,
+          estorno_par_extrato_id: dev.id,
+          estorno_motivo: par.motivo,
+          ignorar_observacao: "Pagamento devolvido — a devolução anula este débito",
+        },
+        updated_at: nowIso,
+      }).eq("id", par.debito_id);
+
+      saida.pares++;
+    } catch (e) {
+      saida.erros.push(`estorno ${dev.id}: ${String(e)}`);
+    }
+  }
+
+  return saida;
+}
+
 // ─── ACTION: executar ────────────────────────────────────────
 async function handleExecutar(db: ReturnType<typeof getServiceClient>, body: Record<string, unknown> | null) {
+
   const codEmpresaFiltro = body?.cod_empresa ? Number(body.cod_empresa) : null;
 
   let empresas: number[];
@@ -409,12 +592,20 @@ async function handleExecutar(db: ReturnType<typeof getServiceClient>, body: Rec
     empresas = [...new Set((data || []).map((e: { cod_empresa: number }) => e.cod_empresa))] as number[];
   }
 
-  const resultado = { empresas: empresas.length, conciliados: 0, com_sugestao: 0, sem_match: 0, erros: [] as string[] };
+  const resultado = { empresas: empresas.length, conciliados: 0, com_sugestao: 0, sem_match: 0, estornos: 0, reabertos: 0, erros: [] as string[] };
 
   for (const codEmpresa of empresas) {
     try {
+      // Devoluções antes do matching: o par débito+crédito se anula e nenhuma
+      // das duas linhas pode casar com título nenhum.
+      const estornos = await processarEstornos(db, codEmpresa);
+      resultado.estornos += estornos.pares;
+      resultado.reabertos += estornos.lancamentos_reabertos;
+      resultado.erros.push(...estornos.erros);
+
       const pools = await carregarPools(db, codEmpresa);
       const usados = new Set<string>();
+
 
       const { data: entries } = await db
         .from("btg_extrato")

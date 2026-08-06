@@ -59,7 +59,7 @@ export interface ComposicaoBordero {
    * É a fatia dos rejeitados que estava invisível: o banco não processou e o
    * sistema ainda mostrava o título como em trânsito.
    */
-  nao_processados: number;
+  nao_processados?: number;
   /** Menor data prevista entre os itens ainda pendentes (yyyy-MM-dd). */
   proxima_data: string | null;
   /**
