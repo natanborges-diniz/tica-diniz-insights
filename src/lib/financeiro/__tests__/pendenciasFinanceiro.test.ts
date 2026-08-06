@@ -171,3 +171,57 @@ describe('resumirPendencias', () => {
     });
   });
 });
+
+describe('quem faz e onde — a pendência não pode circular entre as pessoas', () => {
+  it('sem retorno é do master do BTG, no aplicativo do banco', () => {
+    const p = pendenciaDoBordero(bordero(), HOJE);
+    expect(p?.responsavel).toBe('MASTER_BTG');
+    expect(p?.local).toBe('BANCO');
+  });
+
+  it('mas ainda oferece consultar o banco daqui, antes de cobrar alguém', () => {
+    // A autorização pode já ter acontecido e o sistema não ter buscado o retorno.
+    const p = pendenciaDoBordero(bordero(), HOJE);
+    expect(p?.acao_sistema).toBe('ATUALIZAR_RETORNO');
+    expect(p?.acao_rotulo).toBe('Consultar o banco agora');
+  });
+
+  it('recusado é do admin, resolvido no sistema', () => {
+    const p = pendenciaDoBordero(
+      bordero({ composicao: comp({ total: 3, pagos: 2, rejeitados: 1, pendentes: 0 }) }),
+      HOJE,
+    );
+    expect(p?.responsavel).toBe('ADMIN');
+    expect(p?.local).toBe('SISTEMA');
+    expect(p?.acao_sistema).toBe('DEVOLVER_PREPARO');
+  });
+
+  it('aprovado sem envio é do operador, resolvido no sistema', () => {
+    const p = pendenciaDoBordero(bordero({ status: 'APROVADO' }), HOJE);
+    expect(p?.responsavel).toBe('OPERADOR');
+    expect(p?.local).toBe('SISTEMA');
+    expect(p?.acao_sistema).toBe('ENVIAR_BORDERO');
+  });
+
+  it('montagem atrasada é do admin — quem monta não aprova o próprio pagamento', () => {
+    const p = pendenciaDoBordero(bordero({ status: 'MONTAGEM' }), HOJE);
+    expect(p?.responsavel).toBe('ADMIN');
+    expect(p?.acao_sistema).toBe('ABRIR_BORDERO');
+  });
+
+  it('toda pendência diz quem faz, onde, e o que o botão dispara', () => {
+    const casos = [
+      bordero(),
+      bordero({ status: 'APROVADO' }),
+      bordero({ status: 'MONTAGEM' }),
+      bordero({ composicao: comp({ total: 2, pagos: 1, rejeitados: 1, pendentes: 0 }) }),
+    ];
+    for (const b of casos) {
+      const p = pendenciaDoBordero(b, HOJE)!;
+      expect(p.responsavel).toBeDefined();
+      expect(p.local).toBeDefined();
+      expect(p.acao_sistema).toBeDefined();
+      expect(p.acao_rotulo).toBeTruthy();
+    }
+  });
+});

@@ -7,7 +7,10 @@
 //
 // Este painel existe para que a primeira notícia venha daqui.
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Clock, Send, XCircle, CheckCircle2, ChevronRight } from "lucide-react";
+import {
+  AlertTriangle, Clock, Send, XCircle, CheckCircle2, ChevronRight,
+  Landmark, Monitor, User, ShieldCheck, RefreshCw,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +20,8 @@ import type {
   ResumoPainel,
   TipoPendencia,
   Severidade,
+  Responsavel,
+  AcaoSistema,
 } from "../../../supabase/functions/_shared/pendenciasFinanceiro";
 
 interface Props {
@@ -25,7 +30,22 @@ interface Props {
   empresas: Array<{ codEmpresa: number; nome?: string | null }>;
   /** Abre o detalhe do borderô — o painel aponta, o detalhe resolve. */
   onAbrirBordero: (borderoId: string) => void;
+  /**
+   * Executa a ação de encaminhamento. O painel decide qual, a página sabe como.
+   * Sem isto, o painel só apontava o problema e o operador tinha de procurar
+   * onde resolvê-lo.
+   */
+  onResolver: (acao: AcaoSistema, borderoId: string) => void;
+  /** Ação em andamento — evita clique duplo em operação que mexe com dinheiro. */
+  resolvendo?: boolean;
 }
+
+/** Quem tem de agir. "Master" é o do BTG, não um papel deste sistema. */
+const RESPONSAVEL: Record<Responsavel, { rotulo: string; icone: typeof User }> = {
+  OPERADOR: { rotulo: "Operador", icone: User },
+  ADMIN: { rotulo: "Admin", icone: ShieldCheck },
+  MASTER_BTG: { rotulo: "Master no BTG", icone: Landmark },
+};
 
 const ICONE: Record<TipoPendencia, typeof Clock> = {
   AGUARDANDO_BANCO: Clock,
@@ -56,7 +76,7 @@ const BADGE: Record<Severidade, "destructive" | "outline" | "secondary"> = {
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-export function PainelPendencias({ invokeAction, empresas, onAbrirBordero }: Props) {
+export function PainelPendencias({ invokeAction, empresas, onAbrirBordero, onResolver, resolvendo }: Props) {
   const { data, isLoading } = useQuery<{ pendencias: Pendencia[]; resumo: ResumoPainel }>({
     queryKey: ["painel-pendencias"],
     queryFn: () => invokeAction("painel_pendencias") as Promise<{
@@ -119,14 +139,13 @@ export function PainelPendencias({ invokeAction, empresas, onAbrirBordero }: Pro
       <CardContent className="space-y-2">
         {pendencias.map((p) => {
           const Icone = ICONE[p.tipo] ?? Clock;
+          const resp = RESPONSAVEL[p.responsavel];
+          const IconeResp = resp?.icone ?? User;
+          const noBanco = p.local === "BANCO";
           return (
-            <button
+            <div
               key={p.bordero_id}
-              onClick={() => onAbrirBordero(p.bordero_id)}
-              className={cn(
-                "w-full text-left border rounded-lg p-3 transition-colors hover:bg-muted/50",
-                COR[p.severidade],
-              )}
+              className={cn("border rounded-lg p-3", COR[p.severidade])}
             >
               <div className="flex items-start gap-3">
                 <Icone className={cn(
@@ -145,7 +164,25 @@ export function PainelPendencias({ invokeAction, empresas, onAbrirBordero }: Pro
                   </div>
 
                   <p className="text-xs text-muted-foreground mt-1">{p.mensagem}</p>
-                  <p className="text-xs mt-0.5">
+
+                  {/* Quem faz e onde. Sem isto a pendência circula entre as
+                      pessoas: o operador espera o admin, o admin acha que é no
+                      banco, e ninguém resolve. */}
+                  <div className="flex items-center gap-3 flex-wrap mt-1.5 text-xs">
+                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      <IconeResp className="h-3 w-3" />
+                      {resp?.rotulo ?? p.responsavel}
+                    </span>
+                    <span className={cn(
+                      "inline-flex items-center gap-1",
+                      noBanco ? "text-amber-700 font-medium" : "text-muted-foreground",
+                    )}>
+                      {noBanco ? <Landmark className="h-3 w-3" /> : <Monitor className="h-3 w-3" />}
+                      {noBanco ? "No aplicativo do BTG" : "Aqui no sistema"}
+                    </span>
+                  </div>
+
+                  <p className="text-xs mt-1">
                     <span className="text-muted-foreground">O que fazer: </span>
                     {p.acao}
                   </p>
@@ -159,10 +196,34 @@ export function PainelPendencias({ invokeAction, empresas, onAbrirBordero }: Pro
                     {p.dias_parado === 0 ? "hoje" : `${p.dias_parado} dia(s)`}
                   </p>
                 </div>
-
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
               </div>
-            </button>
+
+              {/* Encaminhamento: resolver daqui quando dá, abrir o borderô sempre. */}
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50">
+                {p.acao_sistema && (
+                  <Button
+                    size="sm"
+                    variant={noBanco ? "outline" : "default"}
+                    className="h-7 text-xs"
+                    disabled={resolvendo}
+                    onClick={() => onResolver(p.acao_sistema!, p.bordero_id)}
+                  >
+                    {p.acao_sistema === "ATUALIZAR_RETORNO" && (
+                      <RefreshCw className={cn("h-3 w-3 mr-1", resolvendo && "animate-spin")} />
+                    )}
+                    {p.acao_rotulo}
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={() => onAbrirBordero(p.bordero_id)}
+                >
+                  Abrir borderô <ChevronRight className="h-3 w-3 ml-1" />
+                </Button>
+              </div>
+            </div>
           );
         })}
 

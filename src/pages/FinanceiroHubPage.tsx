@@ -249,6 +249,36 @@ export default function FinanceiroHubPage() {
   });
 
   // ── Mutations ──
+  /**
+   * Encaminhamento a partir do painel.
+   *
+   * O painel decide QUAL ação cabe em cada pendência; aqui está COMO executá-la.
+   * Antes ele só apontava o problema, e o operador tinha de descobrir sozinho em
+   * que tela resolver — que é onde a pendência morria.
+   */
+  const resolverPendencia = (acao: string, borderoId: string) => {
+    switch (acao) {
+      case "ENVIAR_BORDERO":
+        enviarBorderoMutation.mutate(borderoId);
+        return;
+      case "DEVOLVER_PREPARO":
+        devolverPreparoMutation.mutate(borderoId);
+        return;
+      case "ATUALIZAR_RETORNO":
+        // Consulta o BTG agora. Se o master já autorizou, a baixa entra e a
+        // pendência some sozinha — sem ninguém precisar cobrar ninguém.
+        atualizarRetornoMutation.mutate();
+        return;
+      case "APROVAR_BORDERO":
+        setActiveTab("borderos");
+        setLiberarBorderoId(borderoId);
+        return;
+      default:
+        setActiveTab("borderos");
+        setBorderoDetalheId(borderoId);
+    }
+  };
+
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["lancamentos"] });
     queryClient.invalidateQueries({ queryKey: ["borderos"] });
@@ -789,6 +819,12 @@ export default function FinanceiroHubPage() {
           invokeAction={invokeAction}
           empresas={empresas || []}
           onAbrirBordero={(id) => { setActiveTab("borderos"); setBorderoDetalheId(id); }}
+          onResolver={resolverPendencia}
+          resolvendo={
+            enviarBorderoMutation.isPending ||
+            devolverPreparoMutation.isPending ||
+            atualizarRetornoMutation.isPending
+          }
         />
 
         {/* Workflow Stepper */}

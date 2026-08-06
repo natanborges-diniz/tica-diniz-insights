@@ -26,6 +26,32 @@ export type TipoPendencia =
 
 export type Severidade = "ALTA" | "MEDIA" | "BAIXA";
 
+/**
+ * Quem resolve.
+ *
+ * "Master" aqui é o do BTG — a pessoa que autoriza o lote no aplicativo do
+ * banco. Não é papel deste sistema, e confundir os dois faz o operador ficar
+ * procurando um botão que não existe.
+ */
+export type Responsavel = "OPERADOR" | "ADMIN" | "MASTER_BTG";
+
+/** Onde a operação acontece. */
+export type Local = "SISTEMA" | "BANCO";
+
+/**
+ * Ação executável a partir do painel. Ausente quando a saída é fora daqui.
+ *
+ * `ATUALIZAR_RETORNO` aparece mesmo quando o local é BANCO: antes de cobrar o
+ * master, vale perguntar ao BTG se ele já autorizou — a resposta pode estar
+ * pronta e ninguém ter olhado.
+ */
+export type AcaoSistema =
+  | "ENVIAR_BORDERO"
+  | "APROVAR_BORDERO"
+  | "DEVOLVER_PREPARO"
+  | "ATUALIZAR_RETORNO"
+  | "ABRIR_BORDERO";
+
 export interface BorderoParaPainel {
   id: string;
   cod_empresa: number;
@@ -50,6 +76,14 @@ export interface Pendencia {
   qtd_pendente: number;
   mensagem: string;
   acao: string;
+  /** Quem tem de agir — evita a pendência circular entre as pessoas. */
+  responsavel: Responsavel;
+  /** SISTEMA resolve por aqui; BANCO exige o app do BTG. */
+  local: Local;
+  /** O que o botão do painel dispara, quando há o que disparar. */
+  acao_sistema?: AcaoSistema;
+  /** Rótulo do botão. */
+  acao_rotulo?: string;
 }
 
 /** Diferença em dias entre duas datas yyyy-MM-dd, sem passar por fuso. */
@@ -103,7 +137,11 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
       valor_pendente: 0, // o valor recusado está no detalhe do borderô
       qtd_pendente: c.rejeitados,
       mensagem: `${c.rejeitados} pagamento(s) recusado(s) pelo banco${c.pagos > 0 ? ` · ${c.pagos} pago(s)` : ""}`,
-      acao: "Abra o borderô, corrija os dados do pagamento e monte um novo para esses títulos",
+      acao: "Devolva os recusados ao preparo, corrija o que o banco apontou e monte um novo borderô",
+      responsavel: "ADMIN",
+      local: "SISTEMA",
+      acao_sistema: "DEVOLVER_PREPARO",
+      acao_rotulo: "Devolver ao preparo",
     };
   }
 
@@ -126,6 +164,12 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
         ? `${c.pendentes} pagamento(s) enviados hoje, ainda sem retorno do banco`
         : `${c.pendentes} pagamento(s) sem retorno há ${dias} dia(s)`,
       acao: "Confira no aplicativo do BTG se o lote está aguardando autorização do master",
+      responsavel: "MASTER_BTG",
+      local: "BANCO",
+      // Antes de cobrar o master, perguntar ao banco: a autorização pode já ter
+      // acontecido e o sistema ainda não ter buscado o retorno.
+      acao_sistema: "ATUALIZAR_RETORNO",
+      acao_rotulo: "Consultar o banco agora",
     };
   }
 
@@ -140,6 +184,10 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
       qtd_pendente: c?.total ?? 0,
       mensagem: "Aprovado e ainda não enviado ao banco",
       acao: "Envie o borderô ao BTG",
+      responsavel: "OPERADOR",
+      local: "SISTEMA",
+      acao_sistema: "ENVIAR_BORDERO",
+      acao_rotulo: "Enviar ao BTG",
     };
   }
 
@@ -158,7 +206,13 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
       valor_pendente: Number(b.total_valor),
       qtd_pendente: c.total,
       mensagem: `Em montagem, com data de pagamento vencida há ${dias} dia(s)`,
-      acao: "Aprove e envie, ou ajuste a data do borderô",
+      acao: "Aprove o borderô (ou ajuste a data, se o pagamento foi remarcado)",
+      // Aprovar exige admin, e quem montou não aprova: é a separação de funções
+      // que impede a mesma pessoa autorizar o próprio pagamento.
+      responsavel: "ADMIN",
+      local: "SISTEMA",
+      acao_sistema: "ABRIR_BORDERO",
+      acao_rotulo: "Abrir para aprovar",
     };
   }
 
