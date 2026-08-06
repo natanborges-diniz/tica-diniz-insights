@@ -6,12 +6,20 @@
 // pagamento já PAGO — os três lados fecham.
 
 import { ratearValorPago } from "./rateio.ts";
+import { lerRecusaBtg } from "./btgRecusa.ts";
 
 declare const Deno: { env: { get(key: string): string | undefined } };
 
 // ─── Vocabulário de status BTG (tolerante — pendência #1 da spec §9) ──
-const FAILED_WORDS = ["REJECTED", "REFUSED", "FAILED", "CANCELLED", "CANCELED", "ERROR", "RETURNED"];
+// "INVALIDATED" é o que o BTG usa quando recusa item do lote (boleto com valor
+// alterado, conta inválida). Faltava aqui, e o item recusado ficava eternamente
+// PENDENTE — nem baixava, nem aparecia como recusa.
+const FAILED_WORDS = [
+  "REJECTED", "REFUSED", "FAILED", "CANCELLED", "CANCELED", "ERROR", "RETURNED",
+  "INVALIDATED", "DENIED", "REPROVED", "REVERSED", "UNPAID", "NOT_AUTHORIZED",
+];
 const PAID_WORDS = ["PAID", "COMPLETED", "EXECUTED", "SETTLED", "PROCESSED", "LIQUIDATED", "DONE"];
+
 
 export type NormStatus = "PAGO" | "FALHA" | "PENDENTE";
 
