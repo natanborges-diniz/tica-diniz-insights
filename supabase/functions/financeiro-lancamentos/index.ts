@@ -26,6 +26,7 @@ import {
   pendenciaDoBordero,
   ordenarPendencias,
   resumirPendencias,
+  pendenciaDeLancamentoReaberto,
   type Pendencia,
 } from "../_shared/pendenciasFinanceiro.ts";
 import { validarEdicao, validarCancelamento, CAMPOS_EDITAVEIS } from "../_shared/rubricaEdicao.ts";
@@ -1088,6 +1089,39 @@ async function painelPendencias(body: Record<string, unknown>) {
     if (p) pendencias.push(p);
   }
 
+  // Títulos recusados pelo banco que já voltaram ao preparo e não entraram em
+  // borderô novo. Varrer só borderôs deixava esse buraco: o borderô antigo fica
+  // resolvido, o novo ainda não existe, e o pagamento — que falhou de verdade —
+  // não aparecia em lugar nenhum. Foi assim que um salário ficou dias parado.
+  let qSoltos = supabase
+    .from("lancamentos_financeiros")
+    .select("id, cod_empresa, descricao, pessoa_nome, valor, data_vencimento, dados_extras")
+    .eq("tipo", "PAGAR")
+    .is("bordero_id", null)
+    .is("data_baixa", null)
+    .in("status", ["PREVISTO", "CLASSIFICADO", "AUTORIZADO", "AGRUPADO"])
+    .not("dados_extras", "is", null)
+    .limit(500);
+  if (body.cod_empresa) qSoltos = qSoltos.eq("cod_empresa", Number(body.cod_empresa));
+
+  const { data: soltos } = await qSoltos;
+  for (const l of (soltos || [])) {
+    const extras = (l.dados_extras || {}) as Record<string, unknown>;
+    const tentouNoBanco = Boolean(extras.btg_payment_status) || Boolean(extras.btg_motivo_recusa);
+    if (!tentouNoBanco) continue;
+    // Aviso silenciado por alguém que resolveu o caso por fora.
+    if (extras.pendencia_dispensada_em) continue;
+    pendencias.push(pendenciaDeLancamentoReaberto({
+      id: String(l.id),
+      cod_empresa: Number(l.cod_empresa),
+      descricao: l.descricao as string | null,
+      pessoa_nome: l.pessoa_nome as string | null,
+      valor: Number(l.valor ?? 0),
+      data_vencimento: l.data_vencimento as string | null,
+      motivo_recusa: (extras.btg_motivo_recusa as string) ?? null,
+    }, hoje));
+  }
+
   const ordenadas = ordenarPendencias(pendencias);
   return json({ pendencias: ordenadas, resumo: resumirPendencias(ordenadas), hoje });
 }
@@ -1104,7 +1138,44 @@ async function dispensarPendencia(body: Record<string, unknown>, userId: string)
   await requireFinanceEdit(userId);
 
   const borderoId = body.bordero_id ? String(body.bordero_id) : null;
-  if (!borderoId) throw new Error("Informe bordero_id");
+  const lancamentoId = body.lancamento_id ? String(body.lancamento_id) : null;
+
+  // Título solto também precisa poder ser silenciado: se o pagamento foi
+  // resolvido por fora (caixa da loja, acerto direto), insistir no alerta só
+  // ensina o operador a ignorar o painel.
+  if (!borderoId && lancamentoId) {
+    const { data: lanc, error: errL } = await supabase
+      .from("lancamentos_financeiros")
+      .select("id, dados_extras")
+      .eq("id", lancamentoId)
+      .maybeSingle();
+    if (errL) throw new Error(errL.message);
+    if (!lanc) throw new Error("Lançamento não encontrado");
+
+    const extras = { ...((lanc.dados_extras || {}) as Record<string, unknown>) };
+    if (body.desfazer === true) {
+      delete extras.pendencia_dispensada_em;
+      delete extras.pendencia_dispensada_por;
+      delete extras.pendencia_dispensada_motivo;
+    } else {
+      extras.pendencia_dispensada_em = new Date().toISOString();
+      extras.pendencia_dispensada_por = userId;
+      extras.pendencia_dispensada_motivo = body.motivo ? String(body.motivo).slice(0, 500) : null;
+    }
+
+    const { error: errU } = await supabase
+      .from("lancamentos_financeiros")
+      .update({ dados_extras: extras })
+      .eq("id", lancamentoId);
+    if (errU) throw new Error(errU.message);
+
+    return json({
+      ok: true,
+      mensagem: body.desfazer === true ? "Aviso reativado" : "Aviso dispensado",
+    });
+  }
+
+  if (!borderoId) throw new Error("Informe bordero_id ou lancamento_id");
 
   const { data: bordero, error: errBusca } = await supabase
     .from("borderos")
@@ -2560,19 +2631,41 @@ async function cancelarBordero(body: Record<string, unknown>) {
   const semLoteNoBanco = !bordero.btg_batch_id;
   if (semLoteNoBanco) statusDevolviveis.push("PROCESSANDO");
 
-  const { data: devolvidos } = await supabase
+  // Cancelar não é apagar: o título volta para Contas a Pagar (Em preparo) com a
+  // classificação intacta. Zerar tudo para PREVISTO fazia o operador achar que o
+  // lançamento havia desaparecido — foi o que aconteceu com um salário recusado
+  // que já tinha sido corrigido.
+  const jaClassificados = statusDevolviveis.filter((st) => st !== "PREVISTO");
+  const { data: devolvidosClass } = await supabase
+    .from("lancamentos_financeiros")
+    .update({
+      bordero_id: null,
+      status: "CLASSIFICADO",
+      autorizado_por: null,
+      autorizado_em: null,
+      observacao: "Borderô cancelado — título de volta em Contas a Pagar (Em preparo). Monte um novo borderô.",
+    })
+    .eq("bordero_id", bordero_id)
+    .in("status", jaClassificados)
+    .select("id");
+
+  const { data: devolvidosPrev } = await supabase
     .from("lancamentos_financeiros")
     .update({ bordero_id: null, status: "PREVISTO", autorizado_por: null, autorizado_em: null })
     .eq("bordero_id", bordero_id)
-    .in("status", statusDevolviveis)
+    .eq("status", "PREVISTO")
     .select("id");
 
   await supabase.from("borderos").update({ status: "CANCELADO" }).eq("id", bordero_id);
 
+  const devolvidos = (devolvidosClass || []).length + (devolvidosPrev || []).length;
   return json({
     ok: true,
     status: "CANCELADO",
-    devolvidos: (devolvidos || []).length,
+    devolvidos,
+    mensagem: devolvidos > 0
+      ? `Borderô cancelado. ${devolvidos} título(s) voltaram para Contas a Pagar, aba "Em preparo", com a classificação preservada.`
+      : "Borderô cancelado (não havia títulos para devolver).",
   });
 }
 

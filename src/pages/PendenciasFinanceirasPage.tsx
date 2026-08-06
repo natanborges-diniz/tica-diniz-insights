@@ -13,7 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle, Clock, Send, XCircle, CheckCircle2, ChevronRight,
-  Landmark, Monitor, User, ShieldCheck, RefreshCw, Archive, CalendarClock, Store, BellOff,
+  Landmark, Monitor, User, ShieldCheck, RefreshCw, Archive, CalendarClock, Store, BellOff, FileWarning,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -50,6 +50,7 @@ const ICONE: Record<TipoPendencia, typeof Clock> = {
   RECUSADO: XCircle,
   NAO_PROCESSADO: XCircle,
   PAGO_FORA: Archive,
+  REABERTO_SEM_BORDERO: FileWarning,
 };
 
 const TITULO: Record<TipoPendencia, string> = {
@@ -60,6 +61,7 @@ const TITULO: Record<TipoPendencia, string> = {
   RECUSADO: "Recusado pelo banco",
   NAO_PROCESSADO: "Não processado pelo banco",
   PAGO_FORA: "Pago fora do borderô",
+  REABERTO_SEM_BORDERO: "Corrigido, sem borderô",
 };
 
 /** Barra lateral colorida: a gravidade se lê antes do texto. */
@@ -124,8 +126,12 @@ export default function PendenciasFinanceirasPage() {
   });
 
   const dispensarMutation = useMutation({
-    mutationFn: async ({ borderoId, motivo }: { borderoId: string; motivo: string }) =>
-      invokeAction("dispensar_pendencia", { bordero_id: borderoId, motivo: motivo || null }),
+    mutationFn: async ({ pendencia, motivo }: { pendencia: Pendencia; motivo: string }) =>
+      invokeAction("dispensar_pendencia", {
+        bordero_id: pendencia.bordero_id,
+        lancamento_id: pendencia.lancamento_id ?? null,
+        motivo: motivo || null,
+      }),
     onSuccess: (r: { ok?: boolean; error?: string; mensagem?: string }) => {
       if (r?.ok === false) { toast.error(r.error || "Não foi possível dispensar"); return; }
       toast.success(r?.mensagem || "Aviso dispensado");
@@ -176,10 +182,24 @@ export default function PendenciasFinanceirasPage() {
    * itens mas não deixa autorizar nada. A Mesa já aceita o borderô em foco por
    * parâmetro, e é lá que o admin decide item a item.
    */
+  /**
+   * Título solto: o destino é a lista de preparo, não um borderô que não existe.
+   *
+   * Levamos a descrição na busca porque é o que faz a linha aparecer de imediato
+   * numa aba com centenas de títulos — chegar na tela certa e ter de procurar foi
+   * exatamente a confusão que originou este caminho.
+   */
+  const irParaPreparo = (p: Pendencia) =>
+    navigate(`/financeiro/hub?tab=contas-pagar&busca=${encodeURIComponent(p.descricao.split(" — ")[0])}`);
+
   const irParaMesa = (borderoId: string, codEmpresa: number) =>
     navigate(`/financeiro/mesa?bordero=${borderoId}&empresa=${codEmpresa}`);
 
   const resolver = (acao: AcaoSistema, p: Pendencia) => {
+    if (acao === "ABRIR_PREPARO" || !p.bordero_id) {
+      irParaPreparo(p);
+      return;
+    }
     if (acao === "APROVAR_BORDERO") {
       irParaMesa(p.bordero_id, p.cod_empresa);
       return;
@@ -287,12 +307,12 @@ export default function PendenciasFinanceirasPage() {
           <div className="space-y-1.5">
             {pendencias.map((p) => (
               <LinhaPendencia
-                key={p.bordero_id}
+                key={p.bordero_id ?? p.lancamento_id}
                 p={p}
                 loja={nomeLoja(p.cod_empresa)}
                 ocupado={acaoMutation.isPending}
                 onResolver={resolver}
-                onAbrir={irParaBordero}
+                onAbrir={(pend) => (pend.bordero_id ? irParaBordero(pend.bordero_id) : irParaPreparo(pend))}
                 onDispensar={(pend) => { setDispensando(pend); setMotivo(""); }}
               />
             ))}
@@ -313,7 +333,7 @@ export default function PendenciasFinanceirasPage() {
             <Button
               disabled={dispensarMutation.isPending}
               onClick={() =>
-                dispensando && dispensarMutation.mutate({ borderoId: dispensando.bordero_id, motivo })
+                dispensando && dispensarMutation.mutate({ pendencia: dispensando, motivo })
               }
             >
               <BellOff className="h-4 w-4 mr-1" />
@@ -388,7 +408,7 @@ function LinhaPendencia({
   loja: string;
   ocupado: boolean;
   onResolver: (acao: AcaoSistema, p: Pendencia) => void;
-  onAbrir: (id: string) => void;
+  onAbrir: (p: Pendencia) => void;
   onDispensar: (p: Pendencia) => void;
 }) {
   const Icone = ICONE[p.tipo] ?? Clock;
@@ -456,6 +476,7 @@ function LinhaPendencia({
               {p.acao_sistema === "ATUALIZAR_RETORNO" && <RefreshCw className="h-3 w-3 mr-1" />}
               {p.acao_sistema === "ENCERRAR_BORDERO" && <Archive className="h-3 w-3 mr-1" />}
               {p.acao_sistema === "AJUSTAR_DATA" && <CalendarClock className="h-3 w-3 mr-1" />}
+              {p.acao_sistema === "ABRIR_PREPARO" && <FileWarning className="h-3 w-3 mr-1" />}
               {p.acao_rotulo}
             </Button>
           )}
@@ -484,8 +505,8 @@ function LinhaPendencia({
             size="sm"
             variant="ghost"
             className="h-7 px-2"
-            onClick={() => onAbrir(p.bordero_id)}
-            title="Abrir o borderô"
+            onClick={() => onAbrir(p)}
+            title={p.bordero_id ? "Abrir o borderô" : "Abrir em Contas a Pagar"}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>

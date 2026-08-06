@@ -33,7 +33,17 @@ export type TipoPendencia =
    */
   | "NAO_PROCESSADO"
   /** Os títulos foram pagos por fora e o borderô ficou aberto. */
-  | "PAGO_FORA";
+  | "PAGO_FORA"
+  /**
+   * Recusado pelo banco, já devolvido ao preparo e sem borderô novo.
+   *
+   * Nasceu de um caso real: um salário recusado foi corrigido e voltou para o
+   * preparo, o borderô novo foi cancelado por engano e o título ficou solto —
+   * sem borderô, ele deixava de existir para qualquer alerta. Continua sendo
+   * dinheiro que o fornecedor/colaborador não recebeu, e agora aparece aqui
+   * até entrar num borderô de novo.
+   */
+  | "REABERTO_SEM_BORDERO";
 
 
 export type Severidade = "ALTA" | "MEDIA" | "BAIXA";
@@ -65,7 +75,9 @@ export type AcaoSistema =
   | "APROVAR_BORDERO"
   | "DEVOLVER_PREPARO"
   | "ATUALIZAR_RETORNO"
-  | "ABRIR_BORDERO";
+  | "ABRIR_BORDERO"
+  /** Levar ao Contas a Pagar (Em preparo), onde o título solto é editável. */
+  | "ABRIR_PREPARO";
 
 export interface BorderoParaPainel {
   id: string;
@@ -86,7 +98,10 @@ export interface BorderoParaPainel {
 }
 
 export interface Pendencia {
-  bordero_id: string;
+  /** Null quando a pendência é de um título solto, fora de qualquer borderô. */
+  bordero_id: string | null;
+  /** Preenchido no lugar de `bordero_id` para título solto. */
+  lancamento_id?: string;
   cod_empresa: number;
   descricao: string;
   tipo: TipoPendencia;
@@ -358,6 +373,54 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
   }
 
   return null;
+}
+
+/**
+ * Título que o banco não pagou, já corrigido e ainda sem borderô.
+ *
+ * O painel varria só borderôs, e por isso um título recusado que voltou ao
+ * preparo saía do radar exatamente no momento mais frágil: o dinheiro não saiu,
+ * o borderô antigo já está resolvido, e o novo ainda não existe. Foi assim que
+ * um salário ficou dias sem ninguém saber.
+ */
+export interface LancamentoReaberto {
+  id: string;
+  cod_empresa: number;
+  descricao: string | null;
+  pessoa_nome?: string | null;
+  valor: number;
+  data_vencimento: string | null;
+  /** Motivo traduzido da última recusa, quando o banco explicou. */
+  motivo_recusa?: string | null;
+}
+
+export function pendenciaDeLancamentoReaberto(
+  l: LancamentoReaberto,
+  hoje: string,
+): Pendencia {
+  const dias = l.data_vencimento ? Math.max(0, diasEntre(l.data_vencimento, hoje)) : 0;
+  const quem = l.pessoa_nome ? ` — ${l.pessoa_nome}` : "";
+  return {
+    bordero_id: null,
+    lancamento_id: l.id,
+    cod_empresa: l.cod_empresa,
+    descricao: `${l.descricao || "Lançamento"}${quem}`,
+    tipo: "REABERTO_SEM_BORDERO",
+    // Alta a partir de dois dias: é pagamento que já falhou uma vez, e o
+    // credor está esperando desde a data original.
+    severidade: dias >= 2 ? "ALTA" : "MEDIA",
+    dias_parado: dias,
+    valor_pendente: Number(l.valor ?? 0),
+    qtd_pendente: 1,
+    mensagem: l.motivo_recusa
+      ? `Recusado pelo banco (${l.motivo_recusa}) e devolvido ao preparo — ainda sem borderô novo`
+      : "O banco não pagou e o título voltou ao preparo — ainda sem borderô novo",
+    acao: "Confira os dados de pagamento em Contas a Pagar (Em preparo) e monte um novo borderô",
+    responsavel: "OPERADOR",
+    local: "SISTEMA",
+    acao_sistema: "ABRIR_PREPARO",
+    acao_rotulo: "Abrir em Contas a Pagar",
+  };
 }
 
 /** Mais grave primeiro; empate desempata por tempo parado e valor. */

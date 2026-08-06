@@ -277,13 +277,25 @@ export default function FinanceiroHubPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     const id = searchParams.get("bordero");
-    if (!id) return;
-    setActiveTab("borderos");
-    setBorderoDetalheId(id);
-    // Limpa o parâmetro: recarregar a página não deve reabrir o mesmo diálogo.
+    const aba = searchParams.get("tab");
+    const buscaUrl = searchParams.get("busca");
+    if (!id && !aba && !buscaUrl) return;
+    if (id) {
+      setActiveTab("borderos");
+      setBorderoDetalheId(id);
+    } else if (aba) {
+      setActiveTab(aba);
+    }
+    // Título solto vindo de "Pagamentos parados": já chega filtrado, senão o
+    // operador aterrissa numa lista de centenas e não acha a linha.
+    if (buscaUrl) setBusca(buscaUrl);
+    // Limpa os parâmetros: recarregar a página não deve reabrir o mesmo diálogo.
     searchParams.delete("bordero");
+    searchParams.delete("tab");
+    searchParams.delete("busca");
     setSearchParams(searchParams, { replace: true });
   }, [searchParams, setSearchParams]);
+
 
   // Contador do aviso — mesma consulta da página de pendências.
   const { data: pendenciasData } = usePendenciasFinanceiro(invokeAction);
