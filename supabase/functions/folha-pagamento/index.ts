@@ -71,6 +71,15 @@ async function requireFinanceEdit(userId: string, codEmpresa: number) {
  */
 async function importar(body: Record<string, unknown>, userId: string) {
   const { cod_empresa, competencia, evento, data_pagamento, descricao } = body;
+  /**
+   * Folha complementar: o mês já foi fechado e entrou alguém (admissão no meio
+   * do mês, líquido corrigido, rescisão fora de hora). Reabrir a folha fechada
+   * seria mexer em lançamento que já virou borderô; então cria-se OUTRA folha
+   * do mesmo evento/competência, com sequência própria, que segue o mesmo
+   * caminho (contas → rubricas → fechar → borderô) e não toca na primeira.
+   */
+  const complementar = body.complementar === true;
+
   const linhas = (body.itens as LinhaFolha[]) || [];
   const encargosInformados = (body.encargos || {}) as Partial<Record<TipoEncargo, number>>;
 
