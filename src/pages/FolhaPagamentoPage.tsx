@@ -627,8 +627,16 @@ export default function FolhaPagamentoPage() {
                       </button>
                     </TableCell>
                     <TableCell className="text-sm">
-                      {EVENTOS.find(e => e.value === c.evento)?.label || c.evento}
+                      <span className="flex items-center gap-1.5">
+                        {EVENTOS.find(e => e.value === c.evento)?.label || c.evento}
+                        {c.complementar && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Complementar {(c.sequencia ?? 2) - 1}
+                          </Badge>
+                        )}
+                      </span>
                     </TableCell>
+
                     <TableCell className="text-sm">
                       {format(new Date(c.data_pagamento + "T12:00:00"), "dd/MM/yy")}
                     </TableCell>
