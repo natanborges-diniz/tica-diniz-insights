@@ -481,7 +481,7 @@ export function ContasPagarTable({
   lancamentos: rawLancamentos, isLoading, selectedIds, isAdmin, stepFilter,
   onToggleSelect, onToggleSelectAll,
   onClassificar, onPrepararPagamento, onBaixaManual, onComprovante, onVirarRubrica,
-  onCancelar, onReabrir, onRemoverDoBordero, onLiberarProcessando,
+  onCancelar, onReabrir, onRemoverDoBordero, onDevolverParaPreparo, onLiberarProcessando,
   isCancelando, isReabrindo, isRemovendoDoBordero,
 }: ContasPagarTableProps) {
   const [pendentesOpen, setPendentesOpen] = useState(true);
