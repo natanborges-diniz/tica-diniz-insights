@@ -488,21 +488,41 @@ export default function BankingExtratoDashboard() {
         icon={<Landmark className="h-5 w-5" />}
       />
 
+      {/* ── Como funciona ───────────────────────────────────── */}
+      <Card className="border-primary/20 bg-primary/[0.03]">
+        <CardHeader className="pb-2">
+          <button
+            type="button"
+            className="flex items-center gap-2 text-sm font-medium text-left"
+            onClick={() => setComoFuncionaAberto((v) => !v)}
+          >
+            <Info className="h-4 w-4 text-primary" />
+            Como funciona a conciliação bancária
+            <span className="text-xs text-muted-foreground">
+              ({comoFuncionaAberto ? "ocultar" : "ver explicação"})
+            </span>
+          </button>
+        </CardHeader>
+        {comoFuncionaAberto && (
+          <CardContent className="text-sm text-muted-foreground space-y-1.5 pt-0">
+            <p><strong>Extrato</strong> = tudo que entrou e saiu da conta corrente no BTG, como no espelho do banco.</p>
+            <p><strong>Conciliar</strong> = apontar cada linha do extrato para o registro que a explica: um título do contas a pagar, um pagamento/boleto BTG, um recebível de cartão ou uma tarifa.</p>
+            <p><strong>Pendente</strong> = o que ainda não foi explicado. É o trabalho humano que resta — o resto o motor já fechou.</p>
+            <p className="pt-1">
+              Procurando uma <strong>conta paga</strong> (comprovante, valor pago, data da baixa)?
+              Isso não vive aqui: vá em{" "}
+              <Link to="/financeiro/hub" className="text-primary hover:underline font-medium">
+                Hub Financeiro → aba Pagos
+              </Link>
+              , que lista pela <strong>data de pagamento</strong>. Nem toda baixa passa por borderô — o sincronismo do ERP também baixa títulos.
+            </p>
+          </CardContent>
+        )}
+      </Card>
+
       {/* ── Filters + actions ───────────────────────────────── */}
       <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Empresa</label>
-          <Select value={String(codEmpresa)} onValueChange={(v) => setCodEmpresa(Number(v))}>
-            <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {(empresas || []).map((e) => (
-                <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
-                  {e.nome || `Empresa ${e.codEmpresa}`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <LojaSelect value={codEmpresa} onChange={setCodEmpresa} />
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">De</label>
           <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="w-[150px]" />
@@ -525,24 +545,37 @@ export default function BankingExtratoDashboard() {
         <div className="space-y-1">
           <label className="text-xs text-muted-foreground">Status</label>
           <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-            <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[190px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="PENDENTE">A conciliar</SelectItem>
-              
-              <SelectItem value="CONCILIADO_AUTO">Conciliadas (auto)</SelectItem>
-              <SelectItem value="CONCILIADO_MANUAL">Conciliadas (manual)</SelectItem>
-              <SelectItem value="IGNORADO">Ignoradas</SelectItem>
-              <SelectItem value="todos">Todas</SelectItem>
+              <SelectItem value="todos">
+                Todas{resumo ? ` (${resumo.total_lancamentos})` : ""}
+              </SelectItem>
+              <SelectItem value="PENDENTE">
+                A conciliar{resumo ? ` (${resumo.total_pendente})` : ""}
+              </SelectItem>
+              <SelectItem value="CONCILIADO_AUTO">
+                Conciliadas (auto){resumo ? ` (${(resumo.por_metodo?.EXATO ?? 0) + (resumo.por_metodo?.TOLERANCIA ?? 0) + (resumo.por_metodo?.AGRUPADO ?? 0) + (resumo.por_metodo?.REGRA ?? 0)})` : ""}
+              </SelectItem>
+              <SelectItem value="CONCILIADO_MANUAL">
+                Conciliadas (manual){resumo ? ` (${resumo.por_metodo?.MANUAL ?? 0})` : ""}
+              </SelectItem>
+              <SelectItem value="IGNORADO">
+                Ignoradas{resumo ? ` (${resumo.por_metodo?.IGNORADO ?? 0})` : ""}
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" size="sm" onClick={() => importarMutation.mutate()} disabled={importarMutation.isPending}>
+        <Button variant="outline" size="sm" onClick={() => importarMutation.mutate()}
+          disabled={importarMutation.isPending || consolidado}
+          title={consolidado ? "Escolha uma loja para importar o extrato" : undefined}>
           <Download className="h-4 w-4 mr-1" />
           Importar BTG
         </Button>
         {isAdmin && (
           <>
-            <Button size="sm" onClick={() => executarMotorMutation.mutate()} disabled={executarMotorMutation.isPending}>
+            <Button size="sm" onClick={() => executarMotorMutation.mutate()}
+              disabled={executarMotorMutation.isPending || consolidado}
+              title={consolidado ? "Escolha uma loja para rodar o motor" : undefined}>
               <Sparkles className="h-4 w-4 mr-1" />
               {executarMotorMutation.isPending ? "Conciliando..." : "Rodar motor"}
             </Button>
@@ -552,6 +585,16 @@ export default function BankingExtratoDashboard() {
             </Button>
           </>
         )}
+      </div>
+
+      {/* Atalhos de período */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">Período:</span>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => aplicarPreset("semana")}>Esta semana</Button>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => aplicarPreset("7d")}>Últimos 7 dias</Button>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => aplicarPreset("mes")}>Este mês</Button>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => aplicarPreset("30d")}>30 dias</Button>
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={limparFiltros}>Limpar filtros</Button>
       </div>
 
       {btgAccessIssue && (
@@ -564,11 +607,32 @@ export default function BankingExtratoDashboard() {
         </Alert>
       )}
 
+      {lojasDefasadas.length > 0 && (
+        <Alert variant="destructive">
+          <Clock className="h-4 w-4" />
+          <AlertTitle>Extrato desatualizado</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>
+              {lojasDefasadas.map((l) => `${nomeLoja(l.cod)} (até ${format(new Date(l.ultima + "T12:00:00"), "dd/MM")})`).join(" · ")}
+              {" "}— sem importação desde então, então a semana pode não estar completa aqui.
+            </p>
+            {!consolidado && (
+              <Button size="sm" variant="outline" onClick={() => importarMutation.mutate()}
+                disabled={importarMutation.isPending}>
+                <Download className="h-4 w-4 mr-1" />
+                Importar o período faltante
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* ── KPI Cards ───────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+
               <Landmark className="h-4 w-4" /> Saldo Disponível
             </CardTitle>
           </CardHeader>
