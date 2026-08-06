@@ -1814,6 +1814,7 @@ export default function FinanceiroHubPage() {
               onRemoverDoBordero={(l) => {
                 if (l.bordero_id) removerDoBorderoMutation.mutate({ bordero_id: l.bordero_id, lancamento_ids: [l.id] });
               }}
+              onDevolverParaPreparo={(l) => devolverPreparoMutation.mutate({ lancamento_ids: [l.id] })}
               onLiberarProcessando={(l) => {
                 const ok = window.confirm(
                   `Destravar "${l.descricao}"?\n\n` +
