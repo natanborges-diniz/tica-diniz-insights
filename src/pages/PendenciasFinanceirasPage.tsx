@@ -380,13 +380,14 @@ function Chip({ ativo, onClick, children }: { ativo: boolean; onClick: () => voi
 }
 
 function LinhaPendencia({
-  p, loja, ocupado, onResolver, onAbrir,
+  p, loja, ocupado, onResolver, onAbrir, onDispensar,
 }: {
   p: Pendencia;
   loja: string;
   ocupado: boolean;
   onResolver: (acao: AcaoSistema, p: Pendencia) => void;
   onAbrir: (id: string) => void;
+  onDispensar: (p: Pendencia) => void;
 }) {
   const Icone = ICONE[p.tipo] ?? Clock;
   const resp = RESPONSAVEL[p.responsavel];
