@@ -132,6 +132,10 @@ export type Database = {
           id: string
           modo_data: string
           observacao: string | null
+          pendencia_dispensada_em: string | null
+          pendencia_dispensada_motivo: string | null
+          pendencia_dispensada_por: string | null
+          pendencia_dispensada_status: string | null
           qtd_lancamentos: number
           status: string
           tipo: string
@@ -153,6 +157,10 @@ export type Database = {
           id?: string
           modo_data?: string
           observacao?: string | null
+          pendencia_dispensada_em?: string | null
+          pendencia_dispensada_motivo?: string | null
+          pendencia_dispensada_por?: string | null
+          pendencia_dispensada_status?: string | null
           qtd_lancamentos?: number
           status?: string
           tipo?: string
@@ -174,6 +182,10 @@ export type Database = {
           id?: string
           modo_data?: string
           observacao?: string | null
+          pendencia_dispensada_em?: string | null
+          pendencia_dispensada_motivo?: string | null
+          pendencia_dispensada_por?: string | null
+          pendencia_dispensada_status?: string | null
           qtd_lancamentos?: number
           status?: string
           tipo?: string

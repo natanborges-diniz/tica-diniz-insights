@@ -13,7 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle, Clock, Send, XCircle, CheckCircle2, ChevronRight,
-  Landmark, Monitor, User, ShieldCheck, RefreshCw, Archive, CalendarClock, Store,
+  Landmark, Monitor, User, ShieldCheck, RefreshCw, Archive, CalendarClock, Store, BellOff,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
@@ -21,6 +21,9 @@ import { usePendenciasFinanceiro, CHAVE_PENDENCIAS } from "@/hooks/usePendencias
 import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { BaseDialog } from "@/components/system/BaseDialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type {
@@ -76,6 +79,9 @@ export default function PendenciasFinanceirasPage() {
   const queryClient = useQueryClient();
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
   const [busca, setBusca] = useState("");
+  /** Pendência escolhida para silenciar — o motivo fica registrado. */
+  const [dispensando, setDispensando] = useState<Pendencia | null>(null);
+  const [motivo, setMotivo] = useState("");
 
   const invokeAction = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -90,6 +96,43 @@ export default function PendenciasFinanceirasPage() {
 
   const { data, isLoading, isFetching, refetch } = usePendenciasFinanceiro(invokeAction);
   const recarregar = () => queryClient.invalidateQueries({ queryKey: CHAVE_PENDENCIAS });
+
+  /**
+   * Atualizar = olhar o sistema e o banco.
+   *
+   * Antes o botão só relia o próprio painel, então um lote já autorizado no app
+   * do BTG continuava listado até o cron de 30 minutos passar. Agora a consulta
+   * ao banco vem primeiro: o que o BTG já finalizou dá baixa e sai da lista.
+   */
+  const atualizarMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.functions.invoke("btg-poll-status", {
+        body: { action: "executar" },
+      });
+      if (error) throw error;
+      await refetch();
+    },
+    onSuccess: () => toast.success("Sistema e retorno do BTG atualizados"),
+    onError: async (e: Error) => {
+      // A consulta ao banco pode falhar (token, indisponibilidade) sem que o
+      // painel deva ficar velho — recarrega o que é nosso e avisa o resto.
+      await refetch();
+      toast.warning(`Painel atualizado, mas o BTG não respondeu: ${e.message}`);
+    },
+  });
+
+  const dispensarMutation = useMutation({
+    mutationFn: async ({ borderoId, motivo }: { borderoId: string; motivo: string }) =>
+      invokeAction("dispensar_pendencia", { bordero_id: borderoId, motivo: motivo || null }),
+    onSuccess: (r: { ok?: boolean; error?: string; mensagem?: string }) => {
+      if (r?.ok === false) { toast.error(r.error || "Não foi possível dispensar"); return; }
+      toast.success(r?.mensagem || "Aviso dispensado");
+      setDispensando(null);
+      setMotivo("");
+      recarregar();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const acaoMutation = useMutation({
     mutationFn: async ({ acao, borderoId }: { acao: AcaoSistema; borderoId: string }) => {
@@ -171,9 +214,18 @@ export default function PendenciasFinanceirasPage() {
         subtitle="De todas as lojas — o que não foi processado, recusado ou está esperando alguém"
         icon={<AlertTriangle className="h-5 w-5" />}
         actions={
-          <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw className={cn("h-4 w-4 mr-1", isFetching && "animate-spin")} />
-            Atualizar
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => atualizarMutation.mutate()}
+            disabled={isFetching || atualizarMutation.isPending}
+            title="Relê o sistema e consulta o retorno do BTG"
+          >
+            <RefreshCw className={cn(
+              "h-4 w-4 mr-1",
+              (isFetching || atualizarMutation.isPending) && "animate-spin",
+            )} />
+            {atualizarMutation.isPending ? "Consultando BTG..." : "Atualizar"}
           </Button>
         }
       />
@@ -239,11 +291,59 @@ export default function PendenciasFinanceirasPage() {
                 ocupado={acaoMutation.isPending}
                 onResolver={resolver}
                 onAbrir={irParaBordero}
+                onDispensar={(pend) => { setDispensando(pend); setMotivo(""); }}
               />
             ))}
           </div>
         </>
       )}
+
+      {/* Dispensar aviso: não mexe no borderô, só silencia o alerta. */}
+      <BaseDialog
+        open={!!dispensando}
+        onOpenChange={(o) => { if (!o) { setDispensando(null); setMotivo(""); } }}
+        title="Dispensar este aviso"
+        description="O borderô continua como está. Só o alerta sai do painel — e volta se a situação do borderô mudar."
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDispensando(null)}>Cancelar</Button>
+            <Button
+              disabled={dispensarMutation.isPending}
+              onClick={() =>
+                dispensando && dispensarMutation.mutate({ borderoId: dispensando.bordero_id, motivo })
+              }
+            >
+              <BellOff className="h-4 w-4 mr-1" />
+              Dispensar aviso
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {dispensando && (
+            <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
+              <p className="font-medium">{nomeLoja(dispensando.cod_empresa)} — {TITULO[dispensando.tipo] ?? dispensando.tipo}</p>
+              <p className="text-muted-foreground">{dispensando.descricao}</p>
+              <p className="text-muted-foreground">
+                {fmt(dispensando.valor_pendente)} · há {dispensando.dias_parado} dia(s)
+              </p>
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="motivo-dispensa" className="text-xs">
+              Como isso foi resolvido? (opcional, fica registrado)
+            </Label>
+            <Textarea
+              id="motivo-dispensa"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Ex.: pago no caixa da loja / acertado direto com o fornecedor / lançamento antigo antes dos ajustes"
+              rows={3}
+            />
+          </div>
+        </div>
+      </BaseDialog>
     </div>
   );
 }
@@ -280,13 +380,14 @@ function Chip({ ativo, onClick, children }: { ativo: boolean; onClick: () => voi
 }
 
 function LinhaPendencia({
-  p, loja, ocupado, onResolver, onAbrir,
+  p, loja, ocupado, onResolver, onAbrir, onDispensar,
 }: {
   p: Pendencia;
   loja: string;
   ocupado: boolean;
   onResolver: (acao: AcaoSistema, p: Pendencia) => void;
   onAbrir: (id: string) => void;
+  onDispensar: (p: Pendencia) => void;
 }) {
   const Icone = ICONE[p.tipo] ?? Clock;
   const resp = RESPONSAVEL[p.responsavel];
@@ -367,6 +468,16 @@ function LinhaPendencia({
               {p.acao_secundaria_rotulo}
             </Button>
           )}
+          {/* Silenciar: para o que já foi resolvido por fora do sistema. */}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-muted-foreground"
+            onClick={() => onDispensar(p)}
+            title="Dispensar este aviso"
+          >
+            <BellOff className="h-4 w-4" />
+          </Button>
           <Button
             size="sm"
             variant="ghost"
