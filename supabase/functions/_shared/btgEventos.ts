@@ -6,12 +6,20 @@
 // pagamento já PAGO — os três lados fecham.
 
 import { ratearValorPago } from "./rateio.ts";
+import { lerRecusaBtg } from "./btgRecusa.ts";
 
 declare const Deno: { env: { get(key: string): string | undefined } };
 
 // ─── Vocabulário de status BTG (tolerante — pendência #1 da spec §9) ──
-const FAILED_WORDS = ["REJECTED", "REFUSED", "FAILED", "CANCELLED", "CANCELED", "ERROR", "RETURNED"];
+// "INVALIDATED" é o que o BTG usa quando recusa item do lote (boleto com valor
+// alterado, conta inválida). Faltava aqui, e o item recusado ficava eternamente
+// PENDENTE — nem baixava, nem aparecia como recusa.
+const FAILED_WORDS = [
+  "REJECTED", "REFUSED", "FAILED", "CANCELLED", "CANCELED", "ERROR", "RETURNED",
+  "INVALIDATED", "DENIED", "REPROVED", "REVERSED", "UNPAID", "NOT_AUTHORIZED",
+];
 const PAID_WORDS = ["PAID", "COMPLETED", "EXECUTED", "SETTLED", "PROCESSED", "LIQUIDATED", "DONE"];
+
 
 export type NormStatus = "PAGO" | "FALHA" | "PENDENTE";
 
@@ -96,21 +104,9 @@ export function referenciasDoPagamento(
  * de fixar um — o que vier, serve.
  */
 export function motivoRecusa(pay: Record<string, unknown> | null | undefined): string | null {
-  if (!pay) return null;
-  const candidatos = [
-    pay.errorMessage, pay.error_message, pay.reason, pay.statusReason,
-    pay.rejectionReason, pay.failureReason, pay.description, pay.detail,
-    pay.message, (pay.error as Record<string, unknown> | undefined)?.message,
-  ];
-  for (const c of candidatos) {
-    const s = String(c ?? "").trim();
-    // Evita ecoar o próprio status como se fosse explicação.
-    if (s && s.length > 2 && s.toUpperCase() !== String(pay.status ?? "").toUpperCase()) {
-      return s.slice(0, 300);
-    }
-  }
-  return null;
+  return lerRecusaBtg(pay)?.motivo ?? null;
 }
+
 
 // ─── Efeitos ─────────────────────────────────────────────────
 /**
@@ -193,16 +189,27 @@ export async function rejeitarLancamentoBtg(
   pay?: Record<string, unknown> | null,
 ) {
   const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
-  const motivo = motivoRecusa(pay);
+  const recusa = lerRecusaBtg(pay);
+  const motivo = recusa?.motivo ?? null;
   await db.from("lancamentos_financeiros").update({
     status: "AUTORIZADO",
     requer_validacao: true,
     observacao: motivo
-      ? `Recusado pelo BTG: ${motivo} (status: ${statusBtg}) — corrija e monte um novo borderô`
+      ? `Recusado pelo BTG: ${motivo}${recusa?.como_resolver ? ` — ${recusa.como_resolver}` : " — corrija e monte um novo borderô"}`
       : `Pagamento rejeitado pelo BTG (status: ${statusBtg}) — revisar dados e reenviar`,
-    dados_extras: { ...dados, btg_payment_status: statusBtg, btg_motivo_recusa: motivo },
+    dados_extras: {
+      ...dados,
+      btg_payment_status: statusBtg,
+      btg_motivo_recusa: motivo,
+      btg_recusa_codigo: recusa?.codigo ?? null,
+      btg_recusa_resolver: recusa?.como_resolver ?? null,
+      // Payload cru da recusa: quando o código for novo, é daqui que sai a
+      // tradução seguinte sem precisar reproduzir o erro.
+      btg_recusa_bruta: (pay?.errors ?? null) as unknown,
+    },
   }).eq("id", lanc.id);
 }
+
 
 // Se todos os lançamentos do borderô estão terminais, fecha o borderô.
 // deno-lint-ignore no-explicit-any

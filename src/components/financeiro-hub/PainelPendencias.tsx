@@ -179,10 +179,26 @@ export function PainelPendencias({ invokeAction, empresas, onAbrirBordero, onRes
                     </span>
                   </div>
 
+                  {/* O motivo que o banco deu, quando deu. Vem antes do "o que
+                      fazer": é o que decide se a correção é valor, conta ou data. */}
+                  {p.motivos && p.motivos.length > 0 && (
+                    <div className="mt-1.5 rounded border border-destructive/30 bg-destructive/5 px-2 py-1">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        Motivo do banco
+                      </p>
+                      <ul className="text-xs text-destructive space-y-0.5">
+                        {p.motivos.map((m, i) => (
+                          <li key={i}>{m}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
                   <p className="text-xs mt-1">
                     <span className="text-muted-foreground">O que fazer: </span>
                     {p.acao}
                   </p>
+
                 </div>
 
                 <div className="text-right shrink-0">

@@ -16,6 +16,8 @@ export interface ItemBordero {
   requer_validacao?: boolean | null;
   /** Data combinada com o banco (dados_extras.btg_payment_date) ou o vencimento. */
   data_prevista?: string | null;
+  /** Por que o banco recusou, já traduzido (dados_extras.btg_motivo_recusa). */
+  motivo_recusa?: string | null;
 }
 
 export interface ComposicaoBordero {
@@ -25,6 +27,14 @@ export interface ComposicaoBordero {
   pendentes: number;
   /** Menor data prevista entre os itens ainda pendentes (yyyy-MM-dd). */
   proxima_data: string | null;
+  /**
+   * Motivos distintos das recusas, na ordem em que aparecem.
+   *
+   * Sem isto o borderô dizia "2 recusados" e o operador tinha de abrir o app do
+   * BTG para descobrir o quê — que era justamente a informação que o banco já
+   * havia mandado.
+   */
+  motivos_recusa?: string[];
 }
 
 export type ChaveEstado =
@@ -45,25 +55,43 @@ export interface EstadoBordero {
 export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
   let pagos = 0, rejeitados = 0, pendentes = 0;
   let proxima: string | null = null;
+  const motivos: string[] = [];
 
   for (const i of itens) {
     const st = String(i.status ?? "").toUpperCase();
     if (st === "BAIXADO") { pagos++; continue; }
     if (st === "CANCELADO") continue; // saiu do borderô, não conta como nada
     // Recusa do banco devolve o título para AUTORIZADO com requer_validacao.
-    if (i.requer_validacao) { rejeitados++; continue; }
+    if (i.requer_validacao) {
+      rejeitados++;
+      const m = String(i.motivo_recusa ?? "").trim();
+      if (m && !motivos.includes(m)) motivos.push(m);
+      continue;
+    }
     pendentes++;
     const d = i.data_prevista ? String(i.data_prevista).slice(0, 10) : null;
     if (d && (proxima === null || d < proxima)) proxima = d;
   }
 
-  return { total: pagos + rejeitados + pendentes, pagos, rejeitados, pendentes, proxima_data: proxima };
+  return {
+    total: pagos + rejeitados + pendentes,
+    pagos, rejeitados, pendentes,
+    proxima_data: proxima,
+    motivos_recusa: motivos,
+  };
 }
 
 /** dd/MM a partir de yyyy-MM-dd, sem passar por Date (fuso trocaria o dia). */
 function ddMM(iso: string): string {
   const [, m, d] = iso.slice(0, 10).split("-");
   return `${d}/${m}`;
+}
+
+/** Os motivos do banco no tooltip — é onde o operador olha primeiro. */
+function motivosSufixo(c: ComposicaoBordero): string {
+  const m = (c.motivos_recusa ?? []).filter(Boolean);
+  if (m.length === 0) return "";
+  return `\nMotivo do banco: ${m.join(" · ")}`;
 }
 
 /**
@@ -112,7 +140,8 @@ export function estadoBordero(
         chave: "REJEITADO",
         label: "Rejeitado",
         variant: "destructive",
-        titulo: `Nenhum dos ${c.total} pagamentos foi aceito pelo banco`,
+        titulo: `Nenhum dos ${c.total} pagamentos foi aceito pelo banco`
+          + motivosSufixo(c),
         exigeAtencao: true,
       };
     }
@@ -120,7 +149,8 @@ export function estadoBordero(
       chave: "PARCIAL",
       label: `Parcial ${c.pagos}/${c.total}`,
       variant: "destructive",
-      titulo: `${c.pagos} pago(s), ${c.rejeitados} recusado(s) pelo banco — abra para ver quais`,
+      titulo: `${c.pagos} pago(s), ${c.rejeitados} recusado(s) pelo banco — abra para ver quais`
+        + motivosSufixo(c),
       exigeAtencao: true,
     };
   }

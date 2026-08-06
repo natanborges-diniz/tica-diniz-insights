@@ -175,6 +175,41 @@ const getReprogramadoBadge = (l: Lancamento) => {
   );
 };
 
+/**
+ * O motivo da recusa do banco, na linha do título.
+ *
+ * O badge "VALIDAR" dizia que algo tinha dado errado e nada sobre o quê — o
+ * operador abria o app do BTG para descobrir, ou reenviava com o mesmo defeito.
+ * O BTG manda o motivo no retorno (`errors[].code`), já traduzido na baixa; aqui
+ * ele fica visível sem precisar de nenhum clique.
+ */
+const getRecusaBadge = (l: Lancamento) => {
+  const d = (l.dados_extras || {}) as Record<string, unknown>;
+  const motivo = (d.btg_motivo_recusa as string) || null;
+  const statusBanco = (d.btg_payment_status as string) || null;
+  if (!l.requer_validacao || (!motivo && !statusBanco)) return null;
+
+  const resolver = (d.btg_recusa_resolver as string) || null;
+  const codigo = (d.btg_recusa_codigo as string) || null;
+  const texto = motivo || `Recusado pelo banco (${statusBanco})`;
+
+  return (
+    <Badge
+      variant="outline"
+      className="text-[10px] bg-destructive/10 text-destructive border-destructive/30 cursor-help max-w-[280px] whitespace-normal text-left leading-tight"
+      title={[
+        `Recusado pelo BTG${statusBanco ? ` (${statusBanco})` : ""}`,
+        texto,
+        resolver ? `O que fazer: ${resolver}` : null,
+        codigo ? `Código do banco: ${codigo}` : null,
+      ].filter(Boolean).join("\n")}
+    >
+      {texto}
+    </Badge>
+  );
+};
+
+
 const formatMonthTitle = (monthKey: string) => {
   try {
     const d = parseISO(`${monthKey}-01`);
@@ -325,10 +360,13 @@ function LancamentoRow({
           />
         )}
       </TableCell>
-      <TableCell className="text-sm max-w-[200px] truncate">
-        {l.descricao.toUpperCase()}
-        {l.requer_validacao && <Badge variant="outline" className="ml-2 text-[10px]">VALIDAR</Badge>}
+      <TableCell className="text-sm max-w-[300px]">
+        <span className="block truncate">{l.descricao.toUpperCase()}</span>
+        {getRecusaBadge(l)
+          ? <div className="mt-0.5">{getRecusaBadge(l)}</div>
+          : l.requer_validacao && <Badge variant="outline" className="ml-2 text-[10px]">VALIDAR</Badge>}
       </TableCell>
+
       <TableCell className="text-sm">{l.pessoa_nome?.toUpperCase() || "—"}</TableCell>
       <TableCell className="text-sm whitespace-nowrap">
         {format(new Date(l.data_vencimento + "T12:00:00"), "dd/MM/yy")}

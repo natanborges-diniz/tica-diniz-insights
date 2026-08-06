@@ -1243,7 +1243,10 @@ export default function FinanceiroHubPage() {
                   data_prevista:
                     ((l.dados_extras || {}) as Record<string, unknown>).btg_payment_date as string
                     ?? l.data_vencimento,
+                  motivo_recusa:
+                    ((l.dados_extras || {}) as Record<string, unknown>).btg_motivo_recusa as string ?? null,
                 })),
+
               );
               const est = estadoBordero(borderoDetalhe.bordero.status, comp, format(agoraSP(), "yyyy-MM-dd"));
               return (

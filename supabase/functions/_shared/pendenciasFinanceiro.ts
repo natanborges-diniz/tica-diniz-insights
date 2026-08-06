@@ -108,6 +108,13 @@ export interface Pendencia {
    */
   acao_secundaria?: AcaoSistema;
   acao_secundaria_rotulo?: string;
+  /**
+   * Motivos da recusa, já em português, como o banco explicou.
+   *
+   * Existe porque "2 pagamentos recusados" não diz o que corrigir — e o BTG
+   * manda o motivo no retorno (`errors[].code`) desde sempre.
+   */
+  motivos?: string[];
 }
 
 /** Diferença em dias entre duas datas yyyy-MM-dd, sem passar por fuso. */
@@ -152,6 +159,7 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
   // Recusa do banco vem primeiro: é o único caso em que o dinheiro definitivamente
   // não saiu e ninguém vai tentar de novo sozinho.
   if (c && c.rejeitados > 0) {
+    const motivos = (c.motivos_recusa ?? []).filter(Boolean);
     const dias = b.data_pagamento ? Math.max(0, diasEntre(b.data_pagamento, hoje)) : 0;
     return {
       ...base,
@@ -161,8 +169,14 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
       valor_pendente: 0, // o valor recusado está no detalhe do borderô
       qtd_pendente: c.rejeitados,
       mensagem: `${c.rejeitados} pagamento(s) recusado(s) pelo banco${c.pagos > 0 ? ` · ${c.pagos} pago(s)` : ""}`,
-      acao: "Veja no app do BTG o motivo (horário-limite ou saldo), devolva ao preparo, "
-        + "corrija o que for preciso e monte um novo borderô — depois avise o master para autorizar",
+      // O motivo do banco vem no lugar do "veja no app do BTG": o retorno traz o
+      // código (ex.: payment-amount-changed), então mandar o operador procurar
+      // fora do sistema era descartar o que já sabíamos.
+      motivos: motivos.length > 0 ? motivos : undefined,
+      acao: motivos.length > 0
+        ? `Motivo do banco: ${motivos.join(" · ")}. Devolva ao preparo, corrija e monte um novo borderô`
+        : "Veja no app do BTG o motivo (horário-limite ou saldo), devolva ao preparo, "
+          + "corrija o que for preciso e monte um novo borderô — depois avise o master para autorizar",
       responsavel: "OPERADOR",
       local: "SISTEMA",
       acao_sistema: "DEVOLVER_PREPARO",
