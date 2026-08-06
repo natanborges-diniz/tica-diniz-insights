@@ -291,11 +291,59 @@ export default function PendenciasFinanceirasPage() {
                 ocupado={acaoMutation.isPending}
                 onResolver={resolver}
                 onAbrir={irParaBordero}
+                onDispensar={(pend) => { setDispensando(pend); setMotivo(""); }}
               />
             ))}
           </div>
         </>
       )}
+
+      {/* Dispensar aviso: não mexe no borderô, só silencia o alerta. */}
+      <BaseDialog
+        open={!!dispensando}
+        onOpenChange={(o) => { if (!o) { setDispensando(null); setMotivo(""); } }}
+        title="Dispensar este aviso"
+        description="O borderô continua como está. Só o alerta sai do painel — e volta se a situação do borderô mudar."
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDispensando(null)}>Cancelar</Button>
+            <Button
+              disabled={dispensarMutation.isPending}
+              onClick={() =>
+                dispensando && dispensarMutation.mutate({ borderoId: dispensando.bordero_id, motivo })
+              }
+            >
+              <BellOff className="h-4 w-4 mr-1" />
+              Dispensar aviso
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {dispensando && (
+            <div className="rounded-md border bg-muted/30 p-3 text-xs space-y-1">
+              <p className="font-medium">{nomeLoja(dispensando.cod_empresa)} — {TITULO[dispensando.tipo] ?? dispensando.tipo}</p>
+              <p className="text-muted-foreground">{dispensando.descricao}</p>
+              <p className="text-muted-foreground">
+                {fmt(dispensando.valor_pendente)} · há {dispensando.dias_parado} dia(s)
+              </p>
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="motivo-dispensa" className="text-xs">
+              Como isso foi resolvido? (opcional, fica registrado)
+            </Label>
+            <Textarea
+              id="motivo-dispensa"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Ex.: pago no caixa da loja / acertado direto com o fornecedor / lançamento antigo antes dos ajustes"
+              rows={3}
+            />
+          </div>
+        </div>
+      </BaseDialog>
     </div>
   );
 }
