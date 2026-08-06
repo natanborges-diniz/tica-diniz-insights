@@ -728,6 +728,9 @@ serve(async (req) => {
       nome_arquivo,
       tipo_arquivo,
       data,
+      data_inicio,
+      data_fim,
+      process_type,
       ambiente: ambienteOverride,
       importado_por,
       aceitar_com_divergencia,
@@ -804,9 +807,16 @@ serve(async (req) => {
             action: "baixar_extrato",
             ambiente,
             tipo_arquivo: tipo,
+            // merchantCode da API = estabelecimento matriz de extrato.
+            merchant_code: cfg.cielo_estabelecimento_matriz,
             estabelecimento_matriz: cfg.cielo_estabelecimento_matriz,
             documento: cfg.cielo_documento,
             data,
+            start_date: data_inicio || data,
+            end_date: data_fim || data,
+            // D = movimento diario. R (reprocessamento) e M (mensal) ficam
+            // disponiveis, mas nao entram no ritmo automatico.
+            process_type: process_type || "D",
           }),
         });
 
@@ -821,26 +831,51 @@ serve(async (req) => {
           continue;
         }
 
-        try {
-          resultados.push(
-            await processarArquivo(
-              db,
-              base64ParaBytes(payload.conteudoBase64),
-              payload.nomeArquivo,
-              "API",
-              configs,
-              importado_por || null,
-              Boolean(aceitar_com_divergencia),
-              Boolean(reprocessar),
-            ),
-          );
-        } catch (e) {
+        // A API devolve links temporarios, e um periodo pode render mais de um
+        // arquivo — por isso o proxy entrega uma lista, ja baixada.
+        for (const f of (payload.falhas || [])) {
           falhas.push({
             matriz: cfg.cielo_estabelecimento_matriz!,
             tipo,
-            error: (e as Error).message,
-            error_code: "PARSE_OU_GRAVACAO",
+            error: f.error,
+            error_code: f.error_code,
           });
+        }
+
+        const arquivosBaixados: Array<{ nomeArquivo: string; conteudoBase64: string }> =
+          payload.arquivos || [];
+
+        if (arquivosBaixados.length === 0 && payload.aviso) {
+          falhas.push({
+            matriz: cfg.cielo_estabelecimento_matriz!,
+            tipo,
+            error: payload.aviso,
+            error_code: "SEM_LINKS",
+          });
+        }
+
+        for (const arq of arquivosBaixados) {
+          try {
+            resultados.push(
+              await processarArquivo(
+                db,
+                base64ParaBytes(arq.conteudoBase64),
+                arq.nomeArquivo,
+                "API",
+                configs,
+                importado_por || null,
+                Boolean(aceitar_com_divergencia),
+                Boolean(reprocessar),
+              ),
+            );
+          } catch (e) {
+            falhas.push({
+              matriz: cfg.cielo_estabelecimento_matriz!,
+              tipo,
+              error: `${arq.nomeArquivo}: ${(e as Error).message}`,
+              error_code: "PARSE_OU_GRAVACAO",
+            });
+          }
         }
       }
     }
