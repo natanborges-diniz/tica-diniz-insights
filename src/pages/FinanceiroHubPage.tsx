@@ -477,7 +477,10 @@ export default function FinanceiroHubPage() {
   // deixava. Aqui ele é solto para entrar num borderô novo — nunca no mesmo,
   // que já tem lote no banco com itens pagos.
   const devolverPreparoMutation = useMutation({
-    mutationFn: (borderoId: string) => invokeAction("devolver_para_preparo", { bordero_id: borderoId }),
+    mutationFn: (alvo: string | { lancamento_ids: string[] }) =>
+      typeof alvo === "string"
+        ? invokeAction("devolver_para_preparo", { bordero_id: alvo })
+        : invokeAction("devolver_para_preparo", { lancamento_ids: alvo.lancamento_ids }),
     onSuccess: (r: {
       ok?: boolean; devolvidos?: number; mensagem?: string; error?: string;
       bloqueados?: Array<{ descricao: string; explicacao?: string }>;
