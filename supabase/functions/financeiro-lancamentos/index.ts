@@ -1280,7 +1280,7 @@ async function devolverParaPreparo(body: Record<string, unknown>, userId: string
     const extras = (item?.dados_extras || {}) as Record<string, unknown>;
     const { error: uErr } = await supabase
       .from("lancamentos_financeiros")
-      .update(estadoDeVolta(extras.btg_payment_status as string | null))
+      .update(estadoDeVolta(extras))
       .eq("id", id);
     if (!uErr) devolvidos++;
   }
