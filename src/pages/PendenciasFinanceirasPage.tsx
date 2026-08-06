@@ -13,7 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle, Clock, Send, XCircle, CheckCircle2, ChevronRight,
-  Landmark, Monitor, User, ShieldCheck, RefreshCw, Archive, CalendarClock, Store,
+  Landmark, Monitor, User, ShieldCheck, RefreshCw, Archive, CalendarClock, Store, BellOff,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
