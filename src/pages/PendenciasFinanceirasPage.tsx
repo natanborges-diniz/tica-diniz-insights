@@ -79,6 +79,9 @@ export default function PendenciasFinanceirasPage() {
   const queryClient = useQueryClient();
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
   const [busca, setBusca] = useState("");
+  /** Pendência escolhida para silenciar — o motivo fica registrado. */
+  const [dispensando, setDispensando] = useState<Pendencia | null>(null);
+  const [motivo, setMotivo] = useState("");
 
   const invokeAction = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
