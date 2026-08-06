@@ -235,6 +235,21 @@ export default function FinanceiroHubPage() {
     queryFn: () => invokeAction("listar_borderos", { cod_empresa: codEmpresa }),
   });
 
+  // ── Pesquisa livre (descrição, fornecedor, valor) ──
+  //
+  // Filtro de tela, não de servidor: a listagem já vem por período e status, e o
+  // termo apenas recorta o que está à vista. Assim continua instantâneo e não
+  // dispara consulta a cada letra digitada.
+  const camposLancamento = (l: Lancamento) => [
+    l.descricao, l.pessoa_nome, l.pessoa_documento, l.valor, l.valor_pago,
+    l.natureza, l.categoria, l.subcategoria, l.forma_pagamento, l.origem,
+  ];
+  const lancamentosFiltrados = filtrarPorBusca(lancamentos, busca, camposLancamento);
+  const pagosFiltrados = filtrarPorBusca(pagos, busca, camposLancamento);
+  const borderosFiltrados = filtrarPorBusca(borderos, busca, (b) => [
+    b.descricao, b.total_valor, b.status, b.criado_por, b.aprovado_por,
+  ]);
+
   // Diagnóstico da trava: por que não sai, o que resolve, e se ESTE usuário
   // pode liberar. Carregado só quando o diálogo abre.
   const { data: diagnostico } = useQuery<{
