@@ -1372,9 +1372,19 @@ export default function FinanceiroHubPage() {
 
                   {comp.rejeitados > 0 && (
                     <div className="w-full pt-2 border-t space-y-2">
-                      <p className="text-xs text-destructive font-medium">
-                        {comp.rejeitados} pagamento(s) recusado(s) pelo banco — o dinheiro não saiu.
+                      <p className="text-sm text-destructive font-medium">
+                        {comp.rejeitados} pagamento(s) devolvido(s)/recusado(s) pelo banco
+                        {(comp.valor_rejeitado ?? 0) > 0 && <> — {fmtCurrency(comp.valor_rejeitado ?? 0)} não saiu da conta</>}
                       </p>
+                      {(comp.motivos_recusa ?? []).length > 0 && (
+                        <p className="text-xs text-destructive">
+                          Motivo do banco: {(comp.motivos_recusa ?? []).join(" · ")}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Os títulos com problema estão destacados em vermelho na lista abaixo.
+                      </p>
+
                       <div className="flex items-center gap-2 flex-wrap">
                         <Button
                           size="sm"
