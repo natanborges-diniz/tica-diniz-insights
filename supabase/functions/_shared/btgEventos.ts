@@ -189,16 +189,27 @@ export async function rejeitarLancamentoBtg(
   pay?: Record<string, unknown> | null,
 ) {
   const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
-  const motivo = motivoRecusa(pay);
+  const recusa = lerRecusaBtg(pay);
+  const motivo = recusa?.motivo ?? null;
   await db.from("lancamentos_financeiros").update({
     status: "AUTORIZADO",
     requer_validacao: true,
     observacao: motivo
-      ? `Recusado pelo BTG: ${motivo} (status: ${statusBtg}) — corrija e monte um novo borderô`
+      ? `Recusado pelo BTG: ${motivo}${recusa?.como_resolver ? ` — ${recusa.como_resolver}` : " — corrija e monte um novo borderô"}`
       : `Pagamento rejeitado pelo BTG (status: ${statusBtg}) — revisar dados e reenviar`,
-    dados_extras: { ...dados, btg_payment_status: statusBtg, btg_motivo_recusa: motivo },
+    dados_extras: {
+      ...dados,
+      btg_payment_status: statusBtg,
+      btg_motivo_recusa: motivo,
+      btg_recusa_codigo: recusa?.codigo ?? null,
+      btg_recusa_resolver: recusa?.como_resolver ?? null,
+      // Payload cru da recusa: quando o código for novo, é daqui que sai a
+      // tradução seguinte sem precisar reproduzir o erro.
+      btg_recusa_bruta: (pay?.errors ?? null) as unknown,
+    },
   }).eq("id", lanc.id);
 }
+
 
 // Se todos os lançamentos do borderô estão terminais, fecha o borderô.
 // deno-lint-ignore no-explicit-any
