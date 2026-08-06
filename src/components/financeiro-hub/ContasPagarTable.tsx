@@ -115,6 +115,8 @@ interface ContasPagarTableProps {
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
   onRemoverDoBordero?: (lancamento: Lancamento) => void;
+  /** Solta o título autorizado para corrigir conta, boleto ou vencimento. */
+  onDevolverParaPreparo?: (lancamento: Lancamento) => void;
   /** Destrava título parado em PROCESSANDO cujo lote nunca fechou no banco. */
   onLiberarProcessando?: (lancamento: Lancamento) => void;
   isCancelando: boolean;
