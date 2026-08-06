@@ -256,7 +256,7 @@ export default function BankingExtratoDashboard() {
     queryKey: ["btg-extrato-resumo", codEmpresa, dataInicio, dataFim],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
-        body: { action: "resumo", cod_empresa: codEmpresa, data_inicio: dataInicio, data_fim: dataFim },
+        body: { action: "resumo", cod_empresa: codEmpresa ?? 0, data_inicio: dataInicio, data_fim: dataFim },
       });
       if (error) {
         const message = await getFunctionErrorMessage(error);
@@ -270,8 +270,21 @@ export default function BankingExtratoDashboard() {
     },
   });
 
+  // Última data importada por loja — base do aviso de extrato desatualizado
+  const { data: ultimaData } = useQuery<Record<string, string>>({
+    queryKey: ["btg-extrato-ultima-data"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("btg-extrato", {
+        body: { action: "ultima_data" },
+      });
+      if (error) return {};
+      return (data?.por_loja ?? {}) as Record<string, string>;
+    },
+  });
+
   const { data: saldo } = useQuery<SaldoResponse | null>({
     queryKey: ["btg-saldo", codEmpresa],
+    enabled: !consolidado,
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("btg-extrato", {
         body: { action: "saldo", cod_empresa: codEmpresa },
@@ -287,6 +300,7 @@ export default function BankingExtratoDashboard() {
       return data as SaldoResponse;
     },
   });
+
 
   // ─── Mutations ───────────────────────────────────────────
   const importarMutation = useMutation({
