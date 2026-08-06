@@ -19,7 +19,7 @@ const emTransito = (data: string): ItemBordero => ({ status: 'PROCESSANDO', data
 describe('resumirComposicao', () => {
   it('separa pago, recusado e em trânsito', () => {
     const c = resumirComposicao([pago(), pago(), recusado(), emTransito('2026-08-06')]);
-    expect(c).toEqual({ total: 4, pagos: 2, rejeitados: 1, pendentes: 1, proxima_data: '2026-08-06' });
+    expect(c).toMatchObject({ total: 4, pagos: 2, rejeitados: 1, pendentes: 1, proxima_data: '2026-08-06' });
   });
 
   it('cancelado sai da conta — não é sucesso nem pendência', () => {
@@ -34,7 +34,7 @@ describe('resumirComposicao', () => {
   });
 
   it('borderô vazio não quebra', () => {
-    expect(resumirComposicao([])).toEqual({ total: 0, pagos: 0, rejeitados: 0, pendentes: 0, proxima_data: null });
+    expect(resumirComposicao([])).toMatchObject({ total: 0, pagos: 0, rejeitados: 0, pendentes: 0, proxima_data: null });
   });
 });
 

@@ -35,6 +35,7 @@ import BankingCobrancasDashboard from "./pages/BankingCobrancasDashboard";
 import BankingDdaDashboard from "./pages/BankingDdaDashboard";
 import FinanceiroHubPage from "./pages/FinanceiroHubPage";
 import FolhaPagamentoPage from "./pages/FolhaPagamentoPage";
+import PendenciasFinanceirasPage from "./pages/PendenciasFinanceirasPage";
 import MesaAprovacaoPage from "./pages/MesaAprovacaoPage";
 import RubricasPage from "./pages/RubricasPage";
 import ConciliacaoCartoesPage from "./pages/ConciliacaoCartoesPage";
@@ -124,6 +125,7 @@ const App = () => (
                   <Route path="/financeiro/parcelas" element={<FinanceiroDashboard />} />
                   <Route path="/financeiro/overview" element={<FinanceiroOverviewPage />} />
                   <Route path="/financeiro/hub" element={<FinanceiroHubPage />} />
+                  <Route path="/financeiro/pendencias" element={<PendenciasFinanceirasPage />} />
                   <Route path="/financeiro/folha" element={<FolhaPagamentoPage />} />
                   <Route path="/financeiro/mesa" element={<MesaAprovacaoPage />} />
                   <Route path="/financeiro/rubricas" element={<RubricasPage />} />

@@ -7,6 +7,7 @@ import {
   ShoppingCart,
   ShieldCheck,
   BookmarkCheck,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
@@ -108,6 +109,7 @@ const moduleMenus: Record<ModuleKey, MenuSection[]> = {
     {
       label: "Hub Financeiro",
       items: [
+        { title: "Pagamentos parados", url: "/financeiro/pendencias", icon: AlertTriangle },
         { title: "Contas a Pagar", url: "/financeiro/hub", icon: Landmark },
         { title: "Folha de Pagamento", url: "/financeiro/folha", icon: Users },
         { title: "Mesa de Aprovação", url: "/financeiro/mesa", icon: ShieldCheck },

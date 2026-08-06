@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useSearchParams, Link } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -11,7 +13,6 @@ import { useEmpresas } from "@/hooks/useEmpresas";
 import { useDefaultEmpresa } from "@/hooks/useDefaultEmpresa";
 import { useAuth } from "@/contexts/AuthContext";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
-import { PainelPendencias } from "@/components/financeiro-hub/PainelPendencias";
 import { usePendenciasFinanceiro } from "@/hooks/usePendenciasFinanceiro";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -131,14 +132,6 @@ export default function FinanceiroHubPage() {
   const [borderoBloqueio, setBorderoBloqueio] = useState<BorderoBloqueioPayload | null>(null);
 
   const [activeTab, setActiveTab] = useState("contas-pagar");
-  /**
-   * A abertura automática vale uma vez por visita.
-   *
-   * Sem isso, cada revalidação da consulta jogaria o operador de volta em
-   * Pendências no meio de outra tarefa — o painel deixaria de avisar e passaria
-   * a atrapalhar.
-   */
-  const [jaAbriuPendencias, setJaAbriuPendencias] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [prepPaymentLanc, setPrepPaymentLanc] = useState<Lancamento | null>(null);
   const [editLanc, setEditLanc] = useState<Lancamento | null>(null);
@@ -261,63 +254,23 @@ export default function FinanceiroHubPage() {
   });
 
   // ── Mutations ──
-  /**
-   * Encaminhamento a partir do painel.
-   *
-   * O painel decide QUAL ação cabe em cada pendência; aqui está COMO executá-la.
-   * Antes ele só apontava o problema, e o operador tinha de descobrir sozinho em
-   * que tela resolver — que é onde a pendência morria.
-   */
-  const resolverPendencia = (acao: string, borderoId: string) => {
-    switch (acao) {
-      case "ENVIAR_BORDERO":
-        enviarBorderoMutation.mutate(borderoId);
-        return;
-      case "DEVOLVER_PREPARO":
-        devolverPreparoMutation.mutate(borderoId);
-        return;
-      case "ATUALIZAR_RETORNO":
-        // Consulta o BTG agora. Se o master já autorizou, a baixa entra e a
-        // pendência some sozinha — sem ninguém precisar cobrar ninguém.
-        atualizarRetornoMutation.mutate();
-        return;
-      case "APROVAR_BORDERO":
-        setActiveTab("borderos");
-        setLiberarBorderoId(borderoId);
-        return;
-      case "ENCERRAR_BORDERO":
-        encerrarBorderoMutation.mutate(borderoId);
-        return;
-      case "REFAZER_BORDERO":
-        // A confirmação de que o lote morreu no banco não cabe num clique —
-        // mora no detalhe, junto do texto que explica o risco.
-        setActiveTab("borderos");
-        setBorderoDetalheId(borderoId);
-        return;
-      case "AJUSTAR_DATA":
-        // Abre o detalhe, onde fica o campo de data. Não ajustamos sozinhos: a
-        // data nova é decisão de quem paga, não um "hoje" automático.
-        setActiveTab("borderos");
-        setBorderoDetalheId(borderoId);
-        return;
-      default:
-        setActiveTab("borderos");
-        setBorderoDetalheId(borderoId);
-    }
-  };
+  // Chegando de "Pagamentos parados" com um borderô para resolver: a página
+  // aponta, o detalhe do borderô é onde a confirmação e os campos moram.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get("bordero");
+    if (!id) return;
+    setActiveTab("borderos");
+    setBorderoDetalheId(id);
+    // Limpa o parâmetro: recarregar a página não deve reabrir o mesmo diálogo.
+    searchParams.delete("bordero");
+    setSearchParams(searchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
-  // Mesma consulta do painel — o contador da aba e a lista não podem divergir.
+  // Contador do aviso — mesma consulta da página de pendências.
   const { data: pendenciasData } = usePendenciasFinanceiro(invokeAction);
   const qtdPendencias = pendenciasData?.pendencias.length ?? 0;
   const pendenciasGraves = pendenciasData?.resumo.alta ?? 0;
-
-  // Entrar no Financeiro com algo parado abre em Pendências; sem nada parado,
-  // cai direto no trabalho do dia.
-  useEffect(() => {
-    if (jaAbriuPendencias || qtdPendencias === 0) return;
-    setActiveTab("pendencias");
-    setJaAbriuPendencias(true);
-  }, [qtdPendencias, jaAbriuPendencias]);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["lancamentos"] });
@@ -894,6 +847,29 @@ export default function FinanceiroHubPage() {
             </div>
           }
         />
+
+        {/* Uma linha, com link. O painel inteiro morava aqui e comia meia tela;
+            o assunto tem página própria agora, mas quem entra no Contas a Pagar
+            precisa saber que há dinheiro parado em outra loja. */}
+        {qtdPendencias > 0 && (
+          <Link
+            to="/financeiro/pendencias"
+            className={cn(
+              "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors hover:bg-muted/50",
+              pendenciasGraves > 0 ? "border-destructive/40 bg-destructive/5" : "border-amber-300 bg-amber-50",
+            )}
+          >
+            <AlertTriangle className={cn(
+              "h-4 w-4 shrink-0",
+              pendenciasGraves > 0 ? "text-destructive" : "text-amber-600",
+            )} />
+            <span className="flex-1">
+              <strong>{qtdPendencias}</strong> pagamento(s) parado(s)
+              {pendenciasGraves > 0 && <> · <strong>{pendenciasGraves}</strong> exige(m) atenção imediata</>}
+            </span>
+            <span className="text-xs text-muted-foreground">Ver pagamentos parados →</span>
+          </Link>
+        )}
 
         {/* Workflow Stepper */}
         <WorkflowStepper
@@ -1745,20 +1721,6 @@ export default function FinanceiroHubPage() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedIds(new Set()); }}>
           <TabsList>
-            {/* Primeira aba de propósito: é o que precisa ser visto antes de
-                começar o dia. O contador some quando não há nada, para a aba não
-                virar ruído permanente. */}
-            <TabsTrigger value="pendencias">
-              Pendências
-              {qtdPendencias > 0 && (
-                <Badge
-                  variant={pendenciasGraves > 0 ? "destructive" : "secondary"}
-                  className="ml-1.5 text-[10px] px-1.5"
-                >
-                  {qtdPendencias}
-                </Badge>
-              )}
-            </TabsTrigger>
             <TabsTrigger value="contas-pagar">Contas a Pagar</TabsTrigger>
             <TabsTrigger value="borderos">
               Borderôs
@@ -1773,32 +1735,6 @@ export default function FinanceiroHubPage() {
           </TabsList>
 
           {/* Contas a Pagar */}
-          <TabsContent value="pendencias">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Pagamentos que exigem atenção</CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  De todas as lojas. Borderô enviado sem retorno, recusado pelo banco, esquecido na
-                  montagem ou esperando decisão na Mesa.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <PainelPendencias
-                  invokeAction={invokeAction}
-                  empresas={empresas || []}
-                  onAbrirBordero={(id) => { setActiveTab("borderos"); setBorderoDetalheId(id); }}
-                  onResolver={resolverPendencia}
-                  resolvendo={
-                    enviarBorderoMutation.isPending ||
-                    devolverPreparoMutation.isPending ||
-                    encerrarBorderoMutation.isPending ||
-                    atualizarRetornoMutation.isPending
-                  }
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
           <TabsContent value="contas-pagar">
             <ContasPagarTable
               lancamentos={lancamentos}
