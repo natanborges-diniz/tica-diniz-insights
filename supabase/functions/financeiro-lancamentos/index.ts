@@ -21,6 +21,7 @@ import { casarTitulo, JANELA_DIAS } from "../_shared/ddaMatch.ts";
 import { montarLoteFolha } from "../_shared/folha.ts";
 import { tipoPorLinhaDigitavel } from "../_shared/btgPayment.ts";
 import { resumirComposicao, type ItemBordero } from "../_shared/borderoEstado.ts";
+import { separarParaReenvio, estadoDeVolta } from "../_shared/reenvio.ts";
 import {
   pendenciaDoBordero,
   ordenarPendencias,
@@ -107,6 +108,8 @@ Deno.serve(async (req) => {
         return await confirmarProcessamento(body, auth.userId);
 
       // ── Borderôs ──
+      case "devolver_para_preparo":
+        return await devolverParaPreparo(body, auth.userId);
       case "painel_pendencias":
         return await painelPendencias(body);
       case "listar_borderos":
@@ -1008,6 +1011,83 @@ async function painelPendencias(body: Record<string, unknown>) {
 
   const ordenadas = ordenarPendencias(pendencias);
   return json({ pendencias: ordenadas, resumo: resumirPendencias(ordenadas), hoje });
+}
+
+
+/**
+ * Devolve ao preparo os pagamentos que o banco recusou.
+ *
+ * O item recusado voltava como AUTORIZADO com "revisar dados e reenviar", preso
+ * ao borderô antigo — e `criar_bordero` só aceita PREVISTO e CLASSIFICADO. Ou
+ * seja: o sistema mandava reenviar e não deixava. Título parado, fornecedor sem
+ * receber.
+ *
+ * Reenviar o MESMO borderô seria pior: ele já tem lote no BTG, e nesse lote em
+ * geral há itens pagos. Reabrir arriscaria pagar duas vezes quem já recebeu, e
+ * Pix não volta. Aqui o título é solto para entrar num borderô novo — lote novo,
+ * chave de idempotência nova, nada ambíguo do lado do banco.
+ */
+async function devolverParaPreparo(body: Record<string, unknown>, userId: string) {
+  await requireAdmin(userId);
+
+  const borderoId = body.bordero_id ? String(body.bordero_id) : null;
+  const ids = (body.lancamento_ids as string[]) || [];
+  if (!borderoId && ids.length === 0) {
+    throw new Error("Informe bordero_id ou lancamento_ids");
+  }
+
+  let query = supabase
+    .from("lancamentos_financeiros")
+    .select("id, descricao, status, requer_validacao, data_baixa, valor_pago, dados_extras");
+  query = borderoId ? query.eq("bordero_id", borderoId) : query.in("id", ids);
+
+  const { data: itens, error } = await query;
+  if (error) throw new Error(error.message);
+  if (!itens || itens.length === 0) throw new Error("Nenhum lançamento encontrado");
+
+  const r = separarParaReenvio(itens.map((i: Record<string, unknown>) => ({
+    id: String(i.id),
+    descricao: i.descricao as string | null,
+    status: String(i.status),
+    requer_validacao: Boolean(i.requer_validacao),
+    data_baixa: i.data_baixa as string | null,
+    valor_pago: i.valor_pago as number | null,
+  })));
+
+  if (r.liberar.length === 0) {
+    return json({
+      ok: false,
+      code: "NADA_A_REENVIAR",
+      error: "Nenhum pagamento em condição de reenvio",
+      bloqueados: r.bloqueados,
+    });
+  }
+
+  // Motivo do banco item a item: a mensagem de recusa é o que diz ao operador o
+  // que corrigir antes de tentar de novo.
+  let devolvidos = 0;
+  for (const id of r.liberar) {
+    const item = itens.find((i: Record<string, unknown>) => String(i.id) === id);
+    const extras = (item?.dados_extras || {}) as Record<string, unknown>;
+    const { error: uErr } = await supabase
+      .from("lancamentos_financeiros")
+      .update(estadoDeVolta(extras.btg_payment_status as string | null))
+      .eq("id", id);
+    if (!uErr) devolvidos++;
+  }
+
+  // O borderô de origem some da lista de pendências assim que não sobra nada
+  // recusado nele — senão o painel cobraria para sempre uma ação já feita.
+  if (borderoId) await recalcBordero(borderoId);
+
+  console.log(`[financeiro-lancamentos] devolver_para_preparo por ${userId}: ${devolvidos} título(s)`);
+  return json({
+    ok: true,
+    devolvidos,
+    bloqueados: r.bloqueados,
+    mensagem: `${devolvidos} título(s) de volta em Contas a Pagar, com a classificação e os dados de pagamento preservados. ` +
+      `Corrija o que o banco apontou e monte um novo borderô.`,
+  });
 }
 
 async function listarBorderos(body: Record<string, unknown>) {

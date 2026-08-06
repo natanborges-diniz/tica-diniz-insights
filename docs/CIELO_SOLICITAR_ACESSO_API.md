@@ -45,6 +45,10 @@ Assunto: Solicitação de acesso à API EXTC — Extrato Eletrônico v15
 > 3. Confirmação do endpoint de download dos arquivos, caso o acesso via API
 >    seja liberado — o manual "Integração com as APIs do EXTC" documenta apenas
 >    a autenticação (mTLS + OAuth), não o recurso de download.
+> 4. Se um único conjunto de credenciais (client_id, client_secret e
+>    certificado) atende todos os nossos CNPJs e matrizes de extrato, ou se é
+>    necessário um conjunto por CNPJ. E se houver etapa de autorização por
+>    estabelecimento, como funciona e quem executa.
 >
 > Nossas matrizes de extrato são: [LISTAR OS NÚMEROS]
 >

@@ -402,6 +402,32 @@ export default function FinanceiroHubPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  // O item recusado voltava como AUTORIZADO preso ao borderô antigo, e criar
+  // borderô só aceita PREVISTO/CLASSIFICADO: o sistema mandava reenviar e não
+  // deixava. Aqui ele é solto para entrar num borderô novo — nunca no mesmo,
+  // que já tem lote no banco com itens pagos.
+  const devolverPreparoMutation = useMutation({
+    mutationFn: (borderoId: string) => invokeAction("devolver_para_preparo", { bordero_id: borderoId }),
+    onSuccess: (r: {
+      ok?: boolean; devolvidos?: number; mensagem?: string; error?: string;
+      bloqueados?: Array<{ descricao: string; explicacao?: string }>;
+    }) => {
+      if (r?.ok === false) {
+        toast.error(r.error || "Nenhum pagamento em condição de reenvio");
+        (r.bloqueados || []).slice(0, 3).forEach((b) =>
+          toast.info(`${b.descricao}: ${b.explicacao ?? ""}`));
+        return;
+      }
+      toast.success(r?.mensagem || `${r?.devolvidos ?? 0} título(s) devolvidos ao preparo`);
+      (r?.bloqueados || []).slice(0, 3).forEach((b) =>
+        toast.info(`${b.descricao}: ${b.explicacao ?? ""}`));
+      setBorderoDetalheId(null);
+      setActiveTab("contas-pagar");
+      invalidateAll();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const cancelarBorderoMutation = useMutation({
     mutationFn: (id: string) => invokeAction("cancelar_bordero", { bordero_id: id }),
     onSuccess: (data: { devolvidos?: number }) => {
@@ -1155,6 +1181,30 @@ export default function FinanceiroHubPage() {
                       <p className="text-xs text-muted-foreground flex-1">
                         Só antes do envio. Depois de enviado a data está com o banco.
                       </p>
+                    </div>
+                  )}
+
+                  {comp.rejeitados > 0 && (
+                    <div className="w-full pt-2 border-t space-y-2">
+                      <p className="text-xs text-destructive font-medium">
+                        {comp.rejeitados} pagamento(s) recusado(s) pelo banco — o dinheiro não saiu.
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          disabled={devolverPreparoMutation.isPending}
+                          onClick={() => devolverPreparoMutation.mutate(borderoDetalhe.bordero.id)}
+                        >
+                          Devolver ao preparo para reenvio
+                        </Button>
+                        <p className="text-xs text-muted-foreground flex-1">
+                          Os recusados voltam para Contas a Pagar com a classificação e os dados de
+                          pagamento preservados. Quem já foi pago fica onde está — reenviar o mesmo
+                          borderô pagaria duas vezes.
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
