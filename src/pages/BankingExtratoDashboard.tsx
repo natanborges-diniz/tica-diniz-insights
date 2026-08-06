@@ -138,18 +138,41 @@ export default function BankingExtratoDashboard() {
   const { codEmpresa: codEmpresaDefault, isAdmin } = useDefaultEmpresa();
   const queryClient = useQueryClient();
 
-  const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
-  const [dataInicio, setDataInicio] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
-  const [dataFim, setDataFim] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [filtroTipo, setFiltroTipo] = useState<string>("todos");
-  const [filtroStatus, setFiltroStatus] = useState<string>("PENDENTE");
+  // Filtros persistidos — a consulta não volta em branco ao sair e retornar.
+  const [filtros, setFiltros, limparFiltros] = useFiltrosPersistentes("extrato", {
+    codEmpresa: (codEmpresaDefault ?? 1) as number | null,
+    dataInicio: format(subDays(new Date(), 30), "yyyy-MM-dd"),
+    dataFim: format(new Date(), "yyyy-MM-dd"),
+    filtroTipo: "todos",
+    filtroStatus: "todos",
+  });
+  const { codEmpresa, dataInicio, dataFim, filtroTipo, filtroStatus } = filtros;
+  const setCodEmpresa = (v: number | null) => setFiltros({ codEmpresa: v });
+  const setDataInicio = (v: string) => setFiltros({ dataInicio: v });
+  const setDataFim = (v: string) => setFiltros({ dataFim: v });
+  const setFiltroTipo = (v: string) => setFiltros({ filtroTipo: v });
+  const setFiltroStatus = (v: string) => setFiltros({ filtroStatus: v });
+  const consolidado = codEmpresa === null;
+
+  const aplicarPreset = (preset: "semana" | "7d" | "mes" | "30d") => {
+    const hoje = new Date();
+    const inicio =
+      preset === "semana" ? startOfWeek(hoje, { weekStartsOn: 1 })
+      : preset === "7d" ? subDays(hoje, 7)
+      : preset === "mes" ? startOfMonth(hoje)
+      : subDays(hoje, 30);
+    setFiltros({ dataInicio: format(inicio, "yyyy-MM-dd"), dataFim: format(hoje, "yyyy-MM-dd") });
+  };
+
   const [btgAccessIssue, setBtgAccessIssue] = useState<string | null>(null);
+  const [comoFuncionaAberto, setComoFuncionaAberto] = useState(false);
 
   const [autoImported, setAutoImported] = useState(false);
   useEffect(() => {
     setAutoImported(false);
     setBtgAccessIssue(null);
   }, [codEmpresa]);
+
 
   // Dialogs
   const [candidatosFor, setCandidatosFor] = useState<ExtratoItem | null>(null);
