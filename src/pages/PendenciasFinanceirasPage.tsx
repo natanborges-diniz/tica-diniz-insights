@@ -468,6 +468,16 @@ function LinhaPendencia({
               {p.acao_secundaria_rotulo}
             </Button>
           )}
+          {/* Silenciar: para o que já foi resolvido por fora do sistema. */}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-muted-foreground"
+            onClick={() => onDispensar(p)}
+            title="Dispensar este aviso"
+          >
+            <BellOff className="h-4 w-4" />
+          </Button>
           <Button
             size="sm"
             variant="ghost"
