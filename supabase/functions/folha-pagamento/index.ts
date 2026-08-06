@@ -379,6 +379,10 @@ async function fechar(body: Record<string, unknown>, userId: string) {
       pessoa_documento: it.cpf,
       valor: Number(it.valor_liquido),
       data_vencimento: dataPagamento,
+      // Competência é decisão, não consequência: julho fechado e pago em agosto
+      // é despesa de julho. Sem isto o DRE colocaria a folha no mês do
+      // pagamento — ou, como acontecia, em mês nenhum.
+      competencia: comp.competencia,
       natureza: "DESPESAS_OPERACIONAIS",
       categoria: "PESSOAL",
       subcategoria: rotulo,
@@ -431,6 +435,9 @@ async function fechar(body: Record<string, unknown>, userId: string) {
       descricao: e.descricao || `${e.tipo} — folha ${comp.competencia}`,
       valor: Number(e.valor),
       data_vencimento: e.data_vencimento,
+      // FGTS vence dia 7 e INSS/IRRF dia 20 do mês seguinte, mas o fato gerador
+      // é o salário: competência do encargo é a da folha.
+      competencia: comp.competencia,
       natureza: "DESPESAS_OPERACIONAIS",
       categoria: "ENCARGOS",
       subcategoria: e.tipo,

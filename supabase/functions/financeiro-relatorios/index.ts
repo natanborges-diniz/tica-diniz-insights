@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders, authGuard } from "../_shared/authGuard.ts";
+import { mesesNoIntervalo, competenciaDoLancamento } from "../_shared/competencia.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -62,13 +63,27 @@ async function gerarDre(body: DreParams) {
     ? ["BAIXADO", "CLASSIFICADO", "BORDERO", "AUTORIZADO", "PROCESSANDO"]
     : ["BAIXADO"];
 
+  // DRE é por competência, e competência não é uma data só.
+  //
+  // Para título do ERP vale a emissão, que é o que a casa usa como mês do fato.
+  // Para folha o mês é escolhido: julho é fechado e pago em agosto, e os
+  // encargos de julho vencem em agosto — tudo é competência julho. Provisão de
+  // rubrica idem.
+  //
+  // O filtro era direto em `data_emissao`, com >= e <=. Em SQL isso descarta
+  // NULL, que é justamente o valor da emissão em folha e provisão (não há
+  // documento emitido). Elas não caíam no grupo errado: sumiam do relatório.
+  const meses = mesesNoIntervalo(data_inicio, data_fim);
+  if (meses.length === 0) {
+    return json({ error: "Período inválido: data_inicio deve ser anterior ou igual a data_fim" }, 400);
+  }
+
   let query = supabase
     .from("lancamentos_financeiros")
-    .select("id, cod_empresa, tipo, categoria, subcategoria, natureza, valor, valor_pago, data_pagamento, data_vencimento, data_emissao, descricao, pessoa_nome, status")
+    .select("id, cod_empresa, tipo, categoria, subcategoria, natureza, valor, valor_pago, data_pagamento, data_vencimento, data_emissao, competencia, competencia_rubrica, descricao, pessoa_nome, status")
     .in("status", statusList)
-    .gte("data_emissao", data_inicio)
-    .lte("data_emissao", data_fim)
-    .order("data_emissao", { ascending: true });
+    .in("competencia", meses)
+    .order("competencia", { ascending: true });
 
   if (cod_empresa) {
     query = query.eq("cod_empresa", cod_empresa);
@@ -79,11 +94,9 @@ async function gerarDre(body: DreParams) {
 
   const linhas = (data || []).map((l) => {
     const grupo = classificarGrupoDre(l.tipo, l.categoria, l.natureza);
-    const competencia = l.data_emissao
-      ? l.data_emissao.substring(0, 7)
-      : l.data_pagamento
-        ? l.data_pagamento.substring(0, 7)
-        : "SEM_DATA";
+    // A coluna é preenchida por trigger; a resolução em código cobre a linha
+    // que porventura escape (banco antigo, restauração parcial).
+    const competencia = competenciaDoLancamento(l) ?? "SEM_DATA";
 
     const isBaixado = l.status === "BAIXADO";
 

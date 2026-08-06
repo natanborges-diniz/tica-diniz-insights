@@ -198,6 +198,9 @@ export function montarProvisao(r: RubricaProvisionavel, c: CompetenciaGerada, co
     lastro: "RUBRICA",
     rubrica_id: r.id,
     competencia_rubrica: c.competencia,
+    // Provisão não tem documento emitido: sem competência explícita ela sumia
+    // do DRE, que filtrava por data_emissao (NULL não passa em >= nem <=).
+    competencia: c.competencia,
     origem: "RUBRICA",
     origem_id: `RUBRICA:${r.id}:${c.competencia}`,
     status: "PREVISTO",
