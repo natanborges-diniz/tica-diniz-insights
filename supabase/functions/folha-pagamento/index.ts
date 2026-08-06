@@ -140,23 +140,38 @@ async function importar(body: Record<string, unknown>, userId: string) {
   const ev = evento as EventoFolha;
   const totais = totalizar(validadas);
 
-  const { data: existente } = await supabase
+  const { data: folhasDoMes } = await supabase
     .from("folha_competencias")
-    .select("id, status")
+    .select("id, status, sequencia, complementar")
     .eq("cod_empresa", Number(cod_empresa))
     .eq("competencia", String(competencia))
     .eq("evento", ev)
     .neq("status", "CANCELADA")
-    .maybeSingle();
+    .order("sequencia", { ascending: false });
 
-  if (existente && existente.status !== "RASCUNHO") {
+  const anteriores = folhasDoMes || [];
+  const maiorSeq = anteriores.reduce((m, f) => Math.max(m, Number(f.sequencia ?? 1)), 0);
+
+  // Rascunho existente é o que se substitui ao reimportar a planilha corrigida.
+  // Numa complementar, o rascunho considerado é o da própria sequência nova —
+  // ou seja, nenhum: a complementar sempre nasce nova.
+  const rascunho = complementar
+    ? undefined
+    : anteriores.find((f) => f.status === "RASCUNHO" && !f.complementar);
+  const principalFechada = anteriores.find((f) => !f.complementar && f.status !== "RASCUNHO");
+
+  if (!complementar && principalFechada) {
     throw new Error(
-      `Já existe folha de ${ROTULO_EVENTO[ev]} para ${competencia} em ${existente.status}. ` +
-      `Cancele antes de reimportar.`,
+      `Já existe folha de ${ROTULO_EVENTO[ev]} para ${competencia} em ${principalFechada.status}. ` +
+      `Para incluir mais colaboradores, importe como FOLHA COMPLEMENTAR (a folha fechada não é alterada). ` +
+      `Se a intenção é refazer tudo, cancele a folha antes de reimportar.`,
     );
   }
 
-  let competenciaId = existente?.id as string | undefined;
+  const sequencia = complementar ? Math.max(maiorSeq, 1) + 1 : 1;
+  const rotuloComplementar = complementar ? ` (complementar ${sequencia - 1})` : "";
+
+  let competenciaId = rascunho?.id as string | undefined;
 
   if (competenciaId) {
     await supabase.from("folha_competencias").update({
@@ -172,7 +187,11 @@ async function importar(body: Record<string, unknown>, userId: string) {
       cod_empresa: Number(cod_empresa),
       competencia: String(competencia),
       evento: ev,
-      descricao: descricao ? String(descricao) : `${ROTULO_EVENTO[ev]} ${competencia}`,
+      sequencia,
+      complementar,
+      descricao: descricao
+        ? String(descricao)
+        : `${ROTULO_EVENTO[ev]} ${competencia}${rotuloComplementar}`,
       data_pagamento: String(data_pagamento),
       status: "RASCUNHO",
       criado_por: userId,
@@ -181,6 +200,7 @@ async function importar(body: Record<string, unknown>, userId: string) {
     if (error) throw new Error(error.message);
     competenciaId = nova.id;
   }
+
 
   const { error: itErr } = await supabase.from("folha_itens").insert(
     validadas.map((l) => ({
