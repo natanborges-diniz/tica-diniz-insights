@@ -12,6 +12,7 @@ import { formatters, ExportColumn } from "@/utils/exportData";
 import { Search, X } from "lucide-react";
 import { EmptyState } from "@/components/system/states";
 import { hojeSP } from "@/lib/datetime";
+import { filtrarPorBusca } from "@/lib/busca";
 
 interface FinanceiroParcelasTableProps {
   data: FinanceiroParcela[];
@@ -220,7 +221,7 @@ export function FinanceiroParcelasTable({ data }: FinanceiroParcelasTableProps) 
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar por cliente, documento, empresa..."
+                  placeholder="Descrição, fornecedor ou valor" data-x=" cliente, documento, empresa..."
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
