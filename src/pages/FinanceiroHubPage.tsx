@@ -1831,9 +1831,13 @@ export default function FinanceiroHubPage() {
                     <TableBody>
                       {borderosLoading ? (
                         <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-                      ) : borderos.length === 0 ? (
-                        <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum borderô. Selecione lançamentos na aba "Contas a Pagar" e clique em "Criar Borderô".</TableCell></TableRow>
-                      ) : borderos.map(b => {
+                      ) : borderosFiltrados.length === 0 ? (
+                        <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          {busca
+                            ? `Nenhum borderô encontrado para "${busca}".`
+                            : 'Nenhum borderô. Selecione lançamentos na aba "Contas a Pagar" e clique em "Criar Borderô".'}
+                        </TableCell></TableRow>
+                      ) : borderosFiltrados.map(b => {
                         const bs = estadoBordero(b.status, b.composicao, format(agoraSP(), "yyyy-MM-dd"));
                         return (
                           <TableRow key={b.id}>
@@ -1902,7 +1906,7 @@ export default function FinanceiroHubPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-bold">{fmtCurrency(totalPago)}</p>
-                  <p className="text-xs text-muted-foreground">{pagos.length} pagamento(s)</p>
+                  <p className="text-xs text-muted-foreground">{pagosFiltrados.length} pagamento(s)</p>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1919,7 +1923,7 @@ export default function FinanceiroHubPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pagos.length === 0 ? (
+                    {pagosFiltrados.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-sm">
                           Nenhum pagamento com baixa {filtroDataInicio || filtroDataFim ? "no período selecionado" : "registrado"}.
@@ -1931,7 +1935,7 @@ export default function FinanceiroHubPage() {
                           )}
                         </TableCell>
                       </TableRow>
-                    ) : pagos.map(l => {
+                    ) : pagosFiltrados.map(l => {
                       const pago = Number(l.valor_pago ?? l.valor);
                       const dif = Number((pago - l.valor).toFixed(2));
                       const temComprovante = !!((l.dados_extras || {}).btg_payment_id || (l.dados_extras || {}).btg_batch_id);
