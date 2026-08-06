@@ -16,6 +16,8 @@ import { BaseDialog } from "@/components/system/BaseDialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { PlanoContaSelect, type PlanoConta } from "@/components/banking/PlanoContaSelect";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 
 interface Rubrica {
   id: string;
@@ -89,6 +91,7 @@ export default function RubricasPage() {
   const [editando, setEditando] = useState<Rubrica | null>(null);
   const [cancelando, setCancelando] = useState<Rubrica | null>(null);
   const [motivoCancel, setMotivoCancel] = useState("");
+  const [busca, setBusca] = useState("");
 
   const { data: rubricas = [], isLoading } = useQuery<Rubrica[]>({
     queryKey: ["rubricas"],
@@ -297,6 +300,10 @@ export default function RubricasPage() {
   const fmt = (v: number | null) =>
     v != null ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v) : "—";
 
+  const rubricasFiltradas = filtrarPorBusca(rubricas, busca, (r) => [
+    r.descricao, r.favorecido_nome, r.favorecido_documento, r.valor_esperado, r.valor_teto,
+  ]);
+
   return (
     <div className="space-y-6">
       <ModuleHeader
@@ -327,6 +334,14 @@ export default function RubricasPage() {
         </Button>
       </div>
 
+      <SearchField
+        value={busca}
+        onChange={setBusca}
+        placeholder="Buscar por descrição, favorecido ou valor..."
+        className="max-w-sm"
+        resultados={rubricasFiltradas.length}
+      />
+
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -347,12 +362,14 @@ export default function RubricasPage() {
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-                ) : rubricas.length === 0 ? (
+                ) : rubricasFiltradas.length === 0 ? (
                   <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    Nenhuma rubrica. Os recorrentes (aluguel, energia, folha, impostos) entram aqui.
+                    {busca
+                      ? "Nenhuma rubrica encontrada para a busca."
+                      : "Nenhuma rubrica. Os recorrentes (aluguel, energia, folha, impostos) entram aqui."}
                   </TableCell></TableRow>
                 ) : (
-                  rubricas.map((r) => (
+                  rubricasFiltradas.map((r) => (
                     <TableRow key={r.id} className={["SUSPENSA", "CANCELADA"].includes(r.status) ? "opacity-50" : ""}>
                       <TableCell className="text-sm font-medium">{r.descricao}
                         <p className="text-xs text-muted-foreground">{r.conta_numero} · {r.periodicidade}</p>

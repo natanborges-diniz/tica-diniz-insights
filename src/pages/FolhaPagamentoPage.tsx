@@ -25,6 +25,8 @@ import {
   ehRelatorioTotaisLiquidos,
   parseRelatorioFolha,
 } from "../../supabase/functions/_shared/folhaRelatorio";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 
 // Espelha _shared/folha.ts. Os códigos numéricos do BTG ficam no backend —
 // aqui só o vocabulário da casa.
@@ -169,6 +171,7 @@ export default function FolhaPagamentoPage() {
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
   const [importOpen, setImportOpen] = useState(false);
   const [detalheId, setDetalheId] = useState<string | null>(null);
+  const [buscaDetalhe, setBuscaDetalhe] = useState("");
 
   const hoje = agoraSP();
   const [evento, setEvento] = useState("SALARIO");
@@ -926,11 +929,25 @@ export default function FolhaPagamentoPage() {
       {/* Detalhe */}
       <BaseDialog
         open={!!detalheId}
-        onOpenChange={(o) => { if (!o) setDetalheId(null); }}
+        onOpenChange={(o) => { if (!o) { setDetalheId(null); setBuscaDetalhe(""); } }}
         title={`Folha ${(detalhe as { competencia?: Competencia })?.competencia?.competencia ?? ""}`}
       >
         {(detalhe as { itens?: Array<Record<string, unknown>>; encargos?: Array<Record<string, unknown>> }) && (
           <div className="space-y-4 py-2">
+            {(() => {
+              const itensDetalhe = (detalhe as { itens?: Array<Record<string, unknown>> })?.itens || [];
+              const itensDetalheFiltrados = filtrarPorBusca(itensDetalhe, buscaDetalhe, (i) => [
+                i.nome, i.cpf, i.valor_liquido,
+              ]);
+              return (
+                <SearchField
+                  value={buscaDetalhe}
+                  onChange={setBuscaDetalhe}
+                  placeholder="Buscar colaborador por nome, CPF ou valor..."
+                  resultados={itensDetalheFiltrados.length}
+                />
+              );
+            })()}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -942,7 +959,11 @@ export default function FolhaPagamentoPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {((detalhe as { itens?: Array<Record<string, unknown>> })?.itens || []).map((i) => {
+                {filtrarPorBusca(
+                  (detalhe as { itens?: Array<Record<string, unknown>> })?.itens || [],
+                  buscaDetalhe,
+                  (i) => [i.nome, i.cpf, i.valor_liquido],
+                ).map((i) => {
                   const semDados = !i.chave_pix && !(i.banco && i.agencia && i.conta);
                   return (
                     <TableRow key={String(i.id)}>

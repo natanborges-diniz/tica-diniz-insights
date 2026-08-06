@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { hojeSP } from "@/lib/datetime";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 
 const fmtCurrency = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -41,6 +43,7 @@ export default function CarteiraRecebiveisPage() {
   });
   const [filtroBandeira, setFiltroBandeira] = useState("todas");
   const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [busca, setBusca] = useState("");
 
   const { data: recebiveis = [], isLoading } = useQuery({
     queryKey: ["carteira-recebiveis", codEmpresa, dataInicio, dataFim],
@@ -91,18 +94,23 @@ export default function CarteiraRecebiveisPage() {
     });
   }, [recebiveis, filtroBandeira, filtroStatus]);
 
+  const filteredBusca = useMemo(
+    () => filtrarPorBusca(filtered, busca, (r: any) => [r.adquirente, r.bandeira, r.status, r.valor_bruto, r.valor_liquido]),
+    [filtered, busca],
+  );
+
   // KPIs
-  const totalBruto = filtered.reduce((s: number, r: any) => s + Number(r.valor_bruto || 0), 0);
-  const totalLiquido = filtered.reduce((s: number, r: any) => s + Number(r.valor_liquido || 0), 0);
-  const totalTaxas = filtered.reduce((s: number, r: any) => s + Number(r.taxa_valor || 0), 0);
-  const qtdPrevistos = filtered.filter((r: any) => r.status === "PREVISTO").length;
-  const qtdConciliados = filtered.filter((r: any) => r.status === "CONCILIADO").length;
-  const qtdRecebidos = filtered.filter((r: any) => r.status === "RECEBIDO").length;
+  const totalBruto = filteredBusca.reduce((s: number, r: any) => s + Number(r.valor_bruto || 0), 0);
+  const totalLiquido = filteredBusca.reduce((s: number, r: any) => s + Number(r.valor_liquido || 0), 0);
+  const totalTaxas = filteredBusca.reduce((s: number, r: any) => s + Number(r.taxa_valor || 0), 0);
+  const qtdPrevistos = filteredBusca.filter((r: any) => r.status === "PREVISTO").length;
+  const qtdConciliados = filteredBusca.filter((r: any) => r.status === "CONCILIADO").length;
+  const qtdRecebidos = filteredBusca.filter((r: any) => r.status === "RECEBIDO").length;
 
   // Chart: by week
   const chartByWeek = useMemo(() => {
     const weeks: Record<string, { semana: string; bruto: number; liquido: number; taxas: number }> = {};
-    filtered.forEach((r: any) => {
+    filteredBusca.forEach((r: any) => {
       try {
         const d = parseISO(r.data_vencimento);
         const weekStart = format(addDays(d, -d.getDay()), "dd/MM");
@@ -113,17 +121,17 @@ export default function CarteiraRecebiveisPage() {
       } catch { /* skip */ }
     });
     return Object.values(weeks).slice(0, 13);
-  }, [filtered]);
+  }, [filteredBusca]);
 
   // Chart: by bandeira (pie)
   const chartByBandeira = useMemo(() => {
     const map: Record<string, number> = {};
-    filtered.forEach((r: any) => {
+    filteredBusca.forEach((r: any) => {
       const b = r.bandeira || "Outros";
       map[b] = (map[b] || 0) + Number(r.valor_liquido || 0);
     });
     return Object.entries(map).map(([name, value]) => ({ name, value }));
-  }, [filtered]);
+  }, [filteredBusca]);
 
   return (
     <div className="space-y-6">
@@ -193,6 +201,14 @@ export default function CarteiraRecebiveisPage() {
             <SelectItem value="RECEBIDO">Recebido</SelectItem>
           </SelectContent>
         </Select>
+        <SearchField
+          value={busca}
+          onChange={setBusca}
+          label="Buscar"
+          placeholder="Adquirente, bandeira ou valor"
+          className="flex-1 min-w-[220px]"
+          resultados={filteredBusca.length}
+        />
       </div>
 
       {/* Charts */}
@@ -257,12 +273,12 @@ export default function CarteiraRecebiveisPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-              ) : filtered.length === 0 ? (
+              ) : filteredBusca.length === 0 ? (
                 <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                  Nenhum recebível encontrado no período.
+                  {busca ? "Nenhum recebível encontrado para a busca." : "Nenhum recebível encontrado no período."}
                 </TableCell></TableRow>
               ) : (
-                filtered.map((r: any) => {
+                filteredBusca.map((r: any) => {
                   const stVariant = r.status === "CONCILIADO" ? "default" : r.status === "RECEBIDO" ? "default" : "secondary";
                   return (
                     <TableRow key={r.id}>
