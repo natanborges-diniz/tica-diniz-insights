@@ -5,11 +5,13 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, subDays, differenceInCalendarDays, startOfWeek, startOfMonth } from "date-fns";
+import { Link } from "react-router-dom";
 import {
   ArrowDownCircle, ArrowUpCircle, Download, Landmark, TrendingUp, TrendingDown,
   PieChart, CheckCircle2, Sparkles, Search, EyeOff, FilePlus2, Undo2, Clock, Settings2,
-  AlertTriangle,
+  AlertTriangle, Info,
 } from "lucide-react";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useEmpresas } from "@/hooks/useEmpresas";
 import { useDefaultEmpresa } from "@/hooks/useDefaultEmpresa";
