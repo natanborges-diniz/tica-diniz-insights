@@ -44,6 +44,21 @@ Mais um link direto para Hub → Pagos ("procurando uma conta paga? é aqui").
 Opção "Todas as lojas" no seletor de empresa da tela de extrato, para uma visão única da semana
 com coluna de loja.
 
+### 5. Contas a Pagar lembra o último período consultado
+Hoje o filtro de vencimento volta em branco a cada visita ao Hub. Passa a guardar loja, campo de data
+(vencimento/pagamento/emissão), data início e data fim no navegador e reaplicar na volta, com um
+botão "Limpar período" para voltar ao estado aberto. Vale também para a aba Pagos, que usa o mesmo
+período.
+
+### 6. Seletor de loja padronizado e destacado em todas as telas de filtro
+A loja passa a ser sempre o **primeiro campo**, com rótulo "Loja", largura maior e destaque visual
+(ícone de loja + nome em negrito), para não haver dúvida de qual unidade está sendo consultada.
+Telas contempladas: Hub Financeiro, Extrato, Pagamentos, Cobranças, DDA, Parcelas, DRE, Fluxo de
+Caixa, Conciliação de Cartões, Recebíveis, Vendas por Família, Compras, Estoque/OTB, Metas, OS e
+Folha de Pagamento. Onde a visão consolidada faz sentido, "Todas as lojas" aparece como primeira
+opção e o cabeçalho da página mostra a loja ativa em destaque.
+
+
 ## Detalhes técnicos
 
 - `src/pages/BankingExtratoDashboard.tsx`: `filtroStatus` inicial `"todos"`, presets de data,
