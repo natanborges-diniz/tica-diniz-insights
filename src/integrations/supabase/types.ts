@@ -1881,6 +1881,7 @@ export type Database = {
           btg_status: string | null
           cod_empresa: number
           competencia: string
+          complementar: boolean
           created_at: string
           criado_por: string | null
           data_pagamento: string
@@ -1891,6 +1892,7 @@ export type Database = {
           id: string
           qtd_colaboradores: number
           rubrica_id: string | null
+          sequencia: number
           status: string
           total_bruto: number
           total_descontos: number
@@ -1903,6 +1905,7 @@ export type Database = {
           btg_status?: string | null
           cod_empresa: number
           competencia: string
+          complementar?: boolean
           created_at?: string
           criado_por?: string | null
           data_pagamento: string
@@ -1913,6 +1916,7 @@ export type Database = {
           id?: string
           qtd_colaboradores?: number
           rubrica_id?: string | null
+          sequencia?: number
           status?: string
           total_bruto?: number
           total_descontos?: number
@@ -1925,6 +1929,7 @@ export type Database = {
           btg_status?: string | null
           cod_empresa?: number
           competencia?: string
+          complementar?: boolean
           created_at?: string
           criado_por?: string | null
           data_pagamento?: string
@@ -1935,6 +1940,7 @@ export type Database = {
           id?: string
           qtd_colaboradores?: number
           rubrica_id?: string | null
+          sequencia?: number
           status?: string
           total_bruto?: number
           total_descontos?: number
