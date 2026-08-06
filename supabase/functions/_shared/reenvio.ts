@@ -73,7 +73,12 @@ export function decidirReenvio(item: ItemParaReenvio): Decisao {
   }
 
   // Recusado: o banco devolveu o item e o marcou para revisão.
-  if (st === "AUTORIZADO" && item.requer_validacao) {
+  // AUTORIZADO ou em borderô e sem baixa: o dinheiro não saiu, então corrigir
+  // conta, linha digitável ou vencimento exige voltar ao preparo — é lá que os
+  // campos são editáveis. Antes só liberávamos com `requer_validacao`, e o
+  // título reaberto de um borderô desfeito ficava travado em AUTORIZADO sem
+  // nenhuma saída na tela.
+  if (["AUTORIZADO", "BORDERO", "AGRUPADO", "CLASSIFICADO", "PREVISTO"].includes(st)) {
     return { id: item.id, descricao, liberar: true };
   }
 
@@ -82,7 +87,7 @@ export function decidirReenvio(item: ItemParaReenvio): Decisao {
     descricao,
     liberar: false,
     motivo: "NAO_RECUSADO",
-    explicacao: `Status ${st} não indica recusa do banco — nada a reenviar`,
+    explicacao: `Status ${st} não permite voltar ao preparo`,
   };
 }
 

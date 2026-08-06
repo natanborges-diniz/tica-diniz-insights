@@ -477,7 +477,10 @@ export default function FinanceiroHubPage() {
   // deixava. Aqui ele é solto para entrar num borderô novo — nunca no mesmo,
   // que já tem lote no banco com itens pagos.
   const devolverPreparoMutation = useMutation({
-    mutationFn: (borderoId: string) => invokeAction("devolver_para_preparo", { bordero_id: borderoId }),
+    mutationFn: (alvo: string | { lancamento_ids: string[] }) =>
+      typeof alvo === "string"
+        ? invokeAction("devolver_para_preparo", { bordero_id: alvo })
+        : invokeAction("devolver_para_preparo", { lancamento_ids: alvo.lancamento_ids }),
     onSuccess: (r: {
       ok?: boolean; devolvidos?: number; mensagem?: string; error?: string;
       bloqueados?: Array<{ descricao: string; explicacao?: string }>;
@@ -1811,6 +1814,7 @@ export default function FinanceiroHubPage() {
               onRemoverDoBordero={(l) => {
                 if (l.bordero_id) removerDoBorderoMutation.mutate({ bordero_id: l.bordero_id, lancamento_ids: [l.id] });
               }}
+              onDevolverParaPreparo={(l) => devolverPreparoMutation.mutate({ lancamento_ids: [l.id] })}
               onLiberarProcessando={(l) => {
                 const ok = window.confirm(
                   `Destravar "${l.descricao}"?\n\n` +

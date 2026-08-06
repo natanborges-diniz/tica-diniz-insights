@@ -115,6 +115,8 @@ interface ContasPagarTableProps {
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
   onRemoverDoBordero?: (lancamento: Lancamento) => void;
+  /** Solta o título autorizado para corrigir conta, boleto ou vencimento. */
+  onDevolverParaPreparo?: (lancamento: Lancamento) => void;
   /** Destrava título parado em PROCESSANDO cujo lote nunca fechou no banco. */
   onLiberarProcessando?: (lancamento: Lancamento) => void;
   isCancelando: boolean;
@@ -186,7 +188,7 @@ const formatMonthTitle = (monthKey: string) => {
 function LancamentoRow({
   l, selectedIds, onToggleSelect, onClassificar, onPrepararPagamento,
   onBaixaManual, onComprovante, onVirarRubrica, onCancelar, onReabrir, onRemoverDoBordero,
-  onLiberarProcessando,
+  onDevolverParaPreparo, onLiberarProcessando,
   isCancelando, isReabrindo, isRemovendoDoBordero, isAdmin,
 }: {
   l: Lancamento;
@@ -201,6 +203,7 @@ function LancamentoRow({
   onCancelar: (id: string) => void;
   onReabrir: (id: string) => void;
   onRemoverDoBordero?: (l: Lancamento) => void;
+  onDevolverParaPreparo?: (l: Lancamento) => void;
   onLiberarProcessando?: (l: Lancamento) => void;
   isCancelando: boolean;
   isReabrindo: boolean;
@@ -248,6 +251,23 @@ function LancamentoRow({
       );
     }
 
+    // Autorizado fora de borderô era beco sem saída: os campos que causam a
+    // recusa do banco (conta, linha digitável, vencimento) só são editáveis no
+    // preparo, e nenhuma ação visível trazia o título de volta.
+    if (l.status === "AUTORIZADO" && !l.bordero_id && onDevolverParaPreparo) {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          title="Volta para Em Preparo, onde dá para corrigir conta bancária, boleto e vencimento"
+          onClick={() => onDevolverParaPreparo(l)}
+        >
+          <RotateCcw className="h-3 w-3 mr-1" /> Voltar p/ preparo
+        </Button>
+      );
+    }
+
     return null;
   };
 
@@ -283,7 +303,9 @@ function LancamentoRow({
   if (l.bordero_id && ["BORDERO", "AUTORIZADO", "AGRUPADO"].includes(l.status) && onRemoverDoBordero) {
     secondaryActions.push({ label: "Desautorizar (voltar p/ Em Preparo)", icon: Unlink, onClick: () => onRemoverDoBordero(l), destructive: true });
   }
-  if (!l.bordero_id && l.status === "AUTORIZADO") {
+  if (!l.bordero_id && l.status === "AUTORIZADO" && onDevolverParaPreparo) {
+    secondaryActions.push({ label: "Voltar p/ Em Preparo (corrigir dados)", icon: RotateCcw, onClick: () => onDevolverParaPreparo(l) });
+  } else if (!l.bordero_id && l.status === "AUTORIZADO") {
     secondaryActions.push({ label: "Desautorizar (voltar p/ Em Preparo)", icon: RotateCcw, onClick: () => onReabrir(l.id) });
   }
   // PROCESSANDO era um beco sem saída na tela: nenhuma ação aparecia. Quando o
@@ -459,7 +481,7 @@ export function ContasPagarTable({
   lancamentos: rawLancamentos, isLoading, selectedIds, isAdmin, stepFilter,
   onToggleSelect, onToggleSelectAll,
   onClassificar, onPrepararPagamento, onBaixaManual, onComprovante, onVirarRubrica,
-  onCancelar, onReabrir, onRemoverDoBordero, onLiberarProcessando,
+  onCancelar, onReabrir, onRemoverDoBordero, onDevolverParaPreparo, onLiberarProcessando,
   isCancelando, isReabrindo, isRemovendoDoBordero,
 }: ContasPagarTableProps) {
   const [pendentesOpen, setPendentesOpen] = useState(true);
@@ -551,7 +573,7 @@ export function ContasPagarTable({
   const sharedProps = {
     selectedIds, onToggleSelect, onClassificar, onPrepararPagamento,
     onBaixaManual, onComprovante, onVirarRubrica, onCancelar, onReabrir, onRemoverDoBordero,
-    onLiberarProcessando,
+    onDevolverParaPreparo, onLiberarProcessando,
     isCancelando, isReabrindo, isRemovendoDoBordero, isAdmin,
   };
 
