@@ -2346,6 +2346,7 @@ export type Database = {
           btg_pagamento_id: string | null
           categoria: string | null
           cod_empresa: number
+          competencia: string | null
           competencia_rubrica: string | null
           created_at: string
           criado_por: string | null
@@ -2399,6 +2400,7 @@ export type Database = {
           btg_pagamento_id?: string | null
           categoria?: string | null
           cod_empresa: number
+          competencia?: string | null
           competencia_rubrica?: string | null
           created_at?: string
           criado_por?: string | null
@@ -2452,6 +2454,7 @@ export type Database = {
           btg_pagamento_id?: string | null
           categoria?: string | null
           cod_empresa?: number
+          competencia?: string | null
           competencia_rubrica?: string | null
           created_at?: string
           criado_por?: string | null
