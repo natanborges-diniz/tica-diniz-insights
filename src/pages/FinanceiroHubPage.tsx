@@ -31,6 +31,8 @@ import { BorderoGuidedActions } from "@/components/financeiro-hub/BorderoGuidedA
 import { BorderoBloqueioDialog, type BorderoBloqueioPayload } from "@/components/financeiro-hub/BorderoBloqueioDialog";
 
 import { ContasPagarTable } from "@/components/financeiro-hub/ContasPagarTable";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 import { NovoLancamentoDialog } from "@/components/financeiro-hub/NovoLancamentoDialog";
 
 import { ClassificarLoteDialog } from "@/components/financeiro-hub/ClassificarLoteDialog";
@@ -121,6 +123,7 @@ export default function FinanceiroHubPage() {
   const [filtroCampoData, setFiltroCampoData] = useState<string>("VENCIMENTO");
   const [filtroDataInicio, setFiltroDataInicio] = useState<string>("");
   const [filtroDataFim, setFiltroDataFim] = useState<string>("");
+  const [busca, setBusca] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [borderoDialogOpen, setBorderoDialogOpen] = useState(false);
   const [borderoDetalheId, setBorderoDetalheId] = useState<string | null>(null);
@@ -1612,6 +1615,18 @@ export default function FinanceiroHubPage() {
 
         {/* Filters */}
         <div className="flex flex-wrap items-end gap-3">
+          <SearchField
+            className="w-[280px]"
+            label="Pesquisar"
+            placeholder="Descrição, fornecedor ou valor"
+            value={busca}
+            onChange={setBusca}
+            resultados={
+              activeTab === "pagos" ? pagosFiltrados.length
+                : activeTab === "borderos" ? borderosFiltrados.length
+                : lancamentosFiltrados.length
+            }
+          />
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Empresa</label>
             <Select value={String(codEmpresa)} onValueChange={v => setCodEmpresa(Number(v))}>
@@ -1752,7 +1767,7 @@ export default function FinanceiroHubPage() {
           {/* Contas a Pagar */}
           <TabsContent value="contas-pagar">
             <ContasPagarTable
-              lancamentos={lancamentos}
+              lancamentos={lancamentosFiltrados}
               isLoading={isLoading}
               selectedIds={selectedIds}
               isAdmin={!!authIsAdmin}
@@ -1787,7 +1802,7 @@ export default function FinanceiroHubPage() {
 
           {/* Borderôs */}
           <TabsContent value="borderos">
-            {borderos.some(b => b.status === "MONTAGEM") && (
+            {borderosFiltrados.some(b => b.status === "MONTAGEM") && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-start gap-2">
                 <FileCheck className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                 <p className="text-xs text-amber-800">
