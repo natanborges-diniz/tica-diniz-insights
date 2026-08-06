@@ -349,14 +349,24 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
     }));
 
   // Ambos ← lançamentos em aberto
+  //
+  // Recusa do banco tira o lançamento do pool: um pagamento que voltou FAILED
+  // não pode ser baixado por coincidência de valor com uma linha do extrato. Foi
+  // assim que um salário devolvido pelo Pix apareceu como "Baixado" — o débito
+  // estava no extrato, o crédito da devolução também, e o motor casou só o
+  // primeiro. Enquanto o operador não corrigir e reenviar, ele não é candidato.
   const { data: lancAbertos } = await db
     .from("lancamentos_financeiros")
-    .select("id, tipo, valor, data_vencimento, descricao")
+    .select("id, tipo, valor, data_vencimento, descricao, requer_validacao, dados_extras")
     .eq("cod_empresa", codEmpresa)
     .in("status", ["PREVISTO", "AUTORIZADO", "PROCESSANDO"])
     .is("btg_extrato_id", null);
   const poolLanc = (lancAbertos || [])
-    .filter((l: { id: string }) => !usados.has(`LANCAMENTO|${l.id}`))
+    .filter((l: { id: string; requer_validacao?: boolean | null; dados_extras?: Record<string, unknown> | null }) =>
+      !usados.has(`LANCAMENTO|${l.id}`) &&
+      !l.requer_validacao &&
+      !falhaFinalDoBanco(l.dados_extras)
+    )
     .map((l: { id: string; tipo: string; valor: number; data_vencimento: string; descricao: string | null }) => ({
       id: l.id,
       tipo: l.tipo as "PAGAR" | "RECEBER",
@@ -364,6 +374,7 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
       data_vencimento: l.data_vencimento,
       label: l.descricao ?? undefined,
     }));
+
 
   // Regras: específicas da empresa primeiro, depois globais
   const { data: regras } = await db
