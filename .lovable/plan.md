@@ -66,7 +66,13 @@ opção e o cabeçalho da página mostra a loja ativa em destaque.
   `ultima_data` em `btg-extrato`, ou derivada do resumo), coluna de loja quando `codEmpresa` = todas.
 - `supabase/functions/btg-extrato/index.ts`: aceitar `cod_empresa: null` em `listar`/`resumo`
   (consolidado, respeitando as lojas permitidas) e expor a última data importada por loja.
+- Persistência de filtros: hook novo `useFiltrosPersistentes` (localStorage por chave de tela)
+  usado no Hub Financeiro e no Extrato — apenas estado de UI, nenhuma regra de negócio muda.
+- Padronização da loja: componente novo `LojaSelect` (rótulo, ícone, largura e opção "Todas as lojas"
+  padronizados, sobre `useUserEmpresas`) substituindo os selects atuais em `FinanceiroFilters`,
+  `DreFilters`, `FluxoCaixaFilters`, `SalesFamilyFilters` e nas demais telas listadas.
 - Sem mudança de schema. Sem alteração nas regras de conciliação nem no motor `conciliar-extrato`.
+
 
 ## Fora deste escopo (aviso)
 
