@@ -4,7 +4,7 @@
 // motor (conciliar-extrato) ou pelas ações desta fila.
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, subDays, differenceInCalendarDays } from "date-fns";
+import { format, subDays, differenceInCalendarDays, startOfWeek, startOfMonth } from "date-fns";
 import {
   ArrowDownCircle, ArrowUpCircle, Download, Landmark, TrendingUp, TrendingDown,
   PieChart, CheckCircle2, Sparkles, Search, EyeOff, FilePlus2, Undo2, Clock, Settings2,
