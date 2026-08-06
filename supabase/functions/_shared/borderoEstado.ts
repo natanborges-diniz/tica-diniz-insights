@@ -87,6 +87,13 @@ function ddMM(iso: string): string {
   return `${d}/${m}`;
 }
 
+/** Os motivos do banco no tooltip — é onde o operador olha primeiro. */
+function motivosSufixo(c: ComposicaoBordero): string {
+  const m = (c.motivos_recusa ?? []).filter(Boolean);
+  if (m.length === 0) return "";
+  return `\nMotivo do banco: ${m.join(" · ")}`;
+}
+
 /**
  * O rótulo do badge.
  *
@@ -133,7 +140,8 @@ export function estadoBordero(
         chave: "REJEITADO",
         label: "Rejeitado",
         variant: "destructive",
-        titulo: `Nenhum dos ${c.total} pagamentos foi aceito pelo banco`,
+        titulo: `Nenhum dos ${c.total} pagamentos foi aceito pelo banco`
+          + motivosSufixo(c),
         exigeAtencao: true,
       };
     }
@@ -141,7 +149,8 @@ export function estadoBordero(
       chave: "PARCIAL",
       label: `Parcial ${c.pagos}/${c.total}`,
       variant: "destructive",
-      titulo: `${c.pagos} pago(s), ${c.rejeitados} recusado(s) pelo banco — abra para ver quais`,
+      titulo: `${c.pagos} pago(s), ${c.rejeitados} recusado(s) pelo banco — abra para ver quais`
+        + motivosSufixo(c),
       exigeAtencao: true,
     };
   }
