@@ -21,6 +21,9 @@ import { usePendenciasFinanceiro, CHAVE_PENDENCIAS } from "@/hooks/usePendencias
 import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { BaseDialog } from "@/components/system/BaseDialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type {
