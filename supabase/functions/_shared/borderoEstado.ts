@@ -18,6 +18,34 @@ export interface ItemBordero {
   data_prevista?: string | null;
   /** Por que o banco recusou, já traduzido (dados_extras.btg_motivo_recusa). */
   motivo_recusa?: string | null;
+  /**
+   * Último status do pagamento no BTG (dados_extras.btg_payment_status).
+   *
+   * Existe porque `requer_validacao` só é gravado quando o retorno da recusa é
+   * processado por inteiro. Havia item com FAILED no banco que continuava
+   * PROCESSANDO aqui — e o painel o contava como "aguardando autorização",
+   * mandando o operador cobrar uma autorização que o banco nunca vai pedir. O
+   * que o banco disse manda: falhou é falhou.
+   */
+  btg_status?: string | null;
+}
+
+/**
+ * Status do BTG que significam "o dinheiro não saiu e não vai sair sozinho".
+ *
+ * Separar isto de "em trânsito" é o ponto: pagamento não processado precisa de
+ * correção e novo borderô; pagamento em trânsito precisa apenas da autorização
+ * do master. Tratar os dois igual foi o que gerou pendência falsa.
+ */
+const FALHA_BTG = new Set([
+  "FAILED", "FAILURE", "REJECTED", "REFUSED", "DENIED", "ERROR",
+  "CANCELLED", "CANCELED", "INVALIDATED", "INVALID", "EXPIRED",
+  "REVERSED", "RETURNED", "NOT_AUTHORIZED", "UNAUTHORIZED",
+]);
+
+export function falhouNoBanco(status?: string | null): boolean {
+  const v = String(status ?? "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  return v.length > 0 && FALHA_BTG.has(v);
 }
 
 export interface ComposicaoBordero {
@@ -25,6 +53,13 @@ export interface ComposicaoBordero {
   pagos: number;
   rejeitados: number;
   pendentes: number;
+  /**
+   * Recusas detectadas pelo status do banco, sem retorno tratado aqui dentro.
+   *
+   * É a fatia dos rejeitados que estava invisível: o banco não processou e o
+   * sistema ainda mostrava o título como em trânsito.
+   */
+  nao_processados: number;
   /** Menor data prevista entre os itens ainda pendentes (yyyy-MM-dd). */
   proxima_data: string | null;
   /**
@@ -36,6 +71,7 @@ export interface ComposicaoBordero {
    */
   motivos_recusa?: string[];
 }
+
 
 export type ChaveEstado =
   | "MONTAGEM" | "APROVADO" | "CANCELADO"
