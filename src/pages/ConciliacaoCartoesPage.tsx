@@ -148,6 +148,11 @@ export default function ConciliacaoCartoesPage() {
 
   const concMap = useMemo(() => new Map(conciliacoes.map((c: any) => [c.venda_cartao_id, c])), [conciliacoes]);
 
+  const vendasCartaoBusca = useMemo(
+    () => filtrarPorBusca(vendasCartao as any[], buscaTx, (vc: any) => [vc.bandeira, vc.nsu, vc.autorizacao, vc.adquirente, vc.valor_bruto, vc.valor_liquido]),
+    [vendasCartao, buscaTx],
+  );
+
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["vendas-cartao"] });
     queryClient.invalidateQueries({ queryKey: ["conciliacao-vendas"] });
@@ -525,12 +530,6 @@ export default function ConciliacaoCartoesPage() {
         <TabsContent value="transacoes">
           <Card>
             <CardContent className="p-0">
-              {(() => {
-                const vendasComBusca = filtrarPorBusca(vendasCartao as any[], buscaTx, (vc: any) => [
-                  vc.bandeira, vc.nsu, vc.autorizacao, vc.adquirente, vc.valor_bruto, vc.valor_liquido,
-                ]);
-                return null;
-              })()}
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -549,9 +548,9 @@ export default function ConciliacaoCartoesPage() {
                 <TableBody>
                   {loadingVendas ? (
                     <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-                  ) : vendasCartao.length === 0 ? (
-                    <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Sem transações no período.</TableCell></TableRow>
-                  ) : vendasCartao
+                  ) : vendasCartaoBusca.length === 0 ? (
+                    <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">{buscaTx ? "Nenhuma transação encontrada para a busca." : "Sem transações no período."}</TableCell></TableRow>
+                  ) : vendasCartaoBusca
                       .filter((vc: any) => {
                         if (filtroStatus === "todos") return true;
                         const conc = concMap.get(vc.id);
