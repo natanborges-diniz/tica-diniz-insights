@@ -734,17 +734,19 @@ export default function BankingExtratoDashboard() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={consolidado ? 8 : 7} className="text-center py-8 text-muted-foreground">
                       Carregando...
                     </TableCell>
                   </TableRow>
                 ) : lancamentos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={consolidado ? 8 : 7} className="text-center py-8 text-muted-foreground">
                       {btgAccessIssue
                         ? "Empresa sem autenticação BTG — conecte antes de importar o extrato."
                         : filtroStatus === "PENDENTE"
                         ? "Nenhuma pendência — extrato 100% explicado. 🎉"
+                        : consolidado
+                        ? "Nenhum lançamento no período para as lojas selecionadas."
                         : "Nenhum lançamento encontrado."}
                     </TableCell>
                   </TableRow>
@@ -758,6 +760,9 @@ export default function BankingExtratoDashboard() {
                         <TableCell className="text-sm">
                           {format(new Date(item.data_lancamento + "T12:00:00"), "dd/MM/yy")}
                         </TableCell>
+                        {consolidado && (
+                          <TableCell className="text-xs font-medium">{nomeLoja(item.cod_empresa)}</TableCell>
+                        )}
                         <TableCell className="text-sm max-w-[280px]">
                           <div className="flex items-center gap-2">
                             {item.tipo === "CREDITO" ? (
