@@ -18,6 +18,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import ReceiptSheet from "@/components/checkout/ReceiptSheet";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType }> = {
   ATIVO: { label: "Ativo", variant: "default", icon: Clock },
@@ -34,6 +36,7 @@ export default function PaymentLinksPage() {
 
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
   const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [busca, setBusca] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [receiptLink, setReceiptLink] = useState<any>(null);
   const [newLinkEmpresa, setNewLinkEmpresa] = useState<number>(codEmpresaDefault || 1);
@@ -95,6 +98,10 @@ export default function PaymentLinksPage() {
     queryKey: ["payment-links", codEmpresa, filtroStatus],
     queryFn: () => invokeAction("listar", { cod_empresa: codEmpresa, status: filtroStatus }),
   });
+
+  const linksFiltrados = filtrarPorBusca(links, busca, (l: any) => [
+    l.descricao, l.cliente_nome, l.cliente_telefone, l.tid, l.valor,
+  ]);
 
   const parseValor = (v: string): number => {
     const s = String(v ?? "").trim();
@@ -323,6 +330,13 @@ export default function PaymentLinksPage() {
             <SelectItem value="CANCELADO">Cancelado</SelectItem>
           </SelectContent>
         </Select>
+        <SearchField
+          value={busca}
+          onChange={setBusca}
+          placeholder="Buscar por descrição, cliente ou valor..."
+          className="w-64"
+          resultados={linksFiltrados.length}
+        />
       </div>
 
       {/* Table */}
@@ -344,10 +358,12 @@ export default function PaymentLinksPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-              ) : links.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum link encontrado. Crie o primeiro!</TableCell></TableRow>
+              ) : linksFiltrados.length === 0 ? (
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  {busca ? "Nenhum link encontrado para a busca." : "Nenhum link encontrado. Crie o primeiro!"}
+                </TableCell></TableRow>
               ) : (
-                links.map((link: {
+                linksFiltrados.map((link: {
                   id: string; descricao: string; cliente_nome: string | null; cliente_telefone: string | null;
                   valor: number; parcelas_max: number; parcelas_fixas: number | null; status: string; origem: string;
                   url_pagamento: string | null; tid: string | null; created_at: string;

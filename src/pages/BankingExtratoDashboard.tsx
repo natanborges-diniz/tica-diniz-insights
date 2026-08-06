@@ -31,6 +31,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { ExtratoRegrasDialog } from "@/components/banking/ExtratoRegrasDialog";
 import { PlanoContaSelect, usePlanoContas, type PlanoConta } from "@/components/banking/PlanoContaSelect";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 
 // ─── Types ───────────────────────────────────────────────────
 interface SugestaoDetalhe {
@@ -191,6 +193,7 @@ export default function BankingExtratoDashboard() {
   const [criarDescricao, setCriarDescricao] = useState("");
   const { data: planoContas = [] } = usePlanoContas();
   const [regrasOpen, setRegrasOpen] = useState(false);
+  const [busca, setBusca] = useState("");
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["btg-extrato"] });
@@ -255,6 +258,8 @@ export default function BankingExtratoDashboard() {
       return items;
     },
   });
+
+  const lancamentosFiltrados = filtrarPorBusca(lancamentos, busca, (item) => [item.descricao, item.valor]);
 
   const { data: resumo } = useQuery<ResumoExtrato | null>({
     queryKey: ["btg-extrato-resumo", codEmpresa, dataInicio, dataFim],
@@ -591,6 +596,16 @@ export default function BankingExtratoDashboard() {
         )}
       </div>
 
+      {/* Busca livre */}
+      <SearchField
+        value={busca}
+        onChange={setBusca}
+        label="Buscar"
+        placeholder="Descrição ou valor do lançamento"
+        className="max-w-md"
+        resultados={lancamentosFiltrados.length}
+      />
+
       {/* Atalhos de período */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">Período:</span>
@@ -712,8 +727,8 @@ export default function BankingExtratoDashboard() {
         <CardHeader>
           <CardTitle className="text-base">
             {filtroStatus === "PENDENTE" ? "Fila de exceções" : "Lançamentos do extrato"}
-            {filtroStatus === "PENDENTE" && lancamentos.length > 0 && (
-              <Badge variant="secondary" className="ml-2">{lancamentos.length}</Badge>
+            {filtroStatus === "PENDENTE" && lancamentosFiltrados.length > 0 && (
+              <Badge variant="secondary" className="ml-2">{lancamentosFiltrados.length}</Badge>
             )}
           </CardTitle>
         </CardHeader>
@@ -740,10 +755,12 @@ export default function BankingExtratoDashboard() {
                       Carregando...
                     </TableCell>
                   </TableRow>
-                ) : lancamentos.length === 0 ? (
+                ) : lancamentosFiltrados.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={consolidado ? 8 : 7} className="text-center py-8 text-muted-foreground">
-                      {btgAccessIssue
+                      {busca
+                        ? "Nenhum lançamento encontrado para a busca."
+                        : btgAccessIssue
                         ? "Empresa sem autenticação BTG — conecte antes de importar o extrato."
                         : filtroStatus === "PENDENTE"
                         ? "Nenhuma pendência — extrato 100% explicado. 🎉"
@@ -753,7 +770,7 @@ export default function BankingExtratoDashboard() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  lancamentos.map((item) => {
+                  lancamentosFiltrados.map((item) => {
                     const statusAtual = item.status_conciliacao || "PENDENTE";
                     const pendente = statusAtual === "PENDENTE";
                     const sug = topSugestao(item);
