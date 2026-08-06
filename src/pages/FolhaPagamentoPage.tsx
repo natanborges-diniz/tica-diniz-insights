@@ -61,6 +61,9 @@ interface Competencia {
   descricao: string | null;
   data_pagamento: string;
   status: string;
+  sequencia?: number | null;
+  complementar?: boolean | null;
+
   qtd_colaboradores: number;
   total_bruto: number;
   total_descontos: number;
