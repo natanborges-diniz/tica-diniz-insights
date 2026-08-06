@@ -30,6 +30,8 @@ import type {
   Responsavel,
   AcaoSistema,
 } from "../../supabase/functions/_shared/pendenciasFinanceiro";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 
 const RESPONSAVEL: Record<Responsavel, { rotulo: string; icone: typeof User }> = {
   OPERADOR: { rotulo: "Operador", icone: User },
@@ -73,6 +75,7 @@ export default function PendenciasFinanceirasPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [filtroTipo, setFiltroTipo] = useState<string>("todos");
+  const [busca, setBusca] = useState("");
 
   const invokeAction = async (action: string, extra: Record<string, unknown> = {}) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -148,7 +151,10 @@ export default function PendenciasFinanceirasPage() {
 
   const todas = data?.pendencias ?? [];
   const resumo = data?.resumo;
-  const pendencias = filtroTipo === "todos" ? todas : todas.filter((p) => p.tipo === filtroTipo);
+  const pendenciasPorTipo = filtroTipo === "todos" ? todas : todas.filter((p) => p.tipo === filtroTipo);
+  const pendencias = filtrarPorBusca(pendenciasPorTipo, busca, (p) => [
+    nomeLoja(p.cod_empresa), p.descricao, p.mensagem, p.valor_pendente,
+  ]);
 
   // Chips só dos tipos presentes: filtro para categoria vazia é ruído.
   const tiposPresentes = Object.entries(
@@ -209,6 +215,20 @@ export default function PendenciasFinanceirasPage() {
               </Chip>
             ))}
           </div>
+
+          <SearchField
+            value={busca}
+            onChange={setBusca}
+            placeholder="Buscar por loja, descrição ou valor..."
+            className="max-w-sm"
+            resultados={pendencias.length}
+          />
+
+          {pendencias.length === 0 && (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Nenhuma pendência encontrada para a busca.
+            </p>
+          )}
 
           <div className="space-y-1.5">
             {pendencias.map((p) => (

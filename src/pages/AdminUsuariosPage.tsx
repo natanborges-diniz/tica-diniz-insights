@@ -25,6 +25,8 @@ import { BaseSheet } from "@/components/system/BaseSheet";
 import { useDirtyGuard } from "@/components/system/dirty/useDirtyGuard";
 import type { ModuleKey } from "@/components/layout/AppLayout";
 import { PAGES_BY_MODULE } from "@/lib/pageCatalog";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 
 interface PagePermRow {
   user_id: string;
@@ -777,6 +779,7 @@ export default function AdminUsuariosPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<{ id: string; name: string } | null>(null);
   const [editUserId, setEditUserId] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -949,6 +952,8 @@ export default function AdminUsuariosPage() {
     await fetchData();
   };
 
+  const profilesFiltrados = filtrarPorBusca(profiles, busca, (p) => [p.nome, p.email]);
+
   const editProfile = editUserId ? profiles.find(p => p.id === editUserId) || null : null;
   const editRoles = editUserId ? userRoles.filter(r => r.user_id === editUserId).map(r => r.role) : [];
   const editModPerms = editUserId ? modulePerms.filter(mp => mp.user_id === editUserId) : [];
@@ -1003,13 +1008,25 @@ export default function AdminUsuariosPage() {
           </CardContent>
         </Card>
 
+        <SearchField
+          value={busca}
+          onChange={setBusca}
+          placeholder="Buscar por nome ou email..."
+          className="max-w-sm"
+          resultados={profilesFiltrados.length}
+        />
+
         {loading ? (
           <div className="flex justify-center p-8">
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
+        ) : profilesFiltrados.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            Nenhum usuário encontrado para a busca.
+          </p>
         ) : (
           <div className="space-y-3">
-            {profiles.map((p) => {
+            {profilesFiltrados.map((p) => {
               const isUserAdmin = userRoles.some(r => r.user_id === p.id && r.role === "admin");
               const userModPerms = modulePerms.filter(mp => mp.user_id === p.id);
               const userEmpPerms = empresaPerms.filter(ep => ep.user_id === p.id);
