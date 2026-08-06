@@ -24,7 +24,9 @@ export type TipoPendencia =
   /** Montagem começada e não finalizada, sem pendência de Mesa. */
   | "MONTAGEM_PARADA"
   /** O banco recusou itens — o fornecedor não recebeu. */
-  | "RECUSADO";
+  | "RECUSADO"
+  /** Os títulos foram pagos por fora e o borderô ficou aberto. */
+  | "PAGO_FORA";
 
 export type Severidade = "ALTA" | "MEDIA" | "BAIXA";
 
@@ -48,6 +50,8 @@ export type Local = "SISTEMA" | "BANCO";
  * pronta e ninguém ter olhado.
  */
 export type AcaoSistema =
+  | "ENCERRAR_BORDERO"
+  | "AJUSTAR_DATA"
   | "ENVIAR_BORDERO"
   | "APROVAR_BORDERO"
   | "DEVOLVER_PREPARO"
@@ -155,6 +159,30 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
     };
   }
 
+  // Nada a pagar num borderô que ainda não foi ao banco significa que o
+  // pagamento aconteceu por fora — débito automático, ou alguém pagou no app do
+  // banco — e o sync do ERP baixou os títulos.
+  //
+  // Precisa vir antes de tudo que sugira envio: o botão "Enviar ao BTG" nesse
+  // estado pagaria os mesmos boletos uma segunda vez.
+  if (c && c.pendentes === 0 && c.pagos > 0 && ["MONTAGEM", "APROVADO"].includes(st)) {
+    return {
+      ...base,
+      tipo: "PAGO_FORA",
+      severidade: "MEDIA",
+      dias_parado: b.data_pagamento ? Math.max(0, diasEntre(b.data_pagamento, hoje)) : 0,
+      valor_pendente: 0,
+      qtd_pendente: 0,
+      mensagem: `Os ${c.pagos} título(s) já constam pagos — o borderô nunca foi ao banco`,
+      acao: "Confira se o pagamento saiu por fora (débito automático ou pago no app) e encerre o borderô. "
+        + "NÃO envie ao BTG: os mesmos boletos seriam pagos de novo",
+      responsavel: "OPERADOR",
+      local: "SISTEMA",
+      acao_sistema: "ENCERRAR_BORDERO",
+      acao_rotulo: "Encerrar borderô",
+    };
+  }
+
   if (st === "ENVIADO") {
     if (!c || c.pendentes === 0) return null;
 
@@ -188,6 +216,27 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
 
   if (st === "APROVADO") {
     const dias = b.data_pagamento ? Math.max(0, diasEntre(b.data_pagamento, hoje)) : 0;
+    // Data combinada já passou: o envio agenda para hoje, porque o banco recusa
+    // data no passado. Dizer isso evita a surpresa de ver o pagamento sair num
+    // dia diferente do que está escrito no borderô.
+    const dataVencida = !!b.data_pagamento && b.data_pagamento < hoje;
+    if (dataVencida) {
+      return {
+        ...base,
+        tipo: "AGUARDANDO_ENVIO",
+        severidade: severidadePorDias(dias),
+        dias_parado: dias,
+        valor_pendente: Number(b.total_valor),
+        qtd_pendente: c?.total ?? 0,
+        mensagem: `Liberado internamente, não enviado, e a data de pagamento venceu há ${dias} dia(s)`,
+        acao: "Ajuste a data para hoje ou para o próximo dia útil antes de enviar — "
+          + "o banco recusa data no passado, e o envio sem ajuste agenda tudo para hoje",
+        responsavel: "OPERADOR",
+        local: "SISTEMA",
+        acao_sistema: "AJUSTAR_DATA",
+        acao_rotulo: "Ajustar data e enviar",
+      };
+    }
     return {
       ...base,
       tipo: "AGUARDANDO_ENVIO",

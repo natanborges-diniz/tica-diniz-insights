@@ -9,7 +9,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle, Clock, Send, XCircle, CheckCircle2, ChevronRight,
-  Landmark, Monitor, User, ShieldCheck, RefreshCw,
+  Landmark, Monitor, User, ShieldCheck, RefreshCw, Archive, CalendarClock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +53,7 @@ const ICONE: Record<TipoPendencia, typeof Clock> = {
   MESA_PENDENTE: ShieldCheck,
   MONTAGEM_PARADA: AlertTriangle,
   RECUSADO: XCircle,
+  PAGO_FORA: Archive,
 };
 
 /**
@@ -68,6 +69,7 @@ const TITULO: Record<TipoPendencia, string> = {
   MESA_PENDENTE: "Exceção aguardando decisão na Mesa",
   MONTAGEM_PARADA: "Borderô começado e não finalizado",
   RECUSADO: "Recusado pelo banco",
+  PAGO_FORA: "Já pago fora do borderô",
 };
 
 const COR: Record<Severidade, string> = {
@@ -212,7 +214,7 @@ export function PainelPendencias({ invokeAction, empresas, onAbrirBordero, onRes
                 {p.acao_sistema && (
                   <Button
                     size="sm"
-                    variant={noBanco ? "outline" : "default"}
+                    variant={noBanco || p.tipo === "PAGO_FORA" ? "outline" : "default"}
                     className="h-7 text-xs"
                     disabled={resolvendo}
                     onClick={() => onResolver(p.acao_sistema!, p.bordero_id)}
@@ -220,6 +222,8 @@ export function PainelPendencias({ invokeAction, empresas, onAbrirBordero, onRes
                     {p.acao_sistema === "ATUALIZAR_RETORNO" && (
                       <RefreshCw className={cn("h-3 w-3 mr-1", resolvendo && "animate-spin")} />
                     )}
+                    {p.acao_sistema === "ENCERRAR_BORDERO" && <Archive className="h-3 w-3 mr-1" />}
+                    {p.acao_sistema === "AJUSTAR_DATA" && <CalendarClock className="h-3 w-3 mr-1" />}
                     {p.acao_rotulo}
                   </Button>
                 )}

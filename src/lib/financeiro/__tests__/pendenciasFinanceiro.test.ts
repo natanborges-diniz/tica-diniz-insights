@@ -93,7 +93,8 @@ describe('pendenciaDoBordero — o que exige ação', () => {
   });
 
   it('liberado internamente e não enviado é pendência de gente, não de banco', () => {
-    const p = pendenciaDoBordero(bordero({ status: 'APROVADO' }), HOJE);
+    // Data de hoje: sem o ramo de data vencida, que tem ação própria.
+    const p = pendenciaDoBordero(bordero({ status: 'APROVADO', data_pagamento: HOJE }), HOJE);
     expect(p?.tipo).toBe('AGUARDANDO_ENVIO');
     // "Aprovado" solto confundia com a autorização do master no BTG.
     expect(p?.mensagem).toContain('Liberado internamente');
@@ -223,7 +224,7 @@ describe('quem faz e onde — a pendência não pode circular entre as pessoas',
   });
 
   it('aprovado sem envio é do operador, resolvido no sistema', () => {
-    const p = pendenciaDoBordero(bordero({ status: 'APROVADO' }), HOJE);
+    const p = pendenciaDoBordero(bordero({ status: 'APROVADO', data_pagamento: HOJE }), HOJE);
     expect(p?.responsavel).toBe('OPERADOR');
     expect(p?.local).toBe('SISTEMA');
     expect(p?.acao_sistema).toBe('ENVIAR_BORDERO');
@@ -250,5 +251,58 @@ describe('quem faz e onde — a pendência não pode circular entre as pessoas',
       expect(p.acao_sistema).toBeDefined();
       expect(p.acao_rotulo).toBeTruthy();
     }
+  });
+});
+
+describe('borderô pago por fora — o botão de enviar pagaria duas vezes', () => {
+  // Boleto sai por débito automático ou alguém paga no app; o sync do ERP baixa
+  // o título. O borderô fica liberado, com tudo pago, e nunca foi ao banco.
+  const pagoFora = comp({ total: 5, pagos: 5, pendentes: 0 });
+
+  it('liberado com tudo pago não é "falta enviar"', () => {
+    const p = pendenciaDoBordero(bordero({ status: 'APROVADO', composicao: pagoFora }), HOJE);
+    expect(p?.tipo).toBe('PAGO_FORA');
+    expect(p?.acao_sistema).toBe('ENCERRAR_BORDERO');
+  });
+
+  it('avisa explicitamente para não enviar', () => {
+    const p = pendenciaDoBordero(bordero({ status: 'APROVADO', composicao: pagoFora }), HOJE);
+    expect(p?.acao).toContain('NÃO envie ao BTG');
+  });
+
+  it('vale também para o borderô ainda em montagem', () => {
+    const p = pendenciaDoBordero(bordero({ status: 'MONTAGEM', composicao: pagoFora }), HOJE);
+    expect(p?.tipo).toBe('PAGO_FORA');
+  });
+
+  it('não pede valor: nada há a pagar', () => {
+    const p = pendenciaDoBordero(bordero({ status: 'APROVADO', composicao: pagoFora }), HOJE);
+    expect(p?.valor_pendente).toBe(0);
+  });
+
+  it('enviado com tudo pago não é pago por fora — foi o banco que pagou', () => {
+    expect(pendenciaDoBordero(bordero({ status: 'ENVIADO', composicao: pagoFora }), HOJE)).toBeNull();
+  });
+
+  it('com item recusado no meio, a recusa continua mandando', () => {
+    const p = pendenciaDoBordero(
+      bordero({ status: 'APROVADO', composicao: comp({ total: 5, pagos: 4, rejeitados: 1, pendentes: 0 }) }),
+      HOJE,
+    );
+    expect(p?.tipo).toBe('RECUSADO');
+  });
+});
+
+describe('data vencida antes do envio', () => {
+  it('avisa que o banco recusa data no passado e oferece o ajuste', () => {
+    const p = pendenciaDoBordero(bordero({ status: 'APROVADO', data_pagamento: '2026-08-04' }), HOJE);
+    expect(p?.acao_sistema).toBe('AJUSTAR_DATA');
+    expect(p?.acao_rotulo).toBe('Ajustar data e enviar');
+    expect(p?.mensagem).toContain('venceu há 6 dia(s)');
+  });
+
+  it('data de hoje ou futura segue no fluxo normal de envio', () => {
+    const p = pendenciaDoBordero(bordero({ status: 'APROVADO', data_pagamento: HOJE }), HOJE);
+    expect(p?.acao_sistema).toBe('ENVIAR_BORDERO');
   });
 });

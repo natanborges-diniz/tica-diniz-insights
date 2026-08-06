@@ -273,6 +273,15 @@ export default function FinanceiroHubPage() {
         setActiveTab("borderos");
         setLiberarBorderoId(borderoId);
         return;
+      case "ENCERRAR_BORDERO":
+        encerrarBorderoMutation.mutate(borderoId);
+        return;
+      case "AJUSTAR_DATA":
+        // Abre o detalhe, onde fica o campo de data. Não ajustamos sozinhos: a
+        // data nova é decisão de quem paga, não um "hoje" automático.
+        setActiveTab("borderos");
+        setBorderoDetalheId(borderoId);
+        return;
       default:
         setActiveTab("borderos");
         setBorderoDetalheId(borderoId);
@@ -453,6 +462,22 @@ export default function FinanceiroHubPage() {
         toast.info(`${b.descricao}: ${b.explicacao ?? ""}`));
       setBorderoDetalheId(null);
       setActiveTab("contas-pagar");
+      invalidateAll();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // Borderô cujos títulos saíram por fora — débito automático, ou alguém pagou
+  // no app. Encerrar fecha a casca sem tocar nos títulos, que já estão baixados
+  // com o valor e a data reais do ERP.
+  const encerrarBorderoMutation = useMutation({
+    mutationFn: (borderoId: string) => invokeAction("encerrar_bordero", { bordero_id: borderoId }),
+    onSuccess: (r: { ok?: boolean; error?: string; mensagem?: string; pendentes?: Array<{ descricao: string }> }) => {
+      if (r?.ok === false) {
+        toast.error(r.error || "Não foi possível encerrar o borderô");
+        return;
+      }
+      toast.success(r?.mensagem || "Borderô encerrado");
       invalidateAll();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -823,6 +848,7 @@ export default function FinanceiroHubPage() {
           resolvendo={
             enviarBorderoMutation.isPending ||
             devolverPreparoMutation.isPending ||
+            encerrarBorderoMutation.isPending ||
             atualizarRetornoMutation.isPending
           }
         />

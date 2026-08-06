@@ -108,6 +108,8 @@ Deno.serve(async (req) => {
         return await confirmarProcessamento(body, auth.userId);
 
       // ── Borderôs ──
+      case "encerrar_bordero":
+        return await encerrarBordero(body, auth.userId);
       case "devolver_para_preparo":
         return await devolverParaPreparo(body, auth.userId);
       case "painel_pendencias":
@@ -1153,6 +1155,70 @@ async function devolverParaPreparo(body: Record<string, unknown>, userId: string
     bloqueados: r.bloqueados,
     mensagem: `${devolvidos} título(s) de volta em Contas a Pagar, com a classificação e os dados de pagamento preservados. ` +
       `Corrija o que o banco apontou e monte um novo borderô.`,
+  });
+}
+
+
+/**
+ * Encerra o borderô cujo pagamento aconteceu por fora.
+ *
+ * Acontece quando o boleto sai por débito automático, ou alguém paga no app do
+ * banco, e o sync do ERP baixa o título. O borderô fica APROVADO com tudo pago e
+ * nunca vai ao banco — mas continua pedindo envio, e esse botão pagaria os
+ * mesmos boletos de novo.
+ *
+ * Encerrar não mexe nos títulos: eles já estão baixados, com o valor e a data
+ * reais do ERP. Só fecha o borderô, que virou casca.
+ */
+async function encerrarBordero(body: Record<string, unknown>, userId: string) {
+  await requireFinanceEdit(userId);
+  const id = String(body.bordero_id || "");
+  if (!id) throw new Error("bordero_id obrigatório");
+
+  const { data: bordero } = await supabase.from("borderos").select("*").eq("id", id).single();
+  if (!bordero) throw new Error("Borderô não encontrado");
+
+  if (["PROCESSADO", "CANCELADO"].includes(String(bordero.status))) {
+    return json({ ok: false, code: "JA_ENCERRADO", error: `Borderô já está ${bordero.status}` });
+  }
+
+  // Só encerra o que não tem mais nada a pagar. Com título em aberto, encerrar
+  // esconderia um pagamento que ninguém fez.
+  const { data: pendentes } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id, descricao, status")
+    .eq("bordero_id", id)
+    .not("status", "in", '("BAIXADO","CANCELADO")');
+
+  if (pendentes && pendentes.length > 0) {
+    return json({
+      ok: false,
+      code: "AINDA_TEM_PENDENTE",
+      error: `${pendentes.length} título(s) ainda não foram pagos — encerrar esconderia um pagamento que ninguém fez`,
+      pendentes: pendentes.map((p: Record<string, unknown>) => ({ descricao: p.descricao, status: p.status })),
+    });
+  }
+
+  const { count } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id", { count: "exact", head: true })
+    .eq("bordero_id", id)
+    .eq("status", "BAIXADO");
+
+  const { error } = await supabase.from("borderos").update({
+    status: "PROCESSADO",
+    observacao: String(body.motivo || "Encerrado: títulos pagos por fora do borderô"),
+    encerrado_por: userId,
+    encerrado_em: new Date().toISOString(),
+  }).eq("id", id);
+  if (error) throw new Error(error.message);
+
+  console.log(`[financeiro-lancamentos] bordero ${id} encerrado por ${userId} (${count} pagos por fora)`);
+  return json({
+    ok: true,
+    status: "PROCESSADO",
+    titulos_pagos: count ?? 0,
+    mensagem: `Borderô encerrado. Os ${count ?? 0} título(s) permanecem baixados com o valor e a data do ERP.`,
   });
 }
 
