@@ -270,11 +270,23 @@ function LancamentoRow({
       );
     }
 
+    // "Pronto p/ borderô" era um badge estático, e virava beco sem saída: com os
+    // dados de pagamento preenchidos, nenhuma ação levava de volta ao preparo.
+    // Doía sobretudo na folha, que preenche conta e forma de pagamento sozinha —
+    // conta errada ficava sem conserto na tela.
+    //
+    // O badge continua dizendo o estado, mas agora é clicável: estar pronto não
+    // significa estar certo.
     if (isClassificado && hasPay && ["PREVISTO", "CLASSIFICADO"].includes(l.status)) {
       return (
-        <Badge variant="outline" className="text-[10px] bg-primary/5 text-primary border-primary/20">
+        <button
+          onClick={() => onPrepararPagamento(l)}
+          title="Pronto para o borderô — clique para revisar ou corrigir os dados de pagamento"
+          className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] text-primary hover:bg-primary/10 transition-colors"
+        >
           ✓ PRONTO P/ BORDERÔ
-        </Badge>
+          <Pencil className="h-2.5 w-2.5 opacity-60" />
+        </button>
       );
     }
 
@@ -320,6 +332,14 @@ function LancamentoRow({
   // fornecedor, e isso valia só para o mês. Vira cadastro permanente.
   if (isAdmin && onVirarRubrica && hasPay && l.tipo === "PAGAR" && l.pessoa_nome && !l.rubrica_id) {
     secondaryActions.push({ label: "Virar rubrica", icon: Repeat, onClick: () => onVirarRubrica(l) });
+  }
+  // Também no menu: quem não percebe que o badge é clicável procura aqui.
+  if (hasPay && l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status)) {
+    secondaryActions.push({
+      label: "Editar dados de pagamento",
+      icon: CreditCard,
+      onClick: () => onPrepararPagamento(l),
+    });
   }
   if (l.status === "PREVISTO") {
     secondaryActions.push({ label: "Cancelar", icon: XCircle, onClick: () => onCancelar(l.id), destructive: true });
