@@ -449,6 +449,17 @@ export default function BankingExtratoDashboard() {
 
   const saldoDisponivel = saldo?.available?.amount;
 
+  const nomeLoja = (cod: number) =>
+    (empresas || []).find((e) => e.codEmpresa === cod)?.nome || `Loja ${cod}`;
+
+  // Lojas com extrato defasado (última importação anterior a ontem)
+  const ontem = format(subDays(new Date(), 1), "yyyy-MM-dd");
+  const lojasDefasadas = Object.entries(ultimaData ?? {})
+    .filter(([cod, d]) => (consolidado || Number(cod) === codEmpresa) && d < ontem)
+    .map(([cod, d]) => ({ cod: Number(cod), ultima: d }))
+    .sort((a, b) => a.ultima.localeCompare(b.ultima));
+
+
   const statusBadge = (item: ExtratoItem) => {
     const s = item.status_conciliacao || "PENDENTE";
     if (s === "PENDENTE") {
