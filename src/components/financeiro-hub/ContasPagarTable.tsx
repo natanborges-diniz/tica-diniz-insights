@@ -251,6 +251,23 @@ function LancamentoRow({
       );
     }
 
+    // Autorizado fora de borderô era beco sem saída: os campos que causam a
+    // recusa do banco (conta, linha digitável, vencimento) só são editáveis no
+    // preparo, e nenhuma ação visível trazia o título de volta.
+    if (l.status === "AUTORIZADO" && !l.bordero_id && onDevolverParaPreparo) {
+      return (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          title="Volta para Em Preparo, onde dá para corrigir conta bancária, boleto e vencimento"
+          onClick={() => onDevolverParaPreparo(l)}
+        >
+          <RotateCcw className="h-3 w-3 mr-1" /> Voltar p/ preparo
+        </Button>
+      );
+    }
+
     return null;
   };
 
