@@ -745,6 +745,22 @@ export default function FolhaPagamentoPage() {
             A data de pagamento é escolhida uma única vez, no fechamento da competência.
           </p>
 
+          <label className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-current"
+              checked={complementar}
+              onChange={e => setComplementar(e.target.checked)}
+            />
+            <span className="text-xs">
+              <span className="font-medium">Folha complementar</span> — o mês já foi fechado e falta
+              incluir alguém (admissão no meio do mês, líquido corrigido, rescisão). Cria uma folha
+              nova do mesmo evento e competência, com fechamento e borderô próprios;
+              a folha já fechada não é alterada.
+            </span>
+          </label>
+
+
 
           <div className="space-y-1">
             <Label>Relatório em PDF</Label>
