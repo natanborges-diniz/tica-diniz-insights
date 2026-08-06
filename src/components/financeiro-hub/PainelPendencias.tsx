@@ -6,15 +6,14 @@
 // todo dia, e a primeira notícia veio pelo telefone.
 //
 // Este painel existe para que a primeira notícia venha daqui.
-import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle, Clock, Send, XCircle, CheckCircle2, ChevronRight,
   Landmark, Monitor, User, ShieldCheck, RefreshCw, Archive, CalendarClock,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { usePendenciasFinanceiro } from "@/hooks/usePendenciasFinanceiro";
 import type {
   Pendencia,
   ResumoPainel,
@@ -88,26 +87,17 @@ const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
 export function PainelPendencias({ invokeAction, empresas, onAbrirBordero, onResolver, resolvendo }: Props) {
-  const { data, isLoading } = useQuery<{ pendencias: Pendencia[]; resumo: ResumoPainel }>({
-    queryKey: ["painel-pendencias"],
-    queryFn: () => invokeAction("painel_pendencias") as Promise<{
-      pendencias: Pendencia[]; resumo: ResumoPainel;
-    }>,
-    // Pagamento parado é informação que envelhece: revalida ao voltar para a aba.
-    refetchOnWindowFocus: true,
-    staleTime: 60_000,
-  });
+  // Mesma consulta do contador da aba: uma requisição, um retrato só.
+  const { data, isLoading } = usePendenciasFinanceiro(invokeAction);
 
   const nomeLoja = (cod: number) =>
     empresas.find((e) => e.codEmpresa === cod)?.nome || `Loja ${cod}`;
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="py-6 text-center text-sm text-muted-foreground">
-          Verificando pagamentos em todas as lojas...
-        </CardContent>
-      </Card>
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Verificando pagamentos em todas as lojas...
+      </p>
     );
   }
 
@@ -118,36 +108,32 @@ export function PainelPendencias({ invokeAction, empresas, onAbrirBordero, onRes
   // mas dizer "nada parado" tem valor: confirma que a varredura rodou.
   if (pendencias.length === 0) {
     return (
-      <Card className="border-green-200 bg-green-50/50">
-        <CardContent className="py-3 flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 text-green-700 shrink-0" />
-          <p className="text-sm text-green-800">
-            Nenhum pagamento parado em nenhuma loja.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="py-10 text-center space-y-2">
+        <CheckCircle2 className="h-8 w-8 text-green-600 mx-auto" />
+        <p className="text-sm font-medium">Nenhum pagamento parado em nenhuma loja</p>
+        <p className="text-xs text-muted-foreground">
+          Borderô enviado, recusado, esquecido ou aguardando autorização apareceria aqui.
+        </p>
+      </div>
     );
   }
 
   return (
-    <Card className={cn(resumo && resumo.alta > 0 && "border-destructive/40")}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <AlertTriangle className={cn("h-4 w-4", resumo && resumo.alta > 0 ? "text-destructive" : "text-amber-600")} />
-            Pagamentos que exigem atenção
-          </CardTitle>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{pendencias.length} pendência(s)</span>
-            <span>·</span>
-            <span>{resumo?.lojas.length} loja(s)</span>
-            <span>·</span>
-            <span className="font-medium text-foreground">{fmt(resumo?.valor_total ?? 0)}</span>
-          </div>
-        </div>
-      </CardHeader>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2 pb-1">
+        <p className="text-sm text-muted-foreground">
+          {pendencias.length} pendência(s) em {resumo?.lojas.length} loja(s) ·{" "}
+          <span className="font-medium text-foreground">{fmt(resumo?.valor_total ?? 0)}</span>
+        </p>
+        {resumo && resumo.alta > 0 && (
+          <span className="inline-flex items-center gap-1 text-xs text-destructive font-medium">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {resumo.alta} exige(m) atenção imediata
+          </span>
+        )}
+      </div>
 
-      <CardContent className="space-y-2">
+      <div className="space-y-2">
         {pendencias.map((p) => {
           const Icone = ICONE[p.tipo] ?? Clock;
           const resp = RESPONSAVEL[p.responsavel];
@@ -258,7 +244,7 @@ export function PainelPendencias({ invokeAction, empresas, onAbrirBordero, onRes
             sistema ainda não ter buscado o retorno.
           </p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

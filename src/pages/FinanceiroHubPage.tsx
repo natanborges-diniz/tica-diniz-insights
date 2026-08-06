@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -12,6 +12,7 @@ import { useDefaultEmpresa } from "@/hooks/useDefaultEmpresa";
 import { useAuth } from "@/contexts/AuthContext";
 import { ModuleHeader } from "@/components/system/ModuleHeader";
 import { PainelPendencias } from "@/components/financeiro-hub/PainelPendencias";
+import { usePendenciasFinanceiro } from "@/hooks/usePendenciasFinanceiro";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -130,6 +131,14 @@ export default function FinanceiroHubPage() {
   const [borderoBloqueio, setBorderoBloqueio] = useState<BorderoBloqueioPayload | null>(null);
 
   const [activeTab, setActiveTab] = useState("contas-pagar");
+  /**
+   * A abertura automática vale uma vez por visita.
+   *
+   * Sem isso, cada revalidação da consulta jogaria o operador de volta em
+   * Pendências no meio de outra tarefa — o painel deixaria de avisar e passaria
+   * a atrapalhar.
+   */
+  const [jaAbriuPendencias, setJaAbriuPendencias] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [prepPaymentLanc, setPrepPaymentLanc] = useState<Lancamento | null>(null);
   const [editLanc, setEditLanc] = useState<Lancamento | null>(null);
@@ -296,6 +305,19 @@ export default function FinanceiroHubPage() {
         setBorderoDetalheId(borderoId);
     }
   };
+
+  // Mesma consulta do painel — o contador da aba e a lista não podem divergir.
+  const { data: pendenciasData } = usePendenciasFinanceiro(invokeAction);
+  const qtdPendencias = pendenciasData?.pendencias.length ?? 0;
+  const pendenciasGraves = pendenciasData?.resumo.alta ?? 0;
+
+  // Entrar no Financeiro com algo parado abre em Pendências; sem nada parado,
+  // cai direto no trabalho do dia.
+  useEffect(() => {
+    if (jaAbriuPendencias || qtdPendencias === 0) return;
+    setActiveTab("pendencias");
+    setJaAbriuPendencias(true);
+  }, [qtdPendencias, jaAbriuPendencias]);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["lancamentos"] });
@@ -867,23 +889,6 @@ export default function FinanceiroHubPage() {
                 <Plus className="h-4 w-4 mr-1" /> Novo Lançamento
               </Button>
             </div>
-          }
-        />
-
-        {/* Pagamento parado é a primeira notícia que o financeiro precisa ter —
-            antes ela chegava por telefone, do fornecedor que não recebeu. Vem
-            antes do stepper de propósito: o stepper mostra o fluxo do dia, este
-            painel mostra o que ficou para trás, em qualquer loja. */}
-        <PainelPendencias
-          invokeAction={invokeAction}
-          empresas={empresas || []}
-          onAbrirBordero={(id) => { setActiveTab("borderos"); setBorderoDetalheId(id); }}
-          onResolver={resolverPendencia}
-          resolvendo={
-            enviarBorderoMutation.isPending ||
-            devolverPreparoMutation.isPending ||
-            encerrarBorderoMutation.isPending ||
-            atualizarRetornoMutation.isPending
           }
         />
 
@@ -1734,6 +1739,20 @@ export default function FinanceiroHubPage() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedIds(new Set()); }}>
           <TabsList>
+            {/* Primeira aba de propósito: é o que precisa ser visto antes de
+                começar o dia. O contador some quando não há nada, para a aba não
+                virar ruído permanente. */}
+            <TabsTrigger value="pendencias">
+              Pendências
+              {qtdPendencias > 0 && (
+                <Badge
+                  variant={pendenciasGraves > 0 ? "destructive" : "secondary"}
+                  className="ml-1.5 text-[10px] px-1.5"
+                >
+                  {qtdPendencias}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="contas-pagar">Contas a Pagar</TabsTrigger>
             <TabsTrigger value="borderos">
               Borderôs
@@ -1748,6 +1767,32 @@ export default function FinanceiroHubPage() {
           </TabsList>
 
           {/* Contas a Pagar */}
+          <TabsContent value="pendencias">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Pagamentos que exigem atenção</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  De todas as lojas. Borderô enviado sem retorno, recusado pelo banco, esquecido na
+                  montagem ou esperando decisão na Mesa.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <PainelPendencias
+                  invokeAction={invokeAction}
+                  empresas={empresas || []}
+                  onAbrirBordero={(id) => { setActiveTab("borderos"); setBorderoDetalheId(id); }}
+                  onResolver={resolverPendencia}
+                  resolvendo={
+                    enviarBorderoMutation.isPending ||
+                    devolverPreparoMutation.isPending ||
+                    encerrarBorderoMutation.isPending ||
+                    atualizarRetornoMutation.isPending
+                  }
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="contas-pagar">
             <ContasPagarTable
               lancamentos={lancamentos}
