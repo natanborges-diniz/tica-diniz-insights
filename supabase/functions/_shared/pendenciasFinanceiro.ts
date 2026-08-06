@@ -161,6 +161,14 @@ export function severidadePorDias(dias: number): Severidade {
   return "BAIXA";
 }
 
+/** R$ 1.234,56 — o valor por extenso, como o operador lê no extrato. */
+export function formatarReais(v: number): string {
+  return `R$ ${Number(v ?? 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 const rotulo = (b: BorderoParaPainel) =>
   b.descricao || `Borderô ${b.id.slice(0, 8).toUpperCase()}`;
 
@@ -192,16 +200,20 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
     const dias = b.data_pagamento ? Math.max(0, diasEntre(b.data_pagamento, hoje)) : 0;
     const naoProcessados = c.nao_processados ?? 0;
     const soNaoProcessado = naoProcessados > 0 && naoProcessados === c.rejeitados;
+    // O valor é a informação que faltava: "1 pagamento devolvido" mandava o
+    // operador abrir o borderô só para descobrir quanto o credor não recebeu.
+    const valorRecusado = Number(c.valor_rejeitado ?? 0);
+    const emReais = valorRecusado > 0 ? ` · ${formatarReais(valorRecusado)} não saiu` : "";
     return {
       ...base,
       tipo: soNaoProcessado ? "NAO_PROCESSADO" : "RECUSADO",
       severidade: "ALTA",
       dias_parado: dias,
-      valor_pendente: 0, // o valor recusado está no detalhe do borderô
+      valor_pendente: valorRecusado,
       qtd_pendente: c.rejeitados,
       mensagem: soNaoProcessado
-        ? `${naoProcessados} pagamento(s) que o banco não processou — não há nada para autorizar${c.pagos > 0 ? ` · ${c.pagos} pago(s)` : ""}`
-        : `${c.rejeitados} pagamento(s) recusado(s) pelo banco${c.pagos > 0 ? ` · ${c.pagos} pago(s)` : ""}`,
+        ? `${naoProcessados} pagamento(s) que o banco não processou${emReais} — não há nada para autorizar${c.pagos > 0 ? ` · ${c.pagos} pago(s)` : ""}`
+        : `${c.rejeitados} pagamento(s) recusado(s) pelo banco${emReais}${c.pagos > 0 ? ` · ${c.pagos} pago(s)` : ""}`,
       // O motivo do banco vem no lugar do "veja no app do BTG": o retorno traz o
       // código (ex.: payment-amount-changed), então mandar o operador procurar
       // fora do sistema era descartar o que já sabíamos.

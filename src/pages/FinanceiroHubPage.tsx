@@ -37,7 +37,7 @@ import { NovoLancamentoDialog } from "@/components/financeiro-hub/NovoLancamento
 
 import { ClassificarLoteDialog } from "@/components/financeiro-hub/ClassificarLoteDialog";
 import { agoraSP } from "@/lib/datetime";
-import { estadoBordero, resumirComposicao, type ComposicaoBordero } from "../../supabase/functions/_shared/borderoEstado";
+import { estadoBordero, resumirComposicao, falhouNoBanco, type ComposicaoBordero } from "../../supabase/functions/_shared/borderoEstado";
 
 interface Lancamento {
   id: string;
@@ -1253,6 +1253,9 @@ export default function FinanceiroHubPage() {
                     ((l.dados_extras || {}) as Record<string, unknown>).btg_motivo_recusa as string ?? null,
                   btg_status:
                     ((l.dados_extras || {}) as Record<string, unknown>).btg_payment_status as string ?? null,
+                  // O valor entra para o resumo dizer quanto o banco devolveu —
+                  // contagem sozinha não serve para cobrar ninguém.
+                  valor: Number(l.valor ?? 0),
                 })),
 
               );
@@ -1369,9 +1372,19 @@ export default function FinanceiroHubPage() {
 
                   {comp.rejeitados > 0 && (
                     <div className="w-full pt-2 border-t space-y-2">
-                      <p className="text-xs text-destructive font-medium">
-                        {comp.rejeitados} pagamento(s) recusado(s) pelo banco — o dinheiro não saiu.
+                      <p className="text-sm text-destructive font-medium">
+                        {comp.rejeitados} pagamento(s) devolvido(s)/recusado(s) pelo banco
+                        {(comp.valor_rejeitado ?? 0) > 0 && <> — {fmtCurrency(comp.valor_rejeitado ?? 0)} não saiu da conta</>}
                       </p>
+                      {(comp.motivos_recusa ?? []).length > 0 && (
+                        <p className="text-xs text-destructive">
+                          Motivo do banco: {(comp.motivos_recusa ?? []).join(" · ")}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Os títulos com problema estão destacados em vermelho na lista abaixo.
+                      </p>
+
                       <div className="flex items-center gap-2 flex-wrap">
                         <Button
                           size="sm"
@@ -1408,9 +1421,30 @@ export default function FinanceiroHubPage() {
               <TableBody>
                 {(borderoDetalhe?.lancamentos || []).map((l: Lancamento) => {
                   const payType = l.dados_extras?.btg_payment_type;
+                  // Título com problema no banco: devolvido, recusado ou não
+                  // processado. Sem o destaque, o operador abria o borderô e
+                  // tinha de adivinhar qual dos itens era o do alerta.
+                  const extras = (l.dados_extras || {}) as Record<string, unknown>;
+                  const motivoBanco = (extras.btg_motivo_recusa as string) || null;
+                  const statusBanco = (extras.btg_payment_status as string) || null;
+                  const comProblema =
+                    Boolean((l as unknown as { requer_validacao?: boolean }).requer_validacao) ||
+                    falhouNoBanco(statusBanco);
                   return (
-                    <TableRow key={l.id}>
-                      <TableCell className="text-sm">{l.descricao.toUpperCase()}</TableCell>
+                    <TableRow
+                      key={l.id}
+                      className={comProblema ? "bg-destructive/10 hover:bg-destructive/15" : undefined}
+                    >
+                      <TableCell className="text-sm font-medium">
+                        {comProblema && <span className="mr-1 text-destructive">⚠</span>}
+                        {l.descricao.toUpperCase()}
+                        {comProblema && (
+                          <span className="block text-xs font-normal text-destructive">
+                            {motivoBanco
+                              || `O banco não processou o pagamento (${String(statusBanco || "").toUpperCase()})`}
+                          </span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-sm">{l.pessoa_nome?.toUpperCase() || "—"}</TableCell>
                       <TableCell className="text-sm">{format(new Date(l.data_vencimento + "T12:00:00"), "dd/MM/yy")}</TableCell>
                       <TableCell className="text-sm text-right">{fmtCurrency(l.valor)}</TableCell>
@@ -1422,8 +1456,10 @@ export default function FinanceiroHubPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={STATUS_CONFIG[l.status]?.variant || "outline"}>
-                          {STATUS_CONFIG[l.status]?.label || l.status}
+                        <Badge variant={comProblema ? "destructive" : (STATUS_CONFIG[l.status]?.variant || "outline")}>
+                          {comProblema
+                            ? "Não pago pelo banco"
+                            : (STATUS_CONFIG[l.status]?.label || l.status)}
                         </Badge>
                       </TableCell>
                       {borderoDetalhe?.bordero?.status === "MONTAGEM" && (
