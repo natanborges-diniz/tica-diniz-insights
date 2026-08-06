@@ -592,12 +592,20 @@ async function handleExecutar(db: ReturnType<typeof getServiceClient>, body: Rec
     empresas = [...new Set((data || []).map((e: { cod_empresa: number }) => e.cod_empresa))] as number[];
   }
 
-  const resultado = { empresas: empresas.length, conciliados: 0, com_sugestao: 0, sem_match: 0, erros: [] as string[] };
+  const resultado = { empresas: empresas.length, conciliados: 0, com_sugestao: 0, sem_match: 0, estornos: 0, reabertos: 0, erros: [] as string[] };
 
   for (const codEmpresa of empresas) {
     try {
+      // Devoluções antes do matching: o par débito+crédito se anula e nenhuma
+      // das duas linhas pode casar com título nenhum.
+      const estornos = await processarEstornos(db, codEmpresa);
+      resultado.estornos += estornos.pares;
+      resultado.reabertos += estornos.lancamentos_reabertos;
+      resultado.erros.push(...estornos.erros);
+
       const pools = await carregarPools(db, codEmpresa);
       const usados = new Set<string>();
+
 
       const { data: entries } = await db
         .from("btg_extrato")
