@@ -828,7 +828,10 @@ Deno.serve(async (req) => {
       case "conciliar_legado_desativado":
         return await handleConciliar(body || {}, userId);
       case "resumo":
-        return await handleResumo(body, url);
+        return await handleResumo(body, url, userId);
+      case "ultima_data":
+        return await handleUltimaData(userId);
+
       default:
         return json({ error: `Ação desconhecida: '${action}'. Use: contas, saldo, extrato, importar, listar, classificar, conciliar, resumo (conciliação automática: function conciliar-extrato)` }, 400);
     }
