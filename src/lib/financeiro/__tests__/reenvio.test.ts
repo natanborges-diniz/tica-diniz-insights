@@ -7,6 +7,8 @@ import {
   decidirReenvio,
   separarParaReenvio,
   estadoDeVolta,
+  ehMotivoNaoLiquidado,
+  MOTIVOS_NAO_LIQUIDADO,
   type ItemParaReenvio,
 } from '../../../../supabase/functions/_shared/reenvio';
 
@@ -101,5 +103,39 @@ describe('estadoDeVolta', () => {
 
   it('sem motivo, a observação continua legível', () => {
     expect(String(estadoDeVolta(null).observacao)).toContain('Devolvido ao preparo');
+  });
+});
+
+describe('motivo de não liquidação', () => {
+  // Estruturado porque a orientação muda conforme o caso — e porque contar os
+  // motivos revela problema de processo: "fora de horário" toda semana não é
+  // erro do operador, é a rotina de envio no horário errado.
+  it('cobre os casos que acontecem de verdade', () => {
+    const valores = MOTIVOS_NAO_LIQUIDADO.map(m => m.valor);
+    expect(valores).toContain('FORA_HORARIO');
+    expect(valores).toContain('SEM_SALDO');
+    expect(valores).toContain('NAO_AUTORIZADO');
+  });
+
+  it('cada motivo carrega a orientação do que fazer antes de reenviar', () => {
+    for (const m of MOTIVOS_NAO_LIQUIDADO) {
+      expect(m.orientacao.length).toBeGreaterThan(10);
+    }
+  });
+
+  it('fora de horário orienta pela janela do tipo de pagamento', () => {
+    const m = MOTIVOS_NAO_LIQUIDADO.find(x => x.valor === 'FORA_HORARIO')!;
+    expect(m.orientacao).toContain('Pix não tem');
+  });
+
+  it('sem saldo avisa que a recusa se repete', () => {
+    const m = MOTIVOS_NAO_LIQUIDADO.find(x => x.valor === 'SEM_SALDO')!;
+    expect(m.orientacao).toContain('se repete');
+  });
+
+  it('recusa valor inventado', () => {
+    expect(ehMotivoNaoLiquidado('FORA_HORARIO')).toBe(true);
+    expect(ehMotivoNaoLiquidado('QUALQUER_COISA')).toBe(false);
+    expect(ehMotivoNaoLiquidado(null)).toBe(false);
   });
 });

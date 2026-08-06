@@ -21,7 +21,12 @@ import { casarTitulo, JANELA_DIAS } from "../_shared/ddaMatch.ts";
 import { montarLoteFolha } from "../_shared/folha.ts";
 import { tipoPorLinhaDigitavel } from "../_shared/btgPayment.ts";
 import { resumirComposicao, type ItemBordero } from "../_shared/borderoEstado.ts";
-import { separarParaReenvio, estadoDeVolta } from "../_shared/reenvio.ts";
+import {
+  separarParaReenvio,
+  estadoDeVolta,
+  ehMotivoNaoLiquidado,
+  MOTIVOS_NAO_LIQUIDADO,
+} from "../_shared/reenvio.ts";
 import {
   pendenciaDoBordero,
   ordenarPendencias,
@@ -1262,19 +1267,36 @@ async function refazerBordero(body: Record<string, unknown>, userId: string) {
     return json({
       ok: false,
       code: "CONFIRMACAO_OBRIGATORIA",
-      error: "Confirme no app do BTG que o lote foi cancelado ou expirou antes de refazer. " +
+      error: "Confirme no app do BTG que o lote não será mais liquidado antes de refazer. " +
         "Se ele ainda estiver ativo e o master autorizar depois, os títulos serão pagos duas vezes.",
     });
   }
 
+  // Motivo estruturado: a orientação muda conforme o caso, e contar os motivos
+  // é o que revela problema de processo — "fora de horário" toda semana não é
+  // erro do operador, é a rotina de envio no horário errado.
+  const motivoTipo = body.motivo_tipo;
+  if (!ehMotivoNaoLiquidado(motivoTipo)) {
+    return json({
+      ok: false,
+      code: "MOTIVO_TIPO_OBRIGATORIO",
+      error: "Informe por que o lote não foi liquidado",
+      opcoes: MOTIVOS_NAO_LIQUIDADO,
+    });
+  }
+
   const motivo = String(body.motivo ?? "").trim();
-  if (motivo.length < 10) {
+  const rotuloMotivo = MOTIVOS_NAO_LIQUIDADO.find((m) => m.valor === motivoTipo)!.rotulo;
+  // Texto livre só é exigido em OUTRO: nos demais o rótulo já explica, e obrigar
+  // a escrever "foi fora de horário" de novo é burocracia sem informação.
+  if (motivoTipo === "OUTRO" && motivo.length < 10) {
     return json({
       ok: false,
       code: "MOTIVO_OBRIGATORIO",
-      error: "Descreva o que aconteceu no banco (mínimo 10 caracteres) — fica registrado com seu usuário",
+      error: "Descreva o que aconteceu (mínimo 10 caracteres) — fica registrado com seu usuário",
     });
   }
+  const descricaoMotivo = motivo ? `${rotuloMotivo}: ${motivo}` : rotuloMotivo;
 
   // Só o que continua em trânsito volta. O que o banco pagou fica pago.
   const { data: pendentes } = await supabase
@@ -1301,9 +1323,10 @@ async function refazerBordero(body: Record<string, unknown>, userId: string) {
       bordero_id: null,
       autorizado_por: null,
       autorizado_em: null,
-      observacao: `Lote não autorizado no BTG (${motivo}). Devolvido para novo borderô com data nova.`,
+      observacao: `Lote não liquidado (${descricaoMotivo}). Devolvido para novo borderô.`,
       dados_extras: {
         ...extras,
+        btg_motivo_nao_liquidado: motivoTipo,
         // Trilha do lote abandonado: se um dia aparecer baixa com este batch,
         // dá para saber de onde veio.
         btg_batch_abandonado: bordero.btg_batch_id ?? null,
@@ -1315,17 +1338,19 @@ async function refazerBordero(body: Record<string, unknown>, userId: string) {
 
   await supabase.from("borderos").update({
     status: "CANCELADO",
-    observacao: `Lote abandonado no BTG por ${motivo}. ${devolvidos} título(s) devolvidos ao preparo.`,
+    observacao: `Lote não liquidado — ${descricaoMotivo}. ${devolvidos} título(s) devolvidos ao preparo.`,
     encerrado_por: userId,
     encerrado_em: new Date().toISOString(),
   }).eq("id", id);
 
   console.log(`[financeiro-lancamentos] bordero ${id} refeito por ${userId}: ${devolvidos} devolvidos`);
+  const orientacao = MOTIVOS_NAO_LIQUIDADO.find((m) => m.valor === motivoTipo)!.orientacao;
   return json({
     ok: true,
     devolvidos,
-    mensagem: `${devolvidos} título(s) de volta em Contas a Pagar. ` +
-      `Monte um novo borderô com a data correta — o borderô antigo foi cancelado.`,
+    motivo_tipo: motivoTipo,
+    orientacao,
+    mensagem: `${devolvidos} título(s) de volta em Contas a Pagar. ${orientacao}.`,
   });
 }
 
