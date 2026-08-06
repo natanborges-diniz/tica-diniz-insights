@@ -25,8 +25,16 @@ export type TipoPendencia =
   | "MONTAGEM_PARADA"
   /** O banco recusou itens — o fornecedor não recebeu. */
   | "RECUSADO"
+  /**
+   * O banco não processou o pagamento (FAILED e afins), sem recusa tratada.
+   *
+   * Distinto de AGUARDANDO_BANCO: aqui não existe autorização pendente no app
+   * do BTG, e cobrar o master só faz o operador procurar um botão que não há.
+   */
+  | "NAO_PROCESSADO"
   /** Os títulos foram pagos por fora e o borderô ficou aberto. */
   | "PAGO_FORA";
+
 
 export type Severidade = "ALTA" | "MEDIA" | "BAIXA";
 
