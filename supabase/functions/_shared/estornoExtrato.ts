@@ -5,8 +5,7 @@
 // com o MESMO endToEndId ("Devolução do pix enviado para ..."). O extrato tinha
 // as duas linhas; o motor de conciliação viu só o débito, casou por valor exato
 // com o lançamento — que já estava marcado como recusado — e deu baixa. Para o
-// operador o pagamento ficou "Baixado" enquanto o fornecedor/colaborador nunca
-// recebeu.
+// operador o pagamento ficou "Baixado" enquanto o colaborador nunca recebeu.
 //
 // Aqui a devolução é tratada como o que é: o par débito+crédito se anula. O
 // débito perde a conciliação, o lançamento volta a exigir correção e reenvio, e
@@ -39,7 +38,7 @@ const semAcento = (s: unknown) =>
 export function ehDevolucao(linha: Pick<LinhaExtrato, "descricao" | "tipo">): boolean {
   if (linha.tipo !== "CREDITO") return false;
   const t = semAcento(linha.descricao);
-  return /\b(DEVOLUCAO|DEVOLVIDO|DEVOLVIDA|ESTORNO|ESTORNADO|RESSARCIMENTO|REVERSAO)\b/.test(t);
+  return /\b(DEVOLUCAO|DEVOLVIDO|DEVOLVIDA|ESTORNO|ESTORNADO|ESTORNADA|RESSARCIMENTO|REVERSAO)\b/.test(t);
 }
 
 /** Nome do favorecido, quando o texto do BTG traz "... para <nome>". */
@@ -74,7 +73,7 @@ export interface ParEstorno {
  * Identidade primeiro: mesmo endToEndId nas duas linhas é prova, não indício —
  * é assim que o Pix devolvido chega. Sem identificador comum, exigimos valor
  * idêntico e proximidade de data; o nome do favorecido, quando aparece nos dois
- * textos, dispensa a janela curta de dias.
+ * textos, desempata.
  *
  * Ambiguidade não casa: dois débitos plausíveis viram decisão humana, porque
  * desfazer a baixa do pagamento errado é pior do que deixar a linha pendente.
