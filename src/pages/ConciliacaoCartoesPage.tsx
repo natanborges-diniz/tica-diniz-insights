@@ -15,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { CieloImportarExtratoDialog } from "@/components/financeiro-hub/CieloImportarExtratoDialog";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 import { toast } from "sonner";
 
 const STATUS_CFG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -73,6 +75,7 @@ export default function ConciliacaoCartoesPage() {
   });
   const [dataFim, setDataFim] = useState(() => new Date().toISOString().slice(0, 10));
   const [expandedTx, setExpandedTx] = useState<string | null>(null);
+  const [buscaTx, setBuscaTx] = useState("");
 
   const invokeFunc = async (fnName: string, body: Record<string, unknown>) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -144,6 +147,11 @@ export default function ConciliacaoCartoesPage() {
   });
 
   const concMap = useMemo(() => new Map(conciliacoes.map((c: any) => [c.venda_cartao_id, c])), [conciliacoes]);
+
+  const vendasCartaoBusca = useMemo(
+    () => filtrarPorBusca(vendasCartao as any[], buscaTx, (vc: any) => [vc.bandeira, vc.nsu, vc.autorizacao, vc.adquirente, vc.valor_bruto, vc.valor_liquido]),
+    [vendasCartao, buscaTx],
+  );
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["vendas-cartao"] });
@@ -367,6 +375,15 @@ export default function ConciliacaoCartoesPage() {
             </SelectContent>
           </Select>
         )}
+        {tab === "transacoes" && (
+          <SearchField
+            value={buscaTx}
+            onChange={setBuscaTx}
+            label="Buscar"
+            placeholder="Bandeira, NSU, autorização ou valor"
+            className="flex-1 min-w-[220px]"
+          />
+        )}
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
@@ -531,9 +548,9 @@ export default function ConciliacaoCartoesPage() {
                 <TableBody>
                   {loadingVendas ? (
                     <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-                  ) : vendasCartao.length === 0 ? (
-                    <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Sem transações no período.</TableCell></TableRow>
-                  ) : vendasCartao
+                  ) : vendasCartaoBusca.length === 0 ? (
+                    <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">{buscaTx ? "Nenhuma transação encontrada para a busca." : "Sem transações no período."}</TableCell></TableRow>
+                  ) : vendasCartaoBusca
                       .filter((vc: any) => {
                         if (filtroStatus === "todos") return true;
                         const conc = concMap.get(vc.id);

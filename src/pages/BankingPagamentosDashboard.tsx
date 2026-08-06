@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BaseDialog } from "@/components/system/BaseDialog";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 import { toast } from "sonner";
 
 interface Pagamento {
@@ -60,6 +62,7 @@ export default function BankingPagamentosDashboard() {
 
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
+  const [busca, setBusca] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Form state
@@ -180,6 +183,8 @@ export default function BankingPagamentosDashboard() {
 
   const tipoLabel = (tipo: string) => TIPOS.find((t) => t.value === tipo)?.label || tipo;
 
+  const pagamentosFiltrados = filtrarPorBusca(pagamentos, busca, (p) => [p.beneficiario, tipoLabel(p.tipo), p.valor]);
+
   const rascunhos = pagamentos.filter((p) => p.status === "RASCUNHO").length;
   const aprovados = pagamentos.filter((p) => p.status === "APROVADO_INTERNO").length;
   const enviados = pagamentos.filter((p) => ["ENVIADO_BTG", "AGUARDANDO_APROVACAO_BTG"].includes(p.status)).length;
@@ -299,6 +304,14 @@ export default function BankingPagamentosDashboard() {
             </SelectContent>
           </Select>
         </div>
+        <SearchField
+          value={busca}
+          onChange={setBusca}
+          label="Buscar"
+          placeholder="Beneficiário, tipo ou valor"
+          className="flex-1 min-w-[220px]"
+          resultados={pagamentosFiltrados.length}
+        />
       </div>
 
       {/* KPIs */}
@@ -358,9 +371,9 @@ export default function BankingPagamentosDashboard() {
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-                ) : pagamentos.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhum pagamento encontrado.</TableCell></TableRow>
-                ) : pagamentos.map((p) => {
+                ) : pagamentosFiltrados.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{busca ? "Nenhum pagamento encontrado para a busca." : "Nenhum pagamento encontrado."}</TableCell></TableRow>
+                ) : pagamentosFiltrados.map((p) => {
                   const sc = STATUS_CONFIG[p.status] || { label: p.status, variant: "outline" as const };
                   return (
                     <TableRow key={p.id}>

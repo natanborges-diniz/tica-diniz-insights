@@ -12,6 +12,7 @@ import { formatters, ExportColumn } from "@/utils/exportData";
 import { Search, X } from "lucide-react";
 import { EmptyState } from "@/components/system/states";
 import { hojeSP } from "@/lib/datetime";
+import { filtrarPorBusca } from "@/lib/busca";
 
 interface FinanceiroParcelasTableProps {
   data: FinanceiroParcela[];
@@ -174,18 +175,15 @@ export function FinanceiroParcelasTable({ data }: FinanceiroParcelasTableProps) 
   });
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Filtrar por termo de busca
-  const filteredData = useMemo(() => {
-    if (!searchTerm.trim()) return data;
-    const term = searchTerm.toLowerCase();
-    return data.filter(
-      (p) =>
-        p.pessoaNome?.toLowerCase().includes(term) ||
-        p.documento?.toLowerCase().includes(term) ||
-        p.empresaNome?.toLowerCase().includes(term) ||
-        p.contaDescricao?.toLowerCase().includes(term)
-    );
-  }, [data, searchTerm]);
+  // Busca livre: descrição, fornecedor/cliente, documento e valor.
+  const filteredData = useMemo(
+    () =>
+      filtrarPorBusca(data, searchTerm, (p) => [
+        p.pessoaNome, p.documento, p.empresaNome, p.contaDescricao,
+        p.contaNumero, p.formaPagamentoTipo, p.valor, p.valorPago,
+      ]),
+    [data, searchTerm],
+  );
 
   return (
     <Card>
@@ -223,7 +221,7 @@ export function FinanceiroParcelasTable({ data }: FinanceiroParcelasTableProps) 
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar por cliente, documento, empresa..."
+                  placeholder="Descrição, fornecedor ou valor..."
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);

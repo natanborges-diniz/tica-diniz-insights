@@ -13,6 +13,8 @@ import { ComprasPivotTable } from "@/components/compras/ComprasPivotTable";
 import { exportComprasReport } from "@/utils/exportComprasReport";
 import type { PivotView } from "@/components/ui/pivot-table";
 import { toast } from "sonner";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 
 function firstDayOfMonth(): string {
   const n = new Date();
@@ -47,6 +49,7 @@ export default function ComprasDashboard() {
   const [contaFilter, setContaFilter] = useState<MultiFilter>({ mode: "include", values: [] });
   const [formaPgtoFilter, setFormaPgtoFilter] = useState<MultiFilter>({ mode: "include", values: [] });
   const [comparativo, setComparativo] = useState<ComparativoMode>("none");
+  const [busca, setBusca] = useState("");
 
   useEffect(() => {
     if (!loadingEmpresas && !errorEmpresas && empresas.length > 0 && !empresaTouched && selectedEmpresaId === null) {
@@ -84,6 +87,10 @@ export default function ComprasDashboard() {
     r = applyMultiFilter(r, n => n.formaPagamento, formaPgtoFilter);
     return r;
   }, [notas, fornecedorFilter, contaFilter, formaPgtoFilter]);
+
+  const filteredBusca = useMemo(() => filtrarPorBusca(filtered, busca, (n) => [
+    n.fornecedor, n.empresaNome, n.documento, n.conta, n.formaPagamento, n.valorTotal,
+  ]), [filtered, busca]);
 
   const filteredAnterior = useMemo(() => {
     if (!comparRange) return undefined;
@@ -235,9 +242,24 @@ export default function ComprasDashboard() {
                   <ComprasCharts notas={filtered} />
                 </div>
                 <Card>
-                  <CardHeader><CardTitle>Detalhamento</CardTitle></CardHeader>
+                  <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <CardTitle>Detalhamento</CardTitle>
+                    <SearchField
+                      value={busca}
+                      onChange={setBusca}
+                      placeholder="Buscar fornecedor, loja, documento, valor..."
+                      className="w-full sm:w-80"
+                      resultados={filteredBusca.length}
+                    />
+                  </CardHeader>
                   <CardContent>
-                    <ComprasPivotTable notas={filtered} onViewChange={(v) => { pivotViewRef.current = v; }} />
+                    {busca && filteredBusca.length === 0 ? (
+                      <p className="text-center text-sm text-muted-foreground py-8">
+                        Nenhum resultado para "{busca}"
+                      </p>
+                    ) : (
+                      <ComprasPivotTable notas={filteredBusca} onViewChange={(v) => { pivotViewRef.current = v; }} />
+                    )}
                   </CardContent>
                 </Card>
               </>

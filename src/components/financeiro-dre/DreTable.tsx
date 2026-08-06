@@ -15,6 +15,7 @@ import { DreLinha } from "@/services/financeiroDreService";
 interface Props {
   data: DreLinha[];
   modo?: "realizado" | "projetado";
+  busca?: string;
 }
 
 function formatCurrency(value: number): string {
@@ -38,7 +39,7 @@ function formatGrupo(grupo: string): string {
   return labels[grupo] || grupo;
 }
 
-export function DreTable({ data, modo = "realizado" }: Props) {
+export function DreTable({ data, modo = "realizado", busca }: Props) {
   if (data.length === 0) {
     return (
       <Card>
@@ -46,7 +47,7 @@ export function DreTable({ data, modo = "realizado" }: Props) {
           <CardTitle>Detalhamento do DRE</CardTitle>
         </CardHeader>
         <CardContent className="text-center text-muted-foreground py-8">
-          Selecione uma empresa para visualizar os dados
+          {busca ? `Nenhum resultado para "${busca}"` : "Selecione uma empresa para visualizar os dados"}
         </CardContent>
       </Card>
     );

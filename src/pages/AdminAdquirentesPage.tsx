@@ -20,6 +20,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Navigate, Link } from "react-router-dom";
 import { useEmpresas } from "@/hooks/useEmpresas";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 
 interface AdquirenteConfig {
   id: string;
@@ -903,7 +905,11 @@ export default function AdminAdquirentesPage() {
   const abaAtiva = abaAdquirente && adquirentesPresentes.includes(abaAdquirente)
     ? abaAdquirente
     : adquirentesPresentes[0];
-  const configsVisiveis = configs.filter(c => c.adquirente === abaAtiva);
+  const [busca, setBusca] = useState("");
+  const configsDaAba = configs.filter(c => c.adquirente === abaAtiva);
+  const configsVisiveis = filtrarPorBusca(configsDaAba, busca, (c) => [
+    getEmpresaNome(c.cod_empresa), c.cod_empresa, c.adquirente,
+  ]);
   const contagemPorAdquirente = (adq: string) => configs.filter(c => c.adquirente === adq).length;
 
   const handleTestCielo = async (config: AdquirenteConfig, targetAmbiente: "sandbox" | "production") => {
@@ -1201,6 +1207,20 @@ export default function AdminAdquirentesPage() {
               </TabsList>
             </Tabs>
           )}
+
+          <SearchField
+            value={busca}
+            onChange={setBusca}
+            placeholder="Buscar loja, código, adquirente..."
+            className="max-w-md"
+            resultados={configsVisiveis.length}
+          />
+
+          {busca && configsVisiveis.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-8">
+              Nenhum resultado para "{busca}"
+            </p>
+          ) : null}
 
           {configsVisiveis.map(config => {
             const form = editForms[config.id];

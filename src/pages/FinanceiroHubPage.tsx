@@ -31,6 +31,8 @@ import { BorderoGuidedActions } from "@/components/financeiro-hub/BorderoGuidedA
 import { BorderoBloqueioDialog, type BorderoBloqueioPayload } from "@/components/financeiro-hub/BorderoBloqueioDialog";
 
 import { ContasPagarTable } from "@/components/financeiro-hub/ContasPagarTable";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 import { NovoLancamentoDialog } from "@/components/financeiro-hub/NovoLancamentoDialog";
 
 import { ClassificarLoteDialog } from "@/components/financeiro-hub/ClassificarLoteDialog";
@@ -121,6 +123,7 @@ export default function FinanceiroHubPage() {
   const [filtroCampoData, setFiltroCampoData] = useState<string>("VENCIMENTO");
   const [filtroDataInicio, setFiltroDataInicio] = useState<string>("");
   const [filtroDataFim, setFiltroDataFim] = useState<string>("");
+  const [busca, setBusca] = useState<string>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [borderoDialogOpen, setBorderoDialogOpen] = useState(false);
   const [borderoDetalheId, setBorderoDetalheId] = useState<string | null>(null);
@@ -234,6 +237,21 @@ export default function FinanceiroHubPage() {
     queryKey: ["borderos", codEmpresa],
     queryFn: () => invokeAction("listar_borderos", { cod_empresa: codEmpresa }),
   });
+
+  // ── Pesquisa livre (descrição, fornecedor, valor) ──
+  //
+  // Filtro de tela, não de servidor: a listagem já vem por período e status, e o
+  // termo apenas recorta o que está à vista. Assim continua instantâneo e não
+  // dispara consulta a cada letra digitada.
+  const camposLancamento = (l: Lancamento) => [
+    l.descricao, l.pessoa_nome, l.pessoa_documento, l.valor, l.valor_pago,
+    l.natureza, l.categoria, l.subcategoria, l.forma_pagamento, l.origem,
+  ];
+  const lancamentosFiltrados = filtrarPorBusca(lancamentos, busca, camposLancamento);
+  const pagosFiltrados = filtrarPorBusca(pagos, busca, camposLancamento);
+  const borderosFiltrados = filtrarPorBusca(borderos, busca, (b) => [
+    b.descricao, b.total_valor, b.status, b.criado_por, b.aprovado_por,
+  ]);
 
   // Diagnóstico da trava: por que não sai, o que resolve, e se ESTE usuário
   // pode liberar. Carregado só quando o diálogo abre.
@@ -752,7 +770,7 @@ export default function FinanceiroHubPage() {
   const selectablePagar = lancamentos.filter(l => l.tipo === "PAGAR" && ["PREVISTO", "CLASSIFICADO"].includes(l.status));
   const previstosPagar = selectablePagar; // alias for backward compat
 
-  const totalPago = pagos.reduce((s, l) => s + Number(l.valor_pago ?? l.valor), 0);
+  const totalPago = pagosFiltrados.reduce((s, l) => s + Number(l.valor_pago ?? l.valor), 0);
   const toggleSelect = (id: string) => {
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -1597,6 +1615,18 @@ export default function FinanceiroHubPage() {
 
         {/* Filters */}
         <div className="flex flex-wrap items-end gap-3">
+          <SearchField
+            className="w-[280px]"
+            label="Pesquisar"
+            placeholder="Descrição, fornecedor ou valor"
+            value={busca}
+            onChange={setBusca}
+            resultados={
+              activeTab === "pagos" ? pagosFiltrados.length
+                : activeTab === "borderos" ? borderosFiltrados.length
+                : lancamentosFiltrados.length
+            }
+          />
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Empresa</label>
             <Select value={String(codEmpresa)} onValueChange={v => setCodEmpresa(Number(v))}>
@@ -1737,7 +1767,7 @@ export default function FinanceiroHubPage() {
           {/* Contas a Pagar */}
           <TabsContent value="contas-pagar">
             <ContasPagarTable
-              lancamentos={lancamentos}
+              lancamentos={lancamentosFiltrados}
               isLoading={isLoading}
               selectedIds={selectedIds}
               isAdmin={!!authIsAdmin}
@@ -1772,7 +1802,7 @@ export default function FinanceiroHubPage() {
 
           {/* Borderôs */}
           <TabsContent value="borderos">
-            {borderos.some(b => b.status === "MONTAGEM") && (
+            {borderosFiltrados.some(b => b.status === "MONTAGEM") && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-start gap-2">
                 <FileCheck className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                 <p className="text-xs text-amber-800">
@@ -1801,9 +1831,13 @@ export default function FinanceiroHubPage() {
                     <TableBody>
                       {borderosLoading ? (
                         <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-                      ) : borderos.length === 0 ? (
-                        <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum borderô. Selecione lançamentos na aba "Contas a Pagar" e clique em "Criar Borderô".</TableCell></TableRow>
-                      ) : borderos.map(b => {
+                      ) : borderosFiltrados.length === 0 ? (
+                        <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          {busca
+                            ? `Nenhum borderô encontrado para "${busca}".`
+                            : 'Nenhum borderô. Selecione lançamentos na aba "Contas a Pagar" e clique em "Criar Borderô".'}
+                        </TableCell></TableRow>
+                      ) : borderosFiltrados.map(b => {
                         const bs = estadoBordero(b.status, b.composicao, format(agoraSP(), "yyyy-MM-dd"));
                         return (
                           <TableRow key={b.id}>
@@ -1872,7 +1906,7 @@ export default function FinanceiroHubPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-bold">{fmtCurrency(totalPago)}</p>
-                  <p className="text-xs text-muted-foreground">{pagos.length} pagamento(s)</p>
+                  <p className="text-xs text-muted-foreground">{pagosFiltrados.length} pagamento(s)</p>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1889,7 +1923,7 @@ export default function FinanceiroHubPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pagos.length === 0 ? (
+                    {pagosFiltrados.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-sm">
                           Nenhum pagamento com baixa {filtroDataInicio || filtroDataFim ? "no período selecionado" : "registrado"}.
@@ -1901,7 +1935,7 @@ export default function FinanceiroHubPage() {
                           )}
                         </TableCell>
                       </TableRow>
-                    ) : pagos.map(l => {
+                    ) : pagosFiltrados.map(l => {
                       const pago = Number(l.valor_pago ?? l.valor);
                       const dif = Number((pago - l.valor).toFixed(2));
                       const temComprovante = !!((l.dados_extras || {}).btg_payment_id || (l.dados_extras || {}).btg_batch_id);

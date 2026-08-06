@@ -1,6 +1,7 @@
 // src/pages/FinanceiroDreDashboard.tsx
 
 
+import { useMemo, useState } from "react";
 import { FileText, RefreshCw, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,6 +12,8 @@ import { DreFilters } from "@/components/financeiro-dre/DreFilters";
 import { DreResumoCards } from "@/components/financeiro-dre/DreResumoCards";
 import { DreCompetenciaChart } from "@/components/financeiro-dre/DreCompetenciaChart";
 import { DreTable } from "@/components/financeiro-dre/DreTable";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 
 export default function FinanceiroDreDashboard() {
   const {
@@ -24,6 +27,11 @@ export default function FinanceiroDreDashboard() {
     error,
     reload,
   } = useFinanceiroDre();
+
+  const [busca, setBusca] = useState("");
+  const dataFiltrada = useMemo(() => filtrarPorBusca(data, busca, (l) => [
+    l.grupo, l.subgrupo, l.competencia, l.valorTotal,
+  ]), [data, busca]);
 
   return (
     <div className="space-y-6">
@@ -62,7 +70,14 @@ export default function FinanceiroDreDashboard() {
 
         <DreResumoCards resumo={resumo} resumoRealizado={resumoRealizado} modo={filters.modo} />
         <DreCompetenciaChart data={dadosPorCompetencia} />
-        <DreTable data={data} modo={filters.modo} />
+        <SearchField
+          value={busca}
+          onChange={setBusca}
+          placeholder="Buscar grupo, subgrupo, competência, valor..."
+          className="max-w-md"
+          resultados={dataFiltrada.length}
+        />
+        <DreTable data={dataFiltrada} modo={filters.modo} busca={busca} />
     </div>
   );
 }
