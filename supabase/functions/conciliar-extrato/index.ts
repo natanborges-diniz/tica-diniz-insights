@@ -274,6 +274,10 @@ async function carregarPools(db: ReturnType<typeof getServiceClient>, codEmpresa
   for (const l of (lancTransito || [])) {
     if (usados.has(`LANCAMENTO|${l.id}`)) continue;
     const extras = (l.dados_extras || {}) as Record<string, unknown>;
+    // Banco já respondeu falha: o débito que aparecer no extrato vem com
+    // devolução atrás. Não é candidato a baixa.
+    if (falhaFinalDoBanco(extras)) continue;
+
     const cand: CandidatoForte = {
       alvo_tipo: "LANCAMENTO",
       id: l.id,
