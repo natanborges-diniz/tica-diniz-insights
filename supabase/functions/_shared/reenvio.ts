@@ -46,6 +46,13 @@ export interface Decisao {
  * não liberamos. Liberar um título já pago faria o operador montar um segundo
  * pagamento do mesmo boleto, e esse erro custa dinheiro de verdade.
  */
+/** Status do BTG que encerram a tentativa sem pagamento. */
+const FALHA_BTG = new Set([
+  "FAILED", "FAILURE", "REJECTED", "REFUSED", "DENIED", "ERROR",
+  "CANCELLED", "CANCELED", "INVALIDATED", "INVALID", "EXPIRED",
+  "REVERSED", "RETURNED", "NOT_AUTHORIZED", "UNAUTHORIZED",
+]);
+
 export function decidirReenvio(item: ItemParaReenvio): Decisao {
   const descricao = String(item.descricao ?? item.id);
   const st = String(item.status ?? "").toUpperCase();
@@ -60,7 +67,15 @@ export function decidirReenvio(item: ItemParaReenvio): Decisao {
     };
   }
 
-  if (st === "PROCESSANDO") {
+  // "Em trânsito" só vale enquanto o banco não deu resposta final. Havia boleto
+  // com FAILED no BTG preso em PROCESSANDO: o painel pedia autorização que não
+  // existia e o botão de devolver ao preparo se recusava a agir. Resposta final
+  // negativa do banco libera a correção.
+  const respostaFinalNegativa = FALHA_BTG.has(
+    String(item.btg_payment_status ?? "").trim().toUpperCase().replace(/[\s-]+/g, "_"),
+  );
+
+  if (st === "PROCESSANDO" && !respostaFinalNegativa) {
     return {
       id: item.id,
       descricao,
@@ -78,7 +93,8 @@ export function decidirReenvio(item: ItemParaReenvio): Decisao {
   // campos são editáveis. Antes só liberávamos com `requer_validacao`, e o
   // título reaberto de um borderô desfeito ficava travado em AUTORIZADO sem
   // nenhuma saída na tela.
-  if (["AUTORIZADO", "BORDERO", "AGRUPADO", "CLASSIFICADO", "PREVISTO"].includes(st)) {
+  if (["AUTORIZADO", "BORDERO", "AGRUPADO", "CLASSIFICADO", "PREVISTO"].includes(st) ||
+      (st === "PROCESSANDO" && respostaFinalNegativa)) {
     return { id: item.id, descricao, liberar: true };
   }
 
