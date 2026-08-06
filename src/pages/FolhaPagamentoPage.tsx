@@ -61,6 +61,9 @@ interface Competencia {
   descricao: string | null;
   data_pagamento: string;
   status: string;
+  sequencia?: number | null;
+  complementar?: boolean | null;
+
   qtd_colaboradores: number;
   total_bruto: number;
   total_descontos: number;
@@ -178,6 +181,13 @@ export default function FolhaPagamentoPage() {
   const [competencia, setCompetencia] = useState(format(hoje, "yyyy-MM"));
   const [dataPagamento, setDataPagamento] = useState(format(hoje, "yyyy-MM-dd"));
   const [planilha, setPlanilha] = useState("");
+  /**
+   * Folha complementar: o mês já foi fechado e falta incluir alguém. Em vez de
+   * reabrir a folha fechada (que já virou lançamento e borderô), entra uma
+   * folha nova do mesmo mês/evento, com trilha própria.
+   */
+  const [complementar, setComplementar] = useState(false);
+
   const [inss, setInss] = useState("");
   const [fgts, setFgts] = useState("");
   const [irrf, setIrrf] = useState("");
@@ -299,6 +309,7 @@ export default function FolhaPagamentoPage() {
       competencia,
       evento,
       data_pagamento: dataPagamento,
+      complementar,
       itens: itensSelecionados,
       encargos: {
         INSS: Number(inss.replace(",", ".")) || 0,
@@ -311,6 +322,8 @@ export default function FolhaPagamentoPage() {
       linhas_invalidas?: typeof linhasInvalidas;
       qtd_colaboradores?: number;
       substituiu?: boolean;
+      complementar?: boolean;
+      sequencia?: number;
       sem_dados_bancarios?: Array<{ nome: string; cpf: string }>;
     }) => {
       if (r?.ok === false && r.linhas_invalidas) {
@@ -320,8 +333,12 @@ export default function FolhaPagamentoPage() {
       }
       setLinhasInvalidas([]);
       toast.success(
-        `${r?.qtd_colaboradores ?? 0} colaborador(es) importado(s)${r?.substituiu ? " — versão anterior substituída" : ""}`,
+        `${r?.qtd_colaboradores ?? 0} colaborador(es) importado(s)` +
+        (r?.complementar
+          ? ` — folha complementar ${(r.sequencia ?? 2) - 1} criada`
+          : r?.substituiu ? " — versão anterior substituída" : ""),
       );
+
       if (r?.sem_dados_bancarios?.length) {
         toast.warning(
           `${r.sem_dados_bancarios.length} colaborador(es) ainda sem banco/conta — ` +
@@ -330,7 +347,9 @@ export default function FolhaPagamentoPage() {
       }
       setImportOpen(false);
       setPlanilha("");
+      setComplementar(false);
       setExcluidos(new Set());
+
       queryClient.invalidateQueries({ queryKey: ["folha"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -608,8 +627,16 @@ export default function FolhaPagamentoPage() {
                       </button>
                     </TableCell>
                     <TableCell className="text-sm">
-                      {EVENTOS.find(e => e.value === c.evento)?.label || c.evento}
+                      <span className="flex items-center gap-1.5">
+                        {EVENTOS.find(e => e.value === c.evento)?.label || c.evento}
+                        {c.complementar && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Complementar {(c.sequencia ?? 2) - 1}
+                          </Badge>
+                        )}
+                      </span>
                     </TableCell>
+
                     <TableCell className="text-sm">
                       {format(new Date(c.data_pagamento + "T12:00:00"), "dd/MM/yy")}
                     </TableCell>
@@ -717,6 +744,22 @@ export default function FolhaPagamentoPage() {
             Cada evento é uma remessa separada no banco — salário e férias do mesmo mês não vão juntos.
             A data de pagamento é escolhida uma única vez, no fechamento da competência.
           </p>
+
+          <label className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-current"
+              checked={complementar}
+              onChange={e => setComplementar(e.target.checked)}
+            />
+            <span className="text-xs">
+              <span className="font-medium">Folha complementar</span> — o mês já foi fechado e falta
+              incluir alguém (admissão no meio do mês, líquido corrigido, rescisão). Cria uma folha
+              nova do mesmo evento e competência, com fechamento e borderô próprios;
+              a folha já fechada não é alterada.
+            </span>
+          </label>
+
 
 
           <div className="space-y-1">
