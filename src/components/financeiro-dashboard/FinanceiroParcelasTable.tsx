@@ -221,7 +221,7 @@ export function FinanceiroParcelasTable({ data }: FinanceiroParcelasTableProps) 
               <div className="relative flex-1 max-w-sm">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Descrição, fornecedor ou valor" data-x=" cliente, documento, empresa..."
+                  placeholder="Descrição, fornecedor ou valor..."
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);

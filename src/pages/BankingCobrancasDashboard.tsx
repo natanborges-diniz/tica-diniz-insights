@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BaseDialog } from "@/components/system/BaseDialog";
+import { SearchField } from "@/components/system/SearchField";
+import { filtrarPorBusca } from "@/lib/busca";
 import { toast } from "sonner";
 
 interface Cobranca {
@@ -56,6 +58,7 @@ export default function BankingCobrancasDashboard() {
 
   const [codEmpresa, setCodEmpresa] = useState<number>(codEmpresaDefault || 1);
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
+  const [busca, setBusca] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Form
@@ -131,6 +134,10 @@ export default function BankingCobrancasDashboard() {
 
   const isAberto = (status: string) => ["EMITIDO", "CREATED", "REGISTERED"].includes(status);
 
+  const cobrancasFiltradas = filtrarPorBusca(cobrancas, busca, (c) => [
+    c.sacado_nome, c.sacado_documento, c.linha_digitavel, c.valor,
+  ]);
+
   return (
     <div className="space-y-6">
       <ModuleHeader
@@ -205,6 +212,14 @@ export default function BankingCobrancasDashboard() {
             </SelectContent>
           </Select>
         </div>
+        <SearchField
+          value={busca}
+          onChange={setBusca}
+          label="Buscar"
+          placeholder="Pagador, documento, linha digitável ou valor"
+          className="flex-1 min-w-[240px]"
+          resultados={cobrancasFiltradas.length}
+        />
       </div>
 
       {/* KPIs */}
@@ -264,9 +279,9 @@ export default function BankingCobrancasDashboard() {
               <TableBody>
                 {isLoading ? (
                   <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
-                ) : cobrancas.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhuma cobrança encontrada.</TableCell></TableRow>
-                ) : cobrancas.map((c) => {
+                ) : cobrancasFiltradas.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{busca ? "Nenhuma cobrança encontrada para a busca." : "Nenhuma cobrança encontrada."}</TableCell></TableRow>
+                ) : cobrancasFiltradas.map((c) => {
                   const sc = STATUS_CONFIG[c.status] || { label: c.status, variant: "outline" as const };
                   const isVencido = isAberto(c.status) && c.data_vencimento < hoje;
                   return (
