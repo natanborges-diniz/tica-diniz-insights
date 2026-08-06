@@ -191,6 +191,9 @@ export function formatarLinhaDigitavel(entrada: unknown): string {
 /** Base do fator de vencimento FEBRABAN. */
 const BASE_FATOR = Date.UTC(1997, 9, 7);
 
+/** 22/02/2025 — primeiro dia do ciclo reiniciado (fator 1000). */
+const VIRADA_FATOR = Date.UTC(2025, 1, 22);
+
 /**
  * Vencimento lido do fator (posições 5–8 do código de barras).
  *
@@ -207,11 +210,14 @@ export function vencimentoDoCodigoBarras(entrada: unknown): string | null {
   }
   if (barras[0] === "8") return null;
 
-  let fator = Number(barras.slice(5, 9));
+  const fator = Number(barras.slice(5, 9));
   if (!Number.isFinite(fator) || fator === 0) return null;
-  if (fator < 1000) fator += 9000; // ciclo reiniciado pós-fator 9999
 
-  const ms = BASE_FATOR + fator * 86400000;
+  // A FEBRABAN esgotou o contador em 21/02/2025 (fator 9999) e reiniciou em
+  // 1000. Um fator cuja data cai antes dessa virada é do ciclo novo — sem isso,
+  // um boleto de 07/08/2026 (fator 1531) era lido como 16/12/2001.
+  let ms = BASE_FATOR + fator * 86400000;
+  if (ms < VIRADA_FATOR) ms += 9000 * 86400000;
   return new Date(ms).toISOString().slice(0, 10);
 }
 
