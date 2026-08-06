@@ -21,12 +21,7 @@ import { casarTitulo, JANELA_DIAS } from "../_shared/ddaMatch.ts";
 import { montarLoteFolha } from "../_shared/folha.ts";
 import { tipoPorLinhaDigitavel } from "../_shared/btgPayment.ts";
 import { resumirComposicao, type ItemBordero } from "../_shared/borderoEstado.ts";
-import {
-  separarParaReenvio,
-  estadoDeVolta,
-  ehMotivoNaoLiquidado,
-  MOTIVOS_NAO_LIQUIDADO,
-} from "../_shared/reenvio.ts";
+import { separarParaReenvio, estadoDeVolta } from "../_shared/reenvio.ts";
 import {
   pendenciaDoBordero,
   ordenarPendencias,
@@ -1238,8 +1233,10 @@ async function encerrarBordero(body: Record<string, unknown>, userId: string) {
  * títulos não voltam sozinhos — ficam PROCESSANDO para sempre. Não havia saída
  * pela tela: só "abrir borderô", que não oferecia nada.
  *
- * Exige confirmação explícita de que o lote foi cancelado ou expirou no banco,
- * porque nós não temos como verificar isso. Se o lote ainda estiver vivo e o
+ * Exige confirmação explícita de que o lote não será mais liquidado, porque nós
+ * não temos como verificar isso. O motivo pode ser vários — horário-limite da
+ * operação, saldo, recusa do banco, falta de autorização — e quem diz qual é o
+ * retorno do BTG, não um catálogo mantido aqui. Se o lote ainda estiver vivo e o
  * master autorizar depois, os mesmos títulos num borderô novo viram pagamento em
  * duplicidade — e Pix não volta. Por isso o operador afirma, e a afirmação fica
  * registrada com o usuário e a data.
@@ -1272,31 +1269,14 @@ async function refazerBordero(body: Record<string, unknown>, userId: string) {
     });
   }
 
-  // Motivo estruturado: a orientação muda conforme o caso, e contar os motivos
-  // é o que revela problema de processo — "fora de horário" toda semana não é
-  // erro do operador, é a rotina de envio no horário errado.
-  const motivoTipo = body.motivo_tipo;
-  if (!ehMotivoNaoLiquidado(motivoTipo)) {
-    return json({
-      ok: false,
-      code: "MOTIVO_TIPO_OBRIGATORIO",
-      error: "Informe por que o lote não foi liquidado",
-      opcoes: MOTIVOS_NAO_LIQUIDADO,
-    });
-  }
-
   const motivo = String(body.motivo ?? "").trim();
-  const rotuloMotivo = MOTIVOS_NAO_LIQUIDADO.find((m) => m.valor === motivoTipo)!.rotulo;
-  // Texto livre só é exigido em OUTRO: nos demais o rótulo já explica, e obrigar
-  // a escrever "foi fora de horário" de novo é burocracia sem informação.
-  if (motivoTipo === "OUTRO" && motivo.length < 10) {
+  if (motivo.length < 10) {
     return json({
       ok: false,
       code: "MOTIVO_OBRIGATORIO",
-      error: "Descreva o que aconteceu (mínimo 10 caracteres) — fica registrado com seu usuário",
+      error: "Descreva o que aconteceu no banco (mínimo 10 caracteres) — fica registrado com seu usuário",
     });
   }
-  const descricaoMotivo = motivo ? `${rotuloMotivo}: ${motivo}` : rotuloMotivo;
 
   // Só o que continua em trânsito volta. O que o banco pagou fica pago.
   const { data: pendentes } = await supabase
@@ -1323,10 +1303,9 @@ async function refazerBordero(body: Record<string, unknown>, userId: string) {
       bordero_id: null,
       autorizado_por: null,
       autorizado_em: null,
-      observacao: `Lote não liquidado (${descricaoMotivo}). Devolvido para novo borderô.`,
+      observacao: `Lote não liquidado no BTG (${motivo}). Devolvido para novo borderô.`,
       dados_extras: {
         ...extras,
-        btg_motivo_nao_liquidado: motivoTipo,
         // Trilha do lote abandonado: se um dia aparecer baixa com este batch,
         // dá para saber de onde veio.
         btg_batch_abandonado: bordero.btg_batch_id ?? null,
@@ -1338,19 +1317,17 @@ async function refazerBordero(body: Record<string, unknown>, userId: string) {
 
   await supabase.from("borderos").update({
     status: "CANCELADO",
-    observacao: `Lote não liquidado — ${descricaoMotivo}. ${devolvidos} título(s) devolvidos ao preparo.`,
+    observacao: `Lote não liquidado — ${motivo}. ${devolvidos} título(s) devolvidos ao preparo.`,
     encerrado_por: userId,
     encerrado_em: new Date().toISOString(),
   }).eq("id", id);
 
   console.log(`[financeiro-lancamentos] bordero ${id} refeito por ${userId}: ${devolvidos} devolvidos`);
-  const orientacao = MOTIVOS_NAO_LIQUIDADO.find((m) => m.valor === motivoTipo)!.orientacao;
   return json({
     ok: true,
     devolvidos,
-    motivo_tipo: motivoTipo,
-    orientacao,
-    mensagem: `${devolvidos} título(s) de volta em Contas a Pagar. ${orientacao}.`,
+    mensagem: `${devolvidos} título(s) de volta em Contas a Pagar. ` +
+      `Monte um novo borderô com a data correta — o borderô antigo foi cancelado.`,
   });
 }
 

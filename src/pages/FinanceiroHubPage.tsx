@@ -127,7 +127,6 @@ export default function FinanceiroHubPage() {
   /** Confirmação de que o lote foi cancelado/expirou no BTG, antes de refazer. */
   const [confirmouBanco, setConfirmouBanco] = useState(false);
   const [motivoRefazer, setMotivoRefazer] = useState("");
-  const [motivoTipoRefazer, setMotivoTipoRefazer] = useState("FORA_HORARIO");
   const [borderoBloqueio, setBorderoBloqueio] = useState<BorderoBloqueioPayload | null>(null);
 
   const [activeTab, setActiveTab] = useState("contas-pagar");
@@ -488,7 +487,6 @@ export default function FinanceiroHubPage() {
     mutationFn: (borderoId: string) => invokeAction("refazer_bordero", {
       bordero_id: borderoId,
       confirmado_no_banco: confirmouBanco,
-      motivo_tipo: motivoTipoRefazer,
       motivo: motivoRefazer.trim(),
     }),
     onSuccess: (r: { ok?: boolean; error?: string; mensagem?: string }) => {
@@ -500,7 +498,6 @@ export default function FinanceiroHubPage() {
       setBorderoDetalheId(null);
       setConfirmouBanco(false);
       setMotivoRefazer("");
-      setMotivoTipoRefazer("FORA_HORARIO");
       setActiveTab("contas-pagar");
       invalidateAll();
     },
@@ -1296,23 +1293,26 @@ export default function FinanceiroHubPage() {
                         os {comp.pendentes} título(s) em trânsito voltam ao preparo e este borderô é
                         cancelado — aí você monta outro com a data correta.
                       </p>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">
-                          Por que o lote não foi liquidado?
-                        </label>
-                        <select
-                          className="w-full h-8 rounded-md border bg-background px-2 text-xs"
-                          value={motivoTipoRefazer}
-                          onChange={(e) => setMotivoTipoRefazer(e.target.value)}
-                        >
-                          <option value="FORA_HORARIO">Enviado fora do horário da operação</option>
-                          <option value="SEM_SALDO">Conta sem saldo na liquidação</option>
-                          <option value="NAO_AUTORIZADO">O master não autorizou a tempo</option>
-                          <option value="EXPIROU">O lote caducou no banco</option>
-                          <option value="OUTRO">Outro motivo</option>
-                        </select>
-                      </div>
 
+                      {/* O que o BTG devolveu, quando devolveu algo. Poupa o
+                          operador de redigitar o que o banco já disse — e o
+                          motivo verdadeiro é o do banco, não o que supomos. */}
+                      {(() => {
+                        const comMotivo = (borderoDetalhe.lancamentos || []).find((l: Lancamento) => {
+                          const d = (l.dados_extras || {}) as Record<string, unknown>;
+                          return d.btg_motivo_recusa || d.btg_payment_status;
+                        });
+                        const d = (comMotivo?.dados_extras || {}) as Record<string, unknown>;
+                        const motivoBanco = d.btg_motivo_recusa as string | undefined;
+                        const statusBanco = d.btg_payment_status as string | undefined;
+                        if (!motivoBanco && !statusBanco) return null;
+                        return (
+                          <p className="text-xs bg-muted/50 border rounded p-2">
+                            <span className="text-muted-foreground">Retorno do banco: </span>
+                            <span className="font-mono">{motivoBanco || statusBanco}</span>
+                          </p>
+                        );
+                      })()}
                       <label className="flex items-start gap-2 text-xs">
                         <input
                           type="checkbox"
@@ -1326,24 +1326,19 @@ export default function FinanceiroHubPage() {
                           vezes — e Pix não volta.
                         </span>
                       </label>
-
-                      {/* Texto livre só quando o rótulo não explica sozinho. */}
-                      {motivoTipoRefazer === "OUTRO" && (
-                        <Input
-                          className="h-8 text-xs"
-                          placeholder="O que aconteceu no banco? (mín. 10 caracteres)"
-                          value={motivoRefazer}
-                          onChange={(e) => setMotivoRefazer(e.target.value)}
-                        />
-                      )}
-
+                      <Input
+                        className="h-8 text-xs"
+                        placeholder="O que o banco informou? (mín. 10 caracteres)"
+                        value={motivoRefazer}
+                        onChange={(e) => setMotivoRefazer(e.target.value)}
+                      />
                       <Button
                         size="sm"
                         variant="destructive"
                         className="h-8"
                         disabled={
                           !confirmouBanco ||
-                          (motivoTipoRefazer === "OUTRO" && motivoRefazer.trim().length < 10) ||
+                          motivoRefazer.trim().length < 10 ||
                           refazerBorderoMutation.isPending
                         }
                         onClick={() => refazerBorderoMutation.mutate(borderoDetalhe.bordero.id)}

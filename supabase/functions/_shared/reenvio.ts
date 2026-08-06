@@ -86,49 +86,6 @@ export function decidirReenvio(item: ItemParaReenvio): Decisao {
   };
 }
 
-/**
- * Por que o lote não foi liquidado.
- *
- * Estruturado, e não texto livre, por dois motivos: a orientação ao operador
- * muda conforme o caso (fora de horário se resolve reenviando amanhã; sem saldo
- * exige provisão antes), e porque só contando dá para descobrir que "fora de
- * horário" é recorrente — o que é problema de processo, não de operador.
- */
-export type MotivoNaoLiquidado =
-  /** Enviado fora da janela do tipo de operação (TED após o corte, por exemplo). */
-  | "FORA_HORARIO"
-  /** Conta sem saldo no momento da liquidação. */
-  | "SEM_SALDO"
-  /** O master não autorizou no app e a data passou. */
-  | "NAO_AUTORIZADO"
-  /** O lote caducou no banco. */
-  | "EXPIROU"
-  | "OUTRO";
-
-export const MOTIVOS_NAO_LIQUIDADO: Array<{ valor: MotivoNaoLiquidado; rotulo: string; orientacao: string }> = [
-  {
-    valor: "FORA_HORARIO",
-    rotulo: "Enviado fora do horário da operação",
-    orientacao: "Reenvie dentro da janela do tipo de pagamento — TED e boleto têm corte no fim da tarde; Pix não tem",
-  },
-  {
-    valor: "SEM_SALDO",
-    rotulo: "Conta sem saldo na liquidação",
-    orientacao: "Garanta o saldo antes de reenviar, senão a recusa se repete",
-  },
-  {
-    valor: "NAO_AUTORIZADO",
-    rotulo: "O master não autorizou a tempo",
-    orientacao: "Combine a autorização antes de reenviar — o lote novo também depende dela",
-  },
-  { valor: "EXPIROU", rotulo: "O lote caducou no banco", orientacao: "Reenvie com data nova" },
-  { valor: "OUTRO", rotulo: "Outro motivo", orientacao: "Descreva o que aconteceu" },
-];
-
-export function ehMotivoNaoLiquidado(v: unknown): v is MotivoNaoLiquidado {
-  return MOTIVOS_NAO_LIQUIDADO.some((m) => m.valor === v);
-}
-
 export interface ResultadoReenvio {
   liberar: string[];
   bloqueados: Decisao[];
