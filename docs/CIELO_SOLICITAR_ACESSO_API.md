@@ -103,6 +103,19 @@ Supabase → Settings → Edge Functions → Secrets:
 
 Depois: Admin → Adquirentes → aba Cielo → **Testar API EXTC**.
 
+### Uma credencial para todo o grupo
+
+Os cinco secrets acima valem para todas as lojas — identificam a aplicação, não
+o estabelecimento. O que varia por loja é o `cielo_estabelecimento_matriz` e o
+`cielo_documento`, que ficam em `adquirentes_config` e vão como parâmetro em
+cada chamada. Mesmo desenho da REDE, onde `REDE_GV_CLIENT_ID` e
+`REDE_GV_CLIENT_SECRET` são um par só e os PVs ficam por loja.
+
+O que pode ser por CNPJ é a **autorização**: no modelo de conciliador, o manual
+descreve o parceiro gerando um link que o estabelecimento acessa para conceder
+acesso — equivalente ao Opt-in da REDE, que foi feito loja a loja. Se for o
+caso, serão 8 autorizações para 1 credencial. É a pergunta 4 do e-mail acima.
+
 ## O obstáculo que sobra: mTLS no Supabase
 
 Mesmo com tudo liberado, ainda há um risco conhecido. O runtime de Edge
