@@ -43,11 +43,8 @@ function json(data: unknown, status = 200) {
   });
 }
 
-async function requireAdmin(userId: string) {
-  const { data } = await supabase.from("user_roles")
-    .select("role").eq("user_id", userId).eq("role", "admin");
-  if (!data || data.length === 0) throw new Error("Apenas admin");
-}
+
+
 
 async function requireFinanceEdit(userId: string, codEmpresa: number) {
   const { data: roles } = await supabase.from("user_roles")
@@ -485,15 +482,35 @@ async function fechar(body: Record<string, unknown>, userId: string) {
 }
 
 // ─── cancelar ────────────────────────────────────────────────
+//
+// Cancelar não é privilégio de admin: quem opera a folha erra na importação e
+// precisa desfazer no mesmo minuto. O que protege o dinheiro é o estado do
+// pagamento, não o cargo — se algum item já foi ao banco (PROCESSANDO/BAIXADO),
+// a folha fica travada e só o suporte desfaz caso a caso.
 async function cancelar(body: Record<string, unknown>, userId: string) {
-  await requireAdmin(userId);
   const id = String(body.competencia_id || "");
   if (!id) throw new Error("competencia_id obrigatório");
 
-  const { data: comp } = await supabase.from("folha_competencias").select("status").eq("id", id).single();
+  const { data: comp } = await supabase.from("folha_competencias")
+    .select("status, cod_empresa").eq("id", id).single();
   if (!comp) throw new Error("Folha não encontrada");
+
+  await requireFinanceEdit(userId, Number(comp.cod_empresa));
+
   if (!["RASCUNHO", "FECHADA"].includes(comp.status)) {
     throw new Error(`Folha em ${comp.status} não pode ser cancelada — já foi ao banco`);
+  }
+
+  // Item já enviado ao banco impede o cancelamento em bloco: baixar um
+  // pagamento que o BTG está processando deixaria o caixa mentindo.
+  const { count: noBanco } = await supabase.from("lancamentos_financeiros")
+    .select("id", { count: "exact", head: true })
+    .like("origem_id", `FOLHA:${id}:%`)
+    .in("status", ["PROCESSANDO", "BAIXADO"]);
+  if ((noBanco ?? 0) > 0) {
+    throw new Error(
+      `Esta folha já tem ${noBanco} pagamento(s) em processamento ou liquidado(s) no banco — não é possível cancelar.`,
+    );
   }
 
   // Cancela os lançamentos gerados que ainda não foram pagos.
@@ -507,6 +524,7 @@ async function cancelar(body: Record<string, unknown>, userId: string) {
 
   return json({ ok: true });
 }
+
 
 // ─── criar_rubricas ──────────────────────────────────────────
 /**
