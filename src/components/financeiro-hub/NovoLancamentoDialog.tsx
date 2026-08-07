@@ -53,8 +53,18 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
   const [natureza, setNatureza] = useState("");
   const [categoria, setCategoria] = useState("");
   const [formaPgto, setFormaPgto] = useState("");
+  // Formas de pagamento — as mesmas do "Preparar Pagamento", para o operador não
+  // precisar criar o lançamento e voltar depois só para escolher TED ou DARF.
+  const [payType, setPayType] = useState("NAO_DEFINIDO");
   const [pixKey, setPixKey] = useState("");
   const [barcode, setBarcode] = useState("");
+  const [banco, setBanco] = useState("");
+  const [agencia, setAgencia] = useState("");
+  const [conta, setConta] = useState("");
+  const [tipoConta, setTipoConta] = useState("CC");
+  const [favNome, setFavNome] = useState("");
+  const [favDoc, setFavDoc] = useState("");
+  const payTypeHint = PAYMENT_TYPES.find(t => t.value === payType)?.hint ?? null;
   // Retorno imediato da linha digitável (tipo, valor e vencimento lidos do código).
   const diagBoleto = diagnosticarBoleto(barcode);
   // G2/G3 — lastro obrigatório para PAGAR manual: rubrica ou exceção com justificativa
