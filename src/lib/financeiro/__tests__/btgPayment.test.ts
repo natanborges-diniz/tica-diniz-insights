@@ -20,6 +20,7 @@ import {
   descreverErroBtg,
   normalizarChavePix,
   tipoPorLinhaDigitavel,
+  ehPixCopiaECola,
 } from '../../../../supabase/functions/_shared/btgPayment';
 
 const DEBIT = { branchCode: '50', number: '000000050' };
@@ -318,5 +319,41 @@ describe('boleto x arrecadacao decidido pela linha', () => {
   it('nao mexe em tipo que nao seja boleto/arrecadacao', () => {
     const item = montarItem(base({ tipo: 'PIX_KEY', dados: { chave_pix: CNPJ } }));
     expect(item.type).toBe('PIX_KEY');
+  });
+});
+
+// Premiação Nobelpack (07/08/2026): o operador colou o Pix copia e cola no campo
+// "Chave PIX". Foi como PIX_KEY e o BTG devolveu `pix-key-type-not-supported` —
+// os dois pagamentos não chegaram ao banco.
+describe('pix copia e cola (EMV) x chave', () => {
+  const EMV = '00020101021226990014br.gov.bcb.pix2577pix.bpp.com.br/qrs1/v2/01bZHhEjHEdF275Yz3YAtkDfc2oi9JGriPoQw8vls2sDjDI1qyh6H25204000053039865406314.285802BR5925EMPRESA BRASILEIRA DE BEN6009Sao Paulo62070503***63047687';
+
+  it('reconhece o payload EMV e não confunde com chave', () => {
+    expect(ehPixCopiaECola(EMV)).toBe(true);
+    expect(ehPixCopiaECola('30306294000145')).toBe(false);
+    expect(ehPixCopiaECola('financeiro@fornecedor.com.br')).toBe(false);
+    expect(ehPixCopiaECola('')).toBe(false);
+  });
+
+  it('normalizarChavePix recusa EMV dizendo o tipo certo', () => {
+    expect(() => normalizarChavePix(EMV)).toThrow(/copia e cola/);
+  });
+
+  it('montarItem corrige PIX_KEY com EMV para PIX_QR_CODE', () => {
+    const item = montarItem(base({ tipo: 'PIX_KEY', dados: { chave_pix: EMV } }));
+    expect(item.type).toBe('PIX_QR_CODE');
+    expect(item.detail).toEqual({ emv: EMV });
+  });
+
+  it('lê o EMV também de btg_details.pixKey (formato já gravado em produção)', () => {
+    const item = montarItem(base({ tipo: 'PIX_KEY', dados: { pixKey: EMV } }));
+    expect(item.type).toBe('PIX_QR_CODE');
+    expect((item.detail as { emv: string }).emv).toBe(EMV);
+  });
+
+  it('corrige no sentido inverso: PIX_QR_CODE com chave comum vira PIX_KEY', () => {
+    const item = montarItem(base({ tipo: 'PIX_QR_CODE', dados: { chave_pix: CNPJ } }));
+    expect(item.type).toBe('PIX_KEY');
+    expect(item.detail).toEqual({ key: { value: CNPJ } });
   });
 });
