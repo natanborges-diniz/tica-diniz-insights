@@ -377,12 +377,32 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
               {payTypeHint && <p className="text-xs text-muted-foreground">{payTypeHint}</p>}
             </div>
 
-            {payType === "PIX_KEY" && (
+            {(payType === "PIX_KEY" || payType === "PIX_QR_CODE") && (
               <div className="space-y-1">
-                <Label className="text-xs">Chave PIX</Label>
-                <Input value={pixKey} onChange={e => setPixKey(e.target.value)} placeholder="CPF, CNPJ, e-mail, telefone ou aleatória" />
+                <Label className="text-xs">
+                  {payType === "PIX_QR_CODE" ? "Pix copia e cola" : "Chave PIX"}
+                </Label>
+                <Input
+                  value={pixKey}
+                  onChange={e => setPixKey(e.target.value)}
+                  className={payType === "PIX_QR_CODE" ? "font-mono text-xs" : undefined}
+                  placeholder={payType === "PIX_QR_CODE"
+                    ? "Cole o código do QR Code (começa em 000201...)"
+                    : "CPF, CNPJ, e-mail, telefone ou aleatória"}
+                />
+                {payType === "PIX_KEY" && ehPixCopiaECola(pixKey) && (
+                  <p className="text-xs text-amber-700">
+                    Isto é um Pix copia e cola — será enviado ao banco como "PIX (Copia e cola)".
+                  </p>
+                )}
+                {payType === "PIX_QR_CODE" && pixKey.trim() && !ehPixCopiaECola(pixKey) && (
+                  <p className="text-xs text-destructive">
+                    Não parece um Pix copia e cola — use "PIX (Chave)" para chave comum.
+                  </p>
+                )}
               </div>
             )}
+
 
             {(payType === "BANKSLIP" || payType === "DARF") && (
               <div className="space-y-1">
