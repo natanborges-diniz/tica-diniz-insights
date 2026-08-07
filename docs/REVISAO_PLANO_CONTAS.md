@@ -56,7 +56,7 @@ Dump real: 106 contas. Desvios encontrados e corrigidos:
 | Conta | Estava | Problema | Correção |
 |---|---|---|---|
 | 1.10 TRANSFERENCIA ENTRADA, 1.11 EMPRESTIMOS ENTRADA | RECEITA_BRUTA | transferência/empréstimo **não é receita** — inflava o faturamento do DRE | MOVIMENTACOES_CAIXA (fora do resultado) |
-| 2.2 COMISSOES | DEDUCOES | comissão de vendedor é despesa de pessoal (padrão de mercado) | DESPESAS_OPERACIONAIS/PESSOAL |
+| 2.2 COMISSOES | DEDUCOES | ~~movida a PESSOAL~~ **REVERTIDA (decisão do stakeholder, migration 20260807150000)**: DRE gerencial — comissão é variável e ligada à venda, fica no bloco da margem de contribuição; societariamente o contador trata como despesa comercial | DEDUCOES/COMISSOES (mantida) |
 | 3.1.1 TAXAS MUNICIPAIS | DEDUCOES | alvará/licença não deduz receita | DESPESAS_OPERACIONAIS/ADMINISTRATIVO |
 | 3.1.3 IRPF | DEDUCOES | IRRF acompanha a folha (⚠️ validar com contabilidade se for IR de sócio) | DESPESAS_OPERACIONAIS/PESSOAL |
 | 3.11 CREDITOS DE CLIENTES | OUTRAS_DESPESAS | crédito devolvido é redutor de receita | DEDUCOES/DEVOLUCOES |
@@ -69,10 +69,10 @@ Backfill incluído: todos os lançamentos re-derivam natureza/categoria pelo
 `dados_extras.conta_numero` — o histórico conta a mesma história do plano novo.
 Nada de status/valores/pagamentos é tocado.
 
-Impacto de leitura no DRE: margem bruta SOBE (comissões saem de deduções) e
-despesa de pessoal sobe na mesma medida; receita bruta CAI onde havia
-transferência/empréstimo classificado. É o retrato correto — e o backfill
-mantém o histórico comparável.
+Impacto de leitura no DRE: receita bruta CAI onde havia transferência/
+empréstimo classificado (era inflação artificial). A margem após deduções
+continua líquida de comissões — leitura de margem de contribuição, escolhida
+pelo stakeholder. O backfill mantém o histórico comparável.
 
 UX corrigida: dialog "Nova Conta" não permite mais criar GRUPO (lista fixa do
 DRE); categoria continua livre. DRE exibe MOVIMENTACOES_* ao final, rotulados
