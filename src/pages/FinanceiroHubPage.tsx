@@ -1371,10 +1371,37 @@ export default function FinanceiroHubPage() {
                     </div>
                   )}
 
+                  {/* Lote enviado que o BTG pode não ter registrado. Um clique de
+                      admin refaz a remessa: a function confere no banco que o lote
+                      está sem pagamento antes de reenviar. */}
+                  {borderoDetalhe.bordero.status === "ENVIADO" && comp.pendentes > 0 && authIsAdmin && (
+                    <div className="w-full pt-2 border-t space-y-2">
+                      <p className="text-xs font-medium">
+                        O BTG não registrou os pagamentos deste lote?
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Reenvia os {comp.pendentes} título(s) num lote novo, com os mesmos dados — sem
+                        mexer em nada manualmente. Antes de reenviar conferimos no banco que o lote
+                        atual está sem pagamento nenhum; se o banco tiver registrado algo, o reenvio é
+                        bloqueado para não pagar duas vezes.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        disabled={reenviarLoteMutation.isPending}
+                        onClick={() => reenviarLoteMutation.mutate(borderoDetalhe.bordero.id)}
+                      >
+                        {reenviarLoteMutation.isPending ? "Reenviando…" : "Reenviar lote agora"}
+                      </Button>
+                    </div>
+                  )}
+
                   {/* Lote no banco que não foi autorizado. Sem isto o borderô
                       ficava sem saída: a data não é editável depois do envio e
                       os títulos não voltam sozinhos. */}
                   {borderoDetalhe.bordero.status === "ENVIADO" && comp.pendentes > 0 && (
+
                     <div className="w-full pt-2 border-t space-y-2">
                       <p className="text-xs font-medium">
                         O lote não foi autorizado no BTG e você quer refazer com outra data?
