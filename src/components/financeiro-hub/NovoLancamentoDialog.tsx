@@ -14,6 +14,17 @@ import {
   diagnosticarBoleto,
 } from "../../../supabase/functions/_shared/boleto";
 
+import { tipoPorLinhaDigitavel } from "../../../supabase/functions/_shared/btgPayment";
+
+/** Mesmas opções (e mesmos rótulos) do "Preparar Pagamento". */
+const PAYMENT_TYPES = [
+  { value: "PIX_KEY", label: "PIX (Chave)", hint: "Chave do beneficiário: CPF, CNPJ, e-mail, telefone ou aleatória" },
+  { value: "BANKSLIP", label: "Boleto ou conta", hint: "Boleto de fornecedor ou conta de concessionária — informe a linha digitável" },
+  { value: "PIX_MANUAL", label: "PIX (Dados bancários)", hint: "Pix por banco, agência e conta — não exige chave cadastrada" },
+  { value: "TED", label: "TED", hint: "Transferência por banco, agência e conta — sujeita a tarifa e horário" },
+  { value: "DARF", label: "DARF (Tributo)", hint: "Código de barras do DARF ou guia de tributo" },
+];
+
 interface PlanoContaRow {
   id: string;
   conta_numero: string;
