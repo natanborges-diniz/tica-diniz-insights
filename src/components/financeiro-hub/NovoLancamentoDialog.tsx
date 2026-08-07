@@ -115,7 +115,16 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
     reset();
   };
 
-  const canSubmit = descricao && valor && vencimento && contaSelecionada && !lastroInvalido;
+  const pendencias: string[] = [];
+  if (!descricao) pendencias.push("Descrição");
+  if (!valor) pendencias.push("Valor");
+  if (!vencimento) pendencias.push("Vencimento");
+  if (!contaSelecionada) pendencias.push("Conta (Plano de Contas)");
+  if (tipo === "PAGAR" && lastroTipo === "RUBRICA" && !rubricaId) pendencias.push("Rubrica autorizada (Lastro do pagamento)");
+  if (tipo === "PAGAR" && lastroTipo === "EXCECAO" && justificativa.trim().length < 20)
+    pendencias.push("Justificativa da exceção (mín. 20 caracteres)");
+
+  const canSubmit = pendencias.length === 0;
 
   return (
     <BaseDialog
@@ -123,14 +132,20 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
       onOpenChange={onOpenChange}
       title="Novo Lançamento"
       footer={
-        <>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleCriar} disabled={isPending || !canSubmit}>
-            Criar Lançamento
-          </Button>
-        </>
+        <div className="flex w-full items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground truncate">
+            {canSubmit ? "Pronto para criar" : `Faltando: ${pendencias.join(", ")}`}
+          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button onClick={handleCriar} disabled={isPending || !canSubmit}>
+              Criar Lançamento
+            </Button>
+          </div>
+        </div>
       }
     >
+
       <div className="space-y-4 py-2">
         {/* G2 — lastro do pagamento manual (governança: nada sem lastro) */}
         {tipo === "PAGAR" && (
