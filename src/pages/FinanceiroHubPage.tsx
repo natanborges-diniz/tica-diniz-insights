@@ -1725,11 +1725,12 @@ export default function FinanceiroHubPage() {
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Status</label>
             <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[190px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos</SelectItem>
-                {Object.entries(STATUS_CONFIG).map(([k, v]) => (
+                {Object.entries(GRUPOS_STATUS).map(([k, v]) => (
                   <SelectItem key={k} value={k}>{v.label}</SelectItem>
+
                 ))}
               </SelectContent>
             </Select>
