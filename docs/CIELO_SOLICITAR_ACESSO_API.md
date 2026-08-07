@@ -110,6 +110,28 @@ Depois de configurar os três secrets:
 | `SEM_LINKS` | a API respondeu, mas sem link — geralmente não há arquivo no período |
 | `LINK_EXPIRADO` | o link temporário venceu antes do download |
 
+## mTLS: risco reduzido, não eliminado
+
+O Time Extrato confirmou que o certificado assinado é obrigatório no consumo da
+API — são três camadas: mTLS, OAuth e HMAC. Isso reabriu um risco que a
+documentação de HMAC parecia ter eliminado.
+
+O diagnóstico rodado em produção respondeu `runtime_suporta_mtls: true`:
+`Deno.createHttpClient` existe no Edge Runtime do Supabase. Derruba a maior parte
+do risco.
+
+**Mas não é prova de que funciona.** O teste verifica que a API está exposta, não
+que o handshake TLS completa com um certificado real. O runtime pode oferecer a
+função e ainda assim falhar ao apresentá-lo. Só o primeiro `health` com o
+certificado da Cielo confirma de fato.
+
+Se falhar, o plano B continua válido e é barato: mover a chamada para o
+`firebird-bridge`, que já roda em Node no Railway e faz mTLS nativo
+(`https.Agent` com `cert` e `key`). Seria um endpoint novo no bridge — algo como
+`GET /api/v1/cielo/extrato` — com a edge function chamando ele em vez de falar
+direto com a Cielo. O parser e todo o pipeline continuam iguais; muda só quem faz
+a requisição HTTP.
+
 ## Formato do retorno
 
 O formato da resposta do `/link/generate` não está documentado. Em vez de fixar
