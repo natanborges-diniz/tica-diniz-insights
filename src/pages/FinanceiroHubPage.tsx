@@ -203,7 +203,10 @@ export default function FinanceiroHubPage() {
     queryKey: ["lancamentos", codEmpresa, filtroStatus, filtroCampoData, filtroDataInicio, filtroDataFim],
     queryFn: async () => {
       const params: Record<string, unknown> = { cod_empresa: codEmpresa, limit: 500, tipo: "PAGAR" };
-      if (filtroStatus !== "todos") params.status = filtroStatus;
+      // Grupo com um único status vai ao servidor; grupo com vários é recortado
+      // na tela, para não multiplicar requisições.
+      const grupo = GRUPOS_STATUS[filtroStatus]?.status;
+      if (grupo?.length === 1) params.status = grupo[0];
       if (filtroDataInicio) params.data_inicio = filtroDataInicio;
       if (filtroDataFim) params.data_fim = filtroDataFim;
       if (filtroCampoData) params.campo_data = filtroCampoData;
