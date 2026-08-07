@@ -187,22 +187,35 @@ const getRecusaBadge = (l: Lancamento) => {
   const d = (l.dados_extras || {}) as Record<string, unknown>;
   const motivo = (d.btg_motivo_recusa as string) || null;
   const statusBanco = (d.btg_payment_status as string) || null;
-  if (!l.requer_validacao || (!motivo && !statusBanco)) return null;
+  // Recusa na validação do envio: o pagamento não existe no BTG. Chamar isso de
+  // "recusado pelo banco" fazia o operador procurar o lote no app do banco.
+  const naoChegou = Boolean(d.btg_envio_rejeitado);
+  const motivoEnvio = (d.btg_motivo_envio as string) || null;
+  if (!l.requer_validacao || (!motivo && !statusBanco && !naoChegou)) return null;
 
   const resolver = (d.btg_recusa_resolver as string) || null;
   const codigo = (d.btg_recusa_codigo as string) || null;
-  const texto = motivo || `Recusado pelo banco (${statusBanco})`;
+  const texto = naoChegou
+    ? `Não chegou ao banco${motivoEnvio ? ` — ${motivoEnvio}` : ""}`
+    : motivo || `Recusado pelo banco (${statusBanco})`;
 
   return (
     <Badge
       variant="outline"
       className="text-[10px] bg-destructive/10 text-destructive border-destructive/30 cursor-help max-w-[280px] whitespace-normal text-left leading-tight"
-      title={[
-        `Recusado pelo BTG${statusBanco ? ` (${statusBanco})` : ""}`,
-        texto,
-        resolver ? `O que fazer: ${resolver}` : null,
-        codigo ? `Código do banco: ${codigo}` : null,
-      ].filter(Boolean).join("\n")}
+      title={(naoChegou
+        ? [
+          "O BTG recusou a inclusão deste pagamento na validação do envio.",
+          "O banco não recebeu o pagamento: nada foi criado, autorizado ou debitado.",
+          motivoEnvio ? `Resposta do banco: ${motivoEnvio}` : null,
+          "O que fazer: corrija o dado apontado e reenvie o borderô.",
+        ]
+        : [
+          `Recusado pelo BTG${statusBanco ? ` (${statusBanco})` : ""}`,
+          texto,
+          resolver ? `O que fazer: ${resolver}` : null,
+          codigo ? `Código do banco: ${codigo}` : null,
+        ]).filter(Boolean).join("\n")}
     >
       {texto}
     </Badge>
