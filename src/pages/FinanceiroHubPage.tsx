@@ -1913,6 +1913,16 @@ export default function FinanceiroHubPage() {
                                 {bs.label}
                               </Badge>
                             </TableCell>
+                            <TableCell>
+                              <Badge variant={bs.variant} title={bs.titulo} className="cursor-help">
+                                {bs.label}
+                              </Badge>
+                              {erroEnvio[b.id] && (
+                                <p className="mt-1 text-xs text-destructive whitespace-pre-wrap max-w-[260px]">
+                                  Último envio recusado: {erroEnvio[b.id]}
+                                </p>
+                              )}
+                            </TableCell>
                             <TableCell className="text-sm text-muted-foreground">{format(new Date(b.created_at), "dd/MM/yy")}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">
                               {b.aprovado_em ? format(new Date(b.aprovado_em), "dd/MM/yy HH:mm") : "—"}
@@ -1935,9 +1945,9 @@ export default function FinanceiroHubPage() {
                                   if (ok) cancelarBorderoMutation.mutate(b.id);
                                 }}
                                 isPendingAprovar={false}
-                                isPendingEnviar={enviarBorderoMutation.isPending}
-                                isPendingConfirmar={confirmarProcessamentoMutation.isPending}
-                                isPendingCancelar={cancelarBorderoMutation.isPending}
+                                isPendingEnviar={enviarBorderoMutation.isPending && enviarBorderoMutation.variables === b.id}
+                                isPendingConfirmar={confirmarProcessamentoMutation.isPending && confirmarProcessamentoMutation.variables === b.id}
+                                isPendingCancelar={cancelarBorderoMutation.isPending && cancelarBorderoMutation.variables === b.id}
                               />
                             </TableCell>
                           </TableRow>
@@ -1948,6 +1958,7 @@ export default function FinanceiroHubPage() {
                 </div>
               </CardContent>
             </Card>
+
           </TabsContent>
 
 
