@@ -99,7 +99,7 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
   const tipoPixEfetivo = pixEhCopiaECola ? "PIX_QR_CODE" : "PIX_KEY";
 
   const isValid = () => {
-    if (payType === "PIX_KEY") return pixKey.trim().length > 3 && !pixEhCopiaECola;
+    if (payType === "PIX_KEY") return pixKey.trim().length > 3;
     if (payType === "PIX_QR_CODE") return pixEhCopiaECola;
     if (payType === "BANKSLIP" || payType === "DARF") return diagBoleto.status === "ok";
     // PIX_MANUAL e TED exigem o mesmo creditParty completo.
