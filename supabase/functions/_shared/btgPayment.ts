@@ -374,6 +374,18 @@ export function montarItem(args: MontarItemArgs): Record<string, unknown> {
     if (correto && correto !== tipo) tipo = correto;
   }
 
+  // Copia e cola colado no campo de chave: o BTG recusa como chave
+  // (`pix-key-type-not-supported`) e o lote inteiro não chega ao banco. Não há
+  // decisão a tomar — o payload EMV é inconfundível, então corrigimos o tipo.
+  if (tipo === "PIX_KEY" && ehPixCopiaECola(primeiro(dados, "chave_pix", "pixKey", "key"))) {
+    tipo = "PIX_QR_CODE";
+  }
+  if (tipo === "PIX_QR_CODE") {
+    const alvo = primeiro(dados, "emv", "qr_code", "copia_e_cola", "chave_pix", "pixKey", "key");
+    if (alvo && !ehPixCopiaECola(alvo)) tipo = "PIX_KEY";
+  }
+
+
   if (!TIPOS_BTG.includes(tipo as BtgPaymentType)) {
     throw new Error(`Tipo de pagamento "${tipo}" não suportado — válidos: ${TIPOS_BTG.join(", ")}`);
   }
