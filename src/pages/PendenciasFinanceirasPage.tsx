@@ -49,6 +49,7 @@ const ICONE: Record<TipoPendencia, typeof Clock> = {
   MONTAGEM_PARADA: AlertTriangle,
   RECUSADO: XCircle,
   NAO_PROCESSADO: XCircle,
+  NAO_ENVIADO_AO_BANCO: Send,
   PAGO_FORA: Archive,
   REABERTO_SEM_BORDERO: FileWarning,
 };
@@ -58,8 +59,11 @@ const TITULO: Record<TipoPendencia, string> = {
   AGUARDANDO_ENVIO: "Falta enviar ao banco",
   MESA_PENDENTE: "Exceção na Mesa",
   MONTAGEM_PARADA: "Montagem parada",
-  RECUSADO: "Recusado pelo banco",
-  NAO_PROCESSADO: "Não processado pelo banco",
+  RECUSADO: "Recusado pelo banco (após envio aceito)",
+  // Diferença que o operador precisa ler no título: um chegou ao banco e não
+  // liquidou; o outro nunca entrou lá.
+  NAO_PROCESSADO: "Chegou ao banco e não foi processado",
+  NAO_ENVIADO_AO_BANCO: "Não chegou ao banco (recusa no envio)",
   PAGO_FORA: "Pago fora do borderô",
   REABERTO_SEM_BORDERO: "Corrigido, sem borderô",
 };
