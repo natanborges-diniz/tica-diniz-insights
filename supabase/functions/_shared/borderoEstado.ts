@@ -35,6 +35,18 @@ export interface ItemBordero {
    * o fornecedor precisa do valor, não da contagem.
    */
   valor?: number | null;
+  /**
+   * O envio foi recusado na validação: o pagamento NÃO entrou no banco.
+   *
+   * Existe porque "o banco não processou o pagamento" fazia entender que o
+   * pagamento chegou ao BTG, foi autorizado pelo master e falhou depois. Não é
+   * o caso: aqui o BTG recusou a inclusão no lote (ex.: 400 tipo de chave Pix
+   * não suportado). Nada foi criado no banco, nada foi autorizado, nada foi
+   * debitado — a correção é no cadastro do título, e só depois reenviar.
+   */
+  envio_rejeitado?: boolean | null;
+  /** O que o banco respondeu ao recusar o envio (dados_extras.btg_motivo_envio). */
+  motivo_envio?: string | null;
 }
 
 /**
