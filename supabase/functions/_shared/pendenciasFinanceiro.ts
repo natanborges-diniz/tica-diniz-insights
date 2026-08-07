@@ -32,6 +32,16 @@ export type TipoPendencia =
    * do BTG, e cobrar o master só faz o operador procurar um botão que não há.
    */
   | "NAO_PROCESSADO"
+  /**
+   * O banco recusou a inclusão do pagamento no envio — o lote nem existiu lá.
+   *
+   * Nasceu de uma confusão real: "não processado pelo banco" dava a entender
+   * que o pagamento chegou ao BTG, o master autorizou e a liquidação falhou.
+   * Aqui é o oposto: a recusa foi na validação do envio (ex.: 400 tipo de chave
+   * Pix não suportado), nada foi criado, autorizado ou debitado. A saída é
+   * corrigir o cadastro do título e reenviar o mesmo borderô.
+   */
+  | "NAO_ENVIADO_AO_BANCO"
   /** Os títulos foram pagos por fora e o borderô ficou aberto. */
   | "PAGO_FORA"
   /**
