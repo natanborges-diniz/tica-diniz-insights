@@ -13,7 +13,7 @@ import {
   formatarLinhaDigitavel,
   diagnosticarBoleto,
 } from "../../../supabase/functions/_shared/boleto";
-import { tipoPorLinhaDigitavel } from "../../../supabase/functions/_shared/btgPayment";
+import { tipoPorLinhaDigitavel, ehPixCopiaECola } from "../../../supabase/functions/_shared/btgPayment";
 
 interface Lancamento {
   id: string;
