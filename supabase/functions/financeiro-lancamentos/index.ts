@@ -1887,14 +1887,20 @@ async function aprovarBordero(body: Record<string, unknown>, userId: string) {
     );
   }
 
+  const trilhaAuto = distinto.autoAprovacao
+    ? `${bordero.observacao ? bordero.observacao + " | " : ""}Auto-aprovação: criado e aprovado pelo mesmo admin em ${new Date().toISOString()}`
+    : bordero.observacao;
+
   const { error: bErr } = await supabase
     .from("borderos")
     .update({
       status: "APROVADO",
       aprovado_por: userId,
       aprovado_em: new Date().toISOString(),
+      observacao: trilhaAuto,
     })
     .eq("id", bordero_id);
+
 
   if (bErr) throw new Error(bErr.message);
 
