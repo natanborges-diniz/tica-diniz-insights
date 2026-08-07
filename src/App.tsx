@@ -38,6 +38,7 @@ import FolhaPagamentoPage from "./pages/FolhaPagamentoPage";
 import PendenciasFinanceirasPage from "./pages/PendenciasFinanceirasPage";
 import MesaAprovacaoPage from "./pages/MesaAprovacaoPage";
 import AprovacoesMobilePage from "./pages/AprovacoesMobilePage";
+import CrediarioLojaPage from "./pages/CrediarioLojaPage";
 import RubricasPage from "./pages/RubricasPage";
 import ConciliacaoCartoesPage from "./pages/ConciliacaoCartoesPage";
 import PaymentLinksPage from "./pages/PaymentLinksPage";
@@ -130,6 +131,7 @@ const App = () => (
                   <Route path="/financeiro/folha" element={<FolhaPagamentoPage />} />
                   <Route path="/financeiro/mesa" element={<MesaAprovacaoPage />} />
                   <Route path="/aprovacoes" element={<AprovacoesMobilePage />} />
+                  <Route path="/crediario" element={<CrediarioLojaPage />} />
                   <Route path="/financeiro/rubricas" element={<RubricasPage />} />
                   <Route path="/financeiro/cartoes" element={<ConciliacaoCartoesPage />} />
                   <Route path="/financeiro/links-pagamento" element={<PaymentLinksPage />} />

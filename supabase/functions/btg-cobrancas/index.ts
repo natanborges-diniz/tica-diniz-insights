@@ -6,6 +6,8 @@
 // BTG Status: CREATED, PROCESSING, PAID, OVERDUE, CANCELED, FAILED, EXPIRED
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { gerarParcelasBoleto, sanitizarCpf, podeDisparar } from "../_shared/crediario.ts";
+import { hojeBrt } from "../_shared/agendamento.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -123,7 +125,43 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
     return json({ error: "cod_empresa, valor, data_vencimento e sacado_documento são obrigatórios" }, 400);
   }
 
-  const ce = Number(cod_empresa);
+  const r = await emitirCore({
+    cod_empresa: Number(cod_empresa),
+    valor: Number(valor),
+    data_vencimento: String(data_vencimento),
+    data_expiracao: data_expiracao ? String(data_expiracao) : null,
+    sacado_nome: sacado_nome ? String(sacado_nome) : null,
+    sacado_documento: String(sacado_documento),
+    parcela_id: parcela_id ? String(parcela_id) : null,
+    tipo_cobranca: String(tipo_cobranca || "BANKSLIP"),
+    descricao: descricao ? String(descricao) : null,
+    userId,
+  });
+  return json({ success: true, ...r }, 201);
+}
+
+interface EmitirCoreArgs {
+  cod_empresa: number;
+  valor: number;
+  data_vencimento: string;
+  data_expiracao?: string | null;
+  sacado_nome?: string | null;
+  sacado_documento: string;
+  parcela_id?: string | null;
+  tipo_cobranca?: string | null;
+  descricao?: string | null;
+  liberacao_id?: string | null;
+  parcela_numero?: number | null;
+  userId: string;
+}
+
+// Núcleo da emissão (BTG + persistência + lançamento RECEBER). Lança Response
+// em erro (o serve devolve); retorna objeto em sucesso — reutilizado pelo
+// emitir manual (admin) e pelo disparo do Crediário Loja.
+async function emitirCore(args: EmitirCoreArgs) {
+  const { cod_empresa, valor, data_vencimento, data_expiracao, sacado_nome, sacado_documento,
+    parcela_id, tipo_cobranca, descricao, liberacao_id, parcela_numero, userId } = args;
+  const ce = cod_empresa;
   const collectionType = String(tipo_cobranca || "BANKSLIP");
   const { apiBase, isSandbox } = await getBtgConfig();
 
@@ -187,7 +225,7 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
 
     if (!btgRes.ok) {
       console.error("[btg-cobrancas] BTG API error:", btgRes.status, btgBody);
-      return json({ error: "BTG rejeitou a emissão", btg_status: btgRes.status, details: btgData }, 502);
+      throw json({ error: "BTG rejeitou a emissão", btg_status: btgRes.status, details: btgData }, 502);
     }
 
     // BTG response: { collectionId, status, digitableLine, ... }
@@ -209,11 +247,13 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
     url_boleto: urlBoleto || null,
     status: btgStatus,
     parcela_id: parcela_id ? String(parcela_id) : null,
+    liberacao_id: liberacao_id || null,
+    parcela_numero: parcela_numero ?? null,
   }).select().single();
 
   if (error) {
     console.error("[btg-cobrancas] Insert error:", error);
-    return json({ error: "Erro ao gravar cobrança", details: error.message }, 500);
+    throw json({ error: "Erro ao gravar cobrança", details: error.message }, 500);
   }
 
   // Auto-create lancamento_financeiro RECEBER linked to this cobranca
@@ -248,7 +288,203 @@ async function handleEmitir(body: Record<string, unknown>, userId: string) {
     }
   }
 
-  return json({ success: true, cobranca: data, lancamento_id: lancamentoId, sandbox: isSandbox }, 201);
+  return { cobranca: data, lancamento_id: lancamentoId, sandbox: isSandbox };
+}
+
+// ═══ CREDIÁRIO LOJA (SPEC_CREDIARIO_LOJA.md) ═════════════════
+// Financeiro LIBERA o CPF com valores/parcelas travados; a loja só DISPARA.
+
+async function requireEmpresaAccess(userId: string, ce: number) {
+  if (await isAdmin(userId)) return;
+  const db = getServiceClient();
+  const { data } = await db
+    .from("user_empresa_permissions")
+    .select("cod_empresa")
+    .eq("user_id", userId)
+    .eq("cod_empresa", ce)
+    .maybeSingle();
+  if (!data) throw json({ error: `Sem permissão na empresa ${ce}` }, 403);
+}
+
+// Financeiro registra a consulta aprovada — valores rigorosamente travados.
+async function handleLiberarCpf(body: Record<string, unknown>, userId: string) {
+  await requireAdminRole(userId);
+  const { cod_empresa, cpf, cliente_nome, valor_total, parcelas, valor_parcela,
+    primeiro_vencimento, validade, observacao, imprimir } = body;
+
+  if (!cod_empresa || !cpf || !cliente_nome || !valor_total || !parcelas || !valor_parcela || !primeiro_vencimento) {
+    return json({ error: "cod_empresa, cpf, cliente_nome, valor_total, parcelas, valor_parcela e primeiro_vencimento são obrigatórios" }, 400);
+  }
+
+  const cpfLimpo = sanitizarCpf(cpf); // lança se inválido
+  // Valida a coerência ANTES de gravar — liberação inconsistente nunca nasce.
+  gerarParcelasBoleto({
+    valor_total: Number(valor_total),
+    parcelas: Number(parcelas),
+    valor_parcela: Number(valor_parcela),
+    primeiro_vencimento: String(primeiro_vencimento),
+  });
+
+  const db = getServiceClient();
+  const { data, error } = await db.from("crediario_liberacoes").insert({
+    cod_empresa: Number(cod_empresa),
+    cpf: cpfLimpo,
+    cliente_nome: String(cliente_nome).trim().toUpperCase(),
+    valor_total: Number(valor_total),
+    parcelas: Number(parcelas),
+    valor_parcela: Number(valor_parcela),
+    primeiro_vencimento: String(primeiro_vencimento),
+    validade: validade ? String(validade) : null,
+    observacao: observacao ? String(observacao) : null,
+    imprimir: Boolean(imprimir),
+    liberado_por: userId,
+  }).select().single();
+  if (error) return json({ error: error.message }, 500);
+  return json({ ok: true, liberacao: data }, 201);
+}
+
+async function handleListarLiberacoes(body: Record<string, unknown>, userId: string) {
+  const db = getServiceClient();
+  const admin = await isAdmin(userId);
+  let empresas: number[] | null = null;
+  if (!admin) {
+    const { data: perms } = await db.from("user_empresa_permissions").select("cod_empresa").eq("user_id", userId);
+    empresas = (perms || []).map((p) => Number(p.cod_empresa));
+    if (empresas.length === 0) return json({ liberacoes: [], boletos: {} });
+  }
+
+  let q = db.from("crediario_liberacoes").select("*").order("created_at", { ascending: false }).limit(200);
+  if (body.cod_empresa) q = q.eq("cod_empresa", Number(body.cod_empresa));
+  if (empresas) q = q.in("cod_empresa", empresas);
+  if (body.status) q = q.eq("status", String(body.status));
+  const { data: libs, error } = await q;
+  if (error) return json({ error: error.message }, 500);
+
+  // Boletos por liberação (linha digitável + PDF para a loja copiar/baixar)
+  const ids = (libs || []).map((l) => l.id);
+  const boletos: Record<string, unknown[]> = {};
+  if (ids.length > 0) {
+    const { data: cobs } = await db
+      .from("btg_cobrancas")
+      .select("id, liberacao_id, parcela_numero, valor, data_vencimento, linha_digitavel, url_boleto, status")
+      .in("liberacao_id", ids)
+      .order("parcela_numero", { ascending: true });
+    for (const c of (cobs || [])) {
+      const k = String(c.liberacao_id);
+      (boletos[k] = boletos[k] || []).push(c);
+    }
+  }
+  return json({ liberacoes: libs, boletos });
+}
+
+// A loja dispara: o sistema emite TODAS as parcelas exatamente como aprovadas.
+// Idempotente: reenvio emite só as parcelas que faltaram (falha parcial).
+async function handleDispararBoletos(body: Record<string, unknown>, userId: string) {
+  const { liberacao_id } = body;
+  if (!liberacao_id) return json({ error: "liberacao_id obrigatório" }, 400);
+
+  const db = getServiceClient();
+  const { data: lib } = await db.from("crediario_liberacoes").select("*").eq("id", String(liberacao_id)).single();
+  if (!lib) return json({ error: "Liberação não encontrada" }, 404);
+
+  await requireEmpresaAccess(userId, Number(lib.cod_empresa));
+
+  const hoje = hojeBrt();
+  const gate = podeDisparar(lib, hoje);
+  // Reenvio de parcial é permitido (completa o que faltou)
+  if (!gate.ok && lib.status !== "BOLETOS_PARCIAL") {
+    return json({ error: gate.motivo }, 409);
+  }
+
+  const parcelasPlano = gerarParcelasBoleto({
+    valor_total: Number(lib.valor_total),
+    parcelas: Number(lib.parcelas),
+    valor_parcela: Number(lib.valor_parcela),
+    primeiro_vencimento: String(lib.primeiro_vencimento),
+  });
+
+  const { data: jaEmitidos } = await db
+    .from("btg_cobrancas")
+    .select("parcela_numero")
+    .eq("liberacao_id", lib.id);
+  const emitidas = new Set((jaEmitidos || []).map((c) => Number(c.parcela_numero)));
+
+  const sucessos: unknown[] = [];
+  const falhas: { parcela: number; erro: string }[] = [];
+  for (const p of parcelasPlano) {
+    if (emitidas.has(p.numero)) continue;
+    try {
+      const r = await emitirCore({
+        cod_empresa: Number(lib.cod_empresa),
+        valor: p.valor,
+        data_vencimento: p.vencimento,
+        sacado_nome: String(lib.cliente_nome),
+        sacado_documento: String(lib.cpf),
+        tipo_cobranca: "BANKSLIP",
+        descricao: `Crediário ${lib.cliente_nome} — parcela ${p.numero}/${lib.parcelas}`,
+        liberacao_id: String(lib.id),
+        parcela_numero: p.numero,
+        userId,
+      });
+      sucessos.push(r.cobranca);
+    } catch (e) {
+      const erro = e instanceof Response ? await e.text() : String(e);
+      console.error(`[btg-cobrancas] Crediário: falha parcela ${p.numero} (lib ${lib.id}):`, erro);
+      falhas.push({ parcela: p.numero, erro: erro.slice(0, 300) });
+    }
+  }
+
+  const totalEmitidas = emitidas.size + sucessos.length;
+  const statusNovo = falhas.length === 0 && totalEmitidas >= Number(lib.parcelas)
+    ? "BOLETOS_EMITIDOS"
+    : (totalEmitidas > 0 ? "BOLETOS_PARCIAL" : lib.status);
+
+  await db.from("crediario_liberacoes").update({
+    status: statusNovo,
+    disparado_por: lib.disparado_por || userId,
+    disparado_em: lib.disparado_em || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq("id", lib.id);
+
+  return json({
+    ok: falhas.length === 0,
+    status: statusNovo,
+    emitidos_agora: sucessos.length,
+    ja_existiam: emitidas.size,
+    falhas,
+    boletos: sucessos,
+  });
+}
+
+async function handleCancelarLiberacao(body: Record<string, unknown>, userId: string) {
+  await requireAdminRole(userId);
+  const { liberacao_id, motivo } = body;
+  if (!liberacao_id) return json({ error: "liberacao_id obrigatório" }, 400);
+  const db = getServiceClient();
+  const { data: lib } = await db.from("crediario_liberacoes").select("id, status").eq("id", String(liberacao_id)).single();
+  if (!lib) return json({ error: "Liberação não encontrada" }, 404);
+  await db.from("crediario_liberacoes").update({
+    status: "CANCELADO",
+    observacao: motivo ? String(motivo) : undefined,
+    updated_at: new Date().toISOString(),
+  }).eq("id", lib.id);
+  const aviso = ["BOLETOS_EMITIDOS", "BOLETOS_PARCIAL"].includes(String(lib.status))
+    ? "Boletos já emitidos NÃO são cancelados automaticamente — cancele-os individualmente na tela de Cobranças."
+    : null;
+  return json({ ok: true, aviso });
+}
+
+async function handleMarcarImpressao(body: Record<string, unknown>, userId: string) {
+  await requireAdminRole(userId);
+  const { liberacao_id, imprimir, impresso } = body;
+  if (!liberacao_id) return json({ error: "liberacao_id obrigatório" }, 400);
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (imprimir !== undefined) updates.imprimir = Boolean(imprimir);
+  if (impresso) updates.impresso_em = new Date().toISOString();
+  const db = getServiceClient();
+  const { error } = await db.from("crediario_liberacoes").update(updates).eq("id", String(liberacao_id));
+  if (error) return json({ error: error.message }, 500);
+  return json({ ok: true });
 }
 
 // ─── ACTION: importar (fetch existing collections from BTG) ──
@@ -490,8 +726,18 @@ Deno.serve(async (req) => {
         return await handleCancelar(body || {}, userId);
       case "segunda_via":
         return await handleSegundaVia(body, url);
+      case "liberar_cpf":
+        return await handleLiberarCpf(body || {}, userId);
+      case "listar_liberacoes":
+        return await handleListarLiberacoes(body || {}, userId);
+      case "disparar_boletos":
+        return await handleDispararBoletos(body || {}, userId);
+      case "cancelar_liberacao":
+        return await handleCancelarLiberacao(body || {}, userId);
+      case "marcar_impressao":
+        return await handleMarcarImpressao(body || {}, userId);
       default:
-        return json({ error: `Ação desconhecida: '${action}'. Use: emitir, importar, listar, detalhe, cancelar, segunda_via` }, 400);
+        return json({ error: `Ação desconhecida: '${action}'. Use: emitir, importar, listar, detalhe, cancelar, segunda_via, liberar_cpf, listar_liberacoes, disparar_boletos, cancelar_liberacao, marcar_impressao` }, 400);
     }
   } catch (e) {
     if (e instanceof Response) return e;
