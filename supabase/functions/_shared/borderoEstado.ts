@@ -117,7 +117,7 @@ export interface EstadoBordero {
 }
 
 export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
-  let pagos = 0, rejeitados = 0, pendentes = 0, naoProcessados = 0;
+  let pagos = 0, rejeitados = 0, pendentes = 0, naoProcessados = 0, naoEnviados = 0;
   let valorRejeitado = 0;
   let proxima: string | null = null;
   const motivos: string[] = [];
@@ -133,14 +133,21 @@ export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
     // virava "aguardando autorização", pedindo ao operador uma ação que não
     // existe no app do banco.
     const falhou = falhouNoBanco(i.btg_status);
-    if (i.requer_validacao || falhou) {
+    const naoEntrou = Boolean(i.envio_rejeitado);
+    if (i.requer_validacao || falhou || naoEntrou) {
       rejeitados++;
       valorRejeitado += Number(i.valor ?? 0);
-      if (falhou && !i.requer_validacao) naoProcessados++;
+      // O envio recusado manda na classificação: o pagamento nunca existiu no
+      // banco, então não é "não processado" nem "recusado depois de autorizado".
+      if (naoEntrou) naoEnviados++;
+      else if (falhou && !i.requer_validacao) naoProcessados++;
+      const mEnvio = String(i.motivo_envio ?? "").trim();
       const m = String(i.motivo_recusa ?? "").trim();
-      const texto = m || (falhou
-        ? `O banco não processou o pagamento (${String(i.btg_status).toUpperCase()})`
-        : "");
+      const texto = naoEntrou
+        ? `O banco não recebeu este pagamento — recusa na validação do envio${mEnvio ? `: ${mEnvio}` : ""}`
+        : m || (falhou
+          ? `O pagamento chegou ao banco e não foi processado (${String(i.btg_status).toUpperCase()})`
+          : "");
       if (texto && !motivos.includes(texto)) motivos.push(texto);
       continue;
     }
@@ -154,6 +161,7 @@ export function resumirComposicao(itens: ItemBordero[]): ComposicaoBordero {
     total: pagos + rejeitados + pendentes,
     pagos, rejeitados, pendentes,
     nao_processados: naoProcessados,
+    nao_enviados: naoEnviados,
     valor_rejeitado: Math.round(valorRejeitado * 100) / 100,
     proxima_data: proxima,
     motivos_recusa: motivos,
