@@ -1390,9 +1390,20 @@ export default function FinanceiroHubPage() {
                   {comp.rejeitados > 0 && (
                     <div className="w-full pt-2 border-t space-y-2">
                       <p className="text-sm text-destructive font-medium">
-                        {comp.rejeitados} pagamento(s) devolvido(s)/recusado(s) pelo banco
+                        {(comp.nao_enviados ?? 0) === comp.rejeitados
+                          ? `${comp.rejeitados} pagamento(s) que o banco NÃO recebeu (recusa na validação do envio)`
+                          : `${comp.rejeitados} pagamento(s) devolvido(s)/recusado(s) pelo banco`}
                         {(comp.valor_rejeitado ?? 0) > 0 && <> — {fmtCurrency(comp.valor_rejeitado ?? 0)} não saiu da conta</>}
                       </p>
+                      {/* A confusão que isto resolve: "não processado" dava a
+                          entender que o lote existia no BTG e o master havia
+                          autorizado. Recusa no envio é antes disso. */}
+                      {(comp.nao_enviados ?? 0) === comp.rejeitados && (
+                        <p className="text-xs text-destructive">
+                          Nada foi criado, autorizado ou debitado no BTG — não há o que o master autorizar.
+                          Corrija o que o banco apontou e reenvie este mesmo borderô.
+                        </p>
+                      )}
                       {(comp.motivos_recusa ?? []).length > 0 && (
                         <p className="text-xs text-destructive">
                           Motivo do banco: {(comp.motivos_recusa ?? []).join(" · ")}
@@ -1927,7 +1938,8 @@ export default function FinanceiroHubPage() {
                               </Badge>
                               {erroEnvio[b.id] && (
                                 <p className="mt-1 text-xs text-destructive whitespace-pre-wrap max-w-[260px]">
-                                  Último envio recusado: {erroEnvio[b.id]}
+                                  O banco não recebeu este borderô (recusa na validação do envio):{" "}
+                                  {erroEnvio[b.id]}
                                 </p>
                               )}
                             </TableCell>
