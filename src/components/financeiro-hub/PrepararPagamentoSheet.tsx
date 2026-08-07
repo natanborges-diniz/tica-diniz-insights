@@ -70,7 +70,7 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
     // Guardamos só dígitos: a máscara é de exibição, o banco recebe a linha limpa.
     setBarcode(somenteDigitos(d.linha_digitavel));
     const details = (d.btg_details || {}) as Record<string, unknown>;
-    setPixKey(String(details.pixKey || ""));
+    setPixKey(String(details.pixKey || details.emv || ""));
     setBanco(String(details.bankCode || ""));
     setAgencia(String(details.branch || ""));
     setConta(String(details.account || ""));
