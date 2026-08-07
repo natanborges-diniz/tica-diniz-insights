@@ -1872,9 +1872,10 @@ async function aprovarBordero(body: Record<string, unknown>, userId: string) {
   if (bordero.status !== "MONTAGEM") throw new Error(`Borderô com status ${bordero.status} não pode ser aprovado`);
   if (bordero.qtd_lancamentos === 0) throw new Error("Borderô vazio — adicione lançamentos antes de aprovar");
 
-  // G2 — separação de funções: quem montou o borderô não o aprova
-  const distinto = criadorAprovadorDistintos(bordero.criado_por, userId);
+  // G2 — separação de funções: quem montou não aprova, exceto admin (registrado)
+  const distinto = criadorAprovadorDistintos(bordero.criado_por, userId, true);
   if (!distinto.ok) throw new Error(distinto.motivo!);
+
 
   for (const lib of liberacoes) {
     await aplicarLiberacao(
