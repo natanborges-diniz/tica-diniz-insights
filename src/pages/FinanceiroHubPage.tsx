@@ -460,6 +460,36 @@ export default function FinanceiroHubPage() {
     },
   });
 
+  /**
+   * Reenvio direto do lote que o BTG não registrou (só admin).
+   *
+   * O caso que motivou: lote aberto e fechado, borderô ENVIADO, títulos em
+   * "Processando" — e no banco o lote estava vazio. Não havia nada a corrigir
+   * nos dados nem nada para o master autorizar; faltava só reenviar. A function
+   * confere no banco que o lote não tem pagamento antes de refazer, então este
+   * botão não cria risco de pagamento em duplicidade.
+   */
+  const reenviarLoteMutation = useMutation({
+    mutationFn: (id: string) => invokeAction("reenviar_lote_vazio", { bordero_id: id }),
+    onSuccess: (data: { ok?: boolean; error?: string }, id: string) => {
+      if (data?.ok === false) {
+        const msg = data.error || "Não foi possível reenviar o lote";
+        setErroEnvio(prev => ({ ...prev, [id]: msg }));
+        toast.error(msg, { duration: 14000 });
+        invalidateAll();
+        return;
+      }
+      setErroEnvio(prev => { const n = { ...prev }; delete n[id]; return n; });
+      toast.success("Lote reenviado ao BTG — os mesmos títulos foram para um lote novo");
+      invalidateAll();
+    },
+    onError: (e: Error, id: string) => {
+      const msg = e.message || "Erro ao reenviar o lote";
+      setErroEnvio(prev => ({ ...prev, [id]: msg }));
+      toast.error(msg, { duration: 14000 });
+    },
+  });
+
 
   const confirmarProcessamentoMutation = useMutation({
     mutationFn: (id: string) => invokeAction("confirmar_processamento", { bordero_id: id }),
@@ -1341,10 +1371,37 @@ export default function FinanceiroHubPage() {
                     </div>
                   )}
 
+                  {/* Lote enviado que o BTG pode não ter registrado. Um clique de
+                      admin refaz a remessa: a function confere no banco que o lote
+                      está sem pagamento antes de reenviar. */}
+                  {borderoDetalhe.bordero.status === "ENVIADO" && comp.pendentes > 0 && authIsAdmin && (
+                    <div className="w-full pt-2 border-t space-y-2">
+                      <p className="text-xs font-medium">
+                        O BTG não registrou os pagamentos deste lote?
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Reenvia os {comp.pendentes} título(s) num lote novo, com os mesmos dados — sem
+                        mexer em nada manualmente. Antes de reenviar conferimos no banco que o lote
+                        atual está sem pagamento nenhum; se o banco tiver registrado algo, o reenvio é
+                        bloqueado para não pagar duas vezes.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        disabled={reenviarLoteMutation.isPending}
+                        onClick={() => reenviarLoteMutation.mutate(borderoDetalhe.bordero.id)}
+                      >
+                        {reenviarLoteMutation.isPending ? "Reenviando…" : "Reenviar lote agora"}
+                      </Button>
+                    </div>
+                  )}
+
                   {/* Lote no banco que não foi autorizado. Sem isto o borderô
                       ficava sem saída: a data não é editável depois do envio e
                       os títulos não voltam sozinhos. */}
                   {borderoDetalhe.bordero.status === "ENVIADO" && comp.pendentes > 0 && (
+
                     <div className="w-full pt-2 border-t space-y-2">
                       <p className="text-xs font-medium">
                         O lote não foi autorizado no BTG e você quer refazer com outra data?
