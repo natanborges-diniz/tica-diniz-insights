@@ -132,7 +132,10 @@ export function estadoDeVolta(
   dadosExtras?: Record<string, unknown> | null,
 ): Record<string, unknown> {
   const extras = dadosExtras ?? {};
-  const motivo = String(extras.btg_motivo_recusa ?? extras.btg_payment_status ?? "").trim();
+  const naoChegou = Boolean(extras.btg_envio_rejeitado);
+  const motivo = String(
+    extras.btg_motivo_recusa ?? extras.btg_motivo_envio ?? extras.btg_payment_status ?? "",
+  ).trim();
   const historicoAnterior = Array.isArray(extras.btg_tentativas_anteriores)
     ? extras.btg_tentativas_anteriores
     : [];
@@ -142,6 +145,10 @@ export function estadoDeVolta(
     external_id: extras.btg_external_id ?? null,
     status: extras.btg_payment_status ?? null,
     motivo_recusa: extras.btg_motivo_recusa ?? null,
+    // Guarda a distinção na trilha: recusa no envio (nunca chegou ao banco) é
+    // outro problema que recusa depois de autorizado.
+    envio_rejeitado: naoChegou || null,
+    motivo_envio: extras.btg_motivo_envio ?? null,
     codigo_recusa: extras.btg_recusa_codigo ?? null,
     devolvida_ao_preparo_em: new Date().toISOString(),
   };
