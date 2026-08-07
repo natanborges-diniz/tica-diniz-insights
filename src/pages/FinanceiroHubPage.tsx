@@ -265,7 +265,11 @@ export default function FinanceiroHubPage() {
     l.descricao, l.pessoa_nome, l.pessoa_documento, l.valor, l.valor_pago,
     l.natureza, l.categoria, l.subcategoria, l.forma_pagamento, l.origem,
   ];
-  const lancamentosFiltrados = filtrarPorBusca(lancamentos, busca, camposLancamento);
+  const grupoStatus = GRUPOS_STATUS[filtroStatus]?.status ?? null;
+  const lancamentosNoStatus = grupoStatus
+    ? lancamentos.filter(l => grupoStatus.includes(String(l.status)))
+    : lancamentos;
+  const lancamentosFiltrados = filtrarPorBusca(lancamentosNoStatus, busca, camposLancamento);
   const pagosFiltrados = filtrarPorBusca(pagos, busca, camposLancamento);
   const borderosFiltrados = filtrarPorBusca(borderos, busca, (b) => [
     b.descricao, b.total_valor, b.status, b.criado_por, b.aprovado_por,
