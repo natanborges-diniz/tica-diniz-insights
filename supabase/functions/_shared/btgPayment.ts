@@ -259,13 +259,16 @@ export function montarDetail(tipo: string, dados: Record<string, unknown>): Reco
     }
 
     case "PIX_QR_CODE": {
-      const emv = primeiro(dados, "emv", "qr_code", "copia_e_cola");
+      // Aceita também os campos de chave: quando o operador cola o copia e cola
+      // no campo "Chave PIX", o dado chega como pixKey/chave_pix.
+      const emv = primeiro(dados, "emv", "qr_code", "copia_e_cola", "chave_pix", "pixKey", "key");
       if (!emv) throw new Error("Emv (copia e cola) é obrigatório para PIX_QR_CODE");
-      const detail: Record<string, unknown> = { emv };
+      const detail: Record<string, unknown> = { emv: String(emv).trim() };
       const cp = creditPartyPix(dados);
       if (cp) detail.creditParty = cp;
       return detail;
     }
+
 
     case "TED":
     case "PIX_MANUAL":
