@@ -28,20 +28,26 @@ interface PlanoContas {
   ativo: boolean;
 }
 
+// Grupos são os macro-blocos do DRE — LISTA FIXA (criar grupo novo pela UI
+// quebra o demonstrativo; categoria continua livre). MOVIMENTACOES_* ficam
+// fora do resultado: caixa de sócios e transferências/empréstimos.
 const SEED_GRUPOS = [
   "RECEITA_BRUTA", "DEDUCOES", "CUSTO_MERCADORIA",
   "DESPESAS_OPERACIONAIS", "RESULTADO_FINANCEIRO",
   "OUTRAS_RECEITAS_DESPESAS", "INVESTIMENTOS",
+  "MOVIMENTACOES_SOCIOS", "MOVIMENTACOES_CAIXA",
 ];
 
 const SEED_CATEGORIAS: Record<string, string[]> = {
-  RECEITA_BRUTA: ["VENDAS"],
-  DEDUCOES: ["IMPOSTOS", "COMISSOES", "TAXAS", "DEVOLUCOES"],
+  RECEITA_BRUTA: ["VENDAS", "OUTRAS_RECEITAS"],
+  DEDUCOES: ["IMPOSTOS", "TAXAS", "DEVOLUCOES"],
   CUSTO_MERCADORIA: ["FORNECEDORES_PRODUTO"],
   DESPESAS_OPERACIONAIS: ["PESSOAL", "OCUPACAO", "COMUNICACAO", "MARKETING", "ADMINISTRATIVO", "SERVICOS", "MANUTENCAO", "FRANQUIA"],
   RESULTADO_FINANCEIRO: ["FINANCEIRO"],
   OUTRAS_RECEITAS_DESPESAS: ["NAO_OPERACIONAL"],
   INVESTIMENTOS: ["CAPEX"],
+  MOVIMENTACOES_SOCIOS: ["SOCIOS"],
+  MOVIMENTACOES_CAIXA: ["MOVIMENTACOES"],
 };
 
 const SINAL_PADRAO: Record<string, string> = {
@@ -52,17 +58,19 @@ const SINAL_PADRAO: Record<string, string> = {
   RESULTADO_FINANCEIRO: "-",
   OUTRAS_RECEITAS_DESPESAS: "-",
   INVESTIMENTOS: "-",
+  MOVIMENTACOES_SOCIOS: "-",
+  MOVIMENTACOES_CAIXA: "+",
 };
 
 function CreatableCombobox({
-  value, onChange, options, placeholder = "Selecione ou digite...", disabled = false,
+  value, onChange, options, placeholder = "Selecione ou digite...", disabled = false, allowCreate = true,
 }: {
-  value: string; onChange: (v: string) => void; options: string[]; placeholder?: string; disabled?: boolean;
+  value: string; onChange: (v: string) => void; options: string[]; placeholder?: string; disabled?: boolean; allowCreate?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const filtered = options.filter((o) => o.toLowerCase().includes(search.toLowerCase()));
-  const showCreate = search.trim() !== "" && !options.some((o) => o.toLowerCase() === search.trim().toLowerCase());
+  const showCreate = allowCreate && search.trim() !== "" && !options.some((o) => o.toLowerCase() === search.trim().toLowerCase());
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -252,7 +260,7 @@ export default function AdminDreConfigPage() {
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <Label>Grupo DRE *</Label>
-              <CreatableCombobox value={formGrupoDre} onChange={handleGrupoChange} options={gruposDisponiveis} placeholder="Selecione ou crie..." />
+              <CreatableCombobox value={formGrupoDre} onChange={handleGrupoChange} options={gruposDisponiveis} placeholder="Selecione o bloco do DRE..." allowCreate={false} />
             </div>
             <div className="space-y-1">
               <Label>Categoria *</Label>

@@ -22,3 +22,16 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Certificados e chaves privadas.
+# A chave mTLS da Cielo permite se passar pela nossa aplicacao e nao tem
+# recuperacao: perdida, e um par novo e outro SLA de assinatura. Commitada,
+# fica no historico do git para sempre — remover depois exige reescrever a
+# arvore. Mais simples e nunca deixar entrar.
+*.key
+*.csr
+*.cer
+*.crt
+*.pem
+*.p12
+*.pfx

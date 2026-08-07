@@ -49,14 +49,38 @@ Princípios que o mercado segue e vamos aplicar:
    DESPESAS_OPERACIONAIS + MARKETING (é experiência de venda); copa da equipe →
    DESPESAS_OPERACIONAIS + ADMINISTRATIVO.
 
-## Pendências para fechar a revisão
+## Gap analysis executada (07/08/2026 — migration 20260807130000)
 
-- [ ] Dump do plano real (`SELECT ... FROM dre_plano_contas ORDER BY conta_numero`)
-      → gap analysis conta a conta contra o alvo acima.
-- [ ] Recriar conta de retirada dos sócios (grupo fora do resultado) + rubricas
-      por sócio.
-- [ ] Criar conta do bar da loja (definir: cortesia ao cliente × copa interna).
-- [ ] UX: dialog "Nova Conta" deve restringir grupo_dre à lista fixa e exigir
-      categoria (hoje deixa criar grupo livre e a categoria fica vazia).
-- [ ] Conferir se todos os relatórios (DRE, fluxo) tratam INVESTIMENTOS e
-      MOVIMENTACOES_SOCIOS fora do resultado operacional.
+Dump real: 106 contas. Desvios encontrados e corrigidos:
+
+| Conta | Estava | Problema | Correção |
+|---|---|---|---|
+| 1.10 TRANSFERENCIA ENTRADA, 1.11 EMPRESTIMOS ENTRADA | RECEITA_BRUTA | transferência/empréstimo **não é receita** — inflava o faturamento do DRE | MOVIMENTACOES_CAIXA (fora do resultado) |
+| 2.2 COMISSOES | DEDUCOES | comissão de vendedor é despesa de pessoal (padrão de mercado) | DESPESAS_OPERACIONAIS/PESSOAL |
+| 3.1.1 TAXAS MUNICIPAIS | DEDUCOES | alvará/licença não deduz receita | DESPESAS_OPERACIONAIS/ADMINISTRATIVO |
+| 3.1.3 IRPF | DEDUCOES | IRRF acompanha a folha (⚠️ validar com contabilidade se for IR de sócio) | DESPESAS_OPERACIONAIS/PESSOAL |
+| 3.11 CREDITOS DE CLIENTES | OUTRAS_DESPESAS | crédito devolvido é redutor de receita | DEDUCOES/DEVOLUCOES |
+| 5.5, 5.7, 5.8 | OUTRAS_DESPESAS | são CAPEX | INVESTIMENTOS/CAPEX |
+| grupo INVESTIMENTOS | categorias mistas | INVESTIMENTOS × CAPEX | tudo CAPEX |
+| — | inexistente | retirada dos sócios sumiu na remodelação de 04/2026 | 7.1 DISTRIBUICAO DE LUCROS e 7.2 APORTE (MOVIMENTACOES_SOCIOS, fora do resultado); 3.4.90 PRO-LABORE (PESSOAL, só se não houver) |
+| — | inexistente | material do bar da loja | 3.5.17 MATERIAL BAR/EXPERIENCIA (MARKETING, só se não houver) |
+
+Backfill incluído: todos os lançamentos re-derivam natureza/categoria pelo
+`dados_extras.conta_numero` — o histórico conta a mesma história do plano novo.
+Nada de status/valores/pagamentos é tocado.
+
+Impacto de leitura no DRE: margem bruta SOBE (comissões saem de deduções) e
+despesa de pessoal sobe na mesma medida; receita bruta CAI onde havia
+transferência/empréstimo classificado. É o retrato correto — e o backfill
+mantém o histórico comparável.
+
+UX corrigida: dialog "Nova Conta" não permite mais criar GRUPO (lista fixa do
+DRE); categoria continua livre. DRE exibe MOVIMENTACOES_* ao final, rotulados
+"fora do resultado".
+
+## Pendências
+
+- [ ] Validar com a contabilidade o destino do 3.1.3 IRPF (folha × sócio).
+- [ ] Rubricas: uma por sócio na 7.1 (retirada mensal sem passar pela Mesa).
+- [ ] Conferir nos relatórios de RESULTADO (não só exibição) se
+      MOVIMENTACOES_* e INVESTIMENTOS ficam fora do lucro líquido calculado.

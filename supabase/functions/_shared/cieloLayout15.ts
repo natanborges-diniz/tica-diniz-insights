@@ -867,6 +867,16 @@ export function parseExtratoCielo(conteudo: string): CieloExtratoParsed {
       "Arquivo marcado como reprocessamento (sequencia 9999999): sobrepoe registros ja importados.",
     );
   }
+  if (!header.cadastroCompleto) {
+    // Manual, registro 0, posicao 76: indica se TODOS os estabelecimentos da
+    // hierarquia estao contemplados nesta matriz de extrato. Com "N", pode
+    // haver loja cujas vendas nao entram neste arquivo — e a falta so
+    // apareceria como dinheiro sumido na conciliacao, sem nada apontando a
+    // causa.
+    avisos.push(
+      "Cadastro incompleto (posicao 76 = N): nem todos os estabelecimentos da hierarquia estao nesta matriz de extrato. Confirme com a Cielo quais ficaram de fora.",
+    );
+  }
   if (Object.keys(registrosIgnorados).length > 0) {
     const detalhe = Object.entries(registrosIgnorados)
       .map(([t, n]) => `${t}=${n}`)

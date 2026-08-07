@@ -33,8 +33,11 @@ function formatGrupo(grupo: string): string {
     DESPESAS_OPERACIONAIS: "Despesas Operacionais",
     OUTRAS_RECEITAS: "Outras Receitas",
     OUTRAS_DESPESAS: "Outras Despesas",
+    OUTRAS_RECEITAS_DESPESAS: "Outras Receitas/Despesas",
     INVESTIMENTOS: "Investimentos",
     RESULTADO_FINANCEIRO: "Resultado Financeiro",
+    MOVIMENTACOES_SOCIOS: "Movimentações de Sócios (fora do resultado)",
+    MOVIMENTACOES_CAIXA: "Movimentações de Caixa (fora do resultado)",
   };
   return labels[grupo] || grupo;
 }
@@ -53,7 +56,7 @@ export function DreTable({ data, modo = "realizado", busca }: Props) {
     );
   }
 
-  const grupoOrder = ["RECEITA_BRUTA", "DEDUCOES", "CUSTO_MERCADORIA", "DESPESAS_OPERACIONAIS", "RESULTADO_FINANCEIRO", "OUTRAS_RECEITAS", "OUTRAS_DESPESAS", "INVESTIMENTOS"];
+  const grupoOrder = ["RECEITA_BRUTA", "DEDUCOES", "CUSTO_MERCADORIA", "DESPESAS_OPERACIONAIS", "RESULTADO_FINANCEIRO", "OUTRAS_RECEITAS", "OUTRAS_DESPESAS", "OUTRAS_RECEITAS_DESPESAS", "INVESTIMENTOS", "MOVIMENTACOES_SOCIOS", "MOVIMENTACOES_CAIXA"];
 
   const sortedData = [...data].sort((a, b) => {
     const aIndex = grupoOrder.indexOf(a.grupo);

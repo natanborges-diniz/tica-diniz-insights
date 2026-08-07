@@ -11,6 +11,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
+  montarMapaPv,
+  resolverEmpresa,
+  matrizesDistintas,
+  type CieloConfigLoja,
+} from "../_shared/cieloMapeamento.ts";
+import {
   parseExtratoCielo,
   chaveRastreioVenda,
   chaveUrLancamento,
@@ -29,11 +35,8 @@ const corsHeaders = {
 
 const LOTE = 500;
 
-interface CieloConfig {
-  cod_empresa: number;
+interface CieloConfig extends CieloConfigLoja {
   ambiente: string;
-  cielo_estabelecimento_matriz: string | null;
-  cielo_pvs: string[] | null;
   cielo_documento: string | null;
   /** Chave HMAC do estabelecimento raiz. Nula = usa o secret global. */
   cielo_hmac_key: string | null;
@@ -85,59 +88,6 @@ function dedupPorChave<T extends Record<string, unknown>>(
   const mapa = new Map<string, T>();
   for (const l of linhas) mapa.set(chave(l), l);
   return { linhas: [...mapa.values()], duplicatas: linhas.length - mapa.size };
-}
-
-/** Normaliza numero de estabelecimento para comparacao (zeros a esquerda). */
-function normalizaPv(pv: string | null | undefined): string {
-  const v = String(pv ?? "").trim();
-  return v.replace(/^0+/, "") || v;
-}
-
-/**
- * Mapeia estabelecimento submissor -> cod_empresa.
- * O PV da filial e a chave primaria; a matriz de extrato so entra como fallback
- * quando ha uma unica loja sob ela, para nao atribuir venda a loja errada.
- */
-function montarMapaPv(configs: CieloConfig[]): {
-  porPv: Record<string, number>;
-  porMatriz: Record<string, number[]>;
-  colisoes: string[];
-} {
-  const porPv: Record<string, number> = {};
-  const porMatriz: Record<string, number[]> = {};
-  const colisoes: string[] = [];
-
-  for (const c of configs) {
-    for (const pv of c.cielo_pvs || []) {
-      if (!pv) continue;
-      const k = normalizaPv(pv);
-      if (porPv[k] !== undefined && porPv[k] !== c.cod_empresa) {
-        // Um PV so pode pertencer a uma loja. Se aparecer em duas configuracoes
-        // e erro de cadastro, e silenciar isso significa atribuir venda a loja
-        // errada sem deixar rastro.
-        colisoes.push(`PV ${k}: empresas ${porPv[k]} e ${c.cod_empresa}`);
-        continue;
-      }
-      porPv[k] = c.cod_empresa;
-    }
-    if (c.cielo_estabelecimento_matriz) {
-      const k = normalizaPv(c.cielo_estabelecimento_matriz);
-      (porMatriz[k] ||= []).push(c.cod_empresa);
-    }
-  }
-  return { porPv, porMatriz, colisoes };
-}
-
-function resolverEmpresa(
-  estabelecimento: string,
-  matrizArquivo: string,
-  mapa: ReturnType<typeof montarMapaPv>,
-): number | null {
-  const direto = mapa.porPv[normalizaPv(estabelecimento)];
-  if (direto) return direto;
-
-  const lojas = mapa.porMatriz[normalizaPv(matrizArquivo)];
-  return lojas && lojas.length === 1 ? lojas[0] : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -784,13 +734,9 @@ serve(async (req) => {
       || (configs.some((c) => c.ambiente === "production") ? "production" : "sandbox");
     const tipos: string[] = tipo_arquivo ? [String(tipo_arquivo)] : ["03", "04", "16"];
 
-    const matrizes = [
-      ...new Map(
-        configs
-          .filter((c) => c.cielo_estabelecimento_matriz)
-          .map((c) => [c.cielo_estabelecimento_matriz!, c]),
-      ).values(),
-    ];
+    // Lojas que compartilham matriz (matriz + filiais sob a mesma raiz de CNPJ)
+    // geram UMA chamada: o arquivo e o mesmo para todas.
+    const matrizes = matrizesDistintas(configs);
 
     if (matrizes.length === 0) {
       throw new Error(

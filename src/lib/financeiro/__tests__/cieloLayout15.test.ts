@@ -587,6 +587,46 @@ describe('parseExtratoCielo — CIELO03', () => {
     expect(parsed.validacao.erros).toHaveLength(2);
   });
 
+  it('avisa quando a matriz nao cobre toda a hierarquia', () => {
+    // Visto em arquivo real da Cielo: posição 76 = "N". Significa que existe
+    // estabelecimento da hierarquia fora desta matriz, e a venda dele não entra
+    // no arquivo — some da conciliação sem nada apontando a causa.
+    const incompleto = new LinhaBuilder(250)
+      .put(1, 1, '0').put(2, 11, '2809658220').put(12, 19, '20260807')
+      .put(20, 27, '20260807').put(28, 35, '20260807').num(36, 42, 1269)
+      .put(43, 47, 'CIELO').put(48, 49, '03').put(50, 50, 'I')
+      .put(71, 73, '015').put(74, 75, '03').put(76, 76, 'N')
+      .build();
+
+    const parsed = parseExtratoCielo(
+      [incompleto, trailer({ total: 0, liquido: 0, qtdE: 0, bruto: 0 })].join('\n'),
+    );
+
+    expect(parsed.header.cadastroCompleto).toBe(false);
+    expect(parsed.validacao.ok).toBe(true);
+    expect(parsed.validacao.avisos.some(a => a.includes('Cadastro incompleto'))).toBe(true);
+  });
+
+  it('parseia arquivo sem movimento, so header e trailer', () => {
+    // Formato real dos dias sem venda: o arquivo vem mesmo assim, zerado.
+    const vazio = new LinhaBuilder(250)
+      .put(1, 1, '0').put(2, 11, '2809658220').put(12, 19, '20260807')
+      .put(20, 27, '20260807').put(28, 35, '20260807').num(36, 42, 1269)
+      .put(43, 47, 'CIELO').put(48, 49, '03').put(50, 50, 'I')
+      .put(71, 73, '015').put(74, 75, '03').put(76, 76, 'S')
+      .build();
+
+    const parsed = parseExtratoCielo(
+      [vazio, trailer({ total: 0, liquido: 0, qtdE: 0, bruto: 0 })].join('\n'),
+    );
+
+    expect(parsed.header.estabelecimentoMatriz).toBe('2809658220');
+    expect(parsed.header.sequencia).toBe(1269);
+    expect(parsed.registrosE).toHaveLength(0);
+    expect(parsed.validacao.ok).toBe(true);
+    expect(parsed.validacao.erros).toEqual([]);
+  });
+
   it('avisa quando o arquivo e um reprocessamento', () => {
     const arquivo = [
       header({ tipo: '03', seq: 9999999 }),

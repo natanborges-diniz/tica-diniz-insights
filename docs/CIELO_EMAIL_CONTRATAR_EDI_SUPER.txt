@@ -1,0 +1,43 @@
+PARA:     extrato@cielo.com.br
+CC:       edi@cielo.com.br
+ASSUNTO:  Contratacao do Extrato Eletronico - EC 2898942388 (Diniz Super Shopping)
+
+
+Bom dia,
+
+Na consulta cadastral que voces nos enviaram, o estabelecimento abaixo consta
+sem cadastro no EDI:
+
+   Estabelecimento: 2898942388
+   CNPJ:            59.068.194/0001-00
+   Razao social:    MOUBOR OPTICA LTDA
+   Loja:            Diniz Super Shopping
+
+Gostariamos de contratar o Extrato Eletronico para ele, nos mesmos moldes dos
+demais estabelecimentos do grupo, com os arquivos CIELO03 (captura/previsao),
+CIELO04 (liquidacao) e CIELO16 (Pix).
+
+Ja estamos em processo de integracao via API para os outros estabelecimentos —
+o CSR foi enviado para assinatura e aguardamos as credenciais. A ideia e que
+este EC entre no mesmo fluxo.
+
+Poderiam nos informar:
+
+   1. O procedimento para a contratacao e o prazo de ativacao.
+
+   2. Se a contratacao pode ser feita por nos na area logada do site Cielo, e em
+      qual menu, ou se depende de acionamento por este canal.
+
+   3. Se este estabelecimento sera uma matriz EDI propria ou ficara vinculado a
+      alguma matriz existente do grupo. Precisamos do codigo da matriz para
+      montar as requisicoes da API.
+
+   4. A partir de quando os arquivos passam a ser gerados: apenas do movimento
+      posterior a ativacao, ou e possivel solicitar o historico?
+
+Ficamos no aguardo.
+
+Atenciosamente,
+
+Natan Borges
+[PREENCHER - telefone para contato]
