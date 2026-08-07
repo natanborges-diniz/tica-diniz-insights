@@ -216,12 +216,49 @@ async function pollBorderos(db: any, apiBase: string, isSandbox: boolean) {
           else paymentsByAmount.set(chaveValor, p);
         }
 
+        // Lote vazio no banco = o envio não chegou ao BTG.
+        //
+        // Caso real (07/08/2026, Material Bar Cappuccino R$ 401,30): o POST dos
+        // itens respondeu 2xx com corpo vazio, o lote fechou, e no banco o lote
+        // não tinha pagamento nenhum (`{"data":[]}`, e o GET do lote devolvia
+        // 500). O título ficava "Processando" para sempre. Passados 20 minutos
+        // sem nenhum item no lote, devolvemos os títulos para AUTORIZADO com o
+        // motivo certo — "não chegou ao banco" — em vez de esperar eternamente.
+        const minutosEnviado = (Date.now() - new Date(bordero.updated_at ?? bordero.created_at).getTime()) / 60000;
+        if (list.length === 0 && minutosEnviado > 20) {
+          for (const l of lancs) {
+            const ex = (l.dados_extras || {}) as Record<string, unknown>;
+            await db.from("lancamentos_financeiros").update({
+              status: "AUTORIZADO",
+              requer_validacao: true,
+              observacao: `Não chegou ao banco: lote ${String(bordero.btg_batch_id).slice(0, 8)} está vazio no BTG — reenviar.`,
+              dados_extras: {
+                ...ex,
+                btg_envio_rejeitado: true,
+                btg_motivo_envio: "O BTG não registrou nenhum pagamento neste lote — nada chegou ao banco. Reenvie o borderô.",
+                btg_envio_rejeitado_em: new Date().toISOString(),
+                btg_payment_status: null,
+                btg_batch_abandonado: String(bordero.btg_batch_id),
+                btg_batch_id: null,
+              },
+            }).eq("id", l.id);
+          }
+          await db.from("borderos").update({
+            status: "APROVADO",
+            btg_batch_id: null,
+            observacao: `Envio não chegou ao BTG (lote ${String(bordero.btg_batch_id).slice(0, 8)} vazio) — devolvido para reenvio.`,
+          }).eq("id", bordero.id);
+          resultado.erros.push(`bordero ${bordero.id}: lote vazio no BTG — títulos devolvidos para reenvio`);
+          continue;
+        }
+
         // Sem status agregado de lote: o borderô só é terminal-pago quando
         // todos os itens retornados são terminais-pagos.
         batchStatus = list.length > 0 && list.every((p) => normStatus(p.status) === "PAGO")
           ? "PAGO"
           : "PENDENTE";
       }
+
 
       let rejeitadosBordero = 0;
       let pendentesBordero = 0;
