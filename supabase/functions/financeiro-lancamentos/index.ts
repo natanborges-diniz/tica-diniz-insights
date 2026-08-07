@@ -2471,7 +2471,28 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     await new Promise((r) => setTimeout(r, 4000));
   }
 
-  if (!fecharRes.ok) {
+  // 409 "Status do lote inválido" DEPOIS dos itens registrados = o lote saiu
+  // do estado de montagem sozinho (o BTG auto-finaliza ao concluir o registro
+  // assíncrono) — não há o que fechar. Tratar como erro abandonava um lote BOM
+  // (caso real: Itapevi 07/08, 3 registrados e 409 no fechamento). Confirma no
+  // banco que os pagamentos estão no lote e segue o fluxo normal.
+  let fecharOk = fecharRes.ok;
+  if (!fecharOk && /invalid-payment-batch-status/i.test(fecharErrText)) {
+    const qs = new URLSearchParams({ pageSize: "200", pageNumber: "1", batchId: String(batchId) });
+    const r = await fetch(`${apiBase}/${cnpj}/banking/payments?${qs}`, {
+      headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: "application/json" },
+    }).catch(() => null);
+    if (r && r.ok) {
+      const b = await r.json().catch(() => ({}));
+      const lista = Array.isArray(b?.data) ? b.data : (Array.isArray(b) ? b : []);
+      if (lista.length >= aceitos) {
+        console.log(`[financeiro-lancamentos] Lote ${batchId} já estava finalizado no BTG (${lista.length} pagamentos) — seguindo sem fechar.`);
+        fecharOk = true;
+      }
+    }
+  }
+
+  if (!fecharOk) {
     // Os itens entraram no lote, mas o lote não fechou — e lote que não fecha
     // não chega à aprovação do app, ou seja NÃO vai ao banco e nunca vira baixa.
     //
