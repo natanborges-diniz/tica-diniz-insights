@@ -1263,6 +1263,13 @@ export default function FinanceiroHubPage() {
                     ((l.dados_extras || {}) as Record<string, unknown>).btg_motivo_recusa as string ?? null,
                   btg_status:
                     ((l.dados_extras || {}) as Record<string, unknown>).btg_payment_status as string ?? null,
+                  // "Não chegou ao banco" é outra história que "o banco não
+                  // processou": aqui o BTG recusou a inclusão no envio.
+                  envio_rejeitado: Boolean(
+                    ((l.dados_extras || {}) as Record<string, unknown>).btg_envio_rejeitado,
+                  ),
+                  motivo_envio:
+                    ((l.dados_extras || {}) as Record<string, unknown>).btg_motivo_envio as string ?? null,
                   // O valor entra para o resumo dizer quanto o banco devolveu —
                   // contagem sozinha não serve para cobrar ninguém.
                   valor: Number(l.valor ?? 0),
@@ -1437,8 +1444,12 @@ export default function FinanceiroHubPage() {
                   const extras = (l.dados_extras || {}) as Record<string, unknown>;
                   const motivoBanco = (extras.btg_motivo_recusa as string) || null;
                   const statusBanco = (extras.btg_payment_status as string) || null;
+                  // Recusa no envio: o banco nem recebeu o pagamento.
+                  const naoChegou = Boolean(extras.btg_envio_rejeitado);
+                  const motivoEnvio = (extras.btg_motivo_envio as string) || null;
                   const comProblema =
                     Boolean((l as unknown as { requer_validacao?: boolean }).requer_validacao) ||
+                    naoChegou ||
                     falhouNoBanco(statusBanco);
                   return (
                     <TableRow
@@ -1450,8 +1461,10 @@ export default function FinanceiroHubPage() {
                         {l.descricao.toUpperCase()}
                         {comProblema && (
                           <span className="block text-xs font-normal text-destructive">
-                            {motivoBanco
-                              || `O banco não processou o pagamento (${String(statusBanco || "").toUpperCase()})`}
+                            {naoChegou
+                              ? `O banco não recebeu este pagamento — recusa na validação do envio${motivoEnvio ? `: ${motivoEnvio}` : ""}. Nada foi autorizado nem debitado.`
+                              : motivoBanco
+                                || `O pagamento chegou ao banco e não foi processado (${String(statusBanco || "").toUpperCase()})`}
                           </span>
                         )}
                       </TableCell>
@@ -1468,7 +1481,7 @@ export default function FinanceiroHubPage() {
                       <TableCell>
                         <Badge variant={comProblema ? "destructive" : (STATUS_CONFIG[l.status]?.variant || "outline")}>
                           {comProblema
-                            ? "Não pago pelo banco"
+                            ? (naoChegou ? "Não chegou ao banco" : "Não pago pelo banco")
                             : (STATUS_CONFIG[l.status]?.label || l.status)}
                         </Badge>
                       </TableCell>
