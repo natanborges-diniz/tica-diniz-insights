@@ -223,10 +223,20 @@ export function validarJustificativa(j: unknown): boolean {
   return typeof j === "string" && j.trim().length >= 20;
 }
 
-// Separação de funções — vale para admin também
-export function criadorAprovadorDistintos(criadoPor: string | null | undefined, aprovador: string): { ok: boolean; motivo?: string } {
+// Separação de funções. Admin pode aprovar o que criou (decisão 07/08: em
+// operação pequena o admin é quem monta e quem libera; travar isso paralisava
+// pagamento). Quando o bypass é usado, quem chama registra na trilha.
+export function criadorAprovadorDistintos(
+  criadoPor: string | null | undefined,
+  aprovador: string,
+  permitirAutoAprovacao = false,
+): { ok: boolean; motivo?: string; autoAprovacao?: boolean } {
   if (criadoPor && criadoPor === aprovador) {
+    if (permitirAutoAprovacao) {
+      return { ok: true, autoAprovacao: true, motivo: "Auto-aprovação de admin registrada na trilha" };
+    }
     return { ok: false, motivo: "Quem criou não pode aprovar (separação de funções)" };
   }
   return { ok: true };
 }
+
