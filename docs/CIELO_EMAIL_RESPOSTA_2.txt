@@ -1,0 +1,67 @@
+PARA:     extrato@cielo.com.br
+CC:       edi@cielo.com.br
+ASSUNTO:  Re: Habilitacao da API de Extrato Eletronico - matrizes EDI e cadastro
+
+
+Bom dia,
+
+Obrigado pelo retorno e pelas orientacoes sobre a integracao via API. Vamos
+iniciar o processo pelo site Cielo, em Servicos > Extrato Eletronico > Visao
+Geral.
+
+Sobre a situacao cadastral que voces informaram, ficaram tres pontos em aberto.
+
+
+1) MATRIZES EDI DAS FILIAIS
+
+Cinco dos estabelecimentos que informamos sao filiais de uma matriz EDI da
+mesma raiz de CNPJ. Como a requisicao da API exige o codigo do EC, precisamos
+saber qual e a matriz EDI correspondente a cada um:
+
+   2838722713  (CNPJ 12.107.885/0001-01)  - matriz EDI: ?
+   2837060040  (CNPJ 13.844.111/0001-26)  - matriz EDI: ?
+   2839970010  (CNPJ 19.938.491/0001-44)  - matriz EDI: ?
+   2838722330  (CNPJ 19.280.952/0002-15)  - matriz EDI: ?
+   2837031318  (CNPJ 35.385.887/0001-68)  - matriz EDI: ?
+
+Poderiam nos informar o codigo de cada matriz EDI e quais estabelecimentos
+submissores estao vinculados a ela? Assim conseguimos montar as requisicoes
+corretamente e conferir se alguma loja nossa ficou de fora.
+
+
+2) ESTABELECIMENTO SEM CADASTRO NO EDI
+
+O estabelecimento 2898942388 (CNPJ 59.068.194/0001-00 - Diniz Super Shopping)
+consta sem cadastro no EDI. Gostariamos de contratar o Extrato Eletronico para
+ele. Qual o procedimento e o prazo?
+
+
+3) VINCULO COM CONCILIADORAS
+
+Os estabelecimentos aparecem vinculados as conciliadoras BRCONSULTING, AUDTAX e
+EQUALS. Como passaremos a fazer a conciliacao internamente, gostariamos de
+entender:
+
+   a) O vinculo com essas conciliadoras impede ou limita o nosso proprio acesso
+      aos arquivos via API?
+
+   b) E possivel manter o envio para elas e simultaneamente consumir os
+      arquivos pela nossa integracao?
+
+   c) Caso desejemos encerrar algum desses vinculos, qual o procedimento?
+
+
+4) DUVIDA TECNICA SOBRE A ASSINATURA HMAC
+
+No passo a passo consta que toda requisicao deve ser assinada com a chave HMAC
+e o resultado informado no header X-Signature. Para evitarmos tentativa e erro:
+qual o algoritmo utilizado (SHA-256?) e em que formato o valor deve ser enviado
+(hexadecimal ou base64)?
+
+
+Ficamos no aguardo para dar sequencia.
+
+Atenciosamente,
+
+Natan Borges
+[PREENCHER - telefone para contato]

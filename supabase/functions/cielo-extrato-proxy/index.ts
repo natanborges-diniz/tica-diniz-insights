@@ -62,9 +62,22 @@ type ProcessType = "D" | "R" | "M";
 let clienteMtls: { client?: unknown; motivo?: string } | null = null;
 
 /**
- * A API de links autentica por token + HMAC. O certificado so entra se a Cielo
- * exigir TLS mutuo na conta — quando os secrets nao existem, a chamada segue
- * normal, sem cliente customizado.
+ * O runtime suporta apresentar certificado de cliente?
+ *
+ * Vale saber ANTES de ter o certificado em maos: a Cielo confirmou que o
+ * certificado assinado e obrigatorio no consumo da API, e o Edge Runtime do
+ * Supabase nao expoe Deno.createHttpClient de forma estavel. Se a resposta for
+ * nao, a chamada precisa sair do Supabase — e descobrir isso agora evita
+ * esperar o SLA de assinatura para so entao topar com a parede.
+ */
+export function runtimeSuportaMtls(): boolean {
+  return typeof (Deno as unknown as { createHttpClient?: unknown }).createHttpClient === "function";
+}
+
+/**
+ * A API de links autentica por token + HMAC, mais o certificado exigido pela
+ * Cielo. Quando os secrets nao existem, a chamada segue sem cliente
+ * customizado — util para testar o restante do fluxo antes do certificado sair.
  */
 function obterClienteMtls(): { client?: unknown; motivo?: string } {
   if (clienteMtls) return clienteMtls;
@@ -72,7 +85,11 @@ function obterClienteMtls(): { client?: unknown; motivo?: string } {
   const cert = Deno.env.get("CIELO_MTLS_CERT");
   const key = Deno.env.get("CIELO_MTLS_KEY");
   if (!cert || !key) {
-    clienteMtls = { motivo: "nao configurado (opcional)" };
+    clienteMtls = {
+      motivo: runtimeSuportaMtls()
+        ? "certificado ainda nao configurado (o runtime suporta)"
+        : "certificado nao configurado E o runtime nao suporta mTLS",
+    };
     return clienteMtls;
   }
 
@@ -436,8 +453,15 @@ serve(async (req) => {
           nota_hmac: "A chave tambem pode ser preenchida por loja em Admin > Adquirentes; quando presente, ela vence sobre o secret global.",
           hmac_algo: Deno.env.get("CIELO_HMAC_ALGO") || "SHA-256 (padrao)",
           hmac_encoding: Deno.env.get("CIELO_HMAC_ENCODING") || "hex (padrao)",
+          // A pergunta que decide a arquitetura: se for false, a chamada a Cielo
+          // precisa sair do Supabase (o firebird-bridge, em Node, faz mTLS
+          // nativo) — e isso da para saber sem ter o certificado ainda.
+          runtime_suporta_mtls: runtimeSuportaMtls(),
           mtls_em_uso: Boolean(mtls.client),
           mtls_motivo: mtls.motivo ?? null,
+          veredito: runtimeSuportaMtls()
+            ? "Supabase consegue apresentar o certificado. Segue tudo aqui."
+            : "Supabase NAO consegue apresentar o certificado. A chamada precisa ir para o firebird-bridge (Node/Railway).",
         };
         break;
       }
