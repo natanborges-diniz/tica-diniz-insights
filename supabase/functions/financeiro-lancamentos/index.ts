@@ -2287,6 +2287,16 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       await supabase.from("lancamentos_financeiros").update({
         requer_validacao: true,
         observacao: `Não enviado ao BTG: ${msg.slice(0, 250)}`,
+        // Marca a diferença que o operador precisa ver: o pagamento não chegou
+        // ao banco. Sem isto a tela dizia "o banco não processou", como se o
+        // lote existisse no BTG e faltasse autorização.
+        dados_extras: {
+          ...dados,
+          btg_envio_rejeitado: true,
+          btg_motivo_envio: `Bloqueado antes do envio: ${msg.slice(0, 250)}`,
+          btg_envio_rejeitado_em: new Date().toISOString(),
+          btg_payment_status: null,
+        },
       }).eq("id", lanc.id);
       falhas++;
       continue;
