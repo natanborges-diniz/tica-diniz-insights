@@ -2227,6 +2227,12 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   let aceitos = 0;
   let falhas = 0;
   const motivos: string[] = [];
+  // Guarda o necessário para reenviar cada item como iniciação INDIVIDUAL se o
+  // lote falhar sem registrar nada (plano B — ver bloco do fechamento).
+  const itensAceitos: {
+    lancId: string; dados: Record<string, unknown>; tipo: string;
+    valorEnviado: number; paymentDate: string;
+  }[] = [];
 
   for (const lanc of (lancamentos || [])) {
     const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
@@ -2356,6 +2362,13 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
         },
       }).eq("id", lanc.id);
       aceitos++;
+      itensAceitos.push({
+        lancId: String(lanc.id),
+        dados: dadosItem as Record<string, unknown>,
+        tipo: paymentType,
+        valorEnviado,
+        paymentDate,
+      });
     } else {
       const errText = await payRes.text();
       console.error(`[financeiro-lancamentos] Pagamento rejeitado no lote (lanc ${lanc.id}):`, payRes.status, errText);
@@ -2512,6 +2525,108 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     }).catch((e) => console.warn("[financeiro-lancamentos] Falha ao abandonar lote não fechado:", e));
 
+    // ── PLANO B: iniciações INDIVIDUAIS ────────────────────────────────────
+    // Caso real (Itapevi 07/08): o lote aceita os itens no POST mas o registro
+    // assíncrono os descarta em silêncio — 0/N registrados, fechamento 422/409,
+    // nada no app. Como NADA existe no banco (registrados=0, lote abandonado),
+    // é seguro reenviar cada pagamento como avulso (agreementId
+    // INDIVIDUAL_APPROVE): aparece no app para o master aprovar do mesmo jeito
+    // e, melhor, a validação responde o ERRO REAL por pagamento.
+    if (registrados === 0 && itensAceitos.length > 0) {
+      console.warn(`[financeiro-lancamentos] Lote ${batchId} nunca registrou itens — plano B: envio individual de ${itensAceitos.length} pagamento(s).`);
+      let indOk = 0;
+      const indFalhas: string[] = [];
+      for (const it of itensAceitos) {
+        try {
+          const itemInd = montarItem({
+            tipo: it.tipo,
+            valor: it.valorEnviado,
+            dados: it.dados,
+            debitParty,
+            paymentDate: it.paymentDate,
+            batchId: null,
+            externalId: it.lancId,
+            descricao: bordero.descricao,
+            descricaoInterna: `bordero ${String(bordero.id).slice(0, 8)} individual`,
+          });
+          // Chave por (borderô, lançamento, valor, data): reenvio idêntico não
+          // duplica; dado corrigido gera chave nova.
+          const keyInd = await chaveIdempotencia("ind", String(bordero_id), it.lancId, String(it.valorEnviado), it.paymentDate);
+          console.log(`[financeiro-lancamentos] BTG request POST individual (lanc ${it.lancId}):`, JSON.stringify(montarCorpo(itemInd)));
+          const rInd = await fetch(`${apiBase}/${cnpj}/banking/payments`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${tokenData.access_token}`,
+              "Content-Type": "application/json",
+              "x-idempotency-key": keyInd,
+            },
+            body: JSON.stringify(montarCorpo(itemInd)),
+          });
+          if (rInd.ok) {
+            const rData = await rInd.json().catch(() => ({} as Record<string, unknown>));
+            const { data: lancAtual } = await supabase.from("lancamentos_financeiros").select("dados_extras").eq("id", it.lancId).single();
+            await supabase.from("lancamentos_financeiros").update({
+              status: "PROCESSANDO",
+              dados_extras: {
+                ...((lancAtual?.dados_extras ?? {}) as Record<string, unknown>),
+                btg_envio_individual: true,
+                btg_batch_id: null,
+                btg_batch_abandonado: String(batchId),
+                btg_external_id: it.lancId,
+                btg_idempotency_key: keyInd,
+                btg_payment_date: it.paymentDate,
+                btg_payment_response: rData,
+              },
+            }).eq("id", it.lancId);
+            indOk++;
+          } else {
+            const t = await rInd.text();
+            let det = t.slice(0, 250);
+            try { det = descreverErroBtg(JSON.parse(t)).slice(0, 250); } catch { /* não-JSON */ }
+            indFalhas.push(`lanc ${it.lancId.slice(0, 8)}: ${rInd.status}: ${det}`);
+            await supabase.from("lancamentos_financeiros").update({
+              status: "AUTORIZADO",
+              requer_validacao: true,
+              observacao: `O banco recusou o pagamento avulso (${rInd.status}): ${det.slice(0, 200)}`,
+            }).eq("id", it.lancId).eq("status", "PROCESSANDO");
+          }
+        } catch (e) {
+          indFalhas.push(`lanc ${it.lancId.slice(0, 8)}: ${String(e).slice(0, 200)}`);
+        }
+      }
+
+      if (indOk > 0) {
+        // Sobrou alguém em PROCESSANDO sem envio individual bem-sucedido? Volta.
+        await supabase.from("lancamentos_financeiros").update({
+          status: "AUTORIZADO",
+          observacao: "Não incluído no envio individual — reenviar.",
+        }).eq("bordero_id", bordero_id).eq("status", "PROCESSANDO")
+          .not("dados_extras->>btg_envio_individual", "eq", "true");
+
+        await supabase.from("borderos").update({
+          status: "ENVIADO",
+          btg_batch_id: null,
+        }).eq("id", bordero_id);
+
+        return json({
+          ok: indFalhas.length === 0,
+          code: indFalhas.length === 0 ? "BTG_SENT_INDIVIDUAL" : "BTG_SENT_INDIVIDUAL_PARTIAL",
+          status: "ENVIADO",
+          modo: "INDIVIDUAL",
+          error: indFalhas.length === 0
+            ? undefined
+            : `${indOk} pagamento(s) enviados como avulsos; ${indFalhas.length} recusado(s): ${indFalhas.join(" | ")}`,
+          mensagem: `O lote do BTG falhou em registrar os pagamentos, então o sistema os enviou como INDIVIDUAIS (${indOk} de ${itensAceitos.length}). ` +
+            `Eles aparecem no app do BTG para o master aprovar um a um (ou em lote pelo próprio app).`,
+          enviados_individual: indOk,
+          falhas_individual: indFalhas,
+        });
+      }
+      // Nenhum individual passou: os motivos REAIS estão em indFalhas — inclui
+      // na mensagem final para o operador corrigir o dado certo.
+      if (indFalhas.length > 0) motivos.push(...indFalhas);
+    }
+
     const { data: revertidos } = await supabase
       .from("lancamentos_financeiros")
       .update({
@@ -2529,7 +2644,8 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
         `Os ${aceitos} pagamento(s) foram aceitos, mas o BTG recusou o fechamento do lote ` +
         `(${fecharRes.status}). Nada foi executado nem debitado, e o lote foi abandonado. ` +
         `Os ${(revertidos || []).length} título(s) voltaram para autorizados — reenvie o borderô. ` +
-        `Detalhe do banco: ${descreverErroBtg(errText).slice(0, 300)}`,
+        `Detalhe do banco: ${descreverErroBtg(errText).slice(0, 300)}` +
+        (motivos.length > 0 ? ` | Recusas individuais (motivo real por pagamento): ${motivos.join(" | ").slice(0, 600)}` : ""),
       status: "APROVADO",
       btg_batch_id: batchId,
       aceitos,
