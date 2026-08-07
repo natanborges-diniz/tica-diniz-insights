@@ -116,10 +116,18 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
     const dadosExtras: Record<string, unknown> = {};
     if (tipo === "PAGAR" && payType !== "NAO_DEFINIDO") {
       dadosExtras.btg_payment_type = payType;
-      if (payType === "PIX_KEY" && pixKey) {
-        dadosExtras.pix_key = pixKey;
-        dadosExtras.btg_details = { pixKey };
+      if ((payType === "PIX_KEY" || payType === "PIX_QR_CODE") && pixKey) {
+        // Copia e cola é PIX_QR_CODE (campo emv) no BTG; como chave o banco
+        // recusa com `pix-key-type-not-supported`. Quem decide é o conteúdo.
+        const ehEmv = ehPixCopiaECola(pixKey);
+        dadosExtras.btg_payment_type = ehEmv ? "PIX_QR_CODE" : "PIX_KEY";
+        if (ehEmv) dadosExtras.btg_details = { emv: pixKey.trim() };
+        else {
+          dadosExtras.pix_key = pixKey.trim();
+          dadosExtras.btg_details = { pixKey: pixKey.trim() };
+        }
       } else if ((payType === "BANKSLIP" || payType === "DARF") && barcode) {
+
         dadosExtras.linha_digitavel = barcode;
         dadosExtras.btg_details = { barcode };
         if (payType === "BANKSLIP") {
