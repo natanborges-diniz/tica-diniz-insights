@@ -14,16 +14,18 @@ import {
   diagnosticarBoleto,
 } from "../../../supabase/functions/_shared/boleto";
 
-import { tipoPorLinhaDigitavel } from "../../../supabase/functions/_shared/btgPayment";
+import { tipoPorLinhaDigitavel, ehPixCopiaECola } from "../../../supabase/functions/_shared/btgPayment";
 
 /** Mesmas opções (e mesmos rótulos) do "Preparar Pagamento". */
 const PAYMENT_TYPES = [
   { value: "PIX_KEY", label: "PIX (Chave)", hint: "Chave do beneficiário: CPF, CNPJ, e-mail, telefone ou aleatória" },
+  { value: "PIX_QR_CODE", label: "PIX (Copia e cola)", hint: "Código do QR Code gerado pelo beneficiário — no BTG é outro tipo de pagamento, não chave" },
   { value: "BANKSLIP", label: "Boleto ou conta", hint: "Boleto de fornecedor ou conta de concessionária — informe a linha digitável" },
   { value: "PIX_MANUAL", label: "PIX (Dados bancários)", hint: "Pix por banco, agência e conta — não exige chave cadastrada" },
   { value: "TED", label: "TED", hint: "Transferência por banco, agência e conta — sujeita a tarifa e horário" },
   { value: "DARF", label: "DARF (Tributo)", hint: "Código de barras do DARF ou guia de tributo" },
 ];
+
 
 interface PlanoContaRow {
   id: string;
@@ -114,10 +116,18 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
     const dadosExtras: Record<string, unknown> = {};
     if (tipo === "PAGAR" && payType !== "NAO_DEFINIDO") {
       dadosExtras.btg_payment_type = payType;
-      if (payType === "PIX_KEY" && pixKey) {
-        dadosExtras.pix_key = pixKey;
-        dadosExtras.btg_details = { pixKey };
+      if ((payType === "PIX_KEY" || payType === "PIX_QR_CODE") && pixKey) {
+        // Copia e cola é PIX_QR_CODE (campo emv) no BTG; como chave o banco
+        // recusa com `pix-key-type-not-supported`. Quem decide é o conteúdo.
+        const ehEmv = ehPixCopiaECola(pixKey);
+        dadosExtras.btg_payment_type = ehEmv ? "PIX_QR_CODE" : "PIX_KEY";
+        if (ehEmv) dadosExtras.btg_details = { emv: pixKey.trim() };
+        else {
+          dadosExtras.pix_key = pixKey.trim();
+          dadosExtras.btg_details = { pixKey: pixKey.trim() };
+        }
       } else if ((payType === "BANKSLIP" || payType === "DARF") && barcode) {
+
         dadosExtras.linha_digitavel = barcode;
         dadosExtras.btg_details = { barcode };
         if (payType === "BANKSLIP") {
@@ -367,12 +377,32 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
               {payTypeHint && <p className="text-xs text-muted-foreground">{payTypeHint}</p>}
             </div>
 
-            {payType === "PIX_KEY" && (
+            {(payType === "PIX_KEY" || payType === "PIX_QR_CODE") && (
               <div className="space-y-1">
-                <Label className="text-xs">Chave PIX</Label>
-                <Input value={pixKey} onChange={e => setPixKey(e.target.value)} placeholder="CPF, CNPJ, e-mail, telefone ou aleatória" />
+                <Label className="text-xs">
+                  {payType === "PIX_QR_CODE" ? "Pix copia e cola" : "Chave PIX"}
+                </Label>
+                <Input
+                  value={pixKey}
+                  onChange={e => setPixKey(e.target.value)}
+                  className={payType === "PIX_QR_CODE" ? "font-mono text-xs" : undefined}
+                  placeholder={payType === "PIX_QR_CODE"
+                    ? "Cole o código do QR Code (começa em 000201...)"
+                    : "CPF, CNPJ, e-mail, telefone ou aleatória"}
+                />
+                {payType === "PIX_KEY" && ehPixCopiaECola(pixKey) && (
+                  <p className="text-xs text-amber-700">
+                    Isto é um Pix copia e cola — será enviado ao banco como "PIX (Copia e cola)".
+                  </p>
+                )}
+                {payType === "PIX_QR_CODE" && pixKey.trim() && !ehPixCopiaECola(pixKey) && (
+                  <p className="text-xs text-destructive">
+                    Não parece um Pix copia e cola — use "PIX (Chave)" para chave comum.
+                  </p>
+                )}
               </div>
             )}
+
 
             {(payType === "BANKSLIP" || payType === "DARF") && (
               <div className="space-y-1">

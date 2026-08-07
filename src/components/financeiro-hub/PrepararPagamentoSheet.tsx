@@ -13,7 +13,7 @@ import {
   formatarLinhaDigitavel,
   diagnosticarBoleto,
 } from "../../../supabase/functions/_shared/boleto";
-import { tipoPorLinhaDigitavel } from "../../../supabase/functions/_shared/btgPayment";
+import { tipoPorLinhaDigitavel, ehPixCopiaECola } from "../../../supabase/functions/_shared/btgPayment";
 
 interface Lancamento {
   id: string;
@@ -28,6 +28,10 @@ interface Lancamento {
 
 const PAYMENT_TYPES = [
   { value: "PIX_KEY", label: "PIX (Chave)", icon: CreditCard, hint: "Informe a chave PIX do beneficiário (CPF, CNPJ, e-mail, telefone ou aleatória)" },
+  // Copia e cola é outro tipo no BTG (PIX_QR_CODE, campo `emv`). Colado no campo
+  // de chave, o banco recusa com `pix-key-type-not-supported` e o lote inteiro
+  // não chega — caso real da premiação Nobelpack (07/08/2026).
+  { value: "PIX_QR_CODE", label: "PIX (Copia e cola)", icon: CreditCard, hint: "Cole o código do QR Code (Pix copia e cola) gerado pelo beneficiário" },
   { value: "BANKSLIP", label: "Boleto ou conta", icon: FileText, hint: "Boleto de fornecedor ou conta de concessionária (água, luz, gás, telefone) — informe a linha digitável ou o código de barras" },
   // PIX_MANUAL: mesmos dados de uma TED, mas liquida pelo Pix — sem custo, sem
   // janela de horário e cai na hora. Enquanto a conta salário do BTG não estiver
@@ -36,6 +40,7 @@ const PAYMENT_TYPES = [
   { value: "TED", label: "TED", icon: Building2, hint: "Transferência tradicional por banco, agência e conta — sujeita a tarifa e a horário" },
   { value: "DARF", label: "DARF (Tributo)", icon: Banknote, hint: "Informe o código de barras do DARF ou guia de tributo" },
 ];
+
 
 interface Props {
   lancamento: Lancamento | null;
@@ -65,7 +70,7 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
     // Guardamos só dígitos: a máscara é de exibição, o banco recebe a linha limpa.
     setBarcode(somenteDigitos(d.linha_digitavel));
     const details = (d.btg_details || {}) as Record<string, unknown>;
-    setPixKey(String(details.pixKey || ""));
+    setPixKey(String(details.pixKey || details.emv || ""));
     setBanco(String(details.bankCode || ""));
     setAgencia(String(details.branch || ""));
     setConta(String(details.account || ""));
@@ -87,8 +92,15 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
   // recusada quando o borderô ia ao banco.
   const diagBoleto = diagnosticarBoleto(barcode);
 
+  // Quem decide entre chave e copia e cola é o próprio conteúdo colado, não o
+  // seletor: o payload EMV é inconfundível e o operador não tem de saber a
+  // diferença de nomenclatura do banco.
+  const pixEhCopiaECola = ehPixCopiaECola(pixKey);
+  const tipoPixEfetivo = pixEhCopiaECola ? "PIX_QR_CODE" : "PIX_KEY";
+
   const isValid = () => {
-    if (payType === "PIX_KEY") return pixKey.length > 3;
+    if (payType === "PIX_KEY") return pixKey.trim().length > 3;
+    if (payType === "PIX_QR_CODE") return pixEhCopiaECola;
     if (payType === "BANKSLIP" || payType === "DARF") return diagBoleto.status === "ok";
     // PIX_MANUAL e TED exigem o mesmo creditParty completo.
     if (payType === "TED" || payType === "PIX_MANUAL") {
@@ -104,8 +116,11 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
       ...(lancamento.dados_extras || {}),
       btg_payment_type: payType,
     };
-    if (payType === "PIX_KEY") {
-      dadosExtras.btg_details = { pixKey };
+    if (payType === "PIX_KEY" || payType === "PIX_QR_CODE") {
+      dadosExtras.btg_payment_type = tipoPixEfetivo;
+      dadosExtras.btg_details = pixEhCopiaECola
+        ? { emv: pixKey.trim() }
+        : { pixKey: pixKey.trim() };
     } else if (payType === "BANKSLIP") {
       dadosExtras.linha_digitavel = barcode;
       // Arrecadação (linha iniciada em 8) exige o tipo UTILITIES no BTG. Quem
@@ -120,6 +135,7 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
     } else if (payType === "DARF") {
       dadosExtras.btg_details = { barcode };
     }
+
     onSave(lancamento.id, dadosExtras);
   };
 
@@ -246,16 +262,33 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
 
             {/* Type-specific fields */}
             <div className="space-y-3">
-              {payType === "PIX_KEY" && (
+              {(payType === "PIX_KEY" || payType === "PIX_QR_CODE") && (
                 <div className="space-y-1">
-                  <Label>Chave PIX do beneficiário</Label>
+                  <Label>
+                    {payType === "PIX_QR_CODE" ? "Pix copia e cola do beneficiário" : "Chave PIX do beneficiário"}
+                  </Label>
                   <Input
                     value={pixKey}
                     onChange={e => setPixKey(e.target.value)}
-                    placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
+                    className={payType === "PIX_QR_CODE" ? "font-mono text-xs" : undefined}
+                    placeholder={payType === "PIX_QR_CODE"
+                      ? "Cole aqui o código do QR Code (começa em 000201...)"
+                      : "CPF, CNPJ, e-mail, telefone ou chave aleatória"}
                   />
+                  {payType === "PIX_KEY" && pixEhCopiaECola && (
+                    <p className="text-xs text-amber-700">
+                      Isto é um Pix copia e cola, não uma chave — será enviado ao banco como
+                      "PIX (Copia e cola)".
+                    </p>
+                  )}
+                  {payType === "PIX_QR_CODE" && pixKey.trim() && !pixEhCopiaECola && (
+                    <p className="text-xs text-destructive">
+                      Não parece um Pix copia e cola — use "PIX (Chave)" para chave comum.
+                    </p>
+                  )}
                 </div>
               )}
+
 
               {(payType === "BANKSLIP" || payType === "DARF") && (
                 <div className="space-y-1">

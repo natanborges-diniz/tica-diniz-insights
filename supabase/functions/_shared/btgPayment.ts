@@ -137,9 +137,30 @@ function cpfValido(d: string): boolean {
  * Desambiguamos pelos dígitos verificadores: 11 dígitos que não formam CPF
  * válido e casam com celular BR (DDD 11-99 + nono dígito 9) vão como telefone.
  */
+/**
+ * Reconhece um Pix "copia e cola" (payload EMV / BR Code).
+ *
+ * Caso real (07/08/2026, premiação Nobelpack): o operador colou o copia e cola
+ * no campo "Chave PIX". Foi como PIX_KEY e o BTG devolveu
+ * `pix-key-type-not-supported` — o lote inteiro não chegou ao banco. O EMV é
+ * inconfundível: começa em "000201" (payload format indicator) e traz o campo
+ * "br.gov.bcb.pix".
+ */
+export function ehPixCopiaECola(raw: unknown): boolean {
+  const v = String(raw ?? "").trim();
+  if (v.length < 30) return false;
+  return v.startsWith("000201") || /br\.gov\.bcb\.pix/i.test(v);
+}
+
 export function normalizarChavePix(raw: unknown): string {
   const v = String(raw ?? "").trim();
   if (v === "") throw new Error("Chave pix vazia");
+  if (ehPixCopiaECola(v)) {
+    throw new Error(
+      "O valor informado é um Pix copia e cola (QR Code), não uma chave — " +
+      "use o tipo PIX_QR_CODE",
+    );
+  }
   if (v.includes("@")) return v; // e-mail
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(v)) return v; // EVP (uuid)
   const d = somenteDigitos(v);
@@ -156,6 +177,7 @@ export function normalizarChavePix(raw: unknown): string {
   if (d.length === 10 || d.length === 13) return `+${d.length === 13 ? d : `55${d}`}`;
   return v;
 }
+
 
 
 /**
@@ -237,13 +259,16 @@ export function montarDetail(tipo: string, dados: Record<string, unknown>): Reco
     }
 
     case "PIX_QR_CODE": {
-      const emv = primeiro(dados, "emv", "qr_code", "copia_e_cola");
+      // Aceita também os campos de chave: quando o operador cola o copia e cola
+      // no campo "Chave PIX", o dado chega como pixKey/chave_pix.
+      const emv = primeiro(dados, "emv", "qr_code", "copia_e_cola", "chave_pix", "pixKey", "key");
       if (!emv) throw new Error("Emv (copia e cola) é obrigatório para PIX_QR_CODE");
-      const detail: Record<string, unknown> = { emv };
+      const detail: Record<string, unknown> = { emv: String(emv).trim() };
       const cp = creditPartyPix(dados);
       if (cp) detail.creditParty = cp;
       return detail;
     }
+
 
     case "TED":
     case "PIX_MANUAL":
@@ -348,6 +373,18 @@ export function montarItem(args: MontarItemArgs): Record<string, unknown> {
     const correto = tipoPorLinhaDigitavel(linha);
     if (correto && correto !== tipo) tipo = correto;
   }
+
+  // Copia e cola colado no campo de chave: o BTG recusa como chave
+  // (`pix-key-type-not-supported`) e o lote inteiro não chega ao banco. Não há
+  // decisão a tomar — o payload EMV é inconfundível, então corrigimos o tipo.
+  if (tipo === "PIX_KEY" && ehPixCopiaECola(primeiro(dados, "chave_pix", "pixKey", "key"))) {
+    tipo = "PIX_QR_CODE";
+  }
+  if (tipo === "PIX_QR_CODE") {
+    const alvo = primeiro(dados, "emv", "qr_code", "copia_e_cola", "chave_pix", "pixKey", "key");
+    if (alvo && !ehPixCopiaECola(alvo)) tipo = "PIX_KEY";
+  }
+
 
   if (!TIPOS_BTG.includes(tipo as BtgPaymentType)) {
     throw new Error(`Tipo de pagamento "${tipo}" não suportado — válidos: ${TIPOS_BTG.join(", ")}`);
