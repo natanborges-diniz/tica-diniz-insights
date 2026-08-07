@@ -872,8 +872,8 @@ export default function FinanceiroHubPage() {
       setActiveTab("contas-pagar");
       // Apply status filter based on step
       if (stepNumber === 1) setFiltroStatus("todos");
-      else if (stepNumber === 2) setFiltroStatus("PREVISTO"); // show unclassified
-      else if (stepNumber === 3) setFiltroStatus("PREVISTO"); // show classified without payment
+      else if (stepNumber === 2) setFiltroStatus("EM_PREPARO"); // show unclassified
+      else if (stepNumber === 3) setFiltroStatus("EM_PREPARO"); // show classified without payment
     } else {
       setActiveTab("borderos");
     }
@@ -1775,7 +1775,7 @@ export default function FinanceiroHubPage() {
           }}>Mês atual</Button>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
             const ontem = agoraSP(); ontem.setDate(ontem.getDate() - 1);
-            setFiltroCampoData("VENCIMENTO"); setFiltroDataInicio(""); setFiltroDataFim(format(ontem, "yyyy-MM-dd")); setFiltroStatus("PREVISTO");
+            setFiltroCampoData("VENCIMENTO"); setFiltroDataInicio(""); setFiltroDataFim(format(ontem, "yyyy-MM-dd")); setFiltroStatus("EM_PREPARO");
           }}>Vencidos</Button>
         </div>
 
