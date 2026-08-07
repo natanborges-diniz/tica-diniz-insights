@@ -79,6 +79,13 @@ export interface ComposicaoBordero {
    * sistema ainda mostrava o título como em trânsito.
    */
   nao_processados?: number;
+  /**
+   * Itens que o banco nem recebeu: recusa na validação do envio.
+   *
+   * Fatia distinta dos rejeitados. Sem ela a tela dizia "o banco não processou",
+   * e o operador entendia que o lote existia no BTG e faltava autorização.
+   */
+  nao_enviados?: number;
   /** Soma dos títulos que o banco não pagou — o valor que o credor não recebeu. */
   valor_rejeitado?: number;
   /** Menor data prevista entre os itens ainda pendentes (yyyy-MM-dd). */
@@ -96,7 +103,7 @@ export interface ComposicaoBordero {
 
 export type ChaveEstado =
   | "MONTAGEM" | "APROVADO" | "CANCELADO"
-  | "PROCESSADO" | "PARCIAL" | "REJEITADO"
+  | "PROCESSADO" | "PARCIAL" | "REJEITADO" | "NAO_ENVIADO"
   | "AGENDADO" | "PROCESSANDO" | "ENVIADO";
 
 export interface EstadoBordero {
