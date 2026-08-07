@@ -1758,12 +1758,13 @@ async function diagnosticoBordero(body: Record<string, unknown>, userId: string)
 
   const travados = itens.filter((i) => i.trava);
   const admin = await isAdminUser(userId);
-  const distinto = criadorAprovadorDistintos(bordero.criado_por, userId);
+  const distinto = criadorAprovadorDistintos(bordero.criado_por, userId, admin);
 
   let impedimento: string | null = null;
   if (!admin) impedimento = "Só um administrador pode liberar um borderô com itens sinalizados.";
   else if (!distinto.ok) impedimento = `${distinto.motivo} — peça a outro administrador.`;
   else if (bordero.status !== "MONTAGEM") impedimento = `O borderô está em ${bordero.status}.`;
+
 
   return json({
     ok: true,
@@ -1871,9 +1872,10 @@ async function aprovarBordero(body: Record<string, unknown>, userId: string) {
   if (bordero.status !== "MONTAGEM") throw new Error(`Borderô com status ${bordero.status} não pode ser aprovado`);
   if (bordero.qtd_lancamentos === 0) throw new Error("Borderô vazio — adicione lançamentos antes de aprovar");
 
-  // G2 — separação de funções: quem montou o borderô não o aprova
-  const distinto = criadorAprovadorDistintos(bordero.criado_por, userId);
+  // G2 — separação de funções: quem montou não aprova, exceto admin (registrado)
+  const distinto = criadorAprovadorDistintos(bordero.criado_por, userId, true);
   if (!distinto.ok) throw new Error(distinto.motivo!);
+
 
   for (const lib of liberacoes) {
     await aplicarLiberacao(
@@ -1885,14 +1887,20 @@ async function aprovarBordero(body: Record<string, unknown>, userId: string) {
     );
   }
 
+  const trilhaAuto = distinto.autoAprovacao
+    ? `${bordero.observacao ? bordero.observacao + " | " : ""}Auto-aprovação: criado e aprovado pelo mesmo admin em ${new Date().toISOString()}`
+    : bordero.observacao;
+
   const { error: bErr } = await supabase
     .from("borderos")
     .update({
       status: "APROVADO",
       aprovado_por: userId,
       aprovado_em: new Date().toISOString(),
+      observacao: trilhaAuto,
     })
     .eq("id", bordero_id);
+
 
   if (bErr) throw new Error(bErr.message);
 
@@ -3586,8 +3594,10 @@ async function aprovarExcecao(body: Record<string, unknown>, userId: string) {
     throw new Error(`Status ${lanc.status} não permite aprovação de exceção`);
   }
 
-  const distinto = criadorAprovadorDistintos(lanc.criado_por, userId);
+  // Admin pode aprovar a exceção que ele mesmo criou (registrado em dados_extras)
+  const distinto = criadorAprovadorDistintos(lanc.criado_por, userId, true);
   if (!distinto.ok) throw new Error(distinto.motivo!);
+
 
   const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
   // Aprovada → volta ao Hub como CLASSIFICADO com a flag de aprovação, e segue

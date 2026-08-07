@@ -121,6 +121,13 @@ describe('separação de funções', () => {
     expect(criadorAprovadorDistintos(null, 'user-b').ok).toBe(true); // legado sem criado_por
   });
 
+  it('admin pode auto-aprovar, com marca de auditoria', () => {
+    const r = criadorAprovadorDistintos('user-a', 'user-a', true);
+    expect(r.ok).toBe(true);
+    expect(r.autoAprovacao).toBe(true);
+  });
+
+
   it('justificativa mínima de 20 caracteres', () => {
     expect(validarJustificativa('curta')).toBe(false);
     expect(validarJustificativa('  compra emergencial de material de reparo  ')).toBe(true);
