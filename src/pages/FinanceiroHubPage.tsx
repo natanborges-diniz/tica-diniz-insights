@@ -1917,7 +1917,14 @@ export default function FinanceiroHubPage() {
                       ) : borderosFiltrados.length === 0 ? (
                         <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           {busca
-                            ? `Nenhum borderô encontrado para "${busca}".`
+                            ? <>
+                                Nenhum borderô encontrado para "{busca}" — a pesquisa continua ativa e pode estar
+                                escondendo o borderô recém-criado.
+                                {" "}
+                                <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setBusca("")}>
+                                  Limpar pesquisa
+                                </Button>
+                              </>
                             : 'Nenhum borderô. Selecione lançamentos na aba "Contas a Pagar" e clique em "Criar Borderô".'}
                         </TableCell></TableRow>
                       ) : borderosFiltrados.map(b => {
