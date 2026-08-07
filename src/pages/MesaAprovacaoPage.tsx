@@ -151,6 +151,13 @@ export default function MesaAprovacaoPage() {
     .filter(noFoco)
     .filter((l) => l.selo === "VERMELHO" && !l.pode_bordero && l.status !== "AUTORIZADO");
   const borderosVisiveis = (mesa?.borderos ?? []).filter((b) => !borderoFoco || b.id === borderoFoco);
+  // Borderôs que dependem de decisão do admin (pendência de lastro/faixa) — vêm primeiro.
+  const pendenciaDe = (b: BorderoMesa) =>
+    (b.selos.SEM_LASTRO ?? 0) + (b.selos.VERMELHO ?? 0) + (b.selos.AMARELO ?? 0);
+  const borderosComDecisao = borderosVisiveis.filter(
+    (b) => b.status === "MONTAGEM" && pendenciaDe(b) > 0 && b.qtd_lancamentos > 0,
+  );
+  const borderosOrdenados = [...borderosVisiveis].sort((a, b) => pendenciaDe(b) - pendenciaDe(a));
   const borderoFocoNome = borderoFoco
     ? (mesa?.borderos ?? []).find((b) => b.id === borderoFoco)?.descricao || `BORDERÔ ${borderoFoco.slice(0, 8).toUpperCase()}`
     : null;
@@ -190,84 +197,63 @@ export default function MesaAprovacaoPage() {
       )}
 
 
-      {/* Filtros */}
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Empresa</label>
-          <Select value={String(codEmpresa)} onValueChange={(v) => setCodEmpresa(Number(v))}>
-            <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {(empresas || []).map((e) => (
-                <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
-                  {e.nome || `Empresa ${e.codEmpresa}`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-end gap-1.5 flex-wrap">
-          <Button variant={filtroSelo === "todos" ? "default" : "outline"} size="sm" onClick={() => setFiltroSelo("todos")}>
-            Todos {mesa ? `(${escopoLancs.length})` : ""}
-          </Button>
-          {ORDEM_SELOS.map((s) => (
-            <Button key={s} variant={filtroSelo === s ? "default" : "outline"} size="sm" onClick={() => setFiltroSelo(s)}>
-              {SELO_CFG[s].label} ({contagemSelo[s] ?? 0})
-            </Button>
-          ))}
-
-        </div>
-        <SearchField
-          value={busca}
-          onChange={setBusca}
-          placeholder="Buscar por favorecido, descrição ou valor..."
-          className="max-w-sm"
-          resultados={lancamentos.length}
-        />
+      {/* Empresa + resumo do que espera decisão — a Mesa abre pela AÇÃO */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={String(codEmpresa)} onValueChange={(v) => setCodEmpresa(Number(v))}>
+          <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {(empresas || []).map((e) => (
+              <SelectItem key={e.codEmpresa} value={String(e.codEmpresa)}>
+                {e.nome || `Empresa ${e.codEmpresa}`}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {mesa && (
+          <p className="text-sm text-muted-foreground">
+            {excecoesPendentes.length + borderosComDecisao.length === 0
+              ? "Nenhuma decisão pendente — a esteira segue sozinha."
+              : `${excecoesPendentes.length + borderosComDecisao.length} decisão(ões) aguardando você.`}
+          </p>
+        )}
       </div>
 
-      {/* Cobranças chegando sem entrada no ERP (DDA órfão) */}
-      {(mesa?.dda_sem_entrada ?? []).length > 0 && (
-        <Card className="border-warning/40">
+      {/* 1) Exceções aguardando o admin — a decisão mais urgente vem primeiro */}
+      {excecoesPendentes.length > 0 && (
+        <Card className="border-danger/40">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2 text-warning">
-              <AlertTriangle className="h-4 w-4" />
-              Cobranças no banco sem entrada no ERP ({mesa!.dda_sem_entrada!.length}) — provável nota sem lançamento
+            <CardTitle className="text-sm font-medium flex items-center gap-2 text-danger">
+              <AlertTriangle className="h-4 w-4" /> Exceções emergenciais aguardando aprovação individual
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-1.5">
-            {mesa!.dda_sem_entrada!.map((d) => {
-              const vencido = d.data_vencimento && d.data_vencimento < new Date().toISOString().slice(0, 10);
-              return (
-                <div key={d.id} className="flex items-center justify-between gap-3 p-2 rounded-lg border text-sm">
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{d.emissor || "Emissor não identificado"}
-                      {d.documento_emissor && <span className="text-muted-foreground font-normal"> · {d.documento_emissor}</span>}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {fmtCurrency(Number(d.valor))}
-                      {d.data_vencimento && (
-                        <> · vence {format(new Date(d.data_vencimento + "T12:00:00"), "dd/MM/yy")}
-                          {vencido && <span className="text-danger font-medium"> (VENCIDO)</span>}
-                        </>
-                      )}
-                      {d.banco_emissor && <> · {d.banco_emissor}</>}
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="shrink-0 text-warning border-warning/40">Dar entrada no Dataweb</Badge>
+          <CardContent className="space-y-2">
+            {excecoesPendentes.map((l) => (
+              <div key={l.id} className="flex items-start justify-between gap-3 p-2.5 rounded-lg border">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{l.pessoa_nome || l.descricao} — {fmtCurrency(Number(l.valor))}</p>
+                  <p className="text-xs text-muted-foreground italic">“{l.justificativa}”</p>
                 </div>
-              );
-            })}
-            <p className="text-xs text-muted-foreground pt-1">
-              Boleto sem título não é pagável (sem lastro). Após a entrada no ERP, o título chega no sync das 8h e casa com o boleto sozinho. Cobrança desconhecida? Investigar — pode ser boleto indevido.
-            </p>
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="shrink-0"
+                    disabled={aprovarExcecaoMutation.isPending}
+                    onClick={() => aprovarExcecaoMutation.mutate(l.id)}
+                  >
+                    Aprovar exceção
+                  </Button>
+                )}
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}
 
-      {/* Borderôs prontos para aprovar */}
-      {borderosVisiveis.length > 0 && (
+      {/* 2) Esteira de borderôs — os que dependem de decisão vêm na frente */}
+      {borderosOrdenados.length > 0 && (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {borderosVisiveis.map((b) => {
+          {borderosOrdenados.map((b) => {
 
             const problema = (b.selos.SEM_LASTRO ?? 0) + (b.selos.VERMELHO ?? 0);
             const amarelos = b.selos.AMARELO ?? 0;
@@ -316,44 +302,66 @@ export default function MesaAprovacaoPage() {
         </div>
       )}
 
-      {/* Exceções aguardando o admin */}
-      {excecoesPendentes.length > 0 && (
-        <Card className="border-danger/40">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2 text-danger">
-              <AlertTriangle className="h-4 w-4" /> Exceções emergenciais aguardando aprovação individual
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {excecoesPendentes.map((l) => (
-              <div key={l.id} className="flex items-start justify-between gap-3 p-2.5 rounded-lg border">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{l.pessoa_nome || l.descricao} — {fmtCurrency(Number(l.valor))}</p>
-                  <p className="text-xs text-muted-foreground italic">“{l.justificativa}”</p>
+      {/* 3) Aviso de sistema (rebaixado): cobranças no banco sem entrada no ERP */}
+      {(mesa?.dda_sem_entrada ?? []).length > 0 && (
+        <details className="rounded-lg border border-warning/40">
+          <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium text-warning flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            Cobranças no banco sem entrada no ERP ({mesa!.dda_sem_entrada!.length}) — clique para ver (ação: dar entrada no Dataweb)
+          </summary>
+          <div className="px-4 pb-3 space-y-1.5">
+            {mesa!.dda_sem_entrada!.map((d) => {
+              const vencido = d.data_vencimento && d.data_vencimento < new Date().toISOString().slice(0, 10);
+              return (
+                <div key={d.id} className="flex items-center justify-between gap-3 p-2 rounded-lg border text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{d.emissor || "Emissor não identificado"}
+                      {d.documento_emissor && <span className="text-muted-foreground font-normal"> · {d.documento_emissor}</span>}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {fmtCurrency(Number(d.valor))}
+                      {d.data_vencimento && (
+                        <> · vence {format(new Date(d.data_vencimento + "T12:00:00"), "dd/MM/yy")}
+                          {vencido && <span className="text-danger font-medium"> (VENCIDO)</span>}
+                        </>
+                      )}
+                      {d.banco_emissor && <> · {d.banco_emissor}</>}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="shrink-0 text-warning border-warning/40">Dar entrada no Dataweb</Badge>
                 </div>
-                {isAdmin && (
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    className="shrink-0"
-                    disabled={aprovarExcecaoMutation.isPending}
-                    onClick={() => aprovarExcecaoMutation.mutate(l.id)}
-                  >
-                    Aprovar exceção
-                  </Button>
-                )}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+              );
+            })}
+            <p className="text-xs text-muted-foreground pt-1">
+              Boleto sem título não é pagável (sem lastro). Após a entrada no ERP, o título chega no sync das 8h e casa com o boleto sozinho. Cobrança desconhecida? Investigar — pode ser boleto indevido.
+            </p>
+          </div>
+        </details>
       )}
 
-      {/* Lançamentos */}
+      {/* 4) Pipeline completo — consulta, com os filtros aqui dentro */}
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-3">
           <CardTitle className="text-base flex items-center gap-2">
             <FileCheck2 className="h-4 w-4" /> Pagamentos no pipeline
           </CardTitle>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button variant={filtroSelo === "todos" ? "default" : "outline"} size="sm" onClick={() => setFiltroSelo("todos")}>
+              Todos {mesa ? `(${escopoLancs.length})` : ""}
+            </Button>
+            {ORDEM_SELOS.map((s) => (
+              <Button key={s} variant={filtroSelo === s ? "default" : "outline"} size="sm" onClick={() => setFiltroSelo(s)}>
+                {SELO_CFG[s].label} ({contagemSelo[s] ?? 0})
+              </Button>
+            ))}
+            <SearchField
+              value={busca}
+              onChange={setBusca}
+              placeholder="Buscar favorecido, descrição ou valor..."
+              className="max-w-sm"
+              resultados={lancamentos.length}
+            />
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
