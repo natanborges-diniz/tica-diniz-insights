@@ -3551,7 +3551,12 @@ async function aprovarExcecao(body: Record<string, unknown>, userId: string) {
   if (!lanc) throw new Error("Lançamento não encontrado");
   if (lanc.lastro !== "EXCECAO") throw new Error("Só exceções emergenciais passam por este caminho");
   if (!validarJustificativa(lanc.justificativa)) throw new Error("Exceção sem justificativa válida");
-  if (!["PREVISTO", "CLASSIFICADO"].includes(lanc.status)) throw new Error(`Status ${lanc.status} não permite aprovação de exceção`);
+  // BORDERO também é válido: o caminho normal é montar o borderô e aprovar as
+  // exceções dele na Mesa (modo foco). Rejeitar BORDERO deixava o borderô
+  // travado sem nenhuma ação possível a partir da Mesa (caso real, 07/08).
+  if (!["PREVISTO", "CLASSIFICADO", "BORDERO"].includes(lanc.status)) {
+    throw new Error(`Status ${lanc.status} não permite aprovação de exceção`);
+  }
 
   const distinto = criadorAprovadorDistintos(lanc.criado_por, userId);
   if (!distinto.ok) throw new Error(distinto.motivo!);
@@ -3561,15 +3566,19 @@ async function aprovarExcecao(body: Record<string, unknown>, userId: string) {
   // o trilho normal (borderô → BTG → app). Antes ia direto a AUTORIZADO sem
   // borderô = limbo invisível: o operador achava que o lançamento sumiu e
   // cadastrava de novo (caso real, 05/08).
+  // Se já está em borderô, preserva o status — rebaixar para CLASSIFICADO o
+  // arrancaria do borderô que o operador acabou de montar.
+  const novoStatus = lanc.status === "BORDERO" ? "BORDERO" : "CLASSIFICADO";
   const { error } = await supabase
     .from("lancamentos_financeiros")
     .update({
-      status: "CLASSIFICADO",
+      status: novoStatus,
       dados_extras: { ...dados, excecao_aprovada_por: userId, excecao_aprovada_em: new Date().toISOString() },
     })
     .eq("id", String(id));
   if (error) throw new Error(error.message);
-  return json({ ok: true, status: "CLASSIFICADO", excecao_aprovada: true });
+  return json({ ok: true, status: novoStatus, excecao_aprovada: true });
+
 }
 
 // ═══════════════════════════════════════════════════════════
