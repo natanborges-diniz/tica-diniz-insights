@@ -2427,16 +2427,49 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   }
 
 
+  // 2.5. Esperar o BTG REGISTRAR os itens antes de fechar.
+  //
+  // A inclusão é assíncrona: o POST responde 2xx com o item ainda em
+  // processamento. Fechar cedo demais dava 422 `empty-batch` mesmo com todos
+  // aceitos (caso real: Itapevi 07/08, 3 aceitos e "Lote vazio" no
+  // fechamento). Aqui aguardamos o banco listar os pagamentos do lote.
+  let registrados = 0;
+  for (let tent = 0; tent < 5; tent++) {
+    await new Promise((r) => setTimeout(r, tent === 0 ? 1500 : 2500));
+    const qs = new URLSearchParams({ pageSize: "200", pageNumber: "1", batchId: String(batchId) });
+    const r = await fetch(`${apiBase}/${cnpj}/banking/payments?${qs}`, {
+      headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: "application/json" },
+    }).catch(() => null);
+    if (r && r.ok) {
+      const b = await r.json().catch(() => ({}));
+      const lista = Array.isArray(b?.data) ? b.data : (Array.isArray(b) ? b : []);
+      registrados = lista.length;
+      if (registrados >= aceitos) break;
+    }
+    console.log(`[financeiro-lancamentos] Lote ${batchId}: ${registrados}/${aceitos} registrados — aguardando BTG (tentativa ${tent + 1})`);
+  }
+
   // 3. Fechar o lote — PATCH espera { isFinished: true } e responde 202.
   //    Sem isso o lote nunca chega à área de aprovação do app/internet banking.
-  const fecharRes = await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${tokenData.access_token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ isFinished: true }),
-  });
+  //    "Lote vazio" no fechamento ganha novas tentativas (o registro assíncrono
+  //    pode atrasar além da espera acima).
+  let fecharRes!: Response;
+  let fecharErrText = "";
+  for (let tent = 0; tent < 3; tent++) {
+    fecharRes = await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ isFinished: true }),
+    });
+    if (fecharRes.ok) break;
+    fecharErrText = await fecharRes.text();
+    if (!/empty-batch/i.test(fecharErrText) || tent === 2) break;
+    console.warn(`[financeiro-lancamentos] Lote ${batchId} "vazio" no fechamento (tentativa ${tent + 1}) — aguardando registro assíncrono...`);
+    await new Promise((r) => setTimeout(r, 4000));
+  }
 
   if (!fecharRes.ok) {
     // Os itens entraram no lote, mas o lote não fechou — e lote que não fecha
@@ -2450,7 +2483,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     //
     // Correção: desfaz o PROCESSANDO (volta a AUTORIZADO, pronto para reenviar)
     // e abandona o lote no BTG para não deixar remessa fantasma pendurada.
-    const errText = await fecharRes.text();
+    const errText = fecharErrText || await fecharRes.text().catch(() => "");
     console.error(`[financeiro-lancamentos] Falha ao fechar lote ${batchId}:`, fecharRes.status, errText);
 
     await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}`, {
