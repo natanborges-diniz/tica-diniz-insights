@@ -28,6 +28,10 @@ interface Lancamento {
 
 const PAYMENT_TYPES = [
   { value: "PIX_KEY", label: "PIX (Chave)", icon: CreditCard, hint: "Informe a chave PIX do beneficiário (CPF, CNPJ, e-mail, telefone ou aleatória)" },
+  // Copia e cola é outro tipo no BTG (PIX_QR_CODE, campo `emv`). Colado no campo
+  // de chave, o banco recusa com `pix-key-type-not-supported` e o lote inteiro
+  // não chega — caso real da premiação Nobelpack (07/08/2026).
+  { value: "PIX_QR_CODE", label: "PIX (Copia e cola)", icon: CreditCard, hint: "Cole o código do QR Code (Pix copia e cola) gerado pelo beneficiário" },
   { value: "BANKSLIP", label: "Boleto ou conta", icon: FileText, hint: "Boleto de fornecedor ou conta de concessionária (água, luz, gás, telefone) — informe a linha digitável ou o código de barras" },
   // PIX_MANUAL: mesmos dados de uma TED, mas liquida pelo Pix — sem custo, sem
   // janela de horário e cai na hora. Enquanto a conta salário do BTG não estiver
@@ -36,6 +40,7 @@ const PAYMENT_TYPES = [
   { value: "TED", label: "TED", icon: Building2, hint: "Transferência tradicional por banco, agência e conta — sujeita a tarifa e a horário" },
   { value: "DARF", label: "DARF (Tributo)", icon: Banknote, hint: "Informe o código de barras do DARF ou guia de tributo" },
 ];
+
 
 interface Props {
   lancamento: Lancamento | null;
