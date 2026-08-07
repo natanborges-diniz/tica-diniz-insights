@@ -224,6 +224,21 @@ export function estadoBordero(
   // Nada mais em trânsito: o borderô fechou, com ou sem recusa.
   if (c.pendentes === 0) {
     if (c.pagos === 0) {
+      // Recusa no envio é outra coisa: o lote não existe no banco, ninguém
+      // autorizou nada e nada foi debitado. Chamar de "rejeitado pelo banco"
+      // fazia o operador procurar o pagamento no app do BTG.
+      const soNaoEnviado = (c.nao_enviados ?? 0) > 0 && (c.nao_enviados ?? 0) === c.rejeitados;
+      if (soNaoEnviado) {
+        return {
+          chave: "NAO_ENVIADO",
+          label: "Não chegou ao banco",
+          variant: "destructive",
+          titulo: `O BTG recusou a inclusão dos ${c.total} pagamento(s) na validação do envio. `
+            + "Nada foi criado no banco, nada autorizado, nada debitado — corrija e reenvie"
+            + motivosSufixo(c),
+          exigeAtencao: true,
+        };
+      }
       return {
         chave: "REJEITADO",
         label: "Rejeitado",
