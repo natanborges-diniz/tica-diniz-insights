@@ -322,6 +322,12 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
   }
 
   if (st === "APROVADO") {
+    // Borderô vazio não é pendência de pagamento — é lixo de montagem (itens
+    // movidos para outro lote). Sem este guard, virava card "Falta enviar"
+    // fantasma cujo envio sempre falha (caso real: Itapevi, 07/08 — três cards
+    // da mesma semana, dois vazios). Cancele-o na aba Borderôs do Hub.
+    if (!c || c.total === 0) return null;
+
     const dias = b.data_pagamento ? Math.max(0, diasEntre(b.data_pagamento, hoje)) : 0;
     // Data combinada já passou: o envio agenda para hoje, porque o banco recusa
     // data no passado. Dizer isso evita a surpresa de ver o pagamento sair num

@@ -1948,7 +1948,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       const { data: rubs } = await supabase.from("rubricas_autorizadas").select("*").in("id", rubIds);
       for (const r of (rubs || [])) rubMap.set(String(r.id), r);
     }
-    if ((lancsAvaliar || []).length === 0) throw new Error("Borderô vazio — adicione lançamentos antes de enviar");
+    if ((lancsAvaliar || []).length === 0) throw new Error("Borderô vazio — os itens foram movidos para outro lote. Cancele este borderô na aba Borderôs (ou adicione lançamentos antes de enviar).");
     const hojeAv = new Date().toISOString().slice(0, 10);
     // Bloqueio estruturado: o operador precisa saber EXATAMENTE qual item travou,
     // por quê e qual ação resolve — e ir direto para ele na Mesa (sem varrer a
