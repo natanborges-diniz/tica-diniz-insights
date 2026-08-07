@@ -1035,6 +1035,8 @@ async function painelPendencias(body: Record<string, unknown>) {
       // "esperando autorização do master".
       btg_status: (extras.btg_payment_status as string) ?? null,
       valor: Number(it.valor ?? 0),
+      envio_rejeitado: Boolean(extras.btg_envio_rejeitado),
+      motivo_envio: (extras.btg_motivo_envio as string) ?? null,
     });
 
 
@@ -1108,7 +1110,8 @@ async function painelPendencias(body: Record<string, unknown>) {
   const { data: soltos } = await qSoltos;
   for (const l of (soltos || [])) {
     const extras = (l.dados_extras || {}) as Record<string, unknown>;
-    const tentouNoBanco = Boolean(extras.btg_payment_status) || Boolean(extras.btg_motivo_recusa);
+    const tentouNoBanco = Boolean(extras.btg_payment_status) || Boolean(extras.btg_motivo_recusa)
+      || Boolean(extras.btg_envio_rejeitado);
     if (!tentouNoBanco) continue;
     // Aviso silenciado por alguém que resolveu o caso por fora.
     if (extras.pendencia_dispensada_em) continue;
@@ -1514,6 +1517,9 @@ async function listarBorderos(body: Record<string, unknown>) {
         motivo_recusa: (extras.btg_motivo_recusa as string) ?? null,
         btg_status: (extras.btg_payment_status as string) ?? null,
         valor: Number(it.valor ?? 0),
+        // Recusa no envio: o pagamento nem chegou ao BTG.
+        envio_rejeitado: Boolean(extras.btg_envio_rejeitado),
+        motivo_envio: (extras.btg_motivo_envio as string) ?? null,
       });
 
       porBordero.set(bid, lista);
