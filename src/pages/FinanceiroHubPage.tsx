@@ -398,9 +398,13 @@ export default function FinanceiroHubPage() {
   });
 
 
+  // A recusa do banco aparecia só num toast, que morre em segundos e não diz de
+  // qual borderô era. Guardamos por id para a linha continuar mostrando o motivo.
+  const [erroEnvio, setErroEnvio] = useState<Record<string, string>>({});
+
   const enviarBorderoMutation = useMutation({
     mutationFn: (id: string) => invokeAction("enviar_bordero_btg", { bordero_id: id }),
-    onSuccess: (data: { sandbox?: boolean; ok?: boolean; error?: string; code?: string } & Partial<BorderoBloqueioPayload>) => {
+    onSuccess: (data: { sandbox?: boolean; ok?: boolean; error?: string; code?: string } & Partial<BorderoBloqueioPayload>, id: string) => {
       // Bloqueio de governança: em vez de um toast genérico, abrimos o painel com
       // item, motivo e ação — e o atalho que leva à Mesa já filtrada nesse borderô.
       if (data?.code === "MESA_REQUIRED" && data.bordero_id) {
@@ -416,18 +420,24 @@ export default function FinanceiroHubPage() {
         return;
       }
       if (data?.ok === false) {
-        toast.error(data.error || "O BTG não aceitou o pagamento. Confira o extrato antes de tentar novamente.", {
-          duration: 12000,
-        });
+        const msg = data.error || "O BTG não aceitou o pagamento. Confira o extrato antes de tentar novamente.";
+        setErroEnvio(prev => ({ ...prev, [id]: msg }));
+        toast.error(msg, { duration: 12000 });
         invalidateAll();
         return;
       }
 
+      setErroEnvio(prev => { const n = { ...prev }; delete n[id]; return n; });
       toast.success(data?.sandbox ? "Enviado ao BTG (sandbox)" : "Enviado ao BTG — aguarde processamento");
       invalidateAll();
     },
-    onError: (e: Error) => toast.error(e.message || "Erro ao enviar"),
+    onError: (e: Error, id: string) => {
+      const msg = e.message || "Erro ao enviar";
+      setErroEnvio(prev => ({ ...prev, [id]: msg }));
+      toast.error(msg, { duration: 12000 });
+    },
   });
+
 
   const confirmarProcessamentoMutation = useMutation({
     mutationFn: (id: string) => invokeAction("confirmar_processamento", { bordero_id: id }),
@@ -1902,6 +1912,11 @@ export default function FinanceiroHubPage() {
                               <Badge variant={bs.variant} title={bs.titulo} className="cursor-help">
                                 {bs.label}
                               </Badge>
+                              {erroEnvio[b.id] && (
+                                <p className="mt-1 text-xs text-destructive whitespace-pre-wrap max-w-[260px]">
+                                  Último envio recusado: {erroEnvio[b.id]}
+                                </p>
+                              )}
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground">{format(new Date(b.created_at), "dd/MM/yy")}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">
@@ -1925,9 +1940,9 @@ export default function FinanceiroHubPage() {
                                   if (ok) cancelarBorderoMutation.mutate(b.id);
                                 }}
                                 isPendingAprovar={false}
-                                isPendingEnviar={enviarBorderoMutation.isPending}
-                                isPendingConfirmar={confirmarProcessamentoMutation.isPending}
-                                isPendingCancelar={cancelarBorderoMutation.isPending}
+                                isPendingEnviar={enviarBorderoMutation.isPending && enviarBorderoMutation.variables === b.id}
+                                isPendingConfirmar={confirmarProcessamentoMutation.isPending && confirmarProcessamentoMutation.variables === b.id}
+                                isPendingCancelar={cancelarBorderoMutation.isPending && cancelarBorderoMutation.variables === b.id}
                               />
                             </TableCell>
                           </TableRow>
@@ -1938,6 +1953,7 @@ export default function FinanceiroHubPage() {
                 </div>
               </CardContent>
             </Card>
+
           </TabsContent>
 
 
