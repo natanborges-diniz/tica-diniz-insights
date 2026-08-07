@@ -262,16 +262,33 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
 
             {/* Type-specific fields */}
             <div className="space-y-3">
-              {payType === "PIX_KEY" && (
+              {(payType === "PIX_KEY" || payType === "PIX_QR_CODE") && (
                 <div className="space-y-1">
-                  <Label>Chave PIX do beneficiário</Label>
+                  <Label>
+                    {payType === "PIX_QR_CODE" ? "Pix copia e cola do beneficiário" : "Chave PIX do beneficiário"}
+                  </Label>
                   <Input
                     value={pixKey}
                     onChange={e => setPixKey(e.target.value)}
-                    placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
+                    className={payType === "PIX_QR_CODE" ? "font-mono text-xs" : undefined}
+                    placeholder={payType === "PIX_QR_CODE"
+                      ? "Cole aqui o código do QR Code (começa em 000201...)"
+                      : "CPF, CNPJ, e-mail, telefone ou chave aleatória"}
                   />
+                  {payType === "PIX_KEY" && pixEhCopiaECola && (
+                    <p className="text-xs text-amber-700">
+                      Isto é um Pix copia e cola, não uma chave — será enviado ao banco como
+                      "PIX (Copia e cola)".
+                    </p>
+                  )}
+                  {payType === "PIX_QR_CODE" && pixKey.trim() && !pixEhCopiaECola && (
+                    <p className="text-xs text-destructive">
+                      Não parece um Pix copia e cola — use "PIX (Chave)" para chave comum.
+                    </p>
+                  )}
                 </div>
               )}
+
 
               {(payType === "BANKSLIP" || payType === "DARF") && (
                 <div className="space-y-1">
