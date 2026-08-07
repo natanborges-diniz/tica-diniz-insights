@@ -100,19 +100,38 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
     setDescricao(""); setValor(""); setVencimento("");
     setPessoa(""); setDocumento(""); setContaSelecionada("");
     setNatureza(""); setCategoria(""); setFormaPgto("");
-    setPixKey(""); setBarcode("");
+    setPayType("NAO_DEFINIDO"); setPixKey(""); setBarcode("");
+    setBanco(""); setAgencia(""); setConta(""); setTipoConta("CC");
+    setFavNome(""); setFavDoc("");
     setLastroTipo("RUBRICA"); setRubricaId(""); setJustificativa("");
   };
 
-
-
+  const soDigitos = (v: string) => v.replace(/\D/g, "");
 
   const handleCriar = () => {
+    // Mesmo formato gravado pelo "Preparar Pagamento" — quem envia ao BTG lê
+    // btg_payment_type + btg_details, então divergir aqui quebraria o envio.
     const dadosExtras: Record<string, unknown> = {};
-    if (tipo === "PAGAR") {
-      if (pixKey) { dadosExtras.pix_key = pixKey; dadosExtras.btg_payment_type = "PIX_KEY"; }
-      if (barcode) { dadosExtras.linha_digitavel = barcode; dadosExtras.btg_payment_type = "BANKSLIP"; }
+    if (tipo === "PAGAR" && payType !== "NAO_DEFINIDO") {
+      dadosExtras.btg_payment_type = payType;
+      if (payType === "PIX_KEY" && pixKey) {
+        dadosExtras.pix_key = pixKey;
+        dadosExtras.btg_details = { pixKey };
+      } else if ((payType === "BANKSLIP" || payType === "DARF") && barcode) {
+        dadosExtras.linha_digitavel = barcode;
+        dadosExtras.btg_details = { barcode };
+        if (payType === "BANKSLIP") {
+          // Arrecadação (linha iniciada em 8) exige UTILITIES no BTG.
+          dadosExtras.btg_payment_type = tipoPorLinhaDigitavel(barcode) ?? "BANKSLIP";
+        }
+      } else if (payType === "TED" || payType === "PIX_MANUAL") {
+        dadosExtras.btg_details = {
+          bankCode: banco, branch: agencia, account: conta,
+          accountType: tipoConta, name: favNome.trim(), taxId: soDigitos(favDoc),
+        };
+      }
     }
+
     onCriar({
       tipo,
       descricao,
