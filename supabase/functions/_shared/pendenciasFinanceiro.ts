@@ -209,33 +209,53 @@ export function pendenciaDoBordero(b: BorderoParaPainel, hoje: string): Pendenci
     const motivos = (c.motivos_recusa ?? []).filter(Boolean);
     const dias = b.data_pagamento ? Math.max(0, diasEntre(b.data_pagamento, hoje)) : 0;
     const naoProcessados = c.nao_processados ?? 0;
+    const naoEnviados = c.nao_enviados ?? 0;
     const soNaoProcessado = naoProcessados > 0 && naoProcessados === c.rejeitados;
+    // Recusa na validação do envio: o banco nem recebeu o pagamento. É o caso
+    // mais mal comunicado do fluxo — o operador lia "o banco não processou" e
+    // ia cobrar autorização de um lote que nunca existiu no BTG.
+    const soNaoEnviado = naoEnviados > 0 && naoEnviados === c.rejeitados;
     // O valor é a informação que faltava: "1 pagamento devolvido" mandava o
     // operador abrir o borderô só para descobrir quanto o credor não recebeu.
     const valorRecusado = Number(c.valor_rejeitado ?? 0);
     const emReais = valorRecusado > 0 ? ` · ${formatarReais(valorRecusado)} não saiu` : "";
+    const jaPagos = c.pagos > 0 ? ` · ${c.pagos} pago(s)` : "";
+    const mensagem = soNaoEnviado
+      ? `${naoEnviados} pagamento(s) que o banco NÃO recebeu${emReais} — recusa na validação do envio, `
+        + `nada foi autorizado nem debitado${jaPagos}`
+      : soNaoProcessado
+        ? `${naoProcessados} pagamento(s) que chegaram ao banco e não foram processados${emReais} — não há nada para autorizar${jaPagos}`
+        : `${c.rejeitados} pagamento(s) recusado(s) pelo banco${emReais}${jaPagos}`;
+    const acao = soNaoEnviado
+      ? (motivos.length > 0 ? `Recusa do envio: ${motivos.join(" · ")}. ` : "")
+        + "Corrija o dado apontado no título (chave Pix, linha digitável, valor ou data) e reenvie este mesmo borderô — "
+        + "não é preciso cancelar nem cobrar o master, o lote não existe no BTG"
+      : motivos.length > 0
+        ? `Motivo do banco: ${motivos.join(" · ")}. Devolva ao preparo, corrija e monte um novo borderô`
+        : "Veja no app do BTG o motivo (horário-limite ou saldo), devolva ao preparo, "
+          + "corrija o que for preciso e monte um novo borderô — depois avise o master para autorizar";
     return {
       ...base,
-      tipo: soNaoProcessado ? "NAO_PROCESSADO" : "RECUSADO",
+      tipo: soNaoEnviado ? "NAO_ENVIADO_AO_BANCO" : soNaoProcessado ? "NAO_PROCESSADO" : "RECUSADO",
       severidade: "ALTA",
       dias_parado: dias,
       valor_pendente: valorRecusado,
       qtd_pendente: c.rejeitados,
-      mensagem: soNaoProcessado
-        ? `${naoProcessados} pagamento(s) que o banco não processou${emReais} — não há nada para autorizar${c.pagos > 0 ? ` · ${c.pagos} pago(s)` : ""}`
-        : `${c.rejeitados} pagamento(s) recusado(s) pelo banco${emReais}${c.pagos > 0 ? ` · ${c.pagos} pago(s)` : ""}`,
+      mensagem,
       // O motivo do banco vem no lugar do "veja no app do BTG": o retorno traz o
       // código (ex.: payment-amount-changed), então mandar o operador procurar
       // fora do sistema era descartar o que já sabíamos.
       motivos: motivos.length > 0 ? motivos : undefined,
-      acao: motivos.length > 0
-        ? `Motivo do banco: ${motivos.join(" · ")}. Devolva ao preparo, corrija e monte um novo borderô`
-        : "Veja no app do BTG o motivo (horário-limite ou saldo), devolva ao preparo, "
-          + "corrija o que for preciso e monte um novo borderô — depois avise o master para autorizar",
+      acao,
       responsavel: "OPERADOR",
       local: "SISTEMA",
-      acao_sistema: "DEVOLVER_PREPARO",
-      acao_rotulo: "Devolver ao preparo",
+      // Envio recusado se corrige no próprio borderô: devolver ao preparo aqui
+      // desmontaria um lote que continua válido no sistema.
+      acao_sistema: soNaoEnviado ? "ABRIR_BORDERO" : "DEVOLVER_PREPARO",
+      acao_rotulo: soNaoEnviado ? "Abrir borderô e corrigir" : "Devolver ao preparo",
+      ...(soNaoEnviado
+        ? { acao_secundaria: "DEVOLVER_PREPARO" as const, acao_secundaria_rotulo: "Devolver ao preparo" }
+        : {}),
     };
   }
 
