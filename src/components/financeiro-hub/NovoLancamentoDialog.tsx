@@ -14,6 +14,17 @@ import {
   diagnosticarBoleto,
 } from "../../../supabase/functions/_shared/boleto";
 
+import { tipoPorLinhaDigitavel } from "../../../supabase/functions/_shared/btgPayment";
+
+/** Mesmas opções (e mesmos rótulos) do "Preparar Pagamento". */
+const PAYMENT_TYPES = [
+  { value: "PIX_KEY", label: "PIX (Chave)", hint: "Chave do beneficiário: CPF, CNPJ, e-mail, telefone ou aleatória" },
+  { value: "BANKSLIP", label: "Boleto ou conta", hint: "Boleto de fornecedor ou conta de concessionária — informe a linha digitável" },
+  { value: "PIX_MANUAL", label: "PIX (Dados bancários)", hint: "Pix por banco, agência e conta — não exige chave cadastrada" },
+  { value: "TED", label: "TED", hint: "Transferência por banco, agência e conta — sujeita a tarifa e horário" },
+  { value: "DARF", label: "DARF (Tributo)", hint: "Código de barras do DARF ou guia de tributo" },
+];
+
 interface PlanoContaRow {
   id: string;
   conta_numero: string;
@@ -53,8 +64,18 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
   const [natureza, setNatureza] = useState("");
   const [categoria, setCategoria] = useState("");
   const [formaPgto, setFormaPgto] = useState("");
+  // Formas de pagamento — as mesmas do "Preparar Pagamento", para o operador não
+  // precisar criar o lançamento e voltar depois só para escolher TED ou DARF.
+  const [payType, setPayType] = useState("NAO_DEFINIDO");
   const [pixKey, setPixKey] = useState("");
   const [barcode, setBarcode] = useState("");
+  const [banco, setBanco] = useState("");
+  const [agencia, setAgencia] = useState("");
+  const [conta, setConta] = useState("");
+  const [tipoConta, setTipoConta] = useState("CC");
+  const [favNome, setFavNome] = useState("");
+  const [favDoc, setFavDoc] = useState("");
+  const payTypeHint = PAYMENT_TYPES.find(t => t.value === payType)?.hint ?? null;
   // Retorno imediato da linha digitável (tipo, valor e vencimento lidos do código).
   const diagBoleto = diagnosticarBoleto(barcode);
   // G2/G3 — lastro obrigatório para PAGAR manual: rubrica ou exceção com justificativa
@@ -79,19 +100,38 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
     setDescricao(""); setValor(""); setVencimento("");
     setPessoa(""); setDocumento(""); setContaSelecionada("");
     setNatureza(""); setCategoria(""); setFormaPgto("");
-    setPixKey(""); setBarcode("");
+    setPayType("NAO_DEFINIDO"); setPixKey(""); setBarcode("");
+    setBanco(""); setAgencia(""); setConta(""); setTipoConta("CC");
+    setFavNome(""); setFavDoc("");
     setLastroTipo("RUBRICA"); setRubricaId(""); setJustificativa("");
   };
 
-
-
+  const soDigitos = (v: string) => v.replace(/\D/g, "");
 
   const handleCriar = () => {
+    // Mesmo formato gravado pelo "Preparar Pagamento" — quem envia ao BTG lê
+    // btg_payment_type + btg_details, então divergir aqui quebraria o envio.
     const dadosExtras: Record<string, unknown> = {};
-    if (tipo === "PAGAR") {
-      if (pixKey) { dadosExtras.pix_key = pixKey; dadosExtras.btg_payment_type = "PIX_KEY"; }
-      if (barcode) { dadosExtras.linha_digitavel = barcode; dadosExtras.btg_payment_type = "BANKSLIP"; }
+    if (tipo === "PAGAR" && payType !== "NAO_DEFINIDO") {
+      dadosExtras.btg_payment_type = payType;
+      if (payType === "PIX_KEY" && pixKey) {
+        dadosExtras.pix_key = pixKey;
+        dadosExtras.btg_details = { pixKey };
+      } else if ((payType === "BANKSLIP" || payType === "DARF") && barcode) {
+        dadosExtras.linha_digitavel = barcode;
+        dadosExtras.btg_details = { barcode };
+        if (payType === "BANKSLIP") {
+          // Arrecadação (linha iniciada em 8) exige UTILITIES no BTG.
+          dadosExtras.btg_payment_type = tipoPorLinhaDigitavel(barcode) ?? "BANKSLIP";
+        }
+      } else if (payType === "TED" || payType === "PIX_MANUAL") {
+        dadosExtras.btg_details = {
+          bankCode: banco, branch: agencia, account: conta,
+          accountType: tipoConta, name: favNome.trim(), taxId: soDigitos(favDoc),
+        };
+      }
     }
+
     onCriar({
       tipo,
       descricao,
@@ -309,13 +349,36 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
             <p className="text-xs text-muted-foreground">
               Pode configurar depois no passo "Preparar Pagamento".
             </p>
-            <div className="grid grid-cols-2 gap-3">
+
+            {/* Mesmas formas do "Preparar Pagamento": a tela nova só tinha PIX
+                (chave) e código de barras, então TED, DARF e PIX por dados
+                bancários só podiam ser informados numa segunda etapa. */}
+            <div className="space-y-1">
+              <Label className="text-xs">Forma de pagamento no banco</Label>
+              <Select value={payType} onValueChange={setPayType}>
+                <SelectTrigger><SelectValue placeholder="Definir depois" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NAO_DEFINIDO">Definir depois</SelectItem>
+                  {PAYMENT_TYPES.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {payTypeHint && <p className="text-xs text-muted-foreground">{payTypeHint}</p>}
+            </div>
+
+            {payType === "PIX_KEY" && (
               <div className="space-y-1">
                 <Label className="text-xs">Chave PIX</Label>
-                <Input value={pixKey} onChange={e => setPixKey(e.target.value)} placeholder="CPF, email, tel..." />
+                <Input value={pixKey} onChange={e => setPixKey(e.target.value)} placeholder="CPF, CNPJ, e-mail, telefone ou aleatória" />
               </div>
+            )}
+
+            {(payType === "BANKSLIP" || payType === "DARF") && (
               <div className="space-y-1">
-                <Label className="text-xs">Código de barras</Label>
+                <Label className="text-xs">
+                  {payType === "DARF" ? "Código de barras do tributo" : "Código de barras / linha digitável"}
+                </Label>
                 {/* Aceita colar com pontos e espaços; guardamos só os dígitos. */}
                 <Input
                   value={formatarLinhaDigitavel(barcode)}
@@ -334,7 +397,49 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
                   <p className="text-xs text-destructive">Linha não confere — {diagBoleto.mensagem}</p>
                 )}
               </div>
-            </div>
+            )}
+
+            {(payType === "TED" || payType === "PIX_MANUAL") && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Banco</Label>
+                    <Input value={banco} onChange={e => setBanco(e.target.value)} placeholder="001, 341, 237" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Agência</Label>
+                    <Input value={agencia} onChange={e => setAgencia(e.target.value)} placeholder="0001" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Conta</Label>
+                    <Input value={conta} onChange={e => setConta(e.target.value)} placeholder="12345-6" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Tipo de conta</Label>
+                    <Select value={tipoConta} onValueChange={setTipoConta}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="CC">Corrente</SelectItem>
+                        <SelectItem value="CP">Poupança</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Favorecido</Label>
+                    <Input value={favNome} onChange={e => setFavNome(e.target.value)} placeholder="Como consta na conta" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">CPF/CNPJ do favorecido</Label>
+                    <Input value={favDoc} onChange={e => setFavDoc(e.target.value)} placeholder="Só números" inputMode="numeric" />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  O banco valida a titularidade da conta contra este documento — sem ele o pagamento é recusado no envio.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

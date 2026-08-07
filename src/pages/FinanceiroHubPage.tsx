@@ -100,6 +100,21 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   CONCILIADO_CARTAO: { label: "Conciliado", variant: "default" },
 };
 
+/**
+ * O filtro de status fala a língua da operação, não a do banco de dados.
+ *
+ * "Em preparo" não é um status gravado: o título recém-importado fica PREVISTO,
+ * o classificado fica CLASSIFICADO e o unificado fica AGRUPADO. Filtrar por um
+ * único valor devolvia lista vazia justamente na etapa mais usada.
+ */
+const GRUPOS_STATUS: Record<string, { label: string; status: string[] }> = {
+  EM_PREPARO: { label: "Em preparo", status: ["PREVISTO", "CLASSIFICADO", "AGRUPADO"] },
+  BORDERO: { label: "Em borderô", status: ["BORDERO"] },
+  AUTORIZADO: { label: "Autorizado / processando", status: ["AUTORIZADO", "PROCESSANDO"] },
+  BAIXADO: { label: "Pagos", status: ["BAIXADO", "CONCILIADO_CARTAO"] },
+  CANCELADO: { label: "Cancelados", status: ["CANCELADO"] },
+};
+
 // Mantido só para o detalhe do borderô, onde o status gravado ainda é a
 // referência. Na lista quem manda é estadoBordero(), que lê a composição dos
 // itens — "ENVIADO" cobria situações opostas demais para virar um badge.
@@ -188,7 +203,10 @@ export default function FinanceiroHubPage() {
     queryKey: ["lancamentos", codEmpresa, filtroStatus, filtroCampoData, filtroDataInicio, filtroDataFim],
     queryFn: async () => {
       const params: Record<string, unknown> = { cod_empresa: codEmpresa, limit: 500, tipo: "PAGAR" };
-      if (filtroStatus !== "todos") params.status = filtroStatus;
+      // Grupo com um único status vai ao servidor; grupo com vários é recortado
+      // na tela, para não multiplicar requisições.
+      const grupo = GRUPOS_STATUS[filtroStatus]?.status;
+      if (grupo?.length === 1) params.status = grupo[0];
       if (filtroDataInicio) params.data_inicio = filtroDataInicio;
       if (filtroDataFim) params.data_fim = filtroDataFim;
       if (filtroCampoData) params.campo_data = filtroCampoData;
@@ -247,7 +265,11 @@ export default function FinanceiroHubPage() {
     l.descricao, l.pessoa_nome, l.pessoa_documento, l.valor, l.valor_pago,
     l.natureza, l.categoria, l.subcategoria, l.forma_pagamento, l.origem,
   ];
-  const lancamentosFiltrados = filtrarPorBusca(lancamentos, busca, camposLancamento);
+  const grupoStatus = GRUPOS_STATUS[filtroStatus]?.status ?? null;
+  const lancamentosNoStatus = grupoStatus
+    ? lancamentos.filter(l => grupoStatus.includes(String(l.status)))
+    : lancamentos;
+  const lancamentosFiltrados = filtrarPorBusca(lancamentosNoStatus, busca, camposLancamento);
   const pagosFiltrados = filtrarPorBusca(pagos, busca, camposLancamento);
   const borderosFiltrados = filtrarPorBusca(borderos, busca, (b) => [
     b.descricao, b.total_valor, b.status, b.criado_por, b.aprovado_por,
@@ -850,8 +872,8 @@ export default function FinanceiroHubPage() {
       setActiveTab("contas-pagar");
       // Apply status filter based on step
       if (stepNumber === 1) setFiltroStatus("todos");
-      else if (stepNumber === 2) setFiltroStatus("PREVISTO"); // show unclassified
-      else if (stepNumber === 3) setFiltroStatus("PREVISTO"); // show classified without payment
+      else if (stepNumber === 2) setFiltroStatus("EM_PREPARO"); // show unclassified
+      else if (stepNumber === 3) setFiltroStatus("EM_PREPARO"); // show classified without payment
     } else {
       setActiveTab("borderos");
     }
@@ -1727,11 +1749,12 @@ export default function FinanceiroHubPage() {
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground">Status</label>
             <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-              <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[190px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos</SelectItem>
-                {Object.entries(STATUS_CONFIG).map(([k, v]) => (
+                {Object.entries(GRUPOS_STATUS).map(([k, v]) => (
                   <SelectItem key={k} value={k}>{v.label}</SelectItem>
+
                 ))}
               </SelectContent>
             </Select>
@@ -1776,7 +1799,7 @@ export default function FinanceiroHubPage() {
           }}>Mês atual</Button>
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
             const ontem = agoraSP(); ontem.setDate(ontem.getDate() - 1);
-            setFiltroCampoData("VENCIMENTO"); setFiltroDataInicio(""); setFiltroDataFim(format(ontem, "yyyy-MM-dd")); setFiltroStatus("PREVISTO");
+            setFiltroCampoData("VENCIMENTO"); setFiltroDataInicio(""); setFiltroDataFim(format(ontem, "yyyy-MM-dd")); setFiltroStatus("EM_PREPARO");
           }}>Vencidos</Button>
         </div>
 
@@ -1918,7 +1941,14 @@ export default function FinanceiroHubPage() {
                       ) : borderosFiltrados.length === 0 ? (
                         <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           {busca
-                            ? `Nenhum borderô encontrado para "${busca}".`
+                            ? <>
+                                Nenhum borderô encontrado para "{busca}" — a pesquisa continua ativa e pode estar
+                                escondendo o borderô recém-criado.
+                                {" "}
+                                <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setBusca("")}>
+                                  Limpar pesquisa
+                                </Button>
+                              </>
                             : 'Nenhum borderô. Selecione lançamentos na aba "Contas a Pagar" e clique em "Criar Borderô".'}
                         </TableCell></TableRow>
                       ) : borderosFiltrados.map(b => {
