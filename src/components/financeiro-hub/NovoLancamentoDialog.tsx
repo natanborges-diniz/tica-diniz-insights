@@ -83,9 +83,8 @@ export function NovoLancamentoDialog({ open, onOpenChange, planoContas, onCriar,
     setLastroTipo("RUBRICA"); setRubricaId(""); setJustificativa("");
   };
 
-  const lastroInvalido =
-    tipo === "PAGAR" &&
-    (lastroTipo === "RUBRICA" ? !rubricaId : justificativa.trim().length < 20);
+
+
 
   const handleCriar = () => {
     const dadosExtras: Record<string, unknown> = {};
