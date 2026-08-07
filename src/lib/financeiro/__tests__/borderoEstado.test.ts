@@ -114,7 +114,7 @@ describe('falha do banco sem retorno tratado', () => {
     expect(c.rejeitados).toBe(1);
     expect(c.nao_processados).toBe(1);
     expect(c.pendentes).toBe(0);
-    expect(c.motivos_recusa?.[0]).toContain('não processou');
+    expect(c.motivos_recusa?.[0]).toContain('chegou ao banco e não foi processado');
   });
 
   it('mantém em trânsito o que o banco ainda não respondeu', () => {
@@ -123,5 +123,41 @@ describe('falha do banco sem retorno tratado', () => {
     ]);
     expect(c.rejeitados).toBe(0);
     expect(c.pendentes).toBe(1);
+  });
+});
+
+// A confusão real: "o banco não processou" dava a entender que o pagamento
+// chegou ao BTG e o master autorizou. Recusa no envio é antes de tudo isso.
+describe('recusa na validação do envio (não chegou ao banco)', () => {
+  it('separa não enviado de não processado e informa o motivo do envio', () => {
+    const c = resumirComposicao([
+      {
+        status: 'AUTORIZADO',
+        requer_validacao: true,
+        envio_rejeitado: true,
+        motivo_envio: '400: Tipo de chave pix não suportado',
+        valor: 499.53,
+      },
+    ]);
+    expect(c.rejeitados).toBe(1);
+    expect(c.nao_enviados).toBe(1);
+    expect(c.nao_processados).toBe(0);
+    expect(c.motivos_recusa?.[0]).toContain('não recebeu este pagamento');
+    expect(c.motivos_recusa?.[0]).toContain('Tipo de chave pix');
+  });
+
+  it('badge diz "Não chegou ao banco" quando nada entrou', () => {
+    const c = resumirComposicao([
+      { status: 'AUTORIZADO', requer_validacao: true, envio_rejeitado: true },
+      { status: 'AUTORIZADO', requer_validacao: true, envio_rejeitado: true },
+    ]);
+    const e = estadoBordero('APROVADO', c, HOJE);
+    // APROVADO tem precedência de status gravado; o estado do envio aparece
+    // quando o borderô já foi marcado como enviado.
+    expect(e.chave).toBe('APROVADO');
+    const enviado = estadoBordero('ENVIADO', c, HOJE);
+    expect(enviado.chave).toBe('NAO_ENVIADO');
+    expect(enviado.label).toBe('Não chegou ao banco');
+    expect(enviado.titulo).toContain('nada debitado');
   });
 });
