@@ -158,9 +158,12 @@ export function estadoDeVolta(
     autorizado_por: null,
     autorizado_em: null,
     requer_validacao: false,
-    observacao: motivo
-      ? `Devolvido ao preparo após recusa do banco (${motivo}). Monte um novo borderô.`
-      : "Devolvido ao preparo após recusa do banco. Monte um novo borderô.",
+    observacao: naoChegou
+      ? `Devolvido ao preparo: o banco não recebeu este pagamento (recusa na validação do envio${motivo ? ` — ${motivo}` : ""}). `
+        + "Nada foi autorizado nem debitado. Corrija o dado apontado e monte um novo borderô."
+      : motivo
+        ? `Devolvido ao preparo após recusa do banco (${motivo}). Monte um novo borderô.`
+        : "Devolvido ao preparo após recusa do banco. Monte um novo borderô.",
     // A resposta terminal pertence à tentativa antiga. Mantê-la nos campos
     // correntes fazia o borderô novo nascer como RETURNED/FAILED antes mesmo de
     // ser enviado. Guardamos a trilha e limpamos somente o estado operacional.
@@ -173,6 +176,9 @@ export function estadoDeVolta(
       btg_idempotency_key: null,
       btg_payment_status: null,
       btg_motivo_recusa: null,
+      btg_envio_rejeitado: null,
+      btg_motivo_envio: null,
+      btg_envio_rejeitado_em: null,
       btg_recusa_codigo: null,
       btg_recusa_resolver: null,
       btg_recusa_bruta: null,
