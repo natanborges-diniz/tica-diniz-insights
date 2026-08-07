@@ -55,6 +55,31 @@ vencida bloqueia o disparo com mensagem clara.
 - UI `/crediario` (`CrediarioLojaPage`) — admin libera; loja dispara e copia
   linha digitável/PDF; selo de impressão.
 
+## Integração Conect$flow (descoberta em 07/08 — ecossistema real)
+
+O fluxo operacional loja↔financeiro (consulta de CPF via `CpfApprovalDialog`,
+solicitação de boleto com projeção de parcelas, revisões, "imprimir e enviar
+por malote") **já vive no Conect$flow** — app Lovable separado, com OUTRO
+projeto Supabase (`kvggebtnqmxydtwaumqz`; o financeiro é `zmsfntqgxsstnbpzdled`).
+As credenciais e a emissão BTG vivem AQUI. A ponte:
+
+- **Endpoint m2m** `btg-cobrancas?action=emitir_lote_crediario`, autenticado
+  pelo header `x-crediario-secret` (env `CREDIARIO_SHARED_SECRET` — criar como
+  secret nas duas pontas). Payload: `cod_empresa` (de `telefones_lojas.cod_empresa`
+  do Conect$flow), `cpf`, `cliente_nome`, `valor_total`, `referencia_externa`
+  (id da solicitação — chave de idempotência), `imprimir`, e as parcelas: ou
+  `parcelas_detalhe` ([{numero, valor, vencimento}] — a projeção aprovada) ou
+  `parcelas`+`valor_parcela`+`primeiro_vencimento`.
+- Resposta: `{ ok, status, boletos: [{parcela_numero, valor, data_vencimento,
+  linha_digitavel, url_boleto, status}], falhas }` — o Conect$flow grava no
+  metadata da solicitação e mostra à loja. Reenvio completa só o que faltou.
+- Cada emissão vira liberação-espelho aqui (ledger em `/crediario`) + boleto em
+  `btg_cobrancas` + lançamento RECEBER — conciliação e baixa automáticas iguais
+  às cobranças manuais.
+- Lado Conect$flow (a implementar lá): edge function proxy que lê a solicitação,
+  monta o payload acima e chama este endpoint com o segredo; botão "Gerar
+  boletos no BTG" no fluxo da solicitação tipo `boleto`.
+
 ## Fora de escopo (v2)
 
 - Consulta de crédito automatizada (SPC/Serasa) alimentando a liberação.

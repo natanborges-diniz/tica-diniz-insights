@@ -456,6 +456,119 @@ async function handleDispararBoletos(body: Record<string, unknown>, userId: stri
   });
 }
 
+// M2M — Conect$flow (outro projeto Supabase) emite o carnê de uma solicitação
+// de boleto aprovada. Auth por segredo compartilhado (x-crediario-secret);
+// idempotente por referencia_externa (id da solicitação) + parcela_numero.
+// Usa a projeção de parcelas aprovada lá (validada aqui) ou deriva do padrão.
+const M2M_USER = "00000000-0000-0000-0000-000000000000";
+
+async function handleEmitirLoteCrediario(body: Record<string, unknown>) {
+  const { cod_empresa, cpf, cliente_nome, valor_total, parcelas, valor_parcela,
+    primeiro_vencimento, parcelas_detalhe, referencia_externa, imprimir, observacao } = body;
+
+  if (!cod_empresa || !cpf || !cliente_nome || !valor_total || !referencia_externa) {
+    return json({ error: "cod_empresa, cpf, cliente_nome, valor_total e referencia_externa são obrigatórios" }, 400);
+  }
+  const cpfLimpo = sanitizarCpf(cpf);
+  const total = Number(valor_total);
+
+  // Plano de parcelas: projeção explícita aprovada no Conect$flow, ou derivada.
+  let plano: { numero: number; valor: number; vencimento: string }[];
+  if (Array.isArray(parcelas_detalhe) && parcelas_detalhe.length > 0) {
+    plano = (parcelas_detalhe as Record<string, unknown>[]).map((p, i) => ({
+      numero: Number(p.numero ?? p.n ?? i + 1),
+      valor: Math.round(Number(p.valor) * 100) / 100,
+      vencimento: String(p.vencimento),
+    }));
+    if (plano.some((p) => !(p.valor > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(p.vencimento))) {
+      return json({ error: "parcelas_detalhe inválido (valor > 0 e vencimento yyyy-MM-dd)" }, 400);
+    }
+    const soma = plano.reduce((s, p) => s + p.valor, 0);
+    if (Math.abs(soma - total) >= 1) {
+      return json({ error: `Projeção inconsistente: soma ${soma.toFixed(2)} ≠ total ${total.toFixed(2)}` }, 400);
+    }
+  } else {
+    plano = gerarParcelasBoleto({
+      valor_total: total,
+      parcelas: Number(parcelas),
+      valor_parcela: Number(valor_parcela),
+      primeiro_vencimento: String(primeiro_vencimento),
+    });
+  }
+
+  const db = getServiceClient();
+  let { data: lib } = await db.from("crediario_liberacoes")
+    .select("*").eq("referencia_externa", String(referencia_externa)).maybeSingle();
+
+  if (lib && lib.status === "CANCELADO") {
+    return json({ error: "Liberação cancelada no financeiro — não emite" }, 409);
+  }
+  if (!lib) {
+    const { data: nova, error } = await db.from("crediario_liberacoes").insert({
+      cod_empresa: Number(cod_empresa),
+      cpf: cpfLimpo,
+      cliente_nome: String(cliente_nome).trim().toUpperCase(),
+      valor_total: total,
+      parcelas: plano.length,
+      valor_parcela: plano[0].valor,
+      primeiro_vencimento: plano[0].vencimento,
+      status: "LIBERADO",
+      observacao: observacao ? String(observacao) : "Origem: Conect$flow (solicitação de boleto)",
+      imprimir: Boolean(imprimir),
+      liberado_por: M2M_USER,
+      referencia_externa: String(referencia_externa),
+    }).select().single();
+    if (error) return json({ error: error.message }, 500);
+    lib = nova;
+  }
+
+  const { data: jaEmitidos } = await db.from("btg_cobrancas")
+    .select("parcela_numero").eq("liberacao_id", lib.id);
+  const emitidas = new Set((jaEmitidos || []).map((c) => Number(c.parcela_numero)));
+
+  const falhas: { parcela: number; erro: string }[] = [];
+  let novos = 0;
+  for (const p of plano) {
+    if (emitidas.has(p.numero)) continue;
+    try {
+      await emitirCore({
+        cod_empresa: Number(lib.cod_empresa),
+        valor: p.valor,
+        data_vencimento: p.vencimento,
+        sacado_nome: String(lib.cliente_nome),
+        sacado_documento: cpfLimpo,
+        tipo_cobranca: "BANKSLIP",
+        descricao: `Crediário ${lib.cliente_nome} — parcela ${p.numero}/${plano.length}`,
+        liberacao_id: String(lib.id),
+        parcela_numero: p.numero,
+        userId: M2M_USER,
+      });
+      novos++;
+    } catch (e) {
+      const erro = e instanceof Response ? await e.text() : String(e);
+      console.error(`[btg-cobrancas] m2m crediário: falha parcela ${p.numero} (ref ${referencia_externa}):`, erro);
+      falhas.push({ parcela: p.numero, erro: erro.slice(0, 300) });
+    }
+  }
+
+  const totalOk = emitidas.size + novos;
+  const statusNovo = falhas.length === 0 && totalOk >= plano.length
+    ? "BOLETOS_EMITIDOS" : (totalOk > 0 ? "BOLETOS_PARCIAL" : lib.status);
+  await db.from("crediario_liberacoes").update({
+    status: statusNovo,
+    disparado_por: lib.disparado_por || M2M_USER,
+    disparado_em: lib.disparado_em || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq("id", lib.id);
+
+  const { data: boletos } = await db.from("btg_cobrancas")
+    .select("parcela_numero, valor, data_vencimento, linha_digitavel, url_boleto, status")
+    .eq("liberacao_id", lib.id)
+    .order("parcela_numero", { ascending: true });
+
+  return json({ ok: falhas.length === 0, status: statusNovo, emitidos_agora: novos, falhas, boletos: boletos || [] });
+}
+
 async function handleCancelarLiberacao(body: Record<string, unknown>, userId: string) {
   await requireAdminRole(userId);
   const { liberacao_id, motivo } = body;
@@ -709,6 +822,16 @@ Deno.serve(async (req) => {
         body = await req.json();
         if (!action && body?.action) action = String(body.action);
       } catch { /* no-op */ }
+    }
+
+    // Ação máquina-a-máquina (Conect$flow) — autentica por segredo, sem JWT.
+    if (action === "emitir_lote_crediario") {
+      const esperado = Deno.env.get("CREDIARIO_SHARED_SECRET") || "";
+      const recebido = req.headers.get("x-crediario-secret") || "";
+      if (!esperado || recebido !== esperado) {
+        return json({ error: "Unauthorized — segredo do crediário ausente/incorreto" }, 401);
+      }
+      return await handleEmitirLoteCrediario(body || {});
     }
 
     const userId = requireAuth(req);
