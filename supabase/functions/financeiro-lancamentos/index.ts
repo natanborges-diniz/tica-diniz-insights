@@ -2481,6 +2481,85 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     });
   }
 
+  // 3.5. CONFIRMAR NO BANCO que o lote realmente existe com os itens.
+  //
+  // Gap real (07/08/2026, Material Bar Cappuccino R$ 401,30): o POST dos itens
+  // respondeu 2xx com CORPO VAZIO, o PATCH de fechamento respondeu ok, e o
+  // borderô virou ENVIADO com os títulos em PROCESSANDO — mas no BTG o lote
+  // estava quebrado: `GET /banking/payments?batchId=` devolvia `{"data":[]}` e
+  // `GET /banking/batch-payments/{id}` devolvia 500 unexpected-error. Ou seja,
+  // nada chegou ao banco e o título ficava eternamente "Processando".
+  //
+  // Agora o envio só é considerado bem-sucedido se o banco listar os pagamentos
+  // do lote. Lote vazio → devolve os títulos para AUTORIZADO e marca o borderô
+  // como "não chegou ao banco" (NAO_ENVIADO), pronto para reenvio.
+  const confQs = new URLSearchParams({ pageSize: "200", pageNumber: "1", batchId: String(batchId) });
+  const confRes = await fetch(`${apiBase}/${cnpj}/banking/payments?${confQs}`, {
+    headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: "application/json" },
+  }).catch(() => null);
+
+  if (confRes && confRes.ok) {
+    const confBody = await confRes.json().catch(() => ({}));
+    const confLista = Array.isArray(confBody?.data)
+      ? confBody.data
+      : Array.isArray(confBody) ? confBody : [];
+
+    if (confLista.length === 0) {
+      console.error(
+        `[financeiro-lancamentos] Lote ${batchId} fechou mas o BTG não lista nenhum pagamento — envio não chegou ao banco.`,
+      );
+
+      const motivo =
+        "O BTG aceitou a requisição mas não registrou nenhum pagamento no lote " +
+        `(${String(batchId).slice(0, 8)}). Nada chegou ao banco — não há o que autorizar no app. ` +
+        "Reenvie este borderô; se repetir, refaça o borderô.";
+
+      const { data: revertidos } = await supabase
+        .from("lancamentos_financeiros")
+        .update({
+          status: "AUTORIZADO",
+          requer_validacao: true,
+          observacao: `Não chegou ao banco: lote ${String(batchId).slice(0, 8)} ficou vazio no BTG — reenviar.`,
+        })
+        .eq("bordero_id", bordero_id)
+        .eq("status", "PROCESSANDO")
+        .select("id, dados_extras");
+
+      for (const r of (revertidos || [])) {
+        await supabase.from("lancamentos_financeiros").update({
+          dados_extras: {
+            ...((r.dados_extras || {}) as Record<string, unknown>),
+            btg_envio_rejeitado: true,
+            btg_motivo_envio: `Lote vazio no BTG: ${motivo}`,
+            btg_envio_rejeitado_em: new Date().toISOString(),
+            btg_payment_status: null,
+            btg_batch_abandonado: String(batchId),
+            btg_batch_id: null,
+          },
+        }).eq("id", r.id);
+      }
+
+      await fetch(`${apiBase}/${cnpj}/banking/batch-payments/${batchId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      }).catch(() => { /* lote já quebrado no banco */ });
+
+      await supabase.from("borderos").update({
+        status: "APROVADO",
+        btg_batch_id: null,
+        observacao: `Envio não chegou ao BTG (lote ${String(batchId).slice(0, 8)} vazio) em ${new Date().toISOString()}`,
+      }).eq("id", bordero_id);
+
+      return json({
+        ok: false,
+        code: "BTG_BATCH_EMPTY",
+        error: motivo,
+        status: "APROVADO",
+        btg_batch_id: batchId,
+        revertidos: (revertidos || []).length,
+      });
+    }
+  }
 
   // 4. Consome os créditos de liberação usados nesta remessa.
   //
@@ -2495,6 +2574,7 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
   }).eq("id", bordero_id);
 
   return json({ ok: true, status: "ENVIADO", btg_batch_id: batchId, aceitos, falhas });
+
 }
 
 /**
