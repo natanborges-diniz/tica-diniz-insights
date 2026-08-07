@@ -1758,12 +1758,13 @@ async function diagnosticoBordero(body: Record<string, unknown>, userId: string)
 
   const travados = itens.filter((i) => i.trava);
   const admin = await isAdminUser(userId);
-  const distinto = criadorAprovadorDistintos(bordero.criado_por, userId);
+  const distinto = criadorAprovadorDistintos(bordero.criado_por, userId, admin);
 
   let impedimento: string | null = null;
   if (!admin) impedimento = "Só um administrador pode liberar um borderô com itens sinalizados.";
   else if (!distinto.ok) impedimento = `${distinto.motivo} — peça a outro administrador.`;
   else if (bordero.status !== "MONTAGEM") impedimento = `O borderô está em ${bordero.status}.`;
+
 
   return json({
     ok: true,
