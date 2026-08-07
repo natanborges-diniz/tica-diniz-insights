@@ -3594,8 +3594,10 @@ async function aprovarExcecao(body: Record<string, unknown>, userId: string) {
     throw new Error(`Status ${lanc.status} não permite aprovação de exceção`);
   }
 
-  const distinto = criadorAprovadorDistintos(lanc.criado_por, userId);
+  // Admin pode aprovar a exceção que ele mesmo criou (registrado em dados_extras)
+  const distinto = criadorAprovadorDistintos(lanc.criado_por, userId, true);
   if (!distinto.ok) throw new Error(distinto.motivo!);
+
 
   const dados = (lanc.dados_extras || {}) as Record<string, unknown>;
   // Aprovada → volta ao Hub como CLASSIFICADO com a flag de aprovação, e segue
