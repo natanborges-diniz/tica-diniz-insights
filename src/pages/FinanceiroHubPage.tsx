@@ -100,6 +100,21 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   CONCILIADO_CARTAO: { label: "Conciliado", variant: "default" },
 };
 
+/**
+ * O filtro de status fala a língua da operação, não a do banco de dados.
+ *
+ * "Em preparo" não é um status gravado: o título recém-importado fica PREVISTO,
+ * o classificado fica CLASSIFICADO e o unificado fica AGRUPADO. Filtrar por um
+ * único valor devolvia lista vazia justamente na etapa mais usada.
+ */
+const GRUPOS_STATUS: Record<string, { label: string; status: string[] }> = {
+  EM_PREPARO: { label: "Em preparo", status: ["PREVISTO", "CLASSIFICADO", "AGRUPADO"] },
+  BORDERO: { label: "Em borderô", status: ["BORDERO"] },
+  AUTORIZADO: { label: "Autorizado / processando", status: ["AUTORIZADO", "PROCESSANDO"] },
+  BAIXADO: { label: "Pagos", status: ["BAIXADO", "CONCILIADO_CARTAO"] },
+  CANCELADO: { label: "Cancelados", status: ["CANCELADO"] },
+};
+
 // Mantido só para o detalhe do borderô, onde o status gravado ainda é a
 // referência. Na lista quem manda é estadoBordero(), que lê a composição dos
 // itens — "ENVIADO" cobria situações opostas demais para virar um badge.
