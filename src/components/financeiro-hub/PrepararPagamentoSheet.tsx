@@ -92,8 +92,15 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
   // recusada quando o borderô ia ao banco.
   const diagBoleto = diagnosticarBoleto(barcode);
 
+  // Quem decide entre chave e copia e cola é o próprio conteúdo colado, não o
+  // seletor: o payload EMV é inconfundível e o operador não tem de saber a
+  // diferença de nomenclatura do banco.
+  const pixEhCopiaECola = ehPixCopiaECola(pixKey);
+  const tipoPixEfetivo = pixEhCopiaECola ? "PIX_QR_CODE" : "PIX_KEY";
+
   const isValid = () => {
-    if (payType === "PIX_KEY") return pixKey.length > 3;
+    if (payType === "PIX_KEY") return pixKey.trim().length > 3 && !pixEhCopiaECola;
+    if (payType === "PIX_QR_CODE") return pixEhCopiaECola;
     if (payType === "BANKSLIP" || payType === "DARF") return diagBoleto.status === "ok";
     // PIX_MANUAL e TED exigem o mesmo creditParty completo.
     if (payType === "TED" || payType === "PIX_MANUAL") {
@@ -109,8 +116,11 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
       ...(lancamento.dados_extras || {}),
       btg_payment_type: payType,
     };
-    if (payType === "PIX_KEY") {
-      dadosExtras.btg_details = { pixKey };
+    if (payType === "PIX_KEY" || payType === "PIX_QR_CODE") {
+      dadosExtras.btg_payment_type = tipoPixEfetivo;
+      dadosExtras.btg_details = pixEhCopiaECola
+        ? { emv: pixKey.trim() }
+        : { pixKey: pixKey.trim() };
     } else if (payType === "BANKSLIP") {
       dadosExtras.linha_digitavel = barcode;
       // Arrecadação (linha iniciada em 8) exige o tipo UTILITIES no BTG. Quem
@@ -125,6 +135,7 @@ export function PrepararPagamentoSheet({ lancamento, onClose, onSave, isPending 
     } else if (payType === "DARF") {
       dadosExtras.btg_details = { barcode };
     }
+
     onSave(lancamento.id, dadosExtras);
   };
 
