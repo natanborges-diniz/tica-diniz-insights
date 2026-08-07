@@ -1,0 +1,119 @@
+PARA:     edi@cielo.com.br
+ASSUNTO:  Habilitacao da API de Extrato Eletronico (EXTC) - 9 matrizes de extrato
+
+
+Bom dia,
+
+Somos um grupo de oticas com 9 lojas e fazemos a conciliacao de cartoes
+internamente, em sistema proprio. Ja recebemos o Extrato Eletronico e hoje
+baixamos os arquivos manualmente pelo site, matriz por matriz, todos os dias.
+
+Implementamos a leitura do layout versao 15 (arquivos CIELO03, CIELO04 e
+CIELO16) e queremos automatizar a obtencao dos arquivos pela API do EXTC.
+
+
+NOSSO CADASTRO NO PORTAL CIELO DESENVOLVEDORES
+
+   E-mail de acesso: [PREENCHER - e-mail usado para logar no portal]
+   Nome do titular:  [PREENCHER - nome completo do cadastro]
+   Empresa:          [PREENCHER - nome da empresa informado no cadastro]
+   CNPJ do cadastro: [PREENCHER - CNPJ informado no cadastro]
+
+E o cadastro acima que precisa receber a habilitacao.
+
+
+BLOQUEIO ENCONTRADO
+
+Nosso cadastro no Portal Cielo Desenvolvedores esta ativo. Ao criar uma nova
+aplicacao em Perfil > Cadastrar Client-ID, a secao "API Disponivel" lista
+apenas "Cielo Smart | Order Manager". A API de Extrato Eletronico nao aparece
+como opcao, entao nao conseguimos gerar o client_id e o client_secret.
+
+
+O QUE PRECISAMOS
+
+Habilitar a API de Extrato Eletronico para o nosso cadastro, de modo a obter
+client_id, client_secret e a chave HMAC (X-Signature) para os 9 estabelecimentos
+matriz relacionados abaixo.
+
+
+ESTABELECIMENTOS MATRIZ DE EXTRATO E SEUS SUBMISSORES
+
+1) DINIZ PRIMITIVA I
+   Matriz de extrato: 2838722713
+   CNPJ: 12.107.885/0001-01
+   Submissores: 1028427902, 1033439069, 2809988395, 2838722713
+
+2) DINIZ PRIMITIVA II
+   Matriz de extrato: 2837060040
+   CNPJ: 13.844.111/0001-26
+   Submissores: 1032636880, 1072478584, 2809988433, 2837060040
+
+3) DINIZ CARAPICUIBA
+   Matriz de extrato: 2839970010
+   CNPJ: 19.938.491/0001-44
+   Submissores: 1050240283, 2809657925, 2839970010
+
+4) DINIZ UNIAO
+   Matriz de extrato: 2838722330
+   CNPJ: 19.280.952/0002-15
+   Submissores: 1048250935, 1055799637, 2809988409, 2838722330
+
+5) DINIZ ANTONIO AGU
+   Matriz de extrato: 2837031318
+   CNPJ: 35.385.887/0001-68
+   Submissores: 2809988441, 2837031318
+
+6) DINIZ ITAPEVI
+   Matriz de extrato: 2809028405
+   CNPJ: 51.322.401/0001-07
+   Submissores: 2809028405
+
+7) DINIZ BARUERI
+   Matriz de extrato: 2895955357
+   CNPJ: 57.465.988/0001-81
+   Submissores: 2895955357
+
+8) DINIZ STO ANTONIO
+   Matriz de extrato: 2895579967
+   CNPJ: 35.385.887/0002-49
+   Submissores: 2895579967
+
+9) DINIZ SUPER SHOPPING
+   Matriz de extrato: 2898942388
+   CNPJ: 59.068.194/0001-00
+   Submissores: 2898942388
+
+Total: 9 matrizes de extrato e 21 estabelecimentos submissores.
+
+
+DUVIDAS TECNICAS
+
+1) A documentacao de consumo indica o endpoint:
+
+   POST https://api-internet.cielo.com.br/cielo-extc-serv-edi-linkexp-external/
+        extc-serv-edi-link-external/v1/link/generate
+
+   Ele e o correto para o nosso perfil?
+
+2) Para a assinatura do header X-Signature, qual o algoritmo utilizado
+   (SHA-256?) e em que formato o valor deve ser enviado (hexadecimal ou
+   base64)?
+
+3) O client_id e o client_secret atendem todos os nossos estabelecimentos, ou e
+   necessario um conjunto por matriz de extrato? E a chave HMAC: e uma unica ou
+   uma por matriz?
+
+4) O manual versao 15 (pagina 64) indica que a contratacao via API e destinada
+   a conciliadoras. Como somos os proprios titulares dos estabelecimentos e
+   conciliamos apenas as nossas lojas, precisamos passar pelo fluxo de concessao
+   e registrar os merchantIDs, ou as credenciais ja operam sobre os
+   estabelecimentos que hoje geram os nossos extratos?
+
+
+Ficamos a disposicao para qualquer informacao complementar.
+
+Atenciosamente,
+
+Natan Borges
+[PREENCHER - telefone para contato]
