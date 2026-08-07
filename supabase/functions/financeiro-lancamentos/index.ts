@@ -2356,7 +2356,18 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
       motivos.push(semAlcada ? detalhe : `${payRes.status}: ${detalhe}`);
       await supabase.from("lancamentos_financeiros").update({
         requer_validacao: true,
-        observacao: `Falha ao incluir no lote BTG (${payRes.status}): ${detalhe.slice(0, 250)}`,
+        observacao: `O banco não recebeu este pagamento — recusa na validação do envio (${payRes.status}): ${detalhe.slice(0, 200)}`,
+        // Recusa no envio ≠ pagamento não processado. Aqui o BTG rejeitou a
+        // inclusão no lote: nada foi criado, autorizado ou debitado no banco.
+        dados_extras: {
+          ...dados,
+          btg_envio_rejeitado: true,
+          btg_motivo_envio: `${payRes.status}: ${detalhe.slice(0, 250)}`,
+          btg_envio_rejeitado_em: new Date().toISOString(),
+          // Limpa retorno antigo para a tela não misturar tentativa velha
+          // ("não processado") com a recusa atual ("não chegou ao banco").
+          btg_payment_status: null,
+        },
       }).eq("id", lanc.id);
       falhas++;
     }
@@ -2377,9 +2388,10 @@ async function enviarBorderoBtg(body: Record<string, unknown>, userId: string) {
     const mensagem = alcada
       ? `O BTG recusou o borderô por falta de permissão (403): ${motivo} ` +
         `Nada foi executado nem debitado — o borderô segue APROVADO. Reenviar sem ajustar a permissão vai falhar de novo.`
-      : `O BTG recusou a inclusão dos pagamentos no lote (${falhas} falha${falhas > 1 ? "s" : ""}). ` +
-        `Nada foi executado nem debitado — o borderô segue APROVADO, é só reenviar. ` +
-        `Resposta do banco (texto genérico deles): ${motivo}`;
+      : `O banco NÃO recebeu os pagamentos: o BTG recusou a inclusão no lote na validação do envio ` +
+        `(${falhas} recusa${falhas > 1 ? "s" : ""}). Nenhum pagamento foi criado, autorizado ou debitado no BTG — ` +
+        `não há nada para o master autorizar. Corrija o que o banco apontou e reenvie este mesmo borderô, que segue APROVADO. ` +
+        `Resposta do banco: ${motivo}`;
 
     console.warn(`[financeiro-lancamentos] ${mensagem}`);
 
