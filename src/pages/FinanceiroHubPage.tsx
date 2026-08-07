@@ -1912,11 +1912,6 @@ export default function FinanceiroHubPage() {
                               <Badge variant={bs.variant} title={bs.titulo} className="cursor-help">
                                 {bs.label}
                               </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={bs.variant} title={bs.titulo} className="cursor-help">
-                                {bs.label}
-                              </Badge>
                               {erroEnvio[b.id] && (
                                 <p className="mt-1 text-xs text-destructive whitespace-pre-wrap max-w-[260px]">
                                   Último envio recusado: {erroEnvio[b.id]}
