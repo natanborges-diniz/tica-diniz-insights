@@ -2875,6 +2875,133 @@ async function liberarProcessandoOrfao(body: Record<string, unknown>, userId: st
   return json({ ok: true, liberados: liberados.length, bloqueados });
 }
 
+/**
+ * "Reenviar lote agora" — botão de admin para o lote que o BTG não registrou.
+ *
+ * Cenário (07/08/2026, Material Bar Cappuccino R$ 401,30): o lote foi aberto e
+ * fechado, o borderô virou ENVIADO e os títulos PROCESSANDO, mas no banco o
+ * lote estava vazio (`GET payments?batchId` → `{"data":[]}`). Não havia nada
+ * para o master autorizar e nada a corrigir nos dados — só faltava reenviar.
+ *
+ * Esta ação faz esse caminho num clique, sem edição manual:
+ *   1. confirma NO BANCO que o lote não tem pagamento nenhum (garantia de que
+ *      não existe risco de pagamento em duplicidade);
+ *   2. devolve os títulos PROCESSANDO deste borderô para AUTORIZADO, mantendo
+ *      classificação, rubrica e dados de pagamento;
+ *   3. reabre o borderô como APROVADO e chama o mesmo envio, que monta um lote
+ *      novo no BTG com os mesmos itens.
+ *
+ * O lote antigo não é reaproveitado de propósito: ele está quebrado no banco
+ * (o próprio GET do lote responde 500) e o BTG não aceita item em lote fechado.
+ */
+async function reenviarLoteVazio(body: Record<string, unknown>, userId: string) {
+  const { bordero_id } = body;
+  if (!bordero_id) throw new Error("bordero_id obrigatório");
+  await requireAdmin(userId);
+
+  const { data: bordero } = await supabase.from("borderos").select("*").eq("id", bordero_id).single();
+  if (!bordero) throw new Error("Borderô não encontrado");
+  if (bordero.status !== "ENVIADO") {
+    throw new Error(
+      `Borderô está ${bordero.status} — o reenvio direto só vale para borderô ENVIADO cujo lote ficou vazio no BTG.`,
+    );
+  }
+
+  const { data: config } = await supabase
+    .from("fornecedor_configuracao")
+    .select("ambiente")
+    .eq("fornecedor", "btg")
+    .eq("ativo", true)
+    .single();
+  const isSandbox = !config || config.ambiente !== "production";
+
+  // Confirmação no banco: só reenvia se o lote realmente não tem pagamento.
+  if (!isSandbox && bordero.btg_batch_id) {
+    const { data: tokenData } = await supabase
+      .from("btg_tokens")
+      .select("access_token, expires_at")
+      .eq("cod_empresa", bordero.cod_empresa)
+      .single();
+    const { data: conta } = await supabase
+      .from("btg_contas_bancarias")
+      .select("cnpj")
+      .eq("cod_empresa", bordero.cod_empresa)
+      .eq("ativa", true)
+      .single();
+    const cnpj = conta?.cnpj?.replace(/\D/g, "");
+    if (!tokenData || !cnpj) throw new Error("Token/CNPJ BTG indisponível para conferir o lote");
+
+    const qs = new URLSearchParams({ pageSize: "200", pageNumber: "1", batchId: String(bordero.btg_batch_id) });
+    const res = await fetch(
+      `https://api.empresas.btgpactual.com/${cnpj}/banking/payments?${qs}`,
+      { headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: "application/json" } },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Não foi possível conferir o lote no BTG (${res.status}). Sem essa confirmação não reenviamos, ` +
+        `para não pagar duas vezes. Tente novamente em instantes.`,
+      );
+    }
+    const corpo = await res.json().catch(() => ({}));
+    const lista = Array.isArray(corpo?.data) ? corpo.data : Array.isArray(corpo) ? corpo : [];
+    if (lista.length > 0) {
+      return json({
+        ok: false,
+        code: "BTG_BATCH_TEM_PAGAMENTOS",
+        error:
+          `O BTG registrou ${lista.length} pagamento(s) neste lote — ele CHEGOU ao banco. ` +
+          `Não reenvie: autorize no app do BTG (ou aguarde o retorno) para não pagar em duplicidade.`,
+      });
+    }
+
+    // Lote quebrado no banco: abandona para não deixar remessa fantasma.
+    await fetch(`https://api.empresas.btgpactual.com/${cnpj}/banking/batch-payments/${bordero.btg_batch_id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    }).catch(() => { /* já inconsistente no banco */ });
+  }
+
+  // Devolve os títulos em trânsito, preservando dados de pagamento.
+  const { data: emTransito } = await supabase
+    .from("lancamentos_financeiros")
+    .select("id, dados_extras")
+    .eq("bordero_id", bordero_id)
+    .eq("status", "PROCESSANDO")
+    .is("data_baixa", null);
+
+  for (const l of (emTransito || [])) {
+    const ex = (l.dados_extras || {}) as Record<string, unknown>;
+    await supabase.from("lancamentos_financeiros").update({
+      status: "AUTORIZADO",
+      requer_validacao: false,
+      dados_extras: {
+        ...ex,
+        btg_batch_abandonado: bordero.btg_batch_id ?? null,
+        btg_batch_id: null,
+        btg_payment_id: null,
+        btg_payment_status: null,
+        btg_envio_rejeitado: null,
+        btg_motivo_envio: null,
+      },
+    }).eq("id", l.id);
+  }
+
+  await supabase.from("borderos").update({
+    status: "APROVADO",
+    btg_batch_id: null,
+    observacao: `Reenvio direto pelo admin em ${new Date().toISOString()} — lote ${String(bordero.btg_batch_id ?? "").slice(0, 8)} estava vazio no BTG.`,
+  }).eq("id", bordero_id);
+
+  console.log(
+    `[financeiro-lancamentos] Reenvio de lote vazio: borderô ${bordero_id}, ` +
+    `${(emTransito || []).length} título(s) devolvidos, por ${userId}`,
+  );
+
+  // Mesmo caminho de sempre — lote novo, itens idênticos, sem edição manual.
+  return await enviarBorderoBtg({ bordero_id }, userId);
+}
+
+
 
 async function detalheBordero(body: Record<string, unknown>) {
   const { bordero_id } = body;
